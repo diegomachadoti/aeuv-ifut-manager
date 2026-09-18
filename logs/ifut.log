@@ -1,0 +1,636 @@
+2026-09-17 18:52:04,217 [INFO] Arquivos sincronizados do Drive: 0
+2026-09-17 18:52:21,384 [INFO] Arquivos sincronizados do Drive: 5
+2026-09-17 18:57:08,257 [INFO] Arquivos sincronizados do Drive: 5
+2026-09-17 20:51:55,576 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 20:51:57,264 [ERROR] Falha ao processar AJAX-2026-09-17-12-07.txt: Time nao encontrado na listagem: AJAX
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 500, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 250, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 246, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: AJAX
+2026-09-17 20:51:57,268 [INFO] Processando protocolo 20260917-237C201A do time AMIGOS DO FUTEBOL
+2026-09-17 20:51:57,810 [ERROR] Falha ao processar AMIGOS DO FUTEBOL-2026-09-17-11-29.txt: Time nao encontrado na listagem: AMIGOS DO FUTEBOL
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 500, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 250, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 246, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: AMIGOS DO FUTEBOL
+2026-09-17 20:51:57,812 [INFO] Processando protocolo 20260917-1F75AFBB do time ONZE GAROTOS
+2026-09-17 20:51:58,297 [ERROR] Falha ao processar ONZE GAROTOS-2026-09-17-12-09.txt: Time nao encontrado na listagem: ONZE GAROTOS
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 500, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 250, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 246, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: ONZE GAROTOS
+2026-09-17 20:51:58,299 [INFO] Processando protocolo 20260917-325DB7B5 do time PEQUIS
+2026-09-17 20:51:58,777 [ERROR] Falha ao processar PEQUIS-2026-09-17-11-37.txt: Time nao encontrado na listagem: PEQUIS
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 500, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 250, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 246, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: PEQUIS
+2026-09-17 20:51:58,780 [INFO] Processando protocolo 20260917-0280614A do time RIVER
+2026-09-17 20:51:59,256 [ERROR] Falha ao processar RIVER-2026-09-17-12-19.txt: Time nao encontrado na listagem: RIVER
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 500, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 250, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 246, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: RIVER
+2026-09-17 20:55:02,352 [INFO] Nenhum arquivo TXT encontrado em downloads
+2026-09-17 20:55:15,871 [INFO] Nenhum arquivo TXT encontrado em downloads
+2026-09-17 20:55:46,751 [INFO] Arquivos sincronizados do Drive: 5
+2026-09-17 20:55:58,888 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 20:55:59,702 [ERROR] Falha ao processar AJAX-2026-09-17-12-07.txt: Time nao encontrado na listagem: AJAX
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 510, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 260, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 256, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: AJAX
+2026-09-17 20:55:59,704 [INFO] Processando protocolo 20260917-237C201A do time AMIGOS DO FUTEBOL
+2026-09-17 20:56:00,089 [ERROR] Falha ao processar AMIGOS DO FUTEBOL-2026-09-17-11-29.txt: Time nao encontrado na listagem: AMIGOS DO FUTEBOL
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 510, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 260, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 256, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: AMIGOS DO FUTEBOL
+2026-09-17 20:56:00,091 [INFO] Processando protocolo 20260917-1F75AFBB do time ONZE GAROTOS
+2026-09-17 20:56:00,516 [ERROR] Falha ao processar ONZE GAROTOS-2026-09-17-12-09.txt: Time nao encontrado na listagem: ONZE GAROTOS
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 510, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 260, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 256, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: ONZE GAROTOS
+2026-09-17 20:56:00,518 [INFO] Processando protocolo 20260917-325DB7B5 do time PEQUIS
+2026-09-17 20:56:00,977 [ERROR] Falha ao processar PEQUIS-2026-09-17-11-37.txt: Time nao encontrado na listagem: PEQUIS
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 510, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 260, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 256, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: PEQUIS
+2026-09-17 20:56:00,979 [INFO] Processando protocolo 20260917-0280614A do time RIVER
+2026-09-17 20:56:01,434 [ERROR] Falha ao processar RIVER-2026-09-17-12-19.txt: Time nao encontrado na listagem: RIVER
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 510, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 260, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 256, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: RIVER
+2026-09-17 20:57:02,436 [INFO] Arquivos sincronizados do Drive: 5
+2026-09-17 20:57:12,837 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 20:57:13,759 [ERROR] Falha ao processar AJAX-2026-09-17-12-07.txt: Time nao encontrado na listagem: AJAX
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 510, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 260, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 256, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: AJAX
+2026-09-17 20:57:13,762 [INFO] Processando protocolo 20260917-237C201A do time AMIGOS DO FUTEBOL
+2026-09-17 20:57:14,129 [ERROR] Falha ao processar AMIGOS DO FUTEBOL-2026-09-17-11-29.txt: Time nao encontrado na listagem: AMIGOS DO FUTEBOL
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 510, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 260, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 256, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: AMIGOS DO FUTEBOL
+2026-09-17 20:57:14,131 [INFO] Processando protocolo 20260917-1F75AFBB do time ONZE GAROTOS
+2026-09-17 20:57:14,576 [ERROR] Falha ao processar ONZE GAROTOS-2026-09-17-12-09.txt: Time nao encontrado na listagem: ONZE GAROTOS
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 510, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 260, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 256, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: ONZE GAROTOS
+2026-09-17 20:57:14,578 [INFO] Processando protocolo 20260917-325DB7B5 do time PEQUIS
+2026-09-17 20:57:14,992 [ERROR] Falha ao processar PEQUIS-2026-09-17-11-37.txt: Time nao encontrado na listagem: PEQUIS
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 510, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 260, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 256, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: PEQUIS
+2026-09-17 20:57:14,994 [INFO] Processando protocolo 20260917-0280614A do time RIVER
+2026-09-17 20:57:15,367 [ERROR] Falha ao processar RIVER-2026-09-17-12-19.txt: Time nao encontrado na listagem: RIVER
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 510, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 260, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 256, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: RIVER
+2026-09-17 20:59:06,866 [INFO] Arquivos sincronizados do Drive: 5
+2026-09-17 20:59:16,255 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 20:59:17,254 [ERROR] Falha ao processar AJAX-2026-09-17-12-07.txt: Time nao encontrado na listagem: AJAX
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 515, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 265, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 261, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: AJAX
+2026-09-17 20:59:17,256 [INFO] Processando protocolo 20260917-237C201A do time AMIGOS DO FUTEBOL
+2026-09-17 20:59:17,680 [ERROR] Falha ao processar AMIGOS DO FUTEBOL-2026-09-17-11-29.txt: Time nao encontrado na listagem: AMIGOS DO FUTEBOL
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 515, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 265, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 261, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: AMIGOS DO FUTEBOL
+2026-09-17 20:59:17,682 [INFO] Processando protocolo 20260917-1F75AFBB do time ONZE GAROTOS
+2026-09-17 20:59:18,236 [ERROR] Falha ao processar ONZE GAROTOS-2026-09-17-12-09.txt: Time nao encontrado na listagem: ONZE GAROTOS
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 515, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 265, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 261, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: ONZE GAROTOS
+2026-09-17 20:59:18,238 [INFO] Processando protocolo 20260917-325DB7B5 do time PEQUIS
+2026-09-17 20:59:18,753 [ERROR] Falha ao processar PEQUIS-2026-09-17-11-37.txt: Time nao encontrado na listagem: PEQUIS
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 515, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 265, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 261, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: PEQUIS
+2026-09-17 20:59:18,755 [INFO] Processando protocolo 20260917-0280614A do time RIVER
+2026-09-17 20:59:19,224 [ERROR] Falha ao processar RIVER-2026-09-17-12-19.txt: Time nao encontrado na listagem: RIVER
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 515, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 265, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 261, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: RIVER
+2026-09-17 21:02:05,512 [INFO] Arquivos sincronizados do Drive: 5
+2026-09-17 21:03:32,509 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 21:03:33,415 [ERROR] Falha ao processar AJAX-2026-09-17-12-07.txt: Time nao encontrado na listagem: AJAX
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 521, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 271, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 267, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: AJAX
+2026-09-17 21:03:33,417 [INFO] Processando protocolo 20260917-237C201A do time AMIGOS DO FUTEBOL
+2026-09-17 21:03:33,891 [ERROR] Falha ao processar AMIGOS DO FUTEBOL-2026-09-17-11-29.txt: Time nao encontrado na listagem: AMIGOS DO FUTEBOL
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 521, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 271, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 267, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: AMIGOS DO FUTEBOL
+2026-09-17 21:03:33,893 [INFO] Processando protocolo 20260917-1F75AFBB do time ONZE GAROTOS
+2026-09-17 21:03:34,384 [ERROR] Falha ao processar ONZE GAROTOS-2026-09-17-12-09.txt: Time nao encontrado na listagem: ONZE GAROTOS
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 521, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 271, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 267, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: ONZE GAROTOS
+2026-09-17 21:03:34,386 [INFO] Processando protocolo 20260917-325DB7B5 do time PEQUIS
+2026-09-17 21:03:34,875 [ERROR] Falha ao processar PEQUIS-2026-09-17-11-37.txt: Time nao encontrado na listagem: PEQUIS
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 521, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 271, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 267, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: PEQUIS
+2026-09-17 21:03:34,877 [INFO] Processando protocolo 20260917-0280614A do time RIVER
+2026-09-17 21:03:36,180 [ERROR] Falha ao processar RIVER-2026-09-17-12-19.txt: Time nao encontrado na listagem: RIVER
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 521, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 271, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 267, in open_team_page
+    raise LookupError(f"Time nao encontrado na listagem: {team_name}")
+LookupError: Time nao encontrado na listagem: RIVER
+2026-09-17 21:09:42,209 [INFO] Arquivos sincronizados do Drive: 5
+2026-09-17 21:10:35,834 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 21:10:36,643 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:10:36,644 [INFO] DRY RUN ativo: nenhuma acao sera confirmada no iFut.
+2026-09-17 21:10:36,644 [INFO] Registro 2 - acao=Portabilidade tipo=Atleta nome=32423423423423424234
+2026-09-17 21:10:36,644 [INFO] DRY RUN ativo: nenhuma acao sera confirmada no iFut.
+2026-09-17 21:10:36,645 [INFO] Processando protocolo 20260917-237C201A do time AMIGOS DO FUTEBOL
+2026-09-17 21:10:36,645 [ERROR] Falha ao processar AMIGOS DO FUTEBOL-2026-09-17-11-29.txt: URL do time nao mapeada: AMIGOS DO FUTEBOL
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 503, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 253, in process_request
+    self.open_team_page(request.team_name)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 240, in open_team_page
+    raise LookupError(f"URL do time nao mapeada: {team_name}")
+LookupError: URL do time nao mapeada: AMIGOS DO FUTEBOL
+2026-09-17 21:10:36,647 [INFO] Processando protocolo 20260917-1F75AFBB do time ONZE GAROTOS
+2026-09-17 21:10:37,395 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:10:37,395 [INFO] DRY RUN ativo: nenhuma acao sera confirmada no iFut.
+2026-09-17 21:10:37,395 [INFO] Registro 2 - acao=Portabilidade tipo=Atleta nome=Nome 2
+2026-09-17 21:10:37,395 [INFO] DRY RUN ativo: nenhuma acao sera confirmada no iFut.
+2026-09-17 21:10:37,396 [INFO] Processando protocolo 20260917-325DB7B5 do time PEQUIS
+2026-09-17 21:10:38,144 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Futebol
+2026-09-17 21:10:38,144 [INFO] DRY RUN ativo: nenhuma acao sera confirmada no iFut.
+2026-09-17 21:10:38,145 [INFO] Processando protocolo 20260917-0280614A do time RIVER
+2026-09-17 21:10:38,887 [INFO] Registro 1 - acao=Portabilidade tipo=Comissao tecnica nome=Ivanildo Xavier de Oliveira
+2026-09-17 21:10:38,888 [INFO] DRY RUN ativo: nenhuma acao sera confirmada no iFut.
+2026-09-17 21:34:48,725 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 21:34:49,539 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:34:49,539 [INFO] DRY RUN ativo: nenhuma acao sera confirmada no iFut.
+2026-09-17 21:34:49,539 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:34:49,539 [INFO] DRY RUN ativo: nenhuma acao sera confirmada no iFut.
+2026-09-17 21:37:11,480 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 21:37:12,413 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:37:15,221 [ERROR] Falha ao processar AJAX-2026-09-17-12-07.txt: 'Seletor ausente: [actions] save_button'
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 504, in main
+    bot.process_request(request)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 263, in process_request
+    self._execute_record(record)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 276, in _execute_record
+    self._include_person(record)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 292, in _include_person
+    self._click(self.selectors.get("actions", "save_button"))
+                ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 122, in get
+    raise KeyError(f"Seletor ausente: [{section}] {option}")
+KeyError: 'Seletor ausente: [actions] save_button'
+2026-09-17 21:39:54,001 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 21:39:54,841 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:41:32,624 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:42:17,923 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 21:42:18,838 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:42:49,647 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:46:30,068 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 21:46:31,004 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:46:36,773 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:48:21,200 [INFO] Nenhum arquivo TXT encontrado em downloads
+2026-09-17 21:48:41,958 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 21:48:42,784 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:48:46,536 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 21:48:48,537 [INFO] Registro 1 processado com sucesso
+2026-09-17 21:48:48,537 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:48:49,706 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 21:48:51,706 [INFO] Registro 2 processado com sucesso
+2026-09-17 21:53:05,477 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 21:53:06,711 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:53:09,974 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 21:53:11,975 [INFO] Registro 1 processado com sucesso
+2026-09-17 21:53:11,975 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:53:13,267 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 21:53:15,268 [INFO] Registro 2 processado com sucesso
+2026-09-17 21:55:50,544 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 21:55:51,369 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:55:55,169 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 21:55:57,169 [INFO] Registro 1 processado com sucesso
+2026-09-17 21:55:57,170 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:55:58,432 [ERROR] Inclusao recusada para Nome 1: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 21:55:58,433 [ERROR] Registro 2 falhou: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 279, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 296, in _execute_record
+    return self._include_person(record)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 315, in _include_person
+    raise ValueError(duplicate_message)
+ValueError: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 21:59:28,410 [INFO] Nenhum arquivo TXT encontrado em downloads
+2026-09-17 21:59:43,951 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 21:59:44,877 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:59:48,122 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 21:59:50,123 [INFO] Registro 1 processado com sucesso
+2026-09-17 21:59:50,123 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 21:59:51,369 [ERROR] Inclusao recusada para Nome 1: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 21:59:52,395 [ERROR] Registro 2 falhou: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 283, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 300, in _execute_record
+    return self._include_person(record)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 320, in _include_person
+    raise DuplicateAthleteError(duplicate_message)
+DuplicateAthleteError: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 22:01:33,629 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:01:34,422 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:01:38,174 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:01:40,174 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:01:40,175 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:01:41,946 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:01:43,946 [INFO] Registro 2 processado com sucesso
+2026-09-17 22:06:16,988 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:06:17,822 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:06:21,601 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:06:23,601 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:06:23,602 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:06:24,852 [ERROR] Inclusao recusada para Nome 1: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 22:06:25,402 [ERROR] Registro 2 falhou: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 283, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 300, in _execute_record
+    return self._include_person(record)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 320, in _include_person
+    raise DuplicateAthleteError(duplicate_message)
+DuplicateAthleteError: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 22:07:28,457 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:07:29,287 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:07:33,059 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:07:35,060 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:07:35,060 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:07:36,867 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:07:38,867 [INFO] Registro 2 processado com sucesso
+2026-09-17 22:08:21,129 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:08:21,929 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:08:26,212 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:08:28,212 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:08:28,212 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:08:29,397 [ERROR] Inclusao recusada para Nome 1: warning RG já cadastrado Nome Nome 1 Time: Atleta sem time Status : Ativo Atleta VER ATLETA
+2026-09-17 22:08:29,937 [ERROR] Registro 2 falhou: warning RG já cadastrado Nome Nome 1 Time: Atleta sem time Status : Ativo Atleta VER ATLETA
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 283, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 300, in _execute_record
+    return self._include_person(record)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 320, in _include_person
+    raise DuplicateAthleteError(duplicate_message)
+DuplicateAthleteError: warning RG já cadastrado Nome Nome 1 Time: Atleta sem time Status : Ativo Atleta VER ATLETA
+2026-09-17 22:10:00,519 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:10:01,388 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:10:05,154 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:10:07,154 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:10:07,154 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:10:08,350 [ERROR] Inclusao recusada para Nome 1: warning RG já cadastrado Nome Nome 1 Time: Atleta sem time Status : Ativo Atleta VER ATLETA
+2026-09-17 22:10:08,895 [ERROR] Registro 2 falhou: warning RG já cadastrado Nome Nome 1 Time: Atleta sem time Status : Ativo Atleta VER ATLETA
+2026-09-17 22:12:16,889 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:12:17,677 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:12:21,407 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:12:23,407 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:12:25,407 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:12:27,174 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:12:29,174 [INFO] Registro 2 processado com sucesso
+2026-09-17 22:14:13,835 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:14:14,648 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:14:17,896 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:14:19,897 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:14:21,897 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:14:59,038 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:14:59,885 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:15:03,606 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:15:05,607 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:15:07,607 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:15:08,828 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:15:10,829 [INFO] Registro 2 processado com sucesso
+2026-09-17 22:15:35,552 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:15:36,342 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:15:39,590 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:15:41,591 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:15:43,591 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:15:44,815 [ERROR] Inclusao recusada para Nome 1: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 22:15:45,362 [ERROR] Registro 2 falhou: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 22:18:17,059 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:18:17,868 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:18:21,780 [ERROR] Inclusao recusada para Nome 1: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 22:18:22,322 [ERROR] Registro 1 falhou: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 22:18:24,322 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:18:26,174 [ERROR] Inclusao recusada para Nome 1: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 22:18:26,711 [ERROR] Registro 2 falhou: warning RG já cadastrado Nome Nome 1 Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-17 22:19:10,334 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:19:11,129 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:19:16,325 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:19:18,326 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:19:20,326 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:19:23,365 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:19:25,365 [INFO] Registro 2 processado com sucesso
+2026-09-17 22:23:22,224 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:23:23,076 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:23:27,420 [ERROR] Inclusao recusada para Nome 1: warning RG já cadastrado Nome Nome 1 Time: Atleta sem time Status : Ativo Atleta VER ATLETA
+2026-09-17 22:23:27,960 [ERROR] Registro 1 falhou: warning RG já cadastrado Nome Nome 1 Time: Atleta sem time Status : Ativo Atleta VER ATLETA
+2026-09-17 22:23:29,960 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:23:33,348 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:23:35,349 [INFO] Registro 2 processado com sucesso
+2026-09-17 22:25:32,695 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:25:33,505 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:25:39,125 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:25:41,126 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:25:43,127 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:25:46,183 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:25:48,184 [INFO] Registro 2 processado com sucesso
+2026-09-17 22:35:40,071 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:35:40,908 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:35:45,298 [ERROR] Inclusao recusada para Nome 1: warning RG já cadastrado Nome Nome 1 Time: Atleta sem time Status : Ativo Atleta VER ATLETA
+2026-09-17 22:35:45,846 [ERROR] Registro 1 falhou: warning RG já cadastrado Nome Nome 1 Time: Atleta sem time Status : Ativo Atleta VER ATLETA
+2026-09-17 22:35:47,846 [INFO] Registro 2 - acao=Portabilidade tipo=Atleta nome=Luis Paulo Ferreira Da Silva
+2026-09-17 22:36:08,047 [ERROR] Registro 2 falhou: Message: 
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff68117abb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff68117ac10+15210]
+	chromedriver!(No symbol) [0x7ff680ca5d6d]
+	chromedriver!(No symbol) [0x7ff680d01289]
+	chromedriver!(No symbol) [0x7ff680d0158c]
+	chromedriver!(No symbol) [0x7ff680d52027]
+	chromedriver!(No symbol) [0x7ff680d4ec0b]
+	chromedriver!(No symbol) [0x7ff680cf37cc]
+	chromedriver!(No symbol) [0x7ff680cf46f3]
+	chromedriver!GetHandleVerifier [0x7ff68179b79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff681795ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff6817bbcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff681198ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff6811a147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff681184d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff681184ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff681167d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 285, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 311, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 340, in _port_person
+    self._select_portability_source_championship()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 353, in _select_portability_source_championship
+    self._click(self.selectors.get("actions", "portability_championship_select"))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 495, in _click
+    element = self.wait.until(ec.element_to_be_clickable(self._locator(selector)))
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\support\wait.py", line 121, in until
+    raise TimeoutException(message, screen, stacktrace)
+selenium.common.exceptions.TimeoutException: Message: 
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff68117abb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff68117ac10+15210]
+	chromedriver!(No symbol) [0x7ff680ca5d6d]
+	chromedriver!(No symbol) [0x7ff680d01289]
+	chromedriver!(No symbol) [0x7ff680d0158c]
+	chromedriver!(No symbol) [0x7ff680d52027]
+	chromedriver!(No symbol) [0x7ff680d4ec0b]
+	chromedriver!(No symbol) [0x7ff680cf37cc]
+	chromedriver!(No symbol) [0x7ff680cf46f3]
+	chromedriver!GetHandleVerifier [0x7ff68179b79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff681795ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff6817bbcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff681198ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff6811a147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff681184d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff681184ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff681167d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+
+2026-09-17 22:36:10,051 [INFO] Registro 3 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:36:14,608 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:36:16,609 [INFO] Registro 3 processado com sucesso
+2026-09-17 22:36:18,609 [INFO] Registro 4 - acao=Portabilidade tipo=Atleta nome=Wagner Soares
+2026-09-17 22:36:38,925 [ERROR] Registro 4 falhou: Message: 
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 285, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 311, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 340, in _port_person
+    self._select_portability_source_championship()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 353, in _select_portability_source_championship
+    self._click(self.selectors.get("actions", "portability_championship_select"))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 495, in _click
+    element = self.wait.until(ec.element_to_be_clickable(self._locator(selector)))
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\support\wait.py", line 121, in until
+    raise TimeoutException(message, screen, stacktrace)
+selenium.common.exceptions.TimeoutException: Message: 
+
+2026-09-17 22:39:56,378 [INFO] Nenhum arquivo TXT encontrado em downloads
+2026-09-17 22:40:15,040 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:40:15,853 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:40:21,516 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:40:23,516 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:40:25,517 [INFO] Registro 2 - acao=Portabilidade tipo=Atleta nome=Luis Paulo Ferreira Da Silva
+2026-09-17 22:40:33,667 [INFO] Registro 2 processado com sucesso
+2026-09-17 22:40:35,668 [INFO] Registro 3 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:40:38,747 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:40:40,748 [INFO] Registro 3 processado com sucesso
+2026-09-17 22:40:42,748 [INFO] Registro 4 - acao=Portabilidade tipo=Atleta nome=Wagner Soares
+2026-09-17 22:40:50,918 [INFO] Registro 4 processado com sucesso
+2026-09-17 22:43:27,537 [INFO] Processando protocolo 20260917-624A9467 do time AJAX
+2026-09-17 22:43:30,344 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:43:33,751 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:43:35,752 [INFO] Registro 1 processado com sucesso
+2026-09-17 22:43:37,752 [INFO] Registro 2 - acao=Portabilidade tipo=Atleta nome=Luis Paulo Ferreira Da Silva
+2026-09-17 22:43:45,903 [INFO] Registro 2 processado com sucesso
+2026-09-17 22:43:47,904 [INFO] Registro 3 - acao=Inclusao tipo=Atleta nome=Nome 1
+2026-09-17 22:43:50,953 [INFO] Inclusao enviada com sucesso para Nome 1
+2026-09-17 22:43:52,953 [INFO] Registro 3 processado com sucesso
+2026-09-17 22:43:54,954 [INFO] Registro 4 - acao=Portabilidade tipo=Atleta nome=Wagner Soares
+2026-09-17 22:44:03,104 [INFO] Registro 4 processado com sucesso

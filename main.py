@@ -1,0 +1,671 @@
+from __future__ import annotations
+
+import argparse
+import configparser
+import logging
+import re
+import sys
+import time
+import unicodedata
+from datetime import datetime
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable
+from urllib.parse import urlparse
+
+import requests
+from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver import ChromeOptions
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
+
+
+DEFAULT_CONFIG_PATH = Path("config.ini")
+DEFAULT_DOWNLOAD_DIR = Path("downloads")
+DEFAULT_LOG_PATH = Path("logs") / "ifut.log"
+DEFAULT_PROCESSED_DIR = Path("downloads") / "processados"
+DEFAULT_FAILED_DIR = Path("downloads") / "falhas"
+DEFAULT_SELECTORS_PATH = Path("selectors.ini")
+
+
+def normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    normalized = normalized.encode("ascii", "ignore").decode("ascii")
+    normalized = normalized.lower()
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    return normalized.strip()
+
+
+def team_search_key(team_name: str) -> str:
+    return normalize_text(team_name.split("-", 1)[0])
+
+
+def parse_bool(value: str, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "sim", "yes", "y"}
+
+
+@dataclass
+class Record:
+    index: int
+    action: str
+    person_type: str
+    full_name: str
+    birthdate: str
+    cpf: str
+
+    @property
+    def normalized_action(self) -> str:
+        return normalize_text(self.action)
+
+    @property
+    def normalized_person_type(self) -> str:
+        return normalize_text(self.person_type)
+
+    @property
+    def requires_identity(self) -> bool:
+        return self.normalized_action == "inclusao" and self.normalized_person_type == "atleta"
+
+
+@dataclass
+class RequestFile:
+    source_name: str
+    source_url: str
+    protocol: str
+    team_name: str
+    competition_name: str
+    pix_receipt_url: str
+    records: list[Record]
+    raw_text: str
+
+
+@dataclass
+class RecordResult:
+    index: int
+    action: str
+    person_type: str
+    full_name: str
+    birthdate: str
+    cpf: str
+    status: str
+    message: str
+
+
+class DuplicateAthleteError(ValueError):
+    pass
+
+
+class AppConfig:
+    def __init__(self, path: Path) -> None:
+        parser = configparser.ConfigParser()
+        if not parser.read(path, encoding="utf-8"):
+            raise FileNotFoundError(f"Arquivo de configuracao nao encontrado: {path}")
+
+        self.path = path
+        self.parser = parser
+        self.username = parser.get("ifut", "username")
+        self.password = parser.get("ifut", "password")
+        self.login_url = parser.get("ifut", "login_url")
+        self.championship_url = parser.get("ifut", "championship_url")
+        self.teams_url = parser.get("ifut", "teams_url")
+        self.team_urls = dict(parser.items("teams")) if parser.has_section("teams") else {}
+        self.headless = parse_bool(parser.get("selenium", "headless", fallback="false"))
+        self.timeout = parser.getint("selenium", "timeout_seconds", fallback=20)
+        self.download_dir = Path(parser.get("drive", "download_dir", fallback=str(DEFAULT_DOWNLOAD_DIR)))
+        self.processed_dir = Path(parser.get("drive", "processed_dir", fallback=str(DEFAULT_PROCESSED_DIR)))
+        self.failed_dir = Path(parser.get("drive", "failed_dir", fallback=str(DEFAULT_FAILED_DIR)))
+        self.results_dir = Path(parser.get("drive", "results_dir", fallback="downloads\\resultados"))
+        self.folder_embed_url = parser.get("drive", "folder_embed_url")
+        self.log_path = Path(parser.get("app", "log_path", fallback=str(DEFAULT_LOG_PATH)))
+        self.pause_after_action = parse_bool(parser.get("app", "pause_after_action", fallback="true"), default=True)
+        self.dry_run = parse_bool(parser.get("app", "dry_run", fallback="true"), default=True)
+        self.wait_between_records_seconds = parser.getfloat("app", "wait_between_records_seconds", fallback=2.0)
+        self.team_page_wait_seconds = parser.getfloat("app", "team_page_wait_seconds", fallback=2.0)
+        self.portability_popup_wait_seconds = parser.getfloat("app", "portability_popup_wait_seconds", fallback=2.0)
+        self.portability_source_championship = parser.get("app", "portability_source_championship", fallback="2º COPA AMERICA 2026")
+
+
+class SelectorConfig:
+    def __init__(self, path: Path) -> None:
+        parser = configparser.ConfigParser()
+        if not parser.read(path, encoding="utf-8"):
+            raise FileNotFoundError(f"Arquivo de seletores nao encontrado: {path}")
+        self.parser = parser
+
+    def get(self, section: str, option: str) -> str:
+        value = self.parser.get(section, option, fallback="").strip()
+        if not value:
+            raise KeyError(f"Seletor ausente: [{section}] {option}")
+        return value
+
+    def get_optional(self, section: str, option: str) -> str | None:
+        value = self.parser.get(section, option, fallback="").strip()
+        return value or None
+
+
+class DriveTxtDownloader:
+    def __init__(self, folder_embed_url: str, download_dir: Path) -> None:
+        self.folder_embed_url = folder_embed_url
+        self.download_dir = download_dir
+
+    def sync(self) -> list[Path]:
+        self.download_dir.mkdir(parents=True, exist_ok=True)
+        response = requests.get(self.folder_embed_url, timeout=30)
+        response.raise_for_status()
+        html = response.text
+        matches = re.findall(
+            r'<div class="flip-entry"[^>]*>.*?<a href="https://drive\.google\.com/file/d/([^"/]+)/view[^"]*".*?<div class="flip-entry-title">(.*?)</div>',
+            html,
+            re.DOTALL,
+        )
+        files: list[Path] = []
+        for file_id, title in matches:
+            safe_name = title.strip()
+            if not safe_name.lower().endswith(".txt"):
+                continue
+            destination = self.download_dir / safe_name
+            content = requests.get(
+                f"https://drive.google.com/uc?export=download&id={file_id}",
+                timeout=30,
+            )
+            content.raise_for_status()
+            destination.write_bytes(content.content)
+            files.append(destination)
+        return files
+
+
+class TxtRequestParser:
+    HEADER_PATTERN = re.compile(r"^(.*?):\s*(.*)$")
+    RECORD_PATTERN = re.compile(
+        r"REGISTRO\s+(\d+)\s*\nACAO:\s*(.*?)\s*\nTIPO:\s*(.*?)\s*\nNOME COMPLETO:\s*(.*?)\s*\nDATA DE NASCIMENTO:\s*(.*?)\s*\nCPF:\s*(.*?)(?=\n\s*\nREGISTRO\s+\d+\s*\n|\Z)",
+        re.DOTALL,
+    )
+
+    def parse(self, path: Path) -> RequestFile:
+        raw_text = path.read_text(encoding="utf-8", errors="ignore")
+        compact = raw_text.replace("\r", "")
+        header: dict[str, str] = {}
+        for line in compact.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            match = self.HEADER_PATTERN.match(line)
+            if match:
+                header[normalize_text(match.group(1))] = match.group(2).strip()
+
+        records: list[Record] = []
+        for record_match in self.RECORD_PATTERN.finditer(compact):
+            records.append(
+                Record(
+                    index=int(record_match.group(1)),
+                    action=record_match.group(2).strip(),
+                    person_type=record_match.group(3).strip(),
+                    full_name=record_match.group(4).strip(),
+                    birthdate=record_match.group(5).strip(),
+                    cpf=record_match.group(6).strip(),
+                )
+            )
+
+        return RequestFile(
+            source_name=path.name,
+            source_url="",
+            protocol=header.get("protocolo", ""),
+            team_name=header.get("equipe", ""),
+            competition_name=header.get("competicao", ""),
+            pix_receipt_url=header.get("comprovante pix", ""),
+            records=records,
+            raw_text=compact,
+        )
+
+
+class IfutBot:
+    def __init__(self, config: AppConfig, selectors: SelectorConfig, logger: logging.Logger) -> None:
+        self.config = config
+        self.selectors = selectors
+        self.logger = logger
+        self.driver = self._build_driver()
+        self.wait = WebDriverWait(self.driver, self.config.timeout)
+
+    def _build_driver(self) -> webdriver.Chrome:
+        options = ChromeOptions()
+        if self.config.headless:
+            options.add_argument("--headless=new")
+        options.add_argument("--start-maximized")
+        options.add_argument("--disable-notifications")
+        options.add_argument("--lang=pt-BR")
+        service = Service(ChromeDriverManager().install())
+        return webdriver.Chrome(service=service, options=options)
+
+    def close(self) -> None:
+        self.driver.quit()
+
+    def login(self) -> None:
+        self.driver.get(self.config.login_url)
+        self._fill(self.selectors.get("login", "username_input"), self.config.username)
+        self._fill(self.selectors.get("login", "password_input"), self.config.password)
+        self._click(self.selectors.get("login", "submit_button"))
+        self.wait.until(ec.url_contains("/campeonatos"))
+
+    def open_teams_page(self) -> None:
+        self.driver.get(self.config.teams_url)
+        self.wait.until(ec.presence_of_element_located(self._locator(self.selectors.get("teams", "page_ready"))))
+
+    def open_team_page(self, team_name: str) -> None:
+        team_url = self._team_url_for(team_name)
+        if not team_url:
+            raise LookupError(f"URL do time nao mapeada: {team_name}")
+        self.driver.get(team_url)
+        self.wait.until(ec.url_contains("/time/"))
+        time.sleep(self.config.team_page_wait_seconds)
+
+    def _team_url_for(self, team_name: str) -> str | None:
+        key = team_search_key(team_name)
+        for mapped_key, mapped_url in self.config.team_urls.items():
+            if normalize_text(mapped_key) == key:
+                return mapped_url
+        return None
+
+    def process_request(self, request: RequestFile) -> None:
+        self.logger.info("Processando protocolo %s do time %s", request.protocol, request.team_name)
+        self.open_team_page(request.team_name)
+        self._open_roster_section()
+        results: list[RecordResult] = []
+        for record in request.records:
+            self.logger.info(
+                "Registro %s - acao=%s tipo=%s nome=%s",
+                record.index,
+                record.action,
+                record.person_type,
+                record.full_name,
+            )
+            try:
+                message = self._execute_record(record)
+                self.logger.info("Registro %s processado com sucesso", record.index)
+                results.append(self._build_record_result(record, "SUCESSO", message))
+            except DuplicateAthleteError as exc:
+                self.logger.error("Registro %s falhou: %s", record.index, exc)
+                results.append(self._build_record_result(record, "FALHA", str(exc)))
+            except Exception as exc:
+                self.logger.exception("Registro %s falhou: %s", record.index, exc)
+                results.append(self._build_record_result(record, "FALHA", str(exc)))
+            time.sleep(self.config.wait_between_records_seconds)
+        self._write_result_file(request, results)
+
+    def _open_roster_section(self) -> None:
+        tab_selector = self.selectors.get_optional("team", "roster_tab")
+        if tab_selector:
+            self._click(tab_selector)
+        self.wait.until(ec.presence_of_element_located(self._locator(self.selectors.get("team", "roster_ready"))))
+
+    def _execute_record(self, record: Record) -> str:
+        action = record.normalized_action
+        if action == "inclusao":
+            return self._include_person(record)
+        if action == "remocao":
+            self._remove_person(record)
+            return "Remocao executada"
+        if action == "portabilidade":
+            self._port_person(record)
+            return "Portabilidade executada"
+        raise ValueError(f"Acao nao suportada: {record.action}")
+
+    def _include_person(self, record: Record) -> str:
+        self._click(self.selectors.get("actions", "include_button"))
+        self._fill_person_form(record)
+        if self.config.dry_run:
+            self.logger.info("DRY RUN ativo: formulario preenchido, sem clicar em salvar.")
+            return "Formulario preenchido em DRY RUN"
+        self._click(self.selectors.get("actions", "save_button"))
+        duplicate_message = self._wait_for_include_outcome()
+        if duplicate_message:
+            self.logger.error("Inclusao recusada para %s: %s", record.full_name, duplicate_message)
+            self._close_include_popup()
+            raise DuplicateAthleteError(duplicate_message)
+        self.logger.info("Inclusao enviada com sucesso para %s", record.full_name)
+        time.sleep(2)
+        return "Inclusao enviada com sucesso"
+
+    def _remove_person(self, record: Record) -> None:
+        row = self._find_person_row(record.full_name)
+        self._click_child(row, self.selectors.get("actions", "remove_row_button"))
+        confirm = self.selectors.get_optional("actions", "confirm_remove_button")
+        if confirm:
+            self._click(confirm)
+
+    def _port_person(self, record: Record) -> None:
+        self._click(self.selectors.get("actions", "portability_button"))
+        time.sleep(self.config.portability_popup_wait_seconds)
+        self._select_portability_source_championship()
+        checkbox = self._find_portability_checkbox(record.full_name)
+        if checkbox is None:
+            raise LookupError(f"Atleta nao encontrado na lista de portabilidade: {record.full_name}")
+        self.driver.execute_script("arguments[0].click();", checkbox)
+        if self.config.dry_run:
+            self.logger.info("DRY RUN ativo: atleta marcado para portabilidade, sem clicar em inscrever.")
+            self._close_portability_popup()
+            return
+        self._click(self.selectors.get("actions", "portability_submit_button"))
+        time.sleep(2)
+
+    def _select_portability_source_championship(self) -> None:
+        self._click(self.selectors.get("actions", "portability_championship_select"))
+        option_xpath = self.selectors.get("actions", "portability_championship_option").format(
+            championship_name=self.config.portability_source_championship
+        )
+        time.sleep(self.config.portability_popup_wait_seconds)
+        self._click(option_xpath)
+        time.sleep(self.config.portability_popup_wait_seconds)
+        self.wait.until(ec.presence_of_element_located(self._locator(self.selectors.get("actions", "portability_player_checkbox"))))
+
+    def _find_portability_checkbox(self, full_name: str) -> WebElement | None:
+        normalized_target = normalize_text(full_name)
+        checkboxes = self.driver.find_elements(*self._locator(self.selectors.get("actions", "portability_player_checkbox")))
+        for checkbox in checkboxes:
+            label = checkbox.get_attribute("aria-label") or checkbox.text
+            if normalized_target == normalize_text(label):
+                return checkbox
+        return None
+
+    def _close_portability_popup(self) -> None:
+        cancel_selector = self.selectors.get_optional("actions", "portability_cancel_button")
+        if cancel_selector:
+            self._click(cancel_selector)
+            time.sleep(1)
+
+    def _select_person_type(self, record: Record) -> None:
+        type_selector = self.selectors.get_optional("actions", "person_type_select")
+        if not type_selector:
+            return
+        self._click(type_selector)
+        option_key = "commission_type_option" if "comissao tecnica" in record.normalized_person_type else "athlete_type_option"
+        self._click(self.selectors.get("actions", option_key))
+
+    def _fill_person_form(self, record: Record) -> None:
+        image_path = Path("perfil-foto-default.png")
+        upload_selector = self.selectors.get_optional("form", "image_input")
+        if upload_selector and image_path.exists():
+            input_element = self.wait.until(ec.presence_of_element_located(self._locator(upload_selector)))
+            input_element.send_keys(str(image_path.resolve()))
+            time.sleep(1)
+        self._fill(self.selectors.get("form", "full_name_input"), record.full_name)
+        if record.requires_identity:
+            self._fill(self.selectors.get("form", "birthdate_input"), record.birthdate)
+            self._fill(self.selectors.get("form", "cpf_input"), record.cpf)
+
+    def _find_duplicate_message(self) -> str | None:
+        duplicate_selector = self.selectors.get_optional("messages", "duplicate_rg_card")
+        if not duplicate_selector:
+            return None
+        elements = self.driver.find_elements(*self._locator(duplicate_selector))
+        for element in elements:
+            text = element.text.strip()
+            if text:
+                return " ".join(text.split())
+        return None
+
+    def _wait_for_include_outcome(self) -> str | None:
+        end_time = time.time() + self.config.timeout
+        while time.time() < end_time:
+            duplicate_message = self._find_duplicate_message()
+            if duplicate_message:
+                return duplicate_message
+
+            dialog_selector = self.selectors.get_optional("messages", "include_dialog")
+            if dialog_selector:
+                dialogs = self.driver.find_elements(*self._locator(dialog_selector))
+                if not dialogs:
+                    return None
+            time.sleep(0.3)
+        return self._find_duplicate_message()
+
+    def _close_include_popup(self) -> None:
+        cancel_selector = self.selectors.get_optional("actions", "cancel_button")
+        if not cancel_selector:
+            return
+        try:
+            self._click(cancel_selector)
+            dialog_selector = self.selectors.get_optional("messages", "include_dialog")
+            if dialog_selector:
+                self.wait.until(ec.invisibility_of_element_located(self._locator(dialog_selector)))
+            else:
+                time.sleep(1)
+            self._open_roster_section()
+        except Exception:
+            self.logger.warning("Nao foi possivel fechar o pop-up de inclusao apos duplicidade.")
+
+    def _build_record_result(self, record: Record, status: str, message: str) -> RecordResult:
+        return RecordResult(
+            index=record.index,
+            action=record.action,
+            person_type=record.person_type,
+            full_name=record.full_name,
+            birthdate=record.birthdate,
+            cpf=record.cpf,
+            status=status,
+            message=message,
+        )
+
+    def _write_result_file(self, request: RequestFile, results: list[RecordResult]) -> None:
+        self.config.results_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        result_name = f"{Path(request.source_name).stem}-resultado-{timestamp}.txt"
+        result_path = self.config.results_dir / result_name
+        lines = [
+            "RESULTADO DA AUTOMACAO AEUV",
+            "",
+            f"PROTOCOLO: {request.protocol}",
+            f"COMPETICAO: {request.competition_name}",
+            f"EQUIPE: {request.team_name}",
+            "",
+            "RESULTADOS",
+            "----------",
+            "",
+        ]
+        for result in results:
+            lines.extend(
+                [
+                    f"REGISTRO {result.index:02d}",
+                    f"ACAO: {result.action}",
+                    f"TIPO: {result.person_type}",
+                    f"NOME COMPLETO: {result.full_name}",
+                    f"DATA DE NASCIMENTO: {result.birthdate}",
+                    f"CPF: {result.cpf}",
+                    f"STATUS: {result.status}",
+                    f"MENSAGEM: {result.message}",
+                    "",
+                ]
+            )
+        result_path.write_text("\n".join(lines), encoding="utf-8")
+
+    def _find_person_row(self, full_name: str) -> WebElement:
+        rows = self.driver.find_elements(*self._locator(self.selectors.get("team", "roster_row")))
+        normalized_name = normalize_text(full_name)
+        for row in rows:
+            if normalized_name in normalize_text(row.text):
+                return row
+        raise LookupError(f"Pessoa nao encontrada na lista do time: {full_name}")
+
+    def _fill(self, selector: str, value: str, clear: bool = True) -> None:
+        element = self.wait.until(ec.presence_of_element_located(self._locator(selector)))
+        if clear:
+            element.clear()
+        element.send_keys(value)
+
+    def _click(self, selector: str) -> None:
+        element = self.wait.until(ec.element_to_be_clickable(self._locator(selector)))
+        self.driver.execute_script("arguments[0].click();", element)
+
+    def _click_child(self, parent: WebElement, selector: str) -> None:
+        by, value = self._locator(selector)
+        child = parent.find_element(by, value)
+        self.driver.execute_script("arguments[0].click();", child)
+
+    def _locator(self, selector: str) -> tuple[str, str]:
+        if "=" not in selector:
+            raise ValueError(f"Seletor invalido: {selector}")
+        strategy, value = selector.split("=", 1)
+        mapping = {
+            "css": By.CSS_SELECTOR,
+            "xpath": By.XPATH,
+            "id": By.ID,
+            "name": By.NAME,
+        }
+        if strategy not in mapping:
+            raise ValueError(f"Estrategia de seletor nao suportada: {strategy}")
+        return mapping[strategy], value
+
+
+def configure_logging(log_path: Path) -> logging.Logger:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("ifut_bot")
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    return logger
+
+
+def move_file(source: Path, destination_dir: Path) -> None:
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    target = destination_dir / source.name
+    if target.exists():
+        target.unlink()
+    source.replace(target)
+
+
+def iter_txt_files(directory: Path) -> Iterable[Path]:
+    return sorted(path for path in directory.glob("*.txt") if path.is_file())
+
+
+def write_default_config() -> None:
+    if not DEFAULT_CONFIG_PATH.exists():
+        DEFAULT_CONFIG_PATH.write_text(
+            """[ifut]
+username = seu_email@ifut.com
+password = sua_senha
+login_url = https://admin.ifut.com.br/login
+championship_url = https://admin.ifut.com.br/campeonatos/131038
+teams_url = https://admin.ifut.com.br/campeonatos/131038/times
+
+[drive]
+folder_embed_url = https://drive.google.com/embeddedfolderview?id=10hhnvDF_J7C0LE5JU9BrPST9D8Rf9qk1#list
+download_dir = downloads
+processed_dir = downloads\\processados
+failed_dir = downloads\\falhas
+
+[selenium]
+headless = false
+timeout_seconds = 20
+
+[app]
+log_path = logs\\ifut.log
+pause_after_action = true
+dry_run = true
+""",
+            encoding="utf-8",
+        )
+
+    if not DEFAULT_SELECTORS_PATH.exists():
+        DEFAULT_SELECTORS_PATH.write_text(
+            """[login]
+username_input = css=input[type='email']
+password_input = css=input[type='password']
+submit_button = css=button[type='submit']
+
+[teams]
+page_ready = css=body
+search_input =
+team_card = xpath=//a[contains(@href, '/campeonatos/131038/time/') or contains(@href, '/time/')]
+
+[team]
+roster_tab =
+roster_ready = css=body
+roster_row = xpath=//*[self::tr or self::div][contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'atleta') or contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'comissao')]
+
+[actions]
+include_button =
+portability_button =
+person_type_select =
+athlete_type_option =
+commission_type_option =
+search_person_input =
+search_person_button =
+select_first_search_result =
+save_button =
+remove_row_button =
+confirm_remove_button =
+
+[form]
+full_name_input =
+birthdate_input =
+cpf_input =
+role_input =
+""",
+            encoding="utf-8",
+        )
+
+
+def build_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Automacao iFut para inclusao, remocao e portabilidade")
+    parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Arquivo INI de configuracao")
+    parser.add_argument("--selectors", default=str(DEFAULT_SELECTORS_PATH), help="Arquivo INI de seletores Selenium")
+    parser.add_argument("--sync-drive-only", action="store_true", help="Baixa os TXTs do Google Drive e encerra")
+    parser.add_argument("--process-local-only", action="store_true", help="Processa somente os TXTs locais ja baixados")
+    parser.add_argument("--login-only", action="store_true", help="Abre o iFut e para logo apos o login")
+    return parser
+
+
+def main() -> int:
+    write_default_config()
+    args = build_argument_parser().parse_args()
+    config = AppConfig(Path(args.config))
+    selectors = SelectorConfig(Path(args.selectors))
+    logger = configure_logging(config.log_path)
+
+    downloader = DriveTxtDownloader(config.folder_embed_url, config.download_dir)
+    if not args.process_local_only:
+        downloaded = downloader.sync()
+        logger.info("Arquivos sincronizados do Drive: %s", len(downloaded))
+        if args.sync_drive_only:
+            return 0
+
+    parser = TxtRequestParser()
+    txt_files = list(iter_txt_files(config.download_dir))
+    if not txt_files:
+        logger.info("Nenhum arquivo TXT encontrado em %s", config.download_dir)
+        return 0
+
+    bot = IfutBot(config, selectors, logger)
+    try:
+        bot.login()
+        if args.login_only:
+            logger.info("Login executado com sucesso; encerrando por --login-only.")
+            return 0
+        for txt_file in txt_files:
+            try:
+                request = parser.parse(txt_file)
+                bot.process_request(request)
+                move_file(txt_file, config.processed_dir)
+            except Exception as exc:
+                logger.exception("Falha ao processar %s: %s", txt_file.name, exc)
+                move_file(txt_file, config.failed_dir)
+    finally:
+        bot.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
