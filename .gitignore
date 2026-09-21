@@ -1,1 +1,8 @@
 downloads/
+google-service-account.json
+logs/
+__pycache__/
+.venv/
+.idea/
+*.pyc
+config.local.ini

@@ -45,6 +45,23 @@ def team_search_key(team_name: str) -> str:
     return normalize_text(team_name.split("-", 1)[0])
 
 
+def text_tokens(text: str) -> set[str]:
+    """Extrai tokens significantes ignorando particulas comuns."""
+    particles = {"da", "de", "do", "a", "o", "e", "em"}
+    normalized = normalize_text(text)
+    tokens = {token for token in normalized.split() if token and token not in particles}
+    return tokens
+
+
+def token_overlap_score(target_tokens: set[str], candidate_tokens: set[str]) -> float:
+    """Calcula similaridade entre conjuntos de tokens (0.0 a 1.0)."""
+    if not target_tokens or not candidate_tokens:
+        return 0.0
+    intersection = len(target_tokens & candidate_tokens)
+    union = len(target_tokens | candidate_tokens)
+    return intersection / union if union > 0 else 0.0
+
+
 def parse_bool(value: str, default: bool = False) -> bool:
     if value is None:
         return default
@@ -364,12 +381,49 @@ class IfutBot:
         self.wait.until(ec.presence_of_element_located(self._locator(self.selectors.get("actions", "portability_player_checkbox"))))
 
     def _find_portability_checkbox(self, full_name: str) -> WebElement | None:
+        from difflib import SequenceMatcher
+        
         normalized_target = normalize_text(full_name)
+        target_tokens = text_tokens(full_name)
+        threshold = 0.88
+        
         checkboxes = self.driver.find_elements(*self._locator(self.selectors.get("actions", "portability_player_checkbox")))
+        best_match = None
+        best_score = 0.0
+        
         for checkbox in checkboxes:
             label = checkbox.get_attribute("aria-label") or checkbox.text
-            if normalized_target == normalize_text(label):
+            normalized_label = normalize_text(label)
+            
+            if normalized_target == normalized_label:
                 return checkbox
+            
+            candidate_tokens = text_tokens(label)
+            token_score = token_overlap_score(target_tokens, candidate_tokens)
+            sequence_score = SequenceMatcher(None, normalized_target, normalized_label).ratio()
+            combined_score = (token_score * 0.65) + (sequence_score * 0.35)
+            
+            self.logger.debug(
+                "Portabilidade: %s vs %s | token=%.2f seq=%.2f combined=%.2f",
+                full_name,
+                label,
+                token_score,
+                sequence_score,
+                combined_score,
+            )
+            
+            if combined_score > best_score:
+                best_score = combined_score
+                best_match = checkbox
+        
+        if best_score >= threshold:
+            self.logger.info(
+                "Portabilidade: Atleta encontrado com fuzzy matching (score=%.2f): %s",
+                best_score,
+                full_name,
+            )
+            return best_match
+        
         return None
 
     def _close_portability_popup(self) -> None:
