@@ -456,17 +456,20 @@ class IfutBot:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         result_name = f"{Path(request.source_name).stem}-resultado-{timestamp}.txt"
         result_path = self.config.results_dir / result_name
+        inclusions = [result for result in results if normalize_text(result.action) == "inclusao" and result.status == "SUCESSO"]
         lines = [
             "RESULTADO DA AUTOMACAO AEUV",
             "",
             f"PROTOCOLO: {request.protocol}",
             f"COMPETICAO: {request.competition_name}",
             f"EQUIPE: {request.team_name}",
-            "",
-            "RESULTADOS",
-            "----------",
-            "",
+            f"QUANTIDADE DE ATLETAS INSCRITOS: {len(inclusions)}",
         ]
+        if inclusions:
+            lines.extend(["ATLETAS INSCRITOS", "-----------------"])
+            for result in inclusions:
+                lines.append(f"- {result.full_name}")
+        lines.extend(["", "RESULTADOS", "----------", ""])
         for result in results:
             lines.extend(
                 [
