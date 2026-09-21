@@ -634,3 +634,688 @@ selenium.common.exceptions.TimeoutException: Message:
 2026-09-17 22:43:52,953 [INFO] Registro 3 processado com sucesso
 2026-09-17 22:43:54,954 [INFO] Registro 4 - acao=Portabilidade tipo=Atleta nome=Wagner Soares
 2026-09-17 22:44:03,104 [INFO] Registro 4 processado com sucesso
+2026-09-21 14:55:03,225 [INFO] Processando protocolo 20260921-TESTEAJAX do time AJAX
+2026-09-21 14:55:07,073 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=TESTE ATLETA AJAX
+2026-09-21 14:55:18,860 [INFO] Inclusao enviada com sucesso para TESTE ATLETA AJAX
+2026-09-21 14:56:53,384 [INFO] Processando protocolo 20260921-TESTEAJAX do time AJAX
+2026-09-21 14:56:57,368 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=TESTE ATLETA AJAX
+2026-09-21 14:57:01,149 [INFO] Inclusao enviada com sucesso para TESTE ATLETA AJAX
+2026-09-21 14:57:03,149 [INFO] Registro 1 processado com sucesso
+2026-09-21 14:57:06,150 [INFO] Registro 2 - acao=Inclusao tipo=Comissao tecnica nome=TESTE COMISSAO AJAX
+2026-09-21 14:57:16,092 [INFO] Inclusao enviada com sucesso para TESTE COMISSAO AJAX
+2026-09-21 14:57:18,139 [INFO] Registro 2 processado com sucesso
+2026-09-21 14:57:21,140 [INFO] Registro 3 - acao=Portabilidade tipo=Atleta nome=Allison nascimento santos
+2026-09-21 14:57:30,311 [ERROR] Registro 3 falhou: Atleta nao encontrado na lista de portabilidade: Allison nascimento santos. Nome mais proximo encontrado: Alisson Nascimento Dos Santos. Similaridade: 0.57. Limiar minimo: 0.88.
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 316, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 342, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 384, in _port_person
+    checkbox = self._find_portability_checkbox(record.full_name)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 451, in _find_portability_checkbox
+    raise PortabilityMatchError(
+    ...<4 lines>...
+    )
+PortabilityMatchError: Atleta nao encontrado na lista de portabilidade: Allison nascimento santos. Nome mais proximo encontrado: Alisson Nascimento Dos Santos. Similaridade: 0.57. Limiar minimo: 0.88.
+2026-09-21 14:57:33,313 [INFO] Registro 4 - acao=Portabilidade tipo=Comissao tecnica nome=Ramires marquez oliveira
+2026-09-21 14:57:42,458 [ERROR] Registro 4 falhou: Atleta nao encontrado na lista de portabilidade: Ramires marquez oliveira. Nome mais proximo encontrado: Ramires Marques Oliveira. Similaridade: 0.66. Limiar minimo: 0.88.
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 316, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 342, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 384, in _port_person
+    checkbox = self._find_portability_checkbox(record.full_name)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 451, in _find_portability_checkbox
+    raise PortabilityMatchError(
+    ...<4 lines>...
+    )
+PortabilityMatchError: Atleta nao encontrado na lista de portabilidade: Ramires marquez oliveira. Nome mais proximo encontrado: Ramires Marques Oliveira. Similaridade: 0.66. Limiar minimo: 0.88.
+2026-09-21 14:57:45,459 [INFO] Registro 5 - acao=Remocao tipo=Atleta nome=Nome Remover
+2026-09-21 14:57:45,557 [ERROR] Registro 5 falhou: 'Seletor ausente: [actions] remove_row_button'
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 316, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 339, in _execute_record
+    self._remove_person(record)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 375, in _remove_person
+    self._click_child(row, self.selectors.get("actions", "remove_row_button"))
+                           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 170, in get
+    raise KeyError(f"Seletor ausente: [{section}] {option}")
+KeyError: 'Seletor ausente: [actions] remove_row_button'
+2026-09-21 14:57:48,560 [INFO] Registro 6 - acao=Remocao tipo=Comissao tecnica nome=Nome Remover 2
+2026-09-21 14:57:48,628 [ERROR] Registro 6 falhou: 'Seletor ausente: [actions] remove_row_button'
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 316, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 339, in _execute_record
+    self._remove_person(record)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 375, in _remove_person
+    self._click_child(row, self.selectors.get("actions", "remove_row_button"))
+                           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 170, in get
+    raise KeyError(f"Seletor ausente: [{section}] {option}")
+KeyError: 'Seletor ausente: [actions] remove_row_button'
+2026-09-21 15:10:59,750 [INFO] Processando protocolo 20260921-TESTEAJAX do time AJAX
+2026-09-21 15:11:03,577 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=TESTE ATLETA AJAX
+2026-09-21 15:11:46,837 [INFO] Processando protocolo 20260921-TESTEAJAX do time AJAX
+2026-09-21 15:11:50,652 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=TESTE ATLETA AJAX
+2026-09-21 15:11:54,356 [INFO] Inclusao enviada com sucesso para TESTE ATLETA AJAX
+2026-09-21 15:11:56,357 [INFO] Registro 1 processado com sucesso
+2026-09-21 15:11:59,357 [INFO] Registro 2 - acao=Inclusao tipo=Comissao tecnica nome=TESTE COMISSAO AJAX
+2026-09-21 15:12:09,274 [INFO] Inclusao enviada com sucesso para TESTE COMISSAO AJAX
+2026-09-21 15:12:11,307 [INFO] Registro 2 processado com sucesso
+2026-09-21 15:12:14,308 [INFO] Registro 3 - acao=Portabilidade tipo=Atleta nome=Allison nascimento santos
+2026-09-21 15:12:23,465 [ERROR] Registro 3 falhou: Atleta nao encontrado na lista de portabilidade: Allison nascimento santos. Nome mais proximo encontrado: Alisson Nascimento Dos Santos. Similaridade: 0.57. Limiar minimo: 0.88.
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 316, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 342, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 387, in _port_person
+    checkbox = self._find_portability_checkbox(record.full_name)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 454, in _find_portability_checkbox
+    raise PortabilityMatchError(
+    ...<4 lines>...
+    )
+PortabilityMatchError: Atleta nao encontrado na lista de portabilidade: Allison nascimento santos. Nome mais proximo encontrado: Alisson Nascimento Dos Santos. Similaridade: 0.57. Limiar minimo: 0.88.
+2026-09-21 15:12:26,467 [INFO] Registro 4 - acao=Portabilidade tipo=Comissao tecnica nome=Ramires marquez oliveira
+2026-09-21 15:12:35,604 [ERROR] Registro 4 falhou: Atleta nao encontrado na lista de portabilidade: Ramires marquez oliveira. Nome mais proximo encontrado: Ramires Marques Oliveira. Similaridade: 0.66. Limiar minimo: 0.88.
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 316, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 342, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 387, in _port_person
+    checkbox = self._find_portability_checkbox(record.full_name)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 454, in _find_portability_checkbox
+    raise PortabilityMatchError(
+    ...<4 lines>...
+    )
+PortabilityMatchError: Atleta nao encontrado na lista de portabilidade: Ramires marquez oliveira. Nome mais proximo encontrado: Ramires Marques Oliveira. Similaridade: 0.66. Limiar minimo: 0.88.
+2026-09-21 15:12:38,625 [INFO] Registro 5 - acao=Remocao tipo=Atleta nome=Nome Remover
+2026-09-21 15:12:41,742 [ERROR] Registro 5 falhou: Message: no such element: Unable to locate element: {"method":"xpath","selector":".//button[.//i[contains(@class, 'delete')]]"}
+  (Session info: chrome=151.0.7922.77); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff724caabb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff724caac10+15210]
+	chromedriver!(No symbol) [0x7ff7247d5d6d]
+	chromedriver!(No symbol) [0x7ff724831289]
+	chromedriver!(No symbol) [0x7ff72483158c]
+	chromedriver!(No symbol) [0x7ff7248250cc]
+	chromedriver!(No symbol) [0x7ff724824f76]
+	chromedriver!(No symbol) [0x7ff72487ec0b]
+	chromedriver!(No symbol) [0x7ff7248237cc]
+	chromedriver!(No symbol) [0x7ff7248246f3]
+	chromedriver!GetHandleVerifier [0x7ff7252cb79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff7252c5ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff7252ebcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff724cc8ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff724cd147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff724cb4d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff724cb4ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff724c97d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 316, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 339, in _execute_record
+    self._remove_person(record)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 377, in _remove_person
+    self._click_child(row, self.selectors.get("actions", "remove_row_button"))
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 636, in _click_child
+    child = parent.find_element(by, value)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webelement.py", line 528, in find_element
+    return self._execute(Command.FIND_CHILD_ELEMENT, {"using": by, "value": value})["value"]
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webelement.py", line 504, in _execute
+    return self._parent.execute(command, params)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webdriver.py", line 506, in execute
+    self.error_handler.check_response(response)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\errorhandler.py", line 232, in check_response
+    raise exception_class(message, screen, stacktrace)
+selenium.common.exceptions.NoSuchElementException: Message: no such element: Unable to locate element: {"method":"xpath","selector":".//button[.//i[contains(@class, 'delete')]]"}
+  (Session info: chrome=151.0.7922.77); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff724caabb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff724caac10+15210]
+	chromedriver!(No symbol) [0x7ff7247d5d6d]
+	chromedriver!(No symbol) [0x7ff724831289]
+	chromedriver!(No symbol) [0x7ff72483158c]
+	chromedriver!(No symbol) [0x7ff7248250cc]
+	chromedriver!(No symbol) [0x7ff724824f76]
+	chromedriver!(No symbol) [0x7ff72487ec0b]
+	chromedriver!(No symbol) [0x7ff7248237cc]
+	chromedriver!(No symbol) [0x7ff7248246f3]
+	chromedriver!GetHandleVerifier [0x7ff7252cb79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff7252c5ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff7252ebcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff724cc8ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff724cd147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff724cb4d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff724cb4ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff724c97d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+
+2026-09-21 15:12:44,746 [INFO] Registro 6 - acao=Remocao tipo=Comissao tecnica nome=Nome Remover 2
+2026-09-21 15:12:50,842 [ERROR] Registro 6 falhou: Message: no such element: Unable to locate element: {"method":"xpath","selector":".//button[.//i[contains(@class, 'delete')]]"}
+  (Session info: chrome=151.0.7922.77); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff724caabb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff724caac10+15210]
+	chromedriver!(No symbol) [0x7ff7247d5d6d]
+	chromedriver!(No symbol) [0x7ff724831289]
+	chromedriver!(No symbol) [0x7ff72483158c]
+	chromedriver!(No symbol) [0x7ff7248250cc]
+	chromedriver!(No symbol) [0x7ff724824f76]
+	chromedriver!(No symbol) [0x7ff72487ec0b]
+	chromedriver!(No symbol) [0x7ff7248237cc]
+	chromedriver!(No symbol) [0x7ff7248246f3]
+	chromedriver!GetHandleVerifier [0x7ff7252cb79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff7252c5ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff7252ebcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff724cc8ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff724cd147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff724cb4d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff724cb4ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff724c97d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 316, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 339, in _execute_record
+    self._remove_person(record)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 377, in _remove_person
+    self._click_child(row, self.selectors.get("actions", "remove_row_button"))
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 636, in _click_child
+    child = parent.find_element(by, value)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webelement.py", line 528, in find_element
+    return self._execute(Command.FIND_CHILD_ELEMENT, {"using": by, "value": value})["value"]
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webelement.py", line 504, in _execute
+    return self._parent.execute(command, params)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webdriver.py", line 506, in execute
+    self.error_handler.check_response(response)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\errorhandler.py", line 232, in check_response
+    raise exception_class(message, screen, stacktrace)
+selenium.common.exceptions.NoSuchElementException: Message: no such element: Unable to locate element: {"method":"xpath","selector":".//button[.//i[contains(@class, 'delete')]]"}
+  (Session info: chrome=151.0.7922.77); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff724caabb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff724caac10+15210]
+	chromedriver!(No symbol) [0x7ff7247d5d6d]
+	chromedriver!(No symbol) [0x7ff724831289]
+	chromedriver!(No symbol) [0x7ff72483158c]
+	chromedriver!(No symbol) [0x7ff7248250cc]
+	chromedriver!(No symbol) [0x7ff724824f76]
+	chromedriver!(No symbol) [0x7ff72487ec0b]
+	chromedriver!(No symbol) [0x7ff7248237cc]
+	chromedriver!(No symbol) [0x7ff7248246f3]
+	chromedriver!GetHandleVerifier [0x7ff7252cb79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff7252c5ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff7252ebcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff724cc8ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff724cd147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff724cb4d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff724cb4ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff724c97d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+
+2026-09-21 15:18:41,512 [INFO] Processando protocolo 20260921-TESTEAJAX do time AJAX
+2026-09-21 15:18:45,340 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=TESTE ATLETA AJAX
+2026-09-21 15:18:47,196 [ERROR] Inclusao recusada para TESTE ATLETA AJAX: warning RG já cadastrado Nome Teste Atleta Ajax Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-21 15:18:47,780 [ERROR] Registro 1 falhou: warning RG já cadastrado Nome Teste Atleta Ajax Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-21 15:18:50,780 [INFO] Registro 2 - acao=Inclusao tipo=Comissao tecnica nome=TESTE COMISSAO AJAX
+2026-09-21 15:18:58,840 [ERROR] Inclusao recusada para TESTE COMISSAO AJAX: warning RG já cadastrado Nome Teste Comissao Ajax Time: AJAX DOM ALMIR Status : Ativo Comissão VER ATLETA
+2026-09-21 15:18:59,437 [ERROR] Registro 2 falhou: warning RG já cadastrado Nome Teste Comissao Ajax Time: AJAX DOM ALMIR Status : Ativo Comissão VER ATLETA
+2026-09-21 15:19:02,438 [INFO] Registro 3 - acao=Portabilidade tipo=Atleta nome=Allison nascimento santos
+2026-09-21 15:19:11,654 [ERROR] Registro 3 falhou: Atleta nao encontrado na lista de portabilidade: Allison nascimento santos. Nome mais proximo encontrado: Alisson Nascimento Dos Santos. Similaridade: 0.55. Limiar minimo: 0.88.
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 321, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 347, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 395, in _port_person
+    checkbox = self._find_portability_checkbox(record.full_name)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 465, in _find_portability_checkbox
+    raise PortabilityMatchError(
+    ...<4 lines>...
+    )
+PortabilityMatchError: Atleta nao encontrado na lista de portabilidade: Allison nascimento santos. Nome mais proximo encontrado: Alisson Nascimento Dos Santos. Similaridade: 0.55. Limiar minimo: 0.88.
+2026-09-21 15:19:14,656 [INFO] Registro 4 - acao=Portabilidade tipo=Comissao tecnica nome=Ramires marquez oliveira
+2026-09-21 15:19:23,816 [ERROR] Registro 4 falhou: Atleta nao encontrado na lista de portabilidade: Ramires marquez oliveira. Nome mais proximo encontrado: Ramires Marques Oliveira. Similaridade: 0.64. Limiar minimo: 0.88.
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 321, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 347, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 395, in _port_person
+    checkbox = self._find_portability_checkbox(record.full_name)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 465, in _find_portability_checkbox
+    raise PortabilityMatchError(
+    ...<4 lines>...
+    )
+PortabilityMatchError: Atleta nao encontrado na lista de portabilidade: Ramires marquez oliveira. Nome mais proximo encontrado: Ramires Marques Oliveira. Similaridade: 0.64. Limiar minimo: 0.88.
+2026-09-21 15:19:26,818 [INFO] Registro 5 - acao=Remocao tipo=Atleta nome=Nome Remover
+2026-09-21 15:19:29,960 [ERROR] Registro 5 falhou: Message: no such element: Unable to locate element: {"method":"xpath","selector":".//button[.//i[contains(@class, 'delete')]]"}
+  (Session info: chrome=151.0.7922.77); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff70a50abb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff70a50ac10+15210]
+	chromedriver!(No symbol) [0x7ff70a035d6d]
+	chromedriver!(No symbol) [0x7ff70a091289]
+	chromedriver!(No symbol) [0x7ff70a09158c]
+	chromedriver!(No symbol) [0x7ff70a0850cc]
+	chromedriver!(No symbol) [0x7ff70a084f76]
+	chromedriver!(No symbol) [0x7ff70a0dec0b]
+	chromedriver!(No symbol) [0x7ff70a0837cc]
+	chromedriver!(No symbol) [0x7ff70a0846f3]
+	chromedriver!GetHandleVerifier [0x7ff70ab2b79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff70ab25ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff70ab4bcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff70a528ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff70a53147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff70a514d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff70a514ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff70a4f7d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 321, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 344, in _execute_record
+    self._remove_person(record)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 382, in _remove_person
+    self._click_child(row, self.selectors.get("actions", "remove_row_button"))
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 647, in _click_child
+    child = parent.find_element(by, value)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webelement.py", line 528, in find_element
+    return self._execute(Command.FIND_CHILD_ELEMENT, {"using": by, "value": value})["value"]
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webelement.py", line 504, in _execute
+    return self._parent.execute(command, params)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webdriver.py", line 506, in execute
+    self.error_handler.check_response(response)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\errorhandler.py", line 232, in check_response
+    raise exception_class(message, screen, stacktrace)
+selenium.common.exceptions.NoSuchElementException: Message: no such element: Unable to locate element: {"method":"xpath","selector":".//button[.//i[contains(@class, 'delete')]]"}
+  (Session info: chrome=151.0.7922.77); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff70a50abb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff70a50ac10+15210]
+	chromedriver!(No symbol) [0x7ff70a035d6d]
+	chromedriver!(No symbol) [0x7ff70a091289]
+	chromedriver!(No symbol) [0x7ff70a09158c]
+	chromedriver!(No symbol) [0x7ff70a0850cc]
+	chromedriver!(No symbol) [0x7ff70a084f76]
+	chromedriver!(No symbol) [0x7ff70a0dec0b]
+	chromedriver!(No symbol) [0x7ff70a0837cc]
+	chromedriver!(No symbol) [0x7ff70a0846f3]
+	chromedriver!GetHandleVerifier [0x7ff70ab2b79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff70ab25ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff70ab4bcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff70a528ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff70a53147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff70a514d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff70a514ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff70a4f7d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+
+2026-09-21 15:19:32,964 [INFO] Registro 6 - acao=Remocao tipo=Comissao tecnica nome=Nome Remover 2
+2026-09-21 15:19:39,063 [ERROR] Registro 6 falhou: Message: no such element: Unable to locate element: {"method":"xpath","selector":".//button[.//i[contains(@class, 'delete')]]"}
+  (Session info: chrome=151.0.7922.77); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff70a50abb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff70a50ac10+15210]
+	chromedriver!(No symbol) [0x7ff70a035d6d]
+	chromedriver!(No symbol) [0x7ff70a091289]
+	chromedriver!(No symbol) [0x7ff70a09158c]
+	chromedriver!(No symbol) [0x7ff70a0850cc]
+	chromedriver!(No symbol) [0x7ff70a084f76]
+	chromedriver!(No symbol) [0x7ff70a0dec0b]
+	chromedriver!(No symbol) [0x7ff70a0837cc]
+	chromedriver!(No symbol) [0x7ff70a0846f3]
+	chromedriver!GetHandleVerifier [0x7ff70ab2b79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff70ab25ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff70ab4bcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff70a528ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff70a53147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff70a514d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff70a514ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff70a4f7d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 321, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 344, in _execute_record
+    self._remove_person(record)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 382, in _remove_person
+    self._click_child(row, self.selectors.get("actions", "remove_row_button"))
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 647, in _click_child
+    child = parent.find_element(by, value)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webelement.py", line 528, in find_element
+    return self._execute(Command.FIND_CHILD_ELEMENT, {"using": by, "value": value})["value"]
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webelement.py", line 504, in _execute
+    return self._parent.execute(command, params)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\webdriver.py", line 506, in execute
+    self.error_handler.check_response(response)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\remote\errorhandler.py", line 232, in check_response
+    raise exception_class(message, screen, stacktrace)
+selenium.common.exceptions.NoSuchElementException: Message: no such element: Unable to locate element: {"method":"xpath","selector":".//button[.//i[contains(@class, 'delete')]]"}
+  (Session info: chrome=151.0.7922.77); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff70a50abb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff70a50ac10+15210]
+	chromedriver!(No symbol) [0x7ff70a035d6d]
+	chromedriver!(No symbol) [0x7ff70a091289]
+	chromedriver!(No symbol) [0x7ff70a09158c]
+	chromedriver!(No symbol) [0x7ff70a0850cc]
+	chromedriver!(No symbol) [0x7ff70a084f76]
+	chromedriver!(No symbol) [0x7ff70a0dec0b]
+	chromedriver!(No symbol) [0x7ff70a0837cc]
+	chromedriver!(No symbol) [0x7ff70a0846f3]
+	chromedriver!GetHandleVerifier [0x7ff70ab2b79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff70ab25ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff70ab4bcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff70a528ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff70a53147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff70a514d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff70a514ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff70a4f7d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+
+2026-09-21 15:24:30,514 [INFO] Processando protocolo 20260921-TESTEAJAX do time AJAX
+2026-09-21 15:24:34,461 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=TESTE ATLETA AJAX
+2026-09-21 15:24:37,883 [INFO] Inclusao enviada com sucesso para TESTE ATLETA AJAX
+2026-09-21 15:24:39,884 [INFO] Registro 1 processado com sucesso
+2026-09-21 15:24:42,885 [INFO] Registro 2 - acao=Inclusao tipo=Comissao tecnica nome=TESTE COMISSAO AJAX
+2026-09-21 15:24:53,089 [INFO] Inclusao enviada com sucesso para TESTE COMISSAO AJAX
+2026-09-21 15:24:55,124 [INFO] Registro 2 processado com sucesso
+2026-09-21 15:24:58,124 [INFO] Registro 3 - acao=Portabilidade tipo=Atleta nome=Allison nascimento santos
+2026-09-21 15:25:07,285 [ERROR] Registro 3 falhou: Atleta nao encontrado na lista de portabilidade: Allison nascimento santos. Nome mais proximo encontrado: Alisson Nascimento Dos Santos. Similaridade: 0.58. Limiar minimo: 0.88.
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 330, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 356, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 411, in _port_person
+    checkbox = self._find_portability_checkbox(record.full_name)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 483, in _find_portability_checkbox
+    raise PortabilityMatchError(
+    ...<4 lines>...
+    )
+PortabilityMatchError: Atleta nao encontrado na lista de portabilidade: Allison nascimento santos. Nome mais proximo encontrado: Alisson Nascimento Dos Santos. Similaridade: 0.58. Limiar minimo: 0.88.
+2026-09-21 15:25:10,287 [INFO] Registro 4 - acao=Portabilidade tipo=Comissao tecnica nome=Ramires marquez oliveira
+2026-09-21 15:25:19,426 [ERROR] Registro 4 falhou: Atleta nao encontrado na lista de portabilidade: Ramires marquez oliveira. Nome mais proximo encontrado: Ramires Marques Oliveira. Similaridade: 0.65. Limiar minimo: 0.88.
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 330, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 356, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 411, in _port_person
+    checkbox = self._find_portability_checkbox(record.full_name)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 483, in _find_portability_checkbox
+    raise PortabilityMatchError(
+    ...<4 lines>...
+    )
+PortabilityMatchError: Atleta nao encontrado na lista de portabilidade: Ramires marquez oliveira. Nome mais proximo encontrado: Ramires Marques Oliveira. Similaridade: 0.65. Limiar minimo: 0.88.
+2026-09-21 15:25:22,427 [INFO] Registro 5 - acao=Remocao tipo=Atleta nome=Nome Remover
+2026-09-21 15:25:31,562 [INFO] Registro 5 processado com sucesso
+2026-09-21 15:25:34,563 [INFO] Registro 6 - acao=Remocao tipo=Comissao tecnica nome=Nome Remover 2
+2026-09-21 15:25:54,782 [ERROR] Registro 6 falhou: Message: 
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff70a50abb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff70a50ac10+15210]
+	chromedriver!(No symbol) [0x7ff70a035d6d]
+	chromedriver!(No symbol) [0x7ff70a091289]
+	chromedriver!(No symbol) [0x7ff70a09158c]
+	chromedriver!(No symbol) [0x7ff70a0e2027]
+	chromedriver!(No symbol) [0x7ff70a0dec0b]
+	chromedriver!(No symbol) [0x7ff70a0837cc]
+	chromedriver!(No symbol) [0x7ff70a0846f3]
+	chromedriver!GetHandleVerifier [0x7ff70ab2b79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff70ab25ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff70ab4bcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff70a528ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff70a53147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff70a514d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff70a514ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff70a4f7d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 330, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 353, in _execute_record
+    self._remove_person(record)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 388, in _remove_person
+    self._open_removal_context(record)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 540, in _open_removal_context
+    self._click(commission_tab_selector)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 670, in _click
+    element = self.wait.until(ec.element_to_be_clickable(self._locator(selector)))
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\support\wait.py", line 121, in until
+    raise TimeoutException(message, screen, stacktrace)
+selenium.common.exceptions.TimeoutException: Message: 
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff70a50abb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff70a50ac10+15210]
+	chromedriver!(No symbol) [0x7ff70a035d6d]
+	chromedriver!(No symbol) [0x7ff70a091289]
+	chromedriver!(No symbol) [0x7ff70a09158c]
+	chromedriver!(No symbol) [0x7ff70a0e2027]
+	chromedriver!(No symbol) [0x7ff70a0dec0b]
+	chromedriver!(No symbol) [0x7ff70a0837cc]
+	chromedriver!(No symbol) [0x7ff70a0846f3]
+	chromedriver!GetHandleVerifier [0x7ff70ab2b79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff70ab25ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff70ab4bcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff70a528ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff70a53147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff70a514d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff70a514ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff70a4f7d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+
+2026-09-21 15:31:32,099 [INFO] Processando protocolo 20260921-TESTEAJAX do time AJAX
+2026-09-21 15:31:35,932 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=TESTE ATLETA AJAX
+2026-09-21 15:31:39,672 [INFO] Inclusao enviada com sucesso para TESTE ATLETA AJAX
+2026-09-21 15:31:41,673 [INFO] Registro 1 processado com sucesso
+2026-09-21 15:31:44,673 [INFO] Registro 2 - acao=Inclusao tipo=Comissao tecnica nome=TESTE COMISSAO AJAX
+2026-09-21 15:31:54,268 [INFO] Inclusao enviada com sucesso para TESTE COMISSAO AJAX
+2026-09-21 15:31:56,303 [INFO] Registro 2 processado com sucesso
+2026-09-21 15:31:59,304 [INFO] Registro 3 - acao=Portabilidade tipo=Atleta nome=Allison nascimento santos
+2026-09-21 15:32:08,450 [ERROR] Registro 3 falhou: Atleta nao encontrado na lista de portabilidade: Allison nascimento santos. Nome mais proximo encontrado: Alisson Nascimento Dos Santos. Similaridade: 0.62. Limiar minimo: 0.88.
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 344, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 370, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 425, in _port_person
+    checkbox = self._find_portability_checkbox(record.full_name)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 498, in _find_portability_checkbox
+    raise PortabilityMatchError(
+    ...<4 lines>...
+    )
+PortabilityMatchError: Atleta nao encontrado na lista de portabilidade: Allison nascimento santos. Nome mais proximo encontrado: Alisson Nascimento Dos Santos. Similaridade: 0.62. Limiar minimo: 0.88.
+2026-09-21 15:32:11,452 [INFO] Registro 4 - acao=Portabilidade tipo=Comissao tecnica nome=Ramires marquez oliveira
+2026-09-21 15:32:20,593 [INFO] Portabilidade: Atleta encontrado com fuzzy matching (score=0.67): Ramires marquez oliveira
+2026-09-21 15:32:22,627 [INFO] Registro 4 processado com sucesso
+2026-09-21 15:32:25,628 [INFO] Registro 5 - acao=Remocao tipo=Atleta nome=Nome Remover
+2026-09-21 15:32:34,742 [INFO] Registro 5 processado com sucesso
+2026-09-21 15:32:37,743 [INFO] Registro 6 - acao=Remocao tipo=Comissao tecnica nome=Nome Remover 2
+2026-09-21 15:32:49,904 [INFO] Registro 6 processado com sucesso
+2026-09-21 15:36:51,202 [INFO] Processando protocolo 20260921-TESTEAJAX do time AJAX
+2026-09-21 15:36:55,174 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=TESTE ATLETA AJAX
+2026-09-21 15:36:57,060 [ERROR] Inclusao recusada para TESTE ATLETA AJAX: warning RG já cadastrado Nome Teste Atleta Ajax Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-21 15:36:57,622 [ERROR] Registro 1 falhou: warning RG já cadastrado Nome Teste Atleta Ajax Time: AJAX DOM ALMIR Status : Ativo Atleta VER ATLETA
+2026-09-21 15:37:00,623 [INFO] Registro 2 - acao=Inclusao tipo=Comissao tecnica nome=TESTE COMISSAO AJAX
+2026-09-21 15:37:10,593 [INFO] Inclusao enviada com sucesso para TESTE COMISSAO AJAX
+2026-09-21 15:37:12,626 [INFO] Registro 2 processado com sucesso
+2026-09-21 15:37:15,627 [INFO] Registro 3 - acao=Portabilidade tipo=Atleta nome=Allison nascimento santos
+2026-09-21 15:37:24,788 [INFO] Portabilidade: Atleta encontrado com fuzzy matching (score=0.62): Allison nascimento santos
+2026-09-21 15:37:26,822 [INFO] Registro 3 processado com sucesso
+2026-09-21 15:37:29,822 [INFO] Registro 4 - acao=Portabilidade tipo=Comissao tecnica nome=Ramires marquez oliveira
+2026-09-21 15:37:38,994 [INFO] Portabilidade: Atleta encontrado com fuzzy matching (score=0.67): Ramires marquez oliveira
+2026-09-21 15:37:41,030 [INFO] Registro 4 processado com sucesso
+2026-09-21 15:37:44,031 [INFO] Registro 5 - acao=Remocao tipo=Atleta nome=Nome Remover
+2026-09-21 15:37:45,104 [ERROR] Registro 5 falhou: Pessoa nao encontrada na lista do time: Nome Remover
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 344, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 367, in _execute_record
+    self._remove_person(record)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 403, in _remove_person
+    row = self._find_person_row(record.full_name)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 689, in _find_person_row
+    raise LookupError(f"Pessoa nao encontrada na lista do time: {full_name}")
+LookupError: Pessoa nao encontrada na lista do time: Nome Remover
+2026-09-21 15:37:48,106 [INFO] Registro 6 - acao=Remocao tipo=Comissao tecnica nome=Nome Remover 2
+2026-09-21 15:38:06,278 [INFO] Registro 6 processado com sucesso
+2026-09-21 15:42:23,084 [INFO] Processando protocolo 20260921-TESTEAJAX do time AJAX
+2026-09-21 15:42:26,924 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=TESTE ATLETA AJAX
+2026-09-21 15:42:30,332 [INFO] Inclusao enviada com sucesso para TESTE ATLETA AJAX
+2026-09-21 15:42:32,333 [INFO] Registro 1 processado com sucesso
+2026-09-21 15:42:35,333 [INFO] Registro 2 - acao=Inclusao tipo=Comissao tecnica nome=TESTE COMISSAO AJAX
+2026-09-21 15:42:45,266 [INFO] Inclusao enviada com sucesso para TESTE COMISSAO AJAX
+2026-09-21 15:42:47,300 [INFO] Registro 2 processado com sucesso
+2026-09-21 15:42:50,300 [INFO] Registro 3 - acao=Portabilidade tipo=Atleta nome=Allison nascimento santos
+2026-09-21 15:42:59,445 [INFO] Portabilidade: Atleta encontrado com fuzzy matching (score=0.62): Allison nascimento santos
+2026-09-21 15:43:01,478 [INFO] Registro 3 processado com sucesso
+2026-09-21 15:43:04,479 [INFO] Registro 4 - acao=Portabilidade tipo=Comissao tecnica nome=Ramires marquez oliveira
+2026-09-21 15:43:13,619 [INFO] Portabilidade: Atleta encontrado com fuzzy matching (score=0.67): Ramires marquez oliveira
+2026-09-21 15:43:15,649 [INFO] Registro 4 processado com sucesso
+2026-09-21 15:43:18,650 [INFO] Registro 5 - acao=Remocao tipo=Atleta nome=Nome Remover
+2026-09-21 15:43:33,774 [INFO] Registro 5 processado com sucesso
+2026-09-21 15:43:36,775 [INFO] Registro 6 - acao=Remocao tipo=Comissao tecnica nome=Nome Remover 2
+2026-09-21 15:43:54,939 [INFO] Registro 6 processado com sucesso
+2026-09-21 15:47:30,468 [INFO] Processando protocolo 20260921-TESTEAJAX do time AJAX
+2026-09-21 15:47:34,502 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=TESTE ATLETA AJAX
+2026-09-21 15:47:38,200 [INFO] Inclusao enviada com sucesso para TESTE ATLETA AJAX
+2026-09-21 15:47:40,201 [INFO] Registro 1 processado com sucesso
+2026-09-21 15:47:43,201 [INFO] Registro 2 - acao=Inclusao tipo=Comissao tecnica nome=TESTE COMISSAO AJAX
+2026-09-21 15:47:52,791 [INFO] Inclusao enviada com sucesso para TESTE COMISSAO AJAX
+2026-09-21 15:47:54,823 [INFO] Registro 2 processado com sucesso
+2026-09-21 15:47:57,824 [INFO] Registro 3 - acao=Portabilidade tipo=Atleta nome=Allison nascimento santos
+2026-09-21 15:48:06,987 [INFO] Portabilidade: Atleta encontrado com fuzzy matching (score=0.62): Allison nascimento santos
+2026-09-21 15:48:09,036 [INFO] Registro 3 processado com sucesso
+2026-09-21 15:48:12,036 [INFO] Registro 4 - acao=Portabilidade tipo=Comissao tecnica nome=Ramires marquez oliveira
+2026-09-21 15:48:35,249 [ERROR] Registro 4 falhou: Message: 
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff70a50abb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff70a50ac10+15210]
+	chromedriver!(No symbol) [0x7ff70a035d6d]
+	chromedriver!(No symbol) [0x7ff70a091289]
+	chromedriver!(No symbol) [0x7ff70a09158c]
+	chromedriver!(No symbol) [0x7ff70a0e2027]
+	chromedriver!(No symbol) [0x7ff70a0dec0b]
+	chromedriver!(No symbol) [0x7ff70a0837cc]
+	chromedriver!(No symbol) [0x7ff70a0846f3]
+	chromedriver!GetHandleVerifier [0x7ff70ab2b79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff70ab25ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff70ab4bcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff70a528ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff70a53147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff70a514d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff70a514ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff70a4f7d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+Traceback (most recent call last):
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 353, in process_request
+    message = self._execute_record(record)
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 379, in _execute_record
+    self._port_person(record)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 432, in _port_person
+    self._click(self.selectors.get("actions", "portability_button"))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\main.py", line 751, in _click
+    element = self.wait.until(ec.element_to_be_clickable(self._locator(selector)))
+  File "C:\Users\diego\PycharmProjects\aeuvIfutManager\.venv\Lib\site-packages\selenium\webdriver\support\wait.py", line 121, in until
+    raise TimeoutException(message, screen, stacktrace)
+selenium.common.exceptions.TimeoutException: Message: 
+Stacktrace:
+	chromedriver!GetHandleVerifier [0x7ff70a50abb5+151b5]
+	chromedriver!GetHandleVerifier [0x7ff70a50ac10+15210]
+	chromedriver!(No symbol) [0x7ff70a035d6d]
+	chromedriver!(No symbol) [0x7ff70a091289]
+	chromedriver!(No symbol) [0x7ff70a09158c]
+	chromedriver!(No symbol) [0x7ff70a0e2027]
+	chromedriver!(No symbol) [0x7ff70a0dec0b]
+	chromedriver!(No symbol) [0x7ff70a0837cc]
+	chromedriver!(No symbol) [0x7ff70a0846f3]
+	chromedriver!GetHandleVerifier [0x7ff70ab2b79b+635d9b]
+	chromedriver!GetHandleVerifier [0x7ff70ab25ac6+6300c6]
+	chromedriver!GetHandleVerifier [0x7ff70ab4bcee+6562ee]
+	chromedriver!GetHandleVerifier [0x7ff70a528ffe+335fe]
+	chromedriver!GetHandleVerifier [0x7ff70a53147c+3ba7c]
+	chromedriver!GetHandleVerifier [0x7ff70a514d64+1f364]
+	chromedriver!GetHandleVerifier [0x7ff70a514ef4+1f4f4]
+	chromedriver!GetHandleVerifier [0x7ff70a4f7d97+2397]
+	KERNEL32!BaseThreadInitThunk [0x7ff89acae8d7+17]
+	ntdll!RtlUserThreadStart [0x7ff89b8ac53c+2c]
+
+2026-09-21 15:48:38,279 [INFO] Registro 5 - acao=Remocao tipo=Atleta nome=Nome Remover
+2026-09-21 15:48:53,484 [INFO] Registro 5 processado com sucesso
+2026-09-21 15:48:56,484 [INFO] Registro 6 - acao=Remocao tipo=Comissao tecnica nome=Nome Remover 2
+2026-09-21 15:49:14,641 [INFO] Registro 6 processado com sucesso
+2026-09-21 15:54:55,230 [INFO] Processando protocolo 20260921-TESTEAJAX do time AJAX
+2026-09-21 15:54:59,066 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=TESTE ATLETA AJAX
+2026-09-21 15:55:03,143 [INFO] Inclusao enviada com sucesso para TESTE ATLETA AJAX
+2026-09-21 15:55:05,144 [INFO] Registro 1 processado com sucesso
+2026-09-21 15:55:08,145 [INFO] Registro 2 - acao=Inclusao tipo=Comissao tecnica nome=TESTE COMISSAO AJAX
+2026-09-21 15:55:18,073 [INFO] Inclusao enviada com sucesso para TESTE COMISSAO AJAX
+2026-09-21 15:55:20,109 [INFO] Registro 2 processado com sucesso
+2026-09-21 15:55:23,111 [INFO] Registro 3 - acao=Portabilidade tipo=Atleta nome=Allison nascimento santos
+2026-09-21 15:55:32,280 [INFO] Portabilidade: Atleta encontrado com fuzzy matching (score=0.62): Allison nascimento santos
+2026-09-21 15:55:34,310 [INFO] Registro 3 processado com sucesso
+2026-09-21 15:55:37,311 [INFO] Registro 4 - acao=Portabilidade tipo=Comissao tecnica nome=Ramires marquez oliveira
+2026-09-21 15:55:46,465 [INFO] Portabilidade: Atleta encontrado com fuzzy matching (score=0.67): Ramires marquez oliveira
+2026-09-21 15:55:48,495 [INFO] Registro 4 processado com sucesso
+2026-09-21 15:55:51,496 [INFO] Registro 5 - acao=Remocao tipo=Atleta nome=Nome Remover
+2026-09-21 15:56:06,594 [INFO] Registro 5 processado com sucesso
+2026-09-21 15:56:09,594 [INFO] Registro 6 - acao=Remocao tipo=Comissao tecnica nome=Nome Remover 2
+2026-09-21 15:56:27,734 [INFO] Registro 6 processado com sucesso

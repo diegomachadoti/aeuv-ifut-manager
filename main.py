@@ -53,6 +53,11 @@ def text_tokens(text: str) -> set[str]:
     return tokens
 
 
+def text_tokens_all(text: str) -> set[str]:
+    normalized = normalize_text(text)
+    return {token for token in normalized.split() if token}
+
+
 def token_overlap_score(target_tokens: set[str], candidate_tokens: set[str]) -> float:
     """Calcula similaridade entre conjuntos de tokens (0.0 a 1.0)."""
     if not target_tokens or not candidate_tokens:
@@ -60,6 +65,26 @@ def token_overlap_score(target_tokens: set[str], candidate_tokens: set[str]) -> 
     intersection = len(target_tokens & candidate_tokens)
     union = len(target_tokens | candidate_tokens)
     return intersection / union if union > 0 else 0.0
+
+
+def token_containment_score(target_tokens: set[str], candidate_tokens: set[str]) -> float:
+    """Calcula quanto o conjunto menor esta contido no maior."""
+    if not target_tokens or not candidate_tokens:
+        return 0.0
+    smaller = target_tokens if len(target_tokens) <= len(candidate_tokens) else candidate_tokens
+    larger = candidate_tokens if smaller is target_tokens else target_tokens
+    return len(smaller & larger) / len(smaller) if smaller else 0.0
+
+
+def token_similarity_score(target_tokens: set[str], candidate_tokens: set[str]) -> float:
+    if not target_tokens or not candidate_tokens:
+        return 0.0
+    target_core = {token for token in target_tokens if token not in {"da", "de", "do", "das", "dos", "e", "a", "o", "em"}}
+    candidate_core = {token for token in candidate_tokens if token not in {"da", "de", "do", "das", "dos", "e", "a", "o", "em"}}
+    if not target_core or not candidate_core:
+        return 0.0
+    intersection = len(target_core & candidate_core)
+    return intersection / max(len(target_core), len(candidate_core))
 
 
 def parse_bool(value: str, default: bool = False) -> bool:
@@ -76,6 +101,7 @@ class Record:
     full_name: str
     birthdate: str
     cpf: str
+    previous_competition: str = ""
 
     @property
     def normalized_action(self) -> str:
@@ -88,6 +114,10 @@ class Record:
     @property
     def requires_identity(self) -> bool:
         return self.normalized_action == "inclusao" and self.normalized_person_type == "atleta"
+
+    @property
+    def is_commission(self) -> bool:
+        return "comissao tecnica" in self.normalized_person_type
 
 
 @dataclass
@@ -118,6 +148,19 @@ class DuplicateAthleteError(ValueError):
     pass
 
 
+class PortabilityMatchError(LookupError):
+    pass
+
+
+@dataclass
+class PortabilityMatch:
+    checkbox: WebElement | None
+    label: str
+    score: float
+    threshold: float
+    matched: bool
+
+
 class AppConfig:
     def __init__(self, path: Path) -> None:
         parser = configparser.ConfigParser()
@@ -145,6 +188,9 @@ class AppConfig:
         self.wait_between_records_seconds = parser.getfloat("app", "wait_between_records_seconds", fallback=2.0)
         self.team_page_wait_seconds = parser.getfloat("app", "team_page_wait_seconds", fallback=2.0)
         self.portability_popup_wait_seconds = parser.getfloat("app", "portability_popup_wait_seconds", fallback=2.0)
+        self.portability_cancel_delay_seconds = parser.getfloat("app", "portability_cancel_delay_seconds", fallback=1.0)
+        self.removal_click_delay_seconds = parser.getfloat("app", "removal_click_delay_seconds", fallback=3.0)
+        self.removal_confirm_delay_seconds = parser.getfloat("app", "removal_confirm_delay_seconds", fallback=3.0)
         self.portability_source_championship = parser.get("app", "portability_source_championship", fallback="2º COPA AMERICA 2026")
 
 
@@ -200,7 +246,8 @@ class DriveTxtDownloader:
 class TxtRequestParser:
     HEADER_PATTERN = re.compile(r"^(.*?):\s*(.*)$")
     RECORD_PATTERN = re.compile(
-        r"REGISTRO\s+(\d+)\s*\nACAO:\s*(.*?)\s*\nTIPO:\s*(.*?)\s*\nNOME COMPLETO:\s*(.*?)\s*\nDATA DE NASCIMENTO:\s*(.*?)\s*\nCPF:\s*(.*?)(?=\n\s*\nREGISTRO\s+\d+\s*\n|\Z)",
+        r"REGISTRO\s+(\d+)\s*\nACAO:\s*(.*?)\s*\nTIPO:\s*(.*?)\s*\nNOME COMPLETO:\s*(.*?)\s*\nDATA DE NASCIMENTO:\s*(.*?)\s*\nCPF:\s*(.*?)"
+        r"(?:\s*\nCOMPETICAO ANTERIOR:\s*(.*?))?(?=\n\s*\nREGISTRO\s+\d+\s*\n|\Z)",
         re.DOTALL,
     )
 
@@ -226,6 +273,7 @@ class TxtRequestParser:
                     full_name=record_match.group(4).strip(),
                     birthdate=record_match.group(5).strip(),
                     cpf=record_match.group(6).strip(),
+                    previous_competition=(record_match.group(7) or "").strip(),
                 )
             )
 
@@ -333,76 +381,116 @@ class IfutBot:
         raise ValueError(f"Acao nao suportada: {record.action}")
 
     def _include_person(self, record: Record) -> str:
-        self._click(self.selectors.get("actions", "include_button"))
+        self._open_include_context(record)
+        include_selector = (
+            self.selectors.get_optional("actions", "commission_include_button")
+            if record.is_commission
+            else None
+        ) or self.selectors.get("actions", "include_button")
+        self._click(include_selector)
+        if record.is_commission:
+            time.sleep(self.config.portability_popup_wait_seconds)
         self._fill_person_form(record)
         if self.config.dry_run:
             self.logger.info("DRY RUN ativo: formulario preenchido, sem clicar em salvar.")
+            self._restore_default_team_tab(record)
             return "Formulario preenchido em DRY RUN"
         self._click(self.selectors.get("actions", "save_button"))
         duplicate_message = self._wait_for_include_outcome()
         if duplicate_message:
             self.logger.error("Inclusao recusada para %s: %s", record.full_name, duplicate_message)
             self._close_include_popup()
+            self._restore_default_team_tab(record)
             raise DuplicateAthleteError(duplicate_message)
         self.logger.info("Inclusao enviada com sucesso para %s", record.full_name)
         time.sleep(2)
+        self._restore_default_team_tab(record)
         return "Inclusao enviada com sucesso"
 
     def _remove_person(self, record: Record) -> None:
+        self._open_removal_context(record)
         row = self._find_person_row(record.full_name)
-        self._click_child(row, self.selectors.get("actions", "remove_row_button"))
+        time.sleep(self.config.removal_click_delay_seconds)
+        try:
+            self._click_child(row, self.selectors.get("actions", "remove_row_button"))
+        except NoSuchElementException:
+            delete_button = row.find_element(
+                By.XPATH,
+                ".//button[contains(@class, 'text-negative') or .//i[contains(@class, 'delete')]]",
+            )
+            self.driver.execute_script("arguments[0].click();", delete_button)
         confirm = self.selectors.get_optional("actions", "confirm_remove_button")
         if confirm:
+            self.wait.until(ec.presence_of_element_located(self._locator(confirm)))
+            time.sleep(self.config.removal_confirm_delay_seconds)
             self._click(confirm)
+            time.sleep(self.config.removal_confirm_delay_seconds)
+        self._restore_default_team_tab(record)
 
     def _port_person(self, record: Record) -> None:
+        self._open_roster_section()
         self._click(self.selectors.get("actions", "portability_button"))
         time.sleep(self.config.portability_popup_wait_seconds)
-        self._select_portability_source_championship()
-        checkbox = self._find_portability_checkbox(record.full_name)
-        if checkbox is None:
-            raise LookupError(f"Atleta nao encontrado na lista de portabilidade: {record.full_name}")
-        self.driver.execute_script("arguments[0].click();", checkbox)
+        self._select_portability_source_championship(record)
+        match = self._find_portability_checkbox(record.full_name)
+        if not match.matched or match.checkbox is None:
+            raise PortabilityMatchError(
+                f"Atleta nao encontrado na lista de portabilidade: {record.full_name}. "
+                f"Nome mais proximo encontrado: {match.label or 'NENHUM'}. "
+                f"Similaridade: {match.score:.2f}. "
+                f"Limiar minimo: {match.threshold:.2f}."
+            )
+        self.driver.execute_script("arguments[0].click();", match.checkbox)
         if self.config.dry_run:
-            self.logger.info("DRY RUN ativo: atleta marcado para portabilidade, sem clicar em inscrever.")
+            self.logger.info(
+                "DRY RUN ativo: atleta marcado para portabilidade (%s, score=%.2f), sem clicar em inscrever.",
+                match.label,
+                match.score,
+            )
             self._close_portability_popup()
             return
         self._click(self.selectors.get("actions", "portability_submit_button"))
         time.sleep(2)
 
-    def _select_portability_source_championship(self) -> None:
+    def _select_portability_source_championship(self, record: Record) -> None:
+        championship_name = record.previous_competition or self.config.portability_source_championship
         self._click(self.selectors.get("actions", "portability_championship_select"))
-        option_xpath = self.selectors.get("actions", "portability_championship_option").format(
-            championship_name=self.config.portability_source_championship
-        )
+        option_xpath = self.selectors.get("actions", "portability_championship_option").format(championship_name=championship_name)
         time.sleep(self.config.portability_popup_wait_seconds)
         self._click(option_xpath)
         time.sleep(self.config.portability_popup_wait_seconds)
         self.wait.until(ec.presence_of_element_located(self._locator(self.selectors.get("actions", "portability_player_checkbox"))))
 
-    def _find_portability_checkbox(self, full_name: str) -> WebElement | None:
+    def _find_portability_checkbox(self, full_name: str) -> PortabilityMatch:
         from difflib import SequenceMatcher
-        
+
         normalized_target = normalize_text(full_name)
         target_tokens = text_tokens(full_name)
+        target_tokens_all = text_tokens_all(full_name)
         threshold = 0.88
-        
+        relaxed_threshold = 0.58
+
         checkboxes = self.driver.find_elements(*self._locator(self.selectors.get("actions", "portability_player_checkbox")))
         best_match = None
+        best_label = ""
         best_score = 0.0
-        
+
         for checkbox in checkboxes:
             label = checkbox.get_attribute("aria-label") or checkbox.text
             normalized_label = normalize_text(label)
-            
+
             if normalized_target == normalized_label:
                 return checkbox
-            
+
             candidate_tokens = text_tokens(label)
+            candidate_tokens_all = text_tokens_all(label)
             token_score = token_overlap_score(target_tokens, candidate_tokens)
+            token_score_all = token_overlap_score(target_tokens_all, candidate_tokens_all)
+            containment_score = token_containment_score(target_tokens_all, candidate_tokens_all)
+            similarity_score = token_similarity_score(target_tokens_all, candidate_tokens_all)
             sequence_score = SequenceMatcher(None, normalized_target, normalized_label).ratio()
-            combined_score = (token_score * 0.65) + (sequence_score * 0.35)
-            
+            combined_score = (token_score * 0.25) + (token_score_all * 0.15) + (containment_score * 0.15) + (similarity_score * 0.20) + (sequence_score * 0.25)
+
             self.logger.debug(
                 "Portabilidade: %s vs %s | token=%.2f seq=%.2f combined=%.2f",
                 full_name,
@@ -411,26 +499,53 @@ class IfutBot:
                 sequence_score,
                 combined_score,
             )
-            
+
             if combined_score > best_score:
                 best_score = combined_score
                 best_match = checkbox
-        
-        if best_score >= threshold:
+                best_label = label
+
+        if best_score >= threshold or (best_score >= relaxed_threshold and self._looks_like_particle_only_difference(normalized_target, normalize_text(best_label))):
             self.logger.info(
                 "Portabilidade: Atleta encontrado com fuzzy matching (score=%.2f): %s",
                 best_score,
                 full_name,
             )
-            return best_match
-        
-        return None
+            return PortabilityMatch(best_match, best_label, best_score, threshold, True)
+
+        if best_label:
+            return PortabilityMatch(None, best_label, best_score, threshold, False)
+
+        return PortabilityMatch(None, "", 0.0, threshold, False)
+
+    def _looks_like_particle_only_difference(self, normalized_target: str, normalized_candidate: str) -> bool:
+        from difflib import SequenceMatcher
+
+        target_tokens = [token for token in normalized_target.split() if token]
+        candidate_tokens = [token for token in normalized_candidate.split() if token]
+        particles = {"da", "de", "do", "das", "dos", "e", "a", "o", "em"}
+        target_core = [token for token in target_tokens if token not in particles]
+        candidate_core = [token for token in candidate_tokens if token not in particles]
+        if target_core == candidate_core:
+            return True
+        if len(target_core) != len(candidate_core):
+            return False
+        differences = 0
+        for target_token, candidate_token in zip(target_core, candidate_core):
+            if target_token == candidate_token:
+                continue
+            if SequenceMatcher(None, target_token, candidate_token).ratio() >= 0.8:
+                differences += 1
+            else:
+                return False
+        return differences <= 1 and abs(len(target_tokens) - len(candidate_tokens)) <= 2
 
     def _close_portability_popup(self) -> None:
         cancel_selector = self.selectors.get_optional("actions", "portability_cancel_button")
         if cancel_selector:
+            time.sleep(self.config.portability_cancel_delay_seconds)
             self._click(cancel_selector)
-            time.sleep(1)
+            time.sleep(self.config.portability_cancel_delay_seconds)
 
     def _select_person_type(self, record: Record) -> None:
         type_selector = self.selectors.get_optional("actions", "person_type_select")
@@ -439,6 +554,32 @@ class IfutBot:
         self._click(type_selector)
         option_key = "commission_type_option" if "comissao tecnica" in record.normalized_person_type else "athlete_type_option"
         self._click(self.selectors.get("actions", option_key))
+
+    def _open_include_context(self, record: Record) -> None:
+        if not record.is_commission:
+            return
+        commission_tab_selector = self.selectors.get_optional("team", "commission_tab")
+        if commission_tab_selector:
+            self._click(commission_tab_selector)
+            time.sleep(self.config.portability_popup_wait_seconds)
+            team_ready = self.selectors.get_optional("team", "commission_ready") or self.selectors.get("team", "roster_ready")
+            self.wait.until(ec.presence_of_element_located(self._locator(team_ready)))
+
+    def _restore_default_team_tab(self, record: Record) -> None:
+        if not record.is_commission:
+            return
+        self._open_roster_section()
+
+    def _open_removal_context(self, record: Record) -> None:
+        if not record.is_commission:
+            self._open_roster_section()
+            return
+        commission_tab_selector = self.selectors.get_optional("team", "commission_tab")
+        if commission_tab_selector:
+            self._click(commission_tab_selector)
+            time.sleep(self.config.portability_popup_wait_seconds)
+            team_ready = self.selectors.get_optional("team", "commission_ready") or self.selectors.get("team", "roster_ready")
+            self.wait.until(ec.presence_of_element_located(self._locator(team_ready)))
 
     def _fill_person_form(self, record: Record) -> None:
         image_path = Path("perfil-foto-default.png")
@@ -451,6 +592,15 @@ class IfutBot:
         if record.requires_identity:
             self._fill(self.selectors.get("form", "birthdate_input"), record.birthdate)
             self._fill(self.selectors.get("form", "cpf_input"), record.cpf)
+        if record.is_commission:
+            role_selector = self.selectors.get_optional("form", "role_input")
+            role_option_selector = self.selectors.get_optional("form", "role_default_option")
+            if role_selector and role_option_selector:
+                self._click(role_selector)
+                self._click(role_option_selector)
+            document_selector = self.selectors.get_optional("form", "commission_document_input")
+            if document_selector and record.cpf and normalize_text(record.cpf) != "nao necessario":
+                self._fill(document_selector, record.cpf)
 
     def _find_duplicate_message(self) -> str | None:
         duplicate_selector = self.selectors.get_optional("messages", "duplicate_rg_card")
@@ -510,7 +660,12 @@ class IfutBot:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         result_name = f"{Path(request.source_name).stem}-resultado-{timestamp}.txt"
         result_path = self.config.results_dir / result_name
-        inclusions = [result for result in results if normalize_text(result.action) == "inclusao" and result.status == "SUCESSO"]
+        inclusions = [
+            result
+            for result in results
+            if result.status == "SUCESSO"
+            and normalize_text(result.action) in {"inclusao", "portabilidade"}
+        ]
         lines = [
             "RESULTADO DA AUTOMACAO AEUV",
             "",
@@ -543,10 +698,40 @@ class IfutBot:
     def _find_person_row(self, full_name: str) -> WebElement:
         rows = self.driver.find_elements(*self._locator(self.selectors.get("team", "roster_row")))
         normalized_name = normalize_text(full_name)
+        search_tokens = [token for token in normalized_name.split() if token]
+        search_key = " ".join(search_tokens[:2]) if len(search_tokens) >= 2 else normalized_name
         for row in rows:
-            if normalized_name in normalize_text(row.text):
+            row_text = normalize_text(row.text)
+            if normalized_name in row_text:
+                return row
+            if search_key and search_key in row_text:
+                return row
+            if self._row_matches_name(row_text, normalized_name):
                 return row
         raise LookupError(f"Pessoa nao encontrada na lista do time: {full_name}")
+
+    def _row_matches_name(self, row_text: str, normalized_name: str) -> bool:
+        from difflib import SequenceMatcher
+
+        row_tokens = text_tokens_all(row_text)
+        name_tokens = text_tokens_all(normalized_name)
+        if not row_tokens or not name_tokens:
+            return False
+
+        row_core = [token for token in row_tokens if token not in {"da", "de", "do", "das", "dos", "e", "a", "o", "em"}]
+        name_core = [token for token in name_tokens if token not in {"da", "de", "do", "das", "dos", "e", "a", "o", "em"}]
+
+        if len(row_core) != len(name_core):
+            return False
+
+        score = 0
+        for expected, candidate in zip(name_core, row_core):
+            if expected == candidate:
+                score += 1
+            elif SequenceMatcher(None, expected, candidate).ratio() >= 0.85:
+                score += 1
+
+        return score == len(name_core) and len(name_core) >= 2
 
     def _fill(self, selector: str, value: str, clear: bool = True) -> None:
         element = self.wait.until(ec.presence_of_element_located(self._locator(selector)))
