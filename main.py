@@ -434,6 +434,7 @@ class IfutBot:
         self._select_portability_source_championship(record)
         match = self._find_portability_checkbox(record.full_name)
         if not match.matched or match.checkbox is None:
+            self._close_portability_popup()
             raise PortabilityMatchError(
                 f"Atleta nao encontrado na lista de portabilidade: {record.full_name}. "
                 f"Nome mais proximo encontrado: {match.label or 'NENHUM'}. "
