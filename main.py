@@ -137,6 +137,12 @@ class RequestFile:
 
 
 @dataclass
+class TeamLinkInfo:
+    name: str
+    url: str
+
+
+@dataclass
 class RecordResult:
     index: int
     action: str
@@ -867,6 +873,18 @@ class IfutBot:
             message=message,
         )
 
+    def _team_link_for_request(self, request: RequestFile) -> str:
+        team_key = normalize_text(request.team_name)
+        direct_url = self.config.team_urls.get(team_key)
+        if direct_url:
+            match = re.search(r"/campeonatos/(\d+)/time/(\d+)", direct_url)
+            if match:
+                championship_id, team_id = match.group(1), match.group(2)
+                public_slug = normalize_text(request.competition_name).replace(" ", "-")
+                return f"https://campeonato.ifut.com.br/c/{championship_id}-{public_slug}/time/{team_id}"
+            return direct_url
+        return self.config.championship_url.rstrip("/")
+
     def _write_result_file(self, request: RequestFile, results: list[RecordResult]) -> None:
         self.config.results_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -905,6 +923,12 @@ class IfutBot:
                     "",
                 ]
             )
+        lines.append("")
+        lines.append("----------------------------------------")
+        lines.append("IMPORTANTE:")
+        lines.append("Representante da equipe, confira no aplicativo se as informacoes cadastradas estao corretas.")
+        lines.append(f"Link do time para conferencia: {self._team_link_for_request(request)}")
+        lines.append(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
         result_path.write_text("\n".join(lines), encoding="utf-8")
 
     def _find_person_row(self, full_name: str) -> WebElement:
