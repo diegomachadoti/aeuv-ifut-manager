@@ -1,7 +1,9 @@
 downloads/
-google-service-account.json
+google-service-account-arte-top-udi.json
+arte-top-udi-*.json
 logs/
 __pycache__/
+__pycache__/main.cpython-313.pyc
 .venv/
 .idea/
 *.pyc

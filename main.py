@@ -7,6 +7,7 @@ import re
 import sys
 import time
 import unicodedata
+import io
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,9 @@ from typing import Iterable
 from urllib.parse import urlparse
 
 import requests
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver import ChromeOptions
@@ -152,6 +156,10 @@ class PortabilityMatchError(LookupError):
     pass
 
 
+class RemovalValidationError(ValueError):
+    pass
+
+
 @dataclass
 class PortabilityMatch:
     checkbox: WebElement | None
@@ -182,6 +190,7 @@ class AppConfig:
         self.failed_dir = Path(parser.get("drive", "failed_dir", fallback=str(DEFAULT_FAILED_DIR)))
         self.results_dir = Path(parser.get("drive", "results_dir", fallback="downloads\\resultados"))
         self.folder_embed_url = parser.get("drive", "folder_embed_url")
+        self.service_account_json = Path(parser.get("drive", "service_account_json", fallback="google-service-account.json"))
         self.log_path = Path(parser.get("app", "log_path", fallback=str(DEFAULT_LOG_PATH)))
         self.pause_after_action = parse_bool(parser.get("app", "pause_after_action", fallback="true"), default=True)
         self.dry_run = parse_bool(parser.get("app", "dry_run", fallback="true"), default=True)
@@ -213,15 +222,25 @@ class SelectorConfig:
 
 
 class DriveTxtDownloader:
-    def __init__(self, folder_embed_url: str, download_dir: Path) -> None:
+    def __init__(self, folder_embed_url: str, download_dir: Path, service_account_json: Path | None = None) -> None:
         self.folder_embed_url = folder_embed_url
         self.download_dir = download_dir
+        self.service_account_json = service_account_json
+        self.remote_files_by_name: dict[str, str] = {}
+        self._drive_service = None
+        self._root_folder_id: str | None = None
+        self._entry_folder_id: str | None = None
+        self._processed_folder_id: str | None = None
+        self._failed_folder_id: str | None = None
 
     def sync(self) -> list[Path]:
         self.download_dir.mkdir(parents=True, exist_ok=True)
-        response = requests.get(self.folder_embed_url, timeout=30)
-        response.raise_for_status()
-        html = response.text
+        if self.service_account_json and self.service_account_json.exists():
+            return self._sync_with_service_account()
+        html = self._fetch_html(self.folder_embed_url)
+        entry_folder_url = self._find_entry_folder_url(html)
+        if entry_folder_url:
+            html = self._fetch_html(self._folder_view_url(entry_folder_url))
         matches = re.findall(
             r'<div class="flip-entry"[^>]*>.*?<a href="https://drive\.google\.com/file/d/([^"/]+)/view[^"]*".*?<div class="flip-entry-title">(.*?)</div>',
             html,
@@ -241,6 +260,108 @@ class DriveTxtDownloader:
             destination.write_bytes(content.content)
             files.append(destination)
         return files
+
+    def _sync_with_service_account(self) -> list[Path]:
+        credentials = service_account.Credentials.from_service_account_file(
+            str(self.service_account_json),
+            scopes=["https://www.googleapis.com/auth/drive"],
+        )
+        service = build("drive", "v3", credentials=credentials)
+        self._drive_service = service
+        root_folder_id = self._extract_folder_id(self.folder_embed_url)
+        self._root_folder_id = root_folder_id
+        entry_folder_id = self._find_named_folder_id(service, root_folder_id, "Entrada")
+        self._entry_folder_id = entry_folder_id or root_folder_id
+        self._processed_folder_id = self._find_named_folder_id(service, root_folder_id, "Processados")
+        self._failed_folder_id = self._find_named_folder_id(service, root_folder_id, "Falhas")
+        folder_id = self._entry_folder_id
+        query = f"'{folder_id}' in parents and trashed = false and (name contains '.txt' or mimeType = 'text/plain')"
+        response = service.files().list(
+            q=query,
+            fields="files(id, name)",
+            pageSize=200,
+        ).execute()
+        files: list[Path] = []
+        for item in response.get("files", []):
+            destination = self.download_dir / item["name"].strip()
+            self.remote_files_by_name[destination.name] = item["id"]
+            request = service.files().get_media(fileId=item["id"])
+            buffer = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+            destination.write_bytes(buffer.getvalue())
+            files.append(destination)
+        return files
+
+    def _fetch_html(self, url: str) -> str:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        return response.text
+
+    def _find_entry_folder_url(self, html: str) -> str | None:
+        match = re.search(
+            r'<a href="(https://drive\.google\.com/drive/folders/[^"]+)".*?<div class="flip-entry-title">Entrada</div>',
+            html,
+            re.DOTALL,
+        )
+        return match.group(1) if match else None
+
+    def _folder_view_url(self, folder_url: str) -> str:
+        parsed = urlparse(folder_url)
+        folder_id = parsed.path.rstrip("/").split("/")[-1]
+        return f"https://drive.google.com/embeddedfolderview?id={folder_id}#list"
+
+    def _extract_folder_id(self, url: str) -> str:
+        parsed = urlparse(url)
+        if "id=" in url:
+            match = re.search(r"[?&]id=([^&#]+)", url)
+            if match:
+                return match.group(1)
+        return parsed.path.rstrip("/").split("/")[-1]
+
+    def _find_named_folder_id(self, service, root_folder_id: str, folder_name: str) -> str | None:
+        query = (
+            f"'{root_folder_id}' in parents and trashed = false "
+            f"and mimeType = 'application/vnd.google-apps.folder' and name = '{folder_name}'"
+        )
+        response = service.files().list(
+            q=query,
+            fields="files(id, name)",
+            pageSize=10,
+        ).execute()
+        files = response.get("files", [])
+        return files[0]["id"] if files else None
+
+    def move_remote_file(self, file_name: str, destination_kind: str, logger=None) -> None:
+        if not self._drive_service:
+            if logger:
+                logger.warning("Servico Google Drive nao inicializado; skip movimentacao remota para %s", file_name)
+            return
+        file_id = self.remote_files_by_name.get(file_name)
+        if not file_id:
+            if logger:
+                logger.warning("Arquivo %s nao encontrado no rastreamento remoto; talvez nao foi baixado via service account", file_name)
+            return
+        destination_folder_id = self._processed_folder_id if destination_kind == "processed" else self._failed_folder_id
+        source_folder_id = self._entry_folder_id
+        if not destination_folder_id or not source_folder_id:
+            if logger:
+                logger.error("Pastas de destino nao configuradas: processados=%s, falhas=%s", self._processed_folder_id, self._failed_folder_id)
+            return
+        try:
+            self._drive_service.files().update(
+                fileId=file_id,
+                addParents=destination_folder_id,
+                removeParents=source_folder_id,
+                fields="id, parents",
+            ).execute()
+            if logger:
+                logger.info("Arquivo movido no Drive: %s -> %s", file_name, destination_kind)
+        except Exception as exc:
+            if logger:
+                logger.error("Erro ao mover arquivo no Drive %s: %s", file_name, exc)
 
 
 class TxtRequestParser:
@@ -388,7 +509,10 @@ class IfutBot:
             else None
         ) or self.selectors.get("actions", "include_button")
         self._click(include_selector)
-        if record.is_commission:
+        dialog_selector = self.selectors.get_optional("messages", "include_dialog")
+        if record.is_commission and dialog_selector:
+            self._wait_for_include_dialog_or_fail()
+        elif record.is_commission:
             time.sleep(self.config.portability_popup_wait_seconds)
         self._fill_person_form(record)
         if self.config.dry_run:
@@ -403,7 +527,7 @@ class IfutBot:
             self._restore_default_team_tab(record)
             raise DuplicateAthleteError(duplicate_message)
         self.logger.info("Inclusao enviada com sucesso para %s", record.full_name)
-        time.sleep(2)
+        time.sleep(3)
         self._restore_default_team_tab(record)
         return "Inclusao enviada com sucesso"
 
@@ -423,6 +547,7 @@ class IfutBot:
         if confirm:
             self.wait.until(ec.presence_of_element_located(self._locator(confirm)))
             time.sleep(self.config.removal_confirm_delay_seconds)
+            self._validate_removal_confirmation(record)
             self._click(confirm)
             time.sleep(self.config.removal_confirm_delay_seconds)
         self._restore_default_team_tab(record)
@@ -481,7 +606,7 @@ class IfutBot:
             normalized_label = normalize_text(label)
 
             if normalized_target == normalized_label:
-                return checkbox
+                return PortabilityMatch(checkbox, label, 1.0, threshold, True)
 
             candidate_tokens = text_tokens(label)
             candidate_tokens_all = text_tokens_all(label)
@@ -541,12 +666,73 @@ class IfutBot:
                 return False
         return differences <= 1 and abs(len(target_tokens) - len(candidate_tokens)) <= 2
 
+    def _validate_removal_confirmation(self, record: Record) -> None:
+        try:
+            confirmation_msg = self.driver.find_element(
+                By.XPATH,
+                ".//div[contains(@class, 'q-dialog__message')]"
+            )
+            dialog_text = confirmation_msg.text.strip()
+            
+            extracted_name = self._extract_name_from_removal_dialog(dialog_text)
+            
+            if not extracted_name or not self._names_match(record.full_name, extracted_name):
+                self.logger.error(
+                    "Nome no popup de confirmacao nao bate: esperado '%s', encontrado '%s'",
+                    record.full_name,
+                    extracted_name or "NENHUM"
+                )
+                deny_button = self.driver.find_element(
+                    By.XPATH,
+                    ".//button[contains(., 'Eita, não')]"
+                )
+                self.driver.execute_script("arguments[0].click();", deny_button)
+                raise RemovalValidationError(
+                    f"Nome do registro ({record.full_name}) nao encontrado no popup de confirmacao. "
+                    f"Remocao foi cancelada por seguranca."
+                )
+            
+            self.logger.info("Confirmacao de remocao validada: '%s'", extracted_name)
+        except NoSuchElementException:
+            self.logger.warning("Nao foi possivel validar popup de confirmacao de remocao")
+
+    def _extract_name_from_removal_dialog(self, dialog_text: str) -> str:
+        import re
+        match = re.search(r"excluir o atleta\s+(.+?)\s+desse", dialog_text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+        return ""
+
+    def _names_match(self, name1: str, name2: str, threshold: float = 0.85) -> bool:
+        from difflib import SequenceMatcher
+        normalized1 = self._normalize_name(name1)
+        normalized2 = self._normalize_name(name2)
+        
+        if normalized1 == normalized2:
+            return True
+        
+        similarity = SequenceMatcher(None, normalized1, normalized2).ratio()
+        return similarity >= threshold
+
+    def _normalize_name(self, name: str) -> str:
+        import unicodedata
+        name = name.strip().lower()
+        name = unicodedata.normalize('NFKD', name)
+        name = name.encode('ascii', 'ignore').decode('ascii')
+        return ' '.join(name.split())
+
     def _close_portability_popup(self) -> None:
         cancel_selector = self.selectors.get_optional("actions", "portability_cancel_button")
         if cancel_selector:
             time.sleep(self.config.portability_cancel_delay_seconds)
             self._click(cancel_selector)
             time.sleep(self.config.portability_cancel_delay_seconds)
+            checkbox_selector = self.selectors.get_optional("actions", "portability_player_checkbox")
+            if checkbox_selector:
+                try:
+                    self.wait.until(ec.invisibility_of_element_located(self._locator(checkbox_selector)))
+                except TimeoutException:
+                    self.logger.warning("Pop-up de portabilidade permaneceu aberto apos clicar em Cancelar.")
 
     def _select_person_type(self, record: Record) -> None:
         type_selector = self.selectors.get_optional("actions", "person_type_select")
@@ -597,8 +783,13 @@ class IfutBot:
             role_selector = self.selectors.get_optional("form", "role_input")
             role_option_selector = self.selectors.get_optional("form", "role_default_option")
             if role_selector and role_option_selector:
+                self.logger.info("Clicando em Posição")
                 self._click(role_selector)
+                time.sleep(0.8)
+                self.logger.info("Clicando na opção Treinador")
                 self._click(role_option_selector)
+                self.logger.info("Aguardando 3 segundos para estabilizar o combobox...")
+                time.sleep(3.0)
             document_selector = self.selectors.get_optional("form", "commission_document_input")
             if document_selector and record.cpf and normalize_text(record.cpf) != "nao necessario":
                 self._fill(document_selector, record.cpf)
@@ -643,6 +834,26 @@ class IfutBot:
             self._open_roster_section()
         except Exception:
             self.logger.warning("Nao foi possivel fechar o pop-up de inclusao apos duplicidade.")
+
+    def _wait_for_include_dialog_or_fail(self) -> None:
+        dialog_selector = self.selectors.get_optional("messages", "include_dialog")
+        if not dialog_selector:
+            time.sleep(self.config.portability_popup_wait_seconds)
+            return
+
+        end_time = time.time() + self.config.timeout
+        while time.time() < end_time:
+            dialogs = self.driver.find_elements(*self._locator(dialog_selector))
+            if dialogs:
+                return
+            current_url = self.driver.current_url
+            if "/atletas/" in current_url:
+                raise RuntimeError(
+                    "Fluxo de inclusao de comissao saiu do modal e navegou para a tela de detalhe do atleta/comissao."
+                )
+            time.sleep(0.2)
+
+        raise TimeoutException("Modal de inclusao nao apareceu apos clicar em Adicionar comissao.")
 
     def _build_record_result(self, record: Record, status: str, message: str) -> RecordResult:
         return RecordResult(
@@ -735,16 +946,18 @@ class IfutBot:
         return score == len(name_core) and len(name_core) >= 2
 
     def _fill(self, selector: str, value: str, clear: bool = True) -> None:
-        element = self.wait.until(ec.presence_of_element_located(self._locator(selector)))
+        element = self._wait_for_any_selector(selector)
         if clear:
             element.clear()
         element.send_keys(value)
 
     def _click(self, selector: str) -> None:
+        self._guard_against_modal_context_leak(selector)
         element = self.wait.until(ec.element_to_be_clickable(self._locator(selector)))
         self.driver.execute_script("arguments[0].click();", element)
 
     def _click_child(self, parent: WebElement, selector: str) -> None:
+        self._guard_against_modal_context_leak(selector)
         by, value = self._locator(selector)
         child = parent.find_element(by, value)
         self.driver.execute_script("arguments[0].click();", child)
@@ -753,6 +966,8 @@ class IfutBot:
         if "=" not in selector:
             raise ValueError(f"Seletor invalido: {selector}")
         strategy, value = selector.split("=", 1)
+        strategy = strategy.strip().lower()
+        value = value.strip()
         mapping = {
             "css": By.CSS_SELECTOR,
             "xpath": By.XPATH,
@@ -762,6 +977,40 @@ class IfutBot:
         if strategy not in mapping:
             raise ValueError(f"Estrategia de seletor nao suportada: {strategy}")
         return mapping[strategy], value
+
+    def _wait_for_any_selector(self, selector: str) -> WebElement:
+        selector_parts = [part.strip() for part in selector.split("||") if part.strip()]
+        if len(selector_parts) <= 1:
+            return self.wait.until(ec.presence_of_element_located(self._locator(selector)))
+
+        end_time = time.time() + self.config.timeout
+        last_error: Exception | None = None
+        while time.time() < end_time:
+            for selector_part in selector_parts:
+                try:
+                    element = self.driver.find_element(*self._locator(selector_part))
+                    if element:
+                        return element
+                except Exception as exc:
+                    last_error = exc
+            time.sleep(0.2)
+
+        raise TimeoutException(f"Nenhum seletor encontrado: {selector}") from last_error
+
+    def _guard_against_modal_context_leak(self, selector: str) -> None:
+        dialog_selector = self.selectors.get_optional("messages", "include_dialog")
+        if not dialog_selector:
+            return
+        dialogs = self.driver.find_elements(*self._locator(dialog_selector))
+        if not dialogs:
+            return
+        safe_markers = ("cancelar", "salvar", "nome", "posição", "posicao", "documento", "rg", "escolher imagem")
+        blocked_markers = ("adicionar", "importar", "remove", "elenco", "comissão", "comissao")
+        selector_text = selector.lower()
+        if any(marker in selector_text for marker in safe_markers):
+            return
+        if any(marker in selector_text for marker in blocked_markers):
+            raise RuntimeError("Tentativa de clicar fora do modal enquanto o pop-up de inclusao ainda esta aberto.")
 
 
 def configure_logging(log_path: Path) -> logging.Logger:
@@ -878,7 +1127,7 @@ def main() -> int:
     selectors = SelectorConfig(Path(args.selectors))
     logger = configure_logging(config.log_path)
 
-    downloader = DriveTxtDownloader(config.folder_embed_url, config.download_dir)
+    downloader = DriveTxtDownloader(config.folder_embed_url, config.download_dir, config.service_account_json)
     if not args.process_local_only:
         downloaded = downloader.sync()
         logger.info("Arquivos sincronizados do Drive: %s", len(downloaded))
@@ -902,9 +1151,11 @@ def main() -> int:
                 request = parser.parse(txt_file)
                 bot.process_request(request)
                 move_file(txt_file, config.processed_dir)
+                downloader.move_remote_file(txt_file.name, "processed", logger)
             except Exception as exc:
                 logger.exception("Falha ao processar %s: %s", txt_file.name, exc)
                 move_file(txt_file, config.failed_dir)
+                downloader.move_remote_file(txt_file.name, "failed", logger)
     finally:
         bot.close()
     return 0

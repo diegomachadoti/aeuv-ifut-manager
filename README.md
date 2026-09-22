@@ -40,6 +40,7 @@ Mapa `nome do time = url direta do time no iFut`.
 ### `[drive]`
 
 - `folder_embed_url`
+- `service_account_json` (opcional, caminho do JSON local da service account)
 - `download_dir`
 - `processed_dir`
 - `failed_dir`
@@ -124,10 +125,72 @@ O arquivo de resultado traz:
 - lista de inscritos por **inclusão** e **portabilidade**
 - bloco com todos os resultados por registro
 
+## Fluxo de sincronização com Google Drive
+
+### Estrutura de pastas esperada no Drive
+
+```
+Pasta Raiz (folder_embed_url)
+├── Entrada/          (arquivos a processar)
+├── Processados/      (arquivos processados com sucesso)
+└── Falhas/           (arquivos que falharam)
+```
+
+### Movimentação automática de arquivos
+
+Quando `service_account_json` está configurado:
+
+**Sucesso:**
+```
+Local:   downloads/ARQUIVO.txt → downloads/processados/ARQUIVO.txt
+Drive:   Entrada/ARQUIVO.txt → Processados/ARQUIVO.txt
+```
+
+**Falha:**
+```
+Local:   downloads/ARQUIVO.txt → downloads/falhas/ARQUIVO.txt
+Drive:   Entrada/ARQUIVO.txt → Falhas/ARQUIVO.txt
+```
+
+### Sincronização e processamento
+
+1. **`main.py` (fluxo completo)**
+   - ✅ Baixa arquivos de `Entrada/` do Drive (via service account)
+   - ✅ Processa cada arquivo
+   - ✅ Move local para `processados/` ou `falhas/`
+   - ✅ Move no Drive para `Processados/` ou `Falhas/`
+
+2. **`main.py --sync-drive-only`**
+   - ✅ Apenas baixa de `Entrada/` do Drive
+   - ❌ Não processa, não move
+
+3. **`main.py --process-local-only`**
+   - ❌ Não sincroniza do Drive
+   - ✅ Processa apenas arquivos locais em `downloads/`
+   - ⚠️ Move local, mas não move no Drive (usar com cuidado)
+
+4. **`main.py --login-only`**
+   - ✅ Apenas faz login e encerra
+
+### Configuração de service account
+
+Para ativar a movimentação no Drive, configure em `config.ini`:
+
+```ini
+[drive]
+service_account_json = google-service-account-arte-top-udi.json
+folder_embed_url = https://drive.google.com/embeddedfolderview?id=10hhnvDF_J7C0LE5JU9BrPST9D8Rf9qk1#list
+```
+
+O arquivo `google-service-account-*.json` deve estar na raiz do projeto.
+
 ## Observações
 
 - `--process-local-only` usa apenas os TXT já existentes em `downloads\`.
+- Sem `service_account_json`, o fluxo do Drive usa scraping público (lento) e não consegue mover arquivos.
+- Com `service_account_json`, a API do Google Drive gerencia sincronização e movimentação automática.
 - Em portabilidade, o campeonato de origem vem de `COMPETICAO ANTERIOR` do TXT; se não existir, usa `portability_source_championship`.
 - Os delays mais sensíveis ficaram em `[app]`.
 - Comissão técnica segue o fluxo da aba **Comissão Téc.** e retorna para **Elenco** nas ações de inclusão e remoção.
 - A portabilidade opera na aba principal de **Elenco**.
+- Remoção valida o nome do atleta/comissão antes de confirmar (segurança).
