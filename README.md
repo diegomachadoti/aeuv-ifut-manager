@@ -184,6 +184,20 @@ folder_embed_url = https://drive.google.com/embeddedfolderview?id=10hhnvDF_J7C0L
 
 O arquivo `google-service-account-*.json` deve estar na raiz do projeto.
 
+O JSON da service account precisa conter campos como:
+
+```json
+{
+  "type": "service_account",
+  "project_id": "arte-top-udi"
+}
+```
+
+Esse arquivo é a credencial técnica usada pelo app para acessar o Google Drive sem login manual. Com ele, o sistema consegue listar arquivos da pasta `Entrada` e mover automaticamente para `Processados` ou `Falhas` após o processamento.
+
+Link para acessar/criar a credencial no Google Cloud:
+https://console.cloud.google.com/apis/credentials
+
 ## Observações
 
 - `--process-local-only` usa apenas os TXT já existentes em `downloads\`.
