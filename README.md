@@ -198,6 +198,58 @@ Esse arquivo é a credencial técnica usada pelo app para acessar o Google Drive
 Link para acessar/criar a credencial no Google Cloud:
 https://console.cloud.google.com/apis/credentials
 
+## Atualização automática de planilha de controle
+
+**Importante:** Esta é uma etapa **adicional e opcional** que **NÃO afeta o sucesso geral da automação**. 
+Se houver algum erro durante a atualização da planilha, o processamento já terá sido concluído com sucesso e os resultados já terão sido salvos.
+
+Ao final do processamento, o bot pode atualizar automaticamente uma planilha Excel com:
+- **QTDA JOGADORES** (coluna C): total de atletas extraído da página do iFut
+- **COMPROVANTES** (coluna J): link do comprovante PIX do arquivo processado (incrementa histórico)
+
+### Configuração da planilha
+
+Em `config.ini`, seção `[sheets]`:
+
+```ini
+[sheets]
+spreadsheet_id = 16Tt-7abmpY2CKtY4TQUrqzkFl9T48MFa
+update_enabled = true
+```
+
+- `spreadsheet_id`: ID do arquivo Excel no Google Drive (extrair da URL compartilhada)
+- `update_enabled`: ativar/desativar atualização automática (false por padrão)
+
+**Estrutura esperada da planilha Excel:**
+- Coluna A: **TIMES** (nome dos times para busca)
+- Coluna C: **QTDA JOGADORES** (quantidade de atletas - atualizada automaticamente)
+- Coluna J: **COMPROVANTES** (links do comprovante PIX - incrementa histórico com quebra de linha a cada novo processamento)
+
+### Permissões necessárias
+
+A service account também precisa ter **permissão de Editor** no arquivo Excel compartilhado.
+
+### Logs da atualização
+
+Durante a execução, você verá logs prefixados com `[PLANILHA]` indicando cada etapa:
+- Conexão com Google Drive
+- Download do arquivo
+- Localização do time na planilha
+- Atualização de colunas
+- Upload do arquivo atualizado
+- Sucesso ou erro no processo
+
+## Fluxo de processamento
+
+1. **Leitura**: Baixa arquivos TXT do Google Drive
+2. **Processamento**: Para cada registro (Inclusão, Portabilidade, Remoção)
+   - Acessa o time no iFut
+   - Executa a ação configurada
+   - Registra o resultado
+3. **Resultado**: Salva arquivo com resultado da execução
+4. **Sincronização**: Move arquivo processado (Processados/Falhas no Drive)
+5. **Planilha** (opcional): Atualiza planilha de controle com dados (não impede sucesso se falhar)
+
 ## Observações
 
 - `--process-local-only` usa apenas os TXT já existentes em `downloads\`.
@@ -208,3 +260,4 @@ https://console.cloud.google.com/apis/credentials
 - Comissão técnica segue o fluxo da aba **Comissão Téc.** e retorna para **Elenco** nas ações de inclusão e remoção.
 - A portabilidade opera na aba principal de **Elenco**.
 - Remoção valida o nome do atleta/comissão antes de confirmar (segurança).
+- A atualização da planilha é a **última etapa** e **não afeta** o resultado geral da execução.

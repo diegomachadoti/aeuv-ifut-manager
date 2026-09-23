@@ -2357,3 +2357,24 @@ LookupError: Pessoa nao encontrada na lista do time: Remover 2 Silva
 2026-09-21 20:57:01,161 [INFO] Aguardando 3 segundos para estabilizar o combobox...
 2026-09-21 20:57:06,426 [INFO] Inclusao enviada com sucesso para Nova Comissao
 2026-09-21 20:57:09,494 [INFO] Registro 14 processado com sucesso
+2026-09-23 09:12:59,006 [INFO] Arquivos sincronizados do Drive: 1
+2026-09-23 09:13:20,542 [INFO] Processando protocolo 20260922-85DB6B93 do time VENUS
+2026-09-23 09:13:24,444 [INFO] Registro 1 - acao=Inclusao tipo=Atleta nome=Sérgio Henrique de Oliveira Alves
+2026-09-23 09:13:28,245 [INFO] Inclusao enviada com sucesso para Sérgio Henrique de Oliveira Alves
+2026-09-23 09:13:31,245 [INFO] Registro 1 processado com sucesso
+2026-09-23 09:13:34,246 [INFO] Registro 2 - acao=Inclusao tipo=Atleta nome=Guilherme Correia Silva
+2026-09-23 09:13:37,702 [INFO] Inclusao enviada com sucesso para Guilherme Correia Silva
+2026-09-23 09:13:40,703 [INFO] Registro 2 processado com sucesso
+2026-09-23 09:13:43,703 [INFO] Registro 3 - acao=Inclusao tipo=Atleta nome=Gabriel Rodrigues Rocha
+2026-09-23 09:13:47,480 [INFO] Inclusao enviada com sucesso para Gabriel Rodrigues Rocha
+2026-09-23 09:13:50,480 [INFO] Registro 3 processado com sucesso
+2026-09-23 09:13:53,481 [INFO] Registro 4 - acao=Inclusao tipo=Atleta nome=IAN Pablo Pereira Guedes
+2026-09-23 09:13:56,887 [INFO] Inclusao enviada com sucesso para IAN Pablo Pereira Guedes
+2026-09-23 09:13:59,887 [INFO] Registro 4 processado com sucesso
+2026-09-23 09:14:02,888 [INFO] Registro 5 - acao=Inclusao tipo=Atleta nome=Danilo Augusto de Oliveira
+2026-09-23 09:14:05,982 [INFO] Inclusao enviada com sucesso para Danilo Augusto de Oliveira
+2026-09-23 09:14:08,982 [INFO] Registro 5 processado com sucesso
+2026-09-23 09:14:11,983 [INFO] Registro 6 - acao=Inclusao tipo=Atleta nome=Johnatan Fidelis Ferreira
+2026-09-23 09:14:15,117 [INFO] Inclusao enviada com sucesso para Johnatan Fidelis Ferreira
+2026-09-23 09:14:18,118 [INFO] Registro 6 processado com sucesso
+2026-09-23 09:14:22,697 [INFO] Arquivo movido no Drive: VENUS-2026-09-22-19-34-54-1790116494897.txt -> processed

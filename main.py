@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 import requests
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver import ChromeOptions
@@ -207,6 +207,9 @@ class AppConfig:
         self.removal_click_delay_seconds = parser.getfloat("app", "removal_click_delay_seconds", fallback=3.0)
         self.removal_confirm_delay_seconds = parser.getfloat("app", "removal_confirm_delay_seconds", fallback=3.0)
         self.portability_source_championship = parser.get("app", "portability_source_championship", fallback="2º COPA AMERICA 2026")
+        self.spreadsheet_id = parser.get("sheets", "spreadsheet_id", fallback="")
+        self.sheets_range_times = parser.get("sheets", "range_times", fallback="A2:C")
+        self.sheets_update_enabled = parse_bool(parser.get("sheets", "update_enabled", fallback="false"), default=False)
 
 
 class SelectorConfig:
@@ -487,7 +490,14 @@ class IfutBot:
                 self.logger.exception("Registro %s falhou: %s", record.index, exc)
                 results.append(self._build_record_result(record, "FALHA", str(exc)))
             time.sleep(self.config.wait_between_records_seconds)
+        
+        self.logger.info("Escrevendo arquivo de resultado...")
         self._write_result_file(request, results)
+        
+        self.logger.info("Etapa final: Atualizando planilha de controle (etapa adicional, nao obrigatoria)...")
+        self._update_spreadsheet(request)
+        
+        self.logger.info("Processamento do arquivo finalizado com sucesso")
 
     def _open_roster_section(self) -> None:
         tab_selector = self.selectors.get_optional("team", "roster_tab")
@@ -931,6 +941,116 @@ class IfutBot:
         lines.append(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
         result_path.write_text("\n".join(lines), encoding="utf-8")
 
+    def _extract_total_athletes(self) -> int | None:
+        """Extrai o total de atletas da página."""
+        try:
+           self.logger.debug("[PLANILHA] Procurando elemento com total de atletas...")
+           element = self.driver.find_element(By.XPATH, "//div[contains(@class, 'text-h5')]")
+           text = element.text
+           match = re.search(r'Total de atletas:\s*(\d+)', text)
+           if match:
+               total = int(match.group(1))
+               self.logger.info("[PLANILHA] Total de atletas extraido: %d", total)
+               return total
+           self.logger.warning("[PLANILHA] Formato de total de atletas nao reconhecido: %s", text)
+        except Exception as exc:
+           self.logger.warning("[PLANILHA] Nao foi possivel extrair total de atletas: %s", exc)
+        return None
+
+    def _update_spreadsheet(self, request: RequestFile) -> None:
+        """Atualiza a planilha de controle com dados do processamento.
+         
+        Esta é uma etapa adicional que NÃO afeta o sucesso geral da automação.
+        Erros na atualização são registrados mas não interrompem o fluxo.
+        """
+        self.logger.info("[PLANILHA] Iniciando atualização da planilha de controle...")
+         
+        if not self.config.sheets_update_enabled or not self.config.spreadsheet_id:
+           self.logger.info("[PLANILHA] Atualizacao de planilha desabilitada no config.ini")
+           return
+         
+        total_athletes = self._extract_total_athletes()
+        if total_athletes is None:
+           self.logger.warning("[PLANILHA] Nao foi possivel extrair quantidade de atletas. Abortando atualizar.")
+           return
+         
+        try:
+           import tempfile
+           from openpyxl import load_workbook
+             
+           self.logger.info("[PLANILHA] Conectando ao Google Drive...")
+           credentials = service_account.Credentials.from_service_account_file(
+               str(self.config.service_account_json),
+               scopes=["https://www.googleapis.com/auth/drive"],
+           )
+           drive_service = build("drive", "v3", credentials=credentials)
+             
+           self.logger.info("[PLANILHA] Baixando arquivo: %s", self.config.spreadsheet_id)
+           file_id = self.config.spreadsheet_id
+           request_obj = drive_service.files().get_media(fileId=file_id)
+             
+           with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+               tmp_path = Path(tmp.name)
+               downloader = MediaIoBaseDownload(tmp, request_obj)
+               done = False
+               while not done:
+                   _, done = downloader.next_chunk()
+           self.logger.info("[PLANILHA] Arquivo baixado: %s", tmp_path)
+             
+           self.logger.info("[PLANILHA] Abrindo workbook...")
+           wb = load_workbook(tmp_path)
+           ws = wb.active
+             
+           team_row = None
+           normalized_team = normalize_text(request.team_name)
+             
+           for idx, row in enumerate(ws.iter_rows(values_only=False), 1):
+               cell_value = row[0].value
+               if cell_value and normalize_text(str(cell_value)) == normalized_team:
+                   team_row = idx
+                   break
+             
+           if team_row is None:
+               self.logger.warning("[PLANILHA] Time '%s' nao encontrado na planilha", request.team_name)
+               return
+             
+           self.logger.info("[PLANILHA] Time encontrado na linha %d", team_row)
+           self.logger.info("[PLANILHA] Atualizando coluna C (QTDA JOGADORES) = %d", total_athletes)
+           ws[f"C{team_row}"].value = total_athletes
+             
+           if request.pix_receipt_url:
+               self.logger.info("[PLANILHA] Adicionando comprovante PIX na coluna J")
+               current_cell = ws[f"J{team_row}"]
+               current_value = str(current_cell.value) if current_cell.value else ""
+               if current_value and current_value.strip():
+                   new_value = f"{current_value}\n{request.pix_receipt_url}"
+                   self.logger.info("[PLANILHA] Comprovante PIX adicionado ao historico existente")
+               else:
+                   new_value = request.pix_receipt_url
+                   self.logger.info("[PLANILHA] Novo comprovante PIX registrado")
+               current_cell.value = new_value
+           else:
+               self.logger.info("[PLANILHA] Nenhum comprovante PIX para adicionar")
+             
+           self.logger.info("[PLANILHA] Salvando workbook em arquivo temporario...")
+           wb.save(tmp_path)
+             
+           self.logger.info("[PLANILHA] Enviando arquivo de volta para o Drive...")
+           drive_service.files().update(
+               fileId=file_id,
+               media_body=MediaFileUpload(str(tmp_path), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+           ).execute()
+             
+           tmp_path.unlink()
+           self.logger.info("[PLANILHA] SUCESSO - Planilha atualizada: time='%s' linha=%d atletas=%d", 
+                            request.team_name, team_row, total_athletes)
+             
+        except FileNotFoundError as exc:
+           self.logger.error("[PLANILHA] Erro: Arquivo de servico ou arquivo temporario nao encontrado: %s", exc)
+        except Exception as exc:
+           self.logger.error("[PLANILHA] Erro ao atualizar planilha (nao afeta o resultado geral): %s", exc)
+           self.logger.exception("[PLANILHA] Stack trace:")
+
     def _find_person_row(self, full_name: str) -> WebElement:
         rows = self.driver.find_elements(*self._locator(self.selectors.get("team", "roster_row")))
         normalized_name = normalize_text(full_name)
@@ -1075,21 +1195,25 @@ password = sua_senha
 login_url = https://admin.ifut.com.br/login
 championship_url = https://admin.ifut.com.br/campeonatos/131038
 teams_url = https://admin.ifut.com.br/campeonatos/131038/times
-
+ 
 [drive]
 folder_embed_url = https://drive.google.com/embeddedfolderview?id=10hhnvDF_J7C0LE5JU9BrPST9D8Rf9qk1#list
 download_dir = downloads
 processed_dir = downloads\\processados
 failed_dir = downloads\\falhas
-
+ 
 [selenium]
 headless = false
 timeout_seconds = 20
-
+ 
 [app]
 log_path = logs\\ifut.log
 pause_after_action = true
 dry_run = true
+ 
+[sheets]
+spreadsheet_id = 16Tt-7abmpY2CKtY4TQUrqzkFl9T48MFa
+update_enabled = false
 """,
             encoding="utf-8",
         )
