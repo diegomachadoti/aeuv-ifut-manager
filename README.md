@@ -90,6 +90,12 @@ Fluxo completo:
 .\.venv\Scripts\python.exe .\main.py
 ```
 
+Atualizar somente a quantidade de atletas de todos os times configurados na planilha:
+
+```powershell
+.\.venv\Scripts\python.exe .\main.py --update-all-team-counts
+```
+
 ## Fluxos suportados
 
 - Inclusão de atleta
@@ -207,6 +213,8 @@ Ao final do processamento, o bot pode atualizar automaticamente uma planilha Exc
 - **QTDA JOGADORES** (coluna C): total de atletas extraído da página do iFut
 - **COMPROVANTES** (coluna J): link do comprovante PIX do arquivo processado (incrementa histórico)
 
+Tambem existe uma rotina independente para atualizar apenas a **QTDA JOGADORES** de todos os times configurados em `[teams]`, sem processar TXT e sem impactar o fluxo principal.
+
 ### Configuração da planilha
 
 Em `config.ini`, seção `[sheets]`:
@@ -238,6 +246,28 @@ Durante a execução, você verá logs prefixados com `[PLANILHA]` indicando cad
 - Atualização de colunas
 - Upload do arquivo atualizado
 - Sucesso ou erro no processo
+
+### Rotina independente de quantidade por time
+
+O comando abaixo:
+
+```powershell
+.\.venv\Scripts\python.exe .\main.py --update-all-team-counts
+```
+
+faz o seguinte:
+
+1. Faz login no iFut
+2. Lê todos os times configurados na seção `[teams]`
+3. Abre cada time um por um
+4. Extrai o **Total de atletas** da página do time
+5. Atualiza somente a coluna **C (QTDA JOGADORES)** na planilha
+
+Essa rotina:
+- não processa arquivos TXT
+- não move arquivos no Drive
+- não altera comprovantes PIX
+- foi criada separada do fluxo atual para não impactar o que já funciona
 
 ## Fluxo de processamento
 

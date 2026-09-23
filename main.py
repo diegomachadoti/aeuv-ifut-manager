@@ -143,6 +143,13 @@ class TeamLinkInfo:
 
 
 @dataclass
+class TeamSpreadsheetUpdate:
+    team_name: str
+    total_athletes: int
+    pix_receipt_url: str = ""
+
+
+@dataclass
 class RecordResult:
     index: int
     action: str
@@ -500,6 +507,29 @@ class IfutBot:
         self._update_spreadsheet(request)
         
         self.logger.info("Processamento do arquivo finalizado com sucesso")
+
+    def update_all_teams_athlete_counts(self) -> None:
+        self.logger.info("[PLANILHA] Iniciando rotina independente de atualizacao de quantidade de atletas")
+        for mapped_team_name in self.config.team_urls:
+            team_name = mapped_team_name.strip()
+            self.logger.info("[PLANILHA] Lendo total de atletas do time '%s' no iFut...", team_name)
+            try:
+                self.open_team_page(team_name)
+                self._open_roster_section()
+                total_athletes = self._extract_total_athletes()
+                if total_athletes is None:
+                    self.logger.warning("[PLANILHA] Nao foi possivel obter total de atletas do time '%s'", team_name)
+                    continue
+                self._update_spreadsheet_entry(
+                    TeamSpreadsheetUpdate(team_name=team_name, total_athletes=total_athletes)
+                )
+            except Exception as exc:
+                self.logger.exception(
+                    "[PLANILHA] Falha ao atualizar quantidade do time '%s' na rotina independente: %s",
+                    team_name,
+                    exc,
+                )
+        self.logger.info("[PLANILHA] Rotina independente de atualizacao de quantidade de atletas finalizada")
 
     def _open_roster_section(self) -> None:
         tab_selector = self.selectors.get_optional("team", "roster_tab")
@@ -962,38 +992,59 @@ class IfutBot:
            self.logger.warning("[PLANILHA] Nao foi possivel extrair total de atletas: %s", exc)
         return None
 
-    def _update_spreadsheet(self, request: RequestFile) -> None:
-        """Atualiza a planilha de controle com dados do processamento.
-         
-        Esta é uma etapa adicional que NÃO afeta o sucesso geral da automação.
-        Erros na atualização são registrados mas não interrompem o fluxo.
-        """
-        self.logger.info("[PLANILHA] Iniciando atualização da planilha de controle...")
-         
+    def _find_team_row_in_sheet(self, worksheet, team_name: str) -> tuple[int | None, str | None]:
+        normalized_team = normalize_text(team_name)
+        search_tokens = [token for token in normalized_team.split() if token]
+        best_contains_row = None
+        best_contains_value = None
+
+        for idx, row in enumerate(worksheet.iter_rows(values_only=False), 1):
+           cell_value = row[0].value
+           if not cell_value:
+               continue
+
+           normalized_cell = normalize_text(str(cell_value))
+           if not normalized_cell:
+               continue
+
+           if normalized_cell == normalized_team:
+               return idx, str(cell_value)
+
+           if normalized_team in normalized_cell or normalized_cell in normalized_team:
+               if best_contains_row is None:
+                   best_contains_row = idx
+                   best_contains_value = str(cell_value)
+               continue
+
+           cell_tokens = [token for token in normalized_cell.split() if token]
+           if search_tokens and all(token in cell_tokens for token in search_tokens):
+               if best_contains_row is None:
+                   best_contains_row = idx
+                   best_contains_value = str(cell_value)
+
+        return best_contains_row, best_contains_value
+
+    def _update_spreadsheet_entry(self, entry: TeamSpreadsheetUpdate) -> None:
+        """Atualiza uma linha da planilha de controle."""
         if not self.config.sheets_update_enabled or not self.config.spreadsheet_id:
            self.logger.info("[PLANILHA] Atualizacao de planilha desabilitada no config.ini")
            return
-         
-        total_athletes = self._extract_total_athletes()
-        if total_athletes is None:
-           self.logger.warning("[PLANILHA] Nao foi possivel extrair quantidade de atletas. Abortando atualizar.")
-           return
-         
+
         try:
            import tempfile
            from openpyxl import load_workbook
-             
+
            self.logger.info("[PLANILHA] Conectando ao Google Drive...")
            credentials = service_account.Credentials.from_service_account_file(
                str(self.config.service_account_json),
                scopes=["https://www.googleapis.com/auth/drive"],
            )
            drive_service = build("drive", "v3", credentials=credentials)
-             
+
            self.logger.info("[PLANILHA] Baixando arquivo: %s", self.config.spreadsheet_id)
            file_id = self.config.spreadsheet_id
            request_obj = drive_service.files().get_media(fileId=file_id)
-             
+
            with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
                tmp_path = Path(tmp.name)
                downloader = MediaIoBaseDownload(tmp, request_obj)
@@ -1001,60 +1052,82 @@ class IfutBot:
                while not done:
                    _, done = downloader.next_chunk()
            self.logger.info("[PLANILHA] Arquivo baixado: %s", tmp_path)
-             
+
            self.logger.info("[PLANILHA] Abrindo workbook...")
            wb = load_workbook(tmp_path)
            ws = wb.active
-             
-           team_row = None
-           normalized_team = normalize_text(request.team_name)
-             
-           for idx, row in enumerate(ws.iter_rows(values_only=False), 1):
-               cell_value = row[0].value
-               if cell_value and normalize_text(str(cell_value)) == normalized_team:
-                   team_row = idx
-                   break
-             
+
+           team_row, matched_team_name = self._find_team_row_in_sheet(ws, entry.team_name)
+
            if team_row is None:
-               self.logger.warning("[PLANILHA] Time '%s' nao encontrado na planilha", request.team_name)
+               self.logger.warning("[PLANILHA] Time '%s' nao encontrado na planilha", entry.team_name)
+               tmp_path.unlink(missing_ok=True)
                return
-             
-           self.logger.info("[PLANILHA] Time encontrado na linha %d", team_row)
-           self.logger.info("[PLANILHA] Atualizando coluna C (QTDA JOGADORES) = %d", total_athletes)
-           ws[f"C{team_row}"].value = total_athletes
-             
-           if request.pix_receipt_url:
+
+           self.logger.info(
+               "[PLANILHA] Time '%s' encontrado na linha %d da planilha como '%s'",
+               entry.team_name,
+               team_row,
+               matched_team_name,
+           )
+           self.logger.info("[PLANILHA] Atualizando coluna C (QTDA JOGADORES) = %d", entry.total_athletes)
+           ws[f"C{team_row}"].value = entry.total_athletes
+
+           if entry.pix_receipt_url:
                self.logger.info("[PLANILHA] Adicionando comprovante PIX na coluna J")
                current_cell = ws[f"J{team_row}"]
                current_value = str(current_cell.value) if current_cell.value else ""
                if current_value and current_value.strip():
-                   new_value = f"{current_value}\n{request.pix_receipt_url}"
+                   new_value = f"{current_value}\n{entry.pix_receipt_url}"
                    self.logger.info("[PLANILHA] Comprovante PIX adicionado ao historico existente")
                else:
-                   new_value = request.pix_receipt_url
+                   new_value = entry.pix_receipt_url
                    self.logger.info("[PLANILHA] Novo comprovante PIX registrado")
                current_cell.value = new_value
            else:
                self.logger.info("[PLANILHA] Nenhum comprovante PIX para adicionar")
-             
+
            self.logger.info("[PLANILHA] Salvando workbook em arquivo temporario...")
            wb.save(tmp_path)
-             
+
            self.logger.info("[PLANILHA] Enviando arquivo de volta para o Drive...")
            drive_service.files().update(
                fileId=file_id,
                media_body=MediaFileUpload(str(tmp_path), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
            ).execute()
-             
-           tmp_path.unlink()
-           self.logger.info("[PLANILHA] SUCESSO - Planilha atualizada: time='%s' linha=%d atletas=%d", 
-                            request.team_name, team_row, total_athletes)
-             
+
+           tmp_path.unlink(missing_ok=True)
+           self.logger.info(
+               "[PLANILHA] SUCESSO - Planilha atualizada: time='%s' linha=%d atletas=%d",
+               entry.team_name,
+               team_row,
+               entry.total_athletes,
+           )
+
         except FileNotFoundError as exc:
            self.logger.error("[PLANILHA] Erro: Arquivo de servico ou arquivo temporario nao encontrado: %s", exc)
         except Exception as exc:
            self.logger.error("[PLANILHA] Erro ao atualizar planilha (nao afeta o resultado geral): %s", exc)
            self.logger.exception("[PLANILHA] Stack trace:")
+
+    def _update_spreadsheet(self, request: RequestFile) -> None:
+        """Atualiza a planilha de controle com dados do processamento.
+         
+        Esta é uma etapa adicional que NÃO afeta o sucesso geral da automação.
+        Erros na atualização são registrados mas não interrompem o fluxo.
+        """
+        self.logger.info("[PLANILHA] Iniciando atualização da planilha de controle...")
+        total_athletes = self._extract_total_athletes()
+        if total_athletes is None:
+           self.logger.warning("[PLANILHA] Nao foi possivel extrair quantidade de atletas. Abortando atualizar.")
+           return
+        self._update_spreadsheet_entry(
+           TeamSpreadsheetUpdate(
+               team_name=request.team_name,
+               total_athletes=total_athletes,
+               pix_receipt_url=request.pix_receipt_url,
+           )
+        )
 
     def _find_person_row(self, full_name: str) -> WebElement:
         rows = self.driver.find_elements(*self._locator(self.selectors.get("team", "roster_row")))
@@ -1270,6 +1343,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sync-drive-only", action="store_true", help="Baixa os TXTs do Google Drive e encerra")
     parser.add_argument("--process-local-only", action="store_true", help="Processa somente os TXTs locais ja baixados")
     parser.add_argument("--login-only", action="store_true", help="Abre o iFut e para logo apos o login")
+    parser.add_argument(
+        "--update-all-team-counts",
+        action="store_true",
+        help="Atualiza somente a quantidade de atletas de todos os times configurados na planilha",
+    )
     return parser
 
 
@@ -1287,17 +1365,19 @@ def main() -> int:
         if args.sync_drive_only:
             return 0
 
-    parser = TxtRequestParser()
-    txt_files = list(iter_txt_files(config.download_dir))
-    if not txt_files:
-        logger.info("Nenhum arquivo TXT encontrado em %s", config.download_dir)
-        return 0
-
     bot = IfutBot(config, selectors, logger)
     try:
         bot.login()
         if args.login_only:
             logger.info("Login executado com sucesso; encerrando por --login-only.")
+            return 0
+        if args.update_all_team_counts:
+            bot.update_all_teams_athlete_counts()
+            return 0
+        parser = TxtRequestParser()
+        txt_files = list(iter_txt_files(config.download_dir))
+        if not txt_files:
+            logger.info("Nenhum arquivo TXT encontrado em %s", config.download_dir)
             return 0
         for txt_file in txt_files:
             try:
