@@ -188,6 +188,8 @@ class AppConfig:
         self.login_url = parser.get("ifut", "login_url")
         self.championship_url = parser.get("ifut", "championship_url")
         self.teams_url = parser.get("ifut", "teams_url")
+        self.championship_public_id = parser.get("ifut", "championship_public_id", fallback="")
+        self.championship_public_slug = parser.get("ifut", "championship_public_slug", fallback="")
         self.team_urls = dict(parser.items("teams")) if parser.has_section("teams") else {}
         self.headless = parse_bool(parser.get("selenium", "headless", fallback="false"))
         self.timeout = parser.getint("selenium", "timeout_seconds", fallback=20)
@@ -889,9 +891,12 @@ class IfutBot:
         if direct_url:
             match = re.search(r"/campeonatos/(\d+)/time/(\d+)", direct_url)
             if match:
-                championship_id, team_id = match.group(1), match.group(2)
-                public_slug = normalize_text(request.competition_name).replace(" ", "-")
-                return f"https://campeonato.ifut.com.br/c/{championship_id}-{public_slug}/time/{team_id}"
+                team_id = match.group(2)
+                if self.config.championship_public_id and self.config.championship_public_slug:
+                    return f"https://campeonato.ifut.com.br/c/{self.config.championship_public_id}-{self.config.championship_public_slug}/time/{team_id}"
+                else:
+                    public_slug = normalize_text(request.competition_name).replace(" ", "-")
+                    return f"https://campeonato.ifut.com.br/c/{self.config.championship_public_id}-{public_slug}/time/{team_id}"
             return direct_url
         return self.config.championship_url.rstrip("/")
 
