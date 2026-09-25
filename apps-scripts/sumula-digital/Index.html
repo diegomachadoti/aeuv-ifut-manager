@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      --azul: #14213d;
+      --dourado: #fca311;
+      --fundo: #f5f7fb;
+      --borda: #d8deea;
+      --texto: #172033;
+      --verde: #067647;
+      --vermelho: #b42318;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--fundo);
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--texto);
+    }
+
+    .topo {
+      background: linear-gradient(135deg, #0c1631, var(--azul));
+      color: white;
+      padding: 25px;
+      border-bottom: 5px solid var(--dourado);
+    }
+
+    .topo-conteudo {
+      max-width: 1200px;
+      margin: auto;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .logo {
+      width: 90px;
+      height: 90px;
+      background: white;
+      border-radius: 12px;
+      padding: 7px;
+      object-fit: contain;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 32px;
+    }
+
+    .topo p {
+      margin: 8px 0 0;
+      opacity: 0.9;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: auto;
+      padding: 25px 15px;
+    }
+
+    .card,
+    .aviso {
+      background: white;
+      border: 1px solid var(--borda);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 18px;
+      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.06);
+    }
+
+    .aviso {
+      border-left: 5px solid var(--dourado);
+    }
+
+    h2 {
+      color: var(--azul);
+      margin-top: 0;
+    }
+
+    .grade {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #aeb8ca;
+      border-radius: 8px;
+      font-size: 14px;
+      background: #ffffff !important;
+      color: #172033 !important;
+    }
+
+    option {
+      background: #ffffff;
+      color: #172033;
+    }
+
+    textarea {
+      min-height: 150px;
+      resize: vertical;
+    }
+
+    .tabela {
+      overflow-x: auto;
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 850px;
+      border-collapse: collapse;
+    }
+
+    th {
+      padding: 10px;
+      font-size: 13px;
+      background: var(--azul);
+      color: white;
+    }
+
+    td {
+      padding: 7px;
+      border-top: 1px solid var(--borda);
+    }
+
+    .numero {
+      width: 45px;
+      text-align: center;
+      font-weight: bold;
+      color: var(--azul);
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 11px 18px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .adicionar {
+      background: #e9eef8;
+      color: var(--azul);
+    }
+
+    .enviar {
+      background: var(--dourado);
+      color: #111;
+    }
+
+    .excluir {
+      background: #fee4e2;
+      color: var(--vermelho);
+    }
+
+    .botoes {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .contador {
+      margin-left: auto;
+      align-self: center;
+    }
+
+    .mensagem {
+      display: none;
+      margin-top: 15px;
+      padding: 14px;
+      border-radius: 8px;
+      font-weight: bold;
+    }
+
+    .sucesso {
+      display: block;
+      background: #dcfae6;
+      color: var(--verde);
+    }
+
+    .erro {
+      display: block;
+      background: #fee4e2;
+      color: var(--vermelho);
+    }
+
+    .upload-area {
+      display: block;
+      padding: 25px 16px;
+      border: 2px dashed #8995aa;
+      border-radius: 10px;
+      text-align: center;
+      background: #fafbfe;
+      cursor: pointer;
+    }
+
+    .upload-area:hover {
+      background: #e9eef8;
+    }
+
+    .upload-btn {
+      display: inline-block;
+      padding: 12px 25px;
+      border-radius: 8px;
+      background: #0b3d91;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .upload-area input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+
+    #listaArquivos {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #444;
+    }
+
+    .upload-titulo {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #14213d;
+    }
+
+    .upload-ajuda {
+      display: block;
+      font-weight: normal;
+      color: #647089;
+    }
+
+    .arquivo-nome {
+      display: block;
+      margin-top: 8px;
+      font-weight: bold;
+      color: #067647;
+    }
+
+    .check {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 10px;
+      align-items: start;
+      line-height: 1.5;
+      font-weight: 400;
+    }
+
+    .check input {
+      width: 18px;
+      height: 18px;
+    }
+
+    .assinatura-ajuda {
+      font-size: 13px;
+      color: #647089;
+      margin-bottom: 12px;
+    }
+
+    .assinatura-box {
+      width: 100%;
+      border: 1px solid #aeb8ca;
+      border-radius: 10px;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+    #assinaturaCanvas {
+      display: block;
+      width: 100%;
+      height: 180px;
+      background: #ffffff;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    .assinatura-acoes {
+      margin-top: 10px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .limpar-assinatura {
+      padding: 9px 16px;
+      background: #e9eef8;
+      color: #14213d;
+    }
+
+    .campo-info {
+      margin-top: -8px;
+      margin-bottom: 15px;
+      font-size: 13px;
+      color: #647089;
+    }
+
+    @media (max-width: 700px) {
+      .grade {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      .logo {
+        width: 70px;
+        height: 70px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-conteudo">
+      <img class="logo" src="<?!= config.logoUrl ?>">
+      <div>
+        <h1>Relatório de Súmula</h1>
+        <p>Preenchimento oficial da arbitragem</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="aviso">
+      <strong>IMPORTANTE</strong> O árbitro terá até 24 (vinte e quatro) horas após o término da partida para enviar a súmula oficial devidamente preenchida.
+    </div>
+
+    <form id="formSumula">
+      <section class="card">
+        <h2>Dados do árbitro</h2>
+        <div class="grade">
+          <div>
+            <label>Nome do árbitro *</label>
+            <input id="arbitro" maxlength="150" required title="Informe o nome do árbitro.">
+          </div>
+          <div>
+            <label>Documento *</label>
+            <input id="documento" maxlength="50" required title="Informe o documento do árbitro.">
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Dados da partida</h2>
+        <div class="grade">
+          <div>
+            <label>TIME 1 *</label>
+            <select id="time1" required title="Selecione o primeiro time.">
+              <option value="">Selecione</option>
+              <? for (let i = 0; i < config.equipes.length; i++) { ?>
+                <option><?= config.equipes[i] ?></option>
+              <? } ?>
+            </select>
+          </div>
+          <div>
+            <label>TIME 2 *</label>
+            <select id="time2" required title="Selecione o segundo time.">
+              <option value="">Selecione</option>
+              <? for (let i = 0; i < config.equipes.length; i++) { ?>
+                <option><?= config.equipes[i] ?></option>
+              <? } ?>
+            </select>
+          </div>
+          <div>
+            <label>Data da partida *</label>
+            <input type="date" id="dataJogo" required title="Informe a data da partida.">
+          </div>
+          <div>
+            <label>Horário *</label>
+            <input type="time" id="horaJogo" required title="Informe o horário da partida.">
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Dos fatos</h2>
+        <label>Relato da arbitragem *</label>
+        <textarea
+          id="fatos"
+          placeholder="Informe gols, cartões, expulsões, ocorrências disciplinares e demais informações importantes..."
+          required
+          title="Informe o relato da arbitragem."
+        ></textarea>
+      </section>
+
+      <section class="card">
+        <h2>Atletas envolvidos</h2>
+        <p class="campo-info">Preencher somente quando houver atleta ou membro da comissão relacionado aos fatos.</p>
+        <div class="tabela">
+          <table>
+            <thead>
+              <tr>
+                <th>Nº</th>
+                <th>Equipe</th>
+                <th>Tipo</th>
+                <th>Nome completo</th>
+                <th>Número camisa</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="linhas"></tbody>
+          </table>
+        </div>
+        <div class="botoes">
+          <button type="button" class="adicionar" id="adicionar">+ Adicionar envolvido</button>
+          <span class="contador" id="contador"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Anexos e evidências</h2>
+        <p class="campo-info">Anexe súmula física, imagens, documentos ou evidências complementares. Formatos permitidos: PDF, JPG e PNG.</p>
+        <label class="upload-area" for="anexos">
+          <div>
+            <span class="upload-btn">📎 Pesquisar arquivos</span>
+            <input id="anexos" type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onchange="mostrarAnexos(this)">
+            <div id="listaArquivos">Nenhum arquivo selecionado.</div>
+          </div>
+          <strong class="upload-titulo">Pesquisar arquivos</strong>
+          <span class="upload-ajuda">Arraste ou selecione fotos da súmula física, provas ou documentos complementares</span>
+          <span class="arquivo-nome" id="nomeAnexos"></span>
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Assinatura do árbitro</h2>
+        <p class="assinatura-ajuda">Assine no campo abaixo utilizando o mouse ou, em dispositivo móvel, o dedo.</p>
+        <div class="assinatura-box">
+          <canvas id="assinaturaCanvas" width="900" height="240"></canvas>
+          <input
+            type="text"
+            id="assinatura"
+            required
+            style="position: absolute; opacity: 0; height: 1px; width: 1px;"
+          >
+        </div>
+        <div class="assinatura-acoes">
+          <button type="button" class="limpar-assinatura" onclick="limparAssinatura()">Limpar assinatura</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Declaração do árbitro</h2>
+        <label class="check">
+          <input type="checkbox" id="confirmacao" required title="Marque a declaração de responsabilidade antes do envio.">
+          <span>Declaro que todas as informações relatadas nesta súmula são verdadeiras, foram registradas conforme os acontecimentos da partida e assumo a responsabilidade pelo preenchimento.</span>
+        </label>
+      </section>
+
+      <div class="botoes">
+        <button id="enviar" class="enviar" onclick="enviarSumula()">Enviar Súmula</button>
+      </div>
+
+      <div id="mensagem" class="mensagem"></div>
+    </form>
+  </main>
+
+  <template id="modeloLinha">
+    <tr>
+      <td class="numero"></td>
+      <td>
+        <select data-campo="equipe">
+          <option value="">Selecione</option>
+          <? for (let i = 0; i < config.equipes.length; i++) { ?>
+            <option><?= config.equipes[i] ?></option>
+          <? } ?>
+        </select>
+      </td>
+      <td>
+        <select data-campo="tipo">
+          <option value="">Selecione</option>
+          <option>Atleta</option>
+          <option>Comissão</option>
+        </select>
+      </td>
+      <td>
+        <input data-campo="nome" maxlength="150">
+      </td>
+      <td>
+        <input data-campo="camisa" type="number" min="0" max="99">
+      </td>
+      <td>
+        <button type="button" class="excluir">×</button>
+      </td>
+    </tr>
+  </template>
+
+  <script>
+    const tbody = document.getElementById('linhas');
+    const modelo = document.getElementById('modeloLinha');
+    const mensagem = document.getElementById('mensagem');
+    const contador = document.getElementById('contador');
+    const assinaturaCanvas = document.getElementById('assinaturaCanvas');
+    const assinaturaCtx = assinaturaCanvas.getContext('2d');
+    const campoAssinatura = document.getElementById('assinatura');
+    const MAX_ENVOLVIDOS = 30;
+
+    let assinando = false;
+    let assinaturaPreenchida = false;
+
+    assinaturaCtx.lineWidth = 4;
+    assinaturaCtx.lineCap = 'round';
+    assinaturaCtx.lineJoin = 'round';
+    assinaturaCtx.strokeStyle = '#172033';
+
+    /**
+     * Adiciona uma nova linha de envolvido à tabela.
+     */
+    function adicionarLinha() {
+      if (tbody.children.length >= MAX_ENVOLVIDOS) {
+        mostrarMensagem('Limite máximo de 30 envolvidos.', 'erro');
+        return;
+      }
+
+      const linha = modelo.content.cloneNode(true);
+      tbody.appendChild(linha);
+      atualizar();
+    }
+
+    /**
+     * Atualiza a numeração visual e o contador de envolvidos.
+     */
+    function atualizar() {
+      const linhas = tbody.querySelectorAll('tr');
+
+      linhas.forEach(function (linha, i) {
+        linha.querySelector('.numero').textContent = i + 1;
+      });
+
+      contador.textContent = linhas.length + ' de ' + MAX_ENVOLVIDOS + ' envolvidos';
+    }
+
+    /**
+     * Lê a tabela e devolve a lista de envolvidos preenchidos no formulário.
+     */
+    function obterEnvolvidos() {
+      return [...tbody.querySelectorAll('tr')].map(function (linha) {
+        return {
+          equipe: linha.querySelector('[data-campo="equipe"]').value,
+          tipo: linha.querySelector('[data-campo="tipo"]').value,
+          nome: linha.querySelector('[data-campo="nome"]').value.trim(),
+          camisa: linha.querySelector('[data-campo="camisa"]').value
+        };
+      });
+    }
+
+    /**
+     * Monta o payload que será enviado ao Apps Script.
+     */
+    function obterDados() {
+      return {
+        arbitro: document.getElementById('arbitro').value.trim(),
+        confirmacao: document.getElementById('confirmacao').checked,
+        documento: document.getElementById('documento').value.trim(),
+        time1: document.getElementById('time1').value,
+        time2: document.getElementById('time2').value,
+        dataJogo: document.getElementById('dataJogo').value,
+        horaJogo: document.getElementById('horaJogo').value,
+        fatos: document.getElementById('fatos').value.trim(),
+        envolvidos: obterEnvolvidos(),
+        assinatura: assinaturaPreenchida ? assinaturaCanvas.toDataURL('image/png') : '',
+        assinaturaPreenchida: assinaturaPreenchida
+      };
+    }
+
+    /**
+     * Exibe mensagens de sucesso ou erro ao usuário.
+     */
+    function mostrarMensagem(texto, tipo) {
+      mensagem.innerHTML = '';
+      mensagem.className = '';
+
+      setTimeout(function () {
+        mensagem.innerHTML = texto;
+        mensagem.className = 'mensagem ' + tipo;
+        mensagem.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
+    }
+
+    /**
+     * Dispara o download local do arquivo TXT gerado.
+     */
+    function baixarTxt(nome, conteudo) {
+      const blob = new Blob(
+        ['\uFEFF', conteudo],
+        { type: 'text/plain;charset=utf-8' }
+      );
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+
+      link.href = url;
+      link.download = nome;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+    }
+
+    /**
+     * Mostra na interface os arquivos selecionados para anexo.
+     */
+    function mostrarAnexos(input) {
+      const lista = document.getElementById('listaArquivos');
+      lista.innerHTML = '';
+
+      Array.from(input.files).forEach(function (arquivo) {
+        const item = document.createElement('div');
+        item.style.color = '#008000';
+        item.style.marginTop = '5px';
+        item.innerHTML = arquivo.name;
+        lista.appendChild(item);
+      });
+    }
+
+    /**
+     * Converte os anexos selecionados para base64.
+     */
+    async function obterAnexos() {
+      const input = document.getElementById('anexos');
+
+      if (!input.files.length) {
+        return [];
+      }
+
+      const arquivos = [];
+
+      for (const arquivo of input.files) {
+        const base64 = await converterArquivo(arquivo);
+
+        arquivos.push({
+          nome: arquivo.name,
+          tipo: arquivo.type,
+          conteudo: base64
+        });
+      }
+
+      return arquivos;
+    }
+
+    /**
+     * Converte um arquivo para string base64.
+     */
+    function converterArquivo(arquivo) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = function () {
+          resolve(reader.result.split(',')[1]);
+        };
+
+        reader.onerror = reject;
+        reader.readAsDataURL(arquivo);
+      });
+    }
+
+    /**
+     * Calcula a posição do ponteiro relativa ao canvas da assinatura.
+     */
+    function posicaoAssinatura(evento) {
+      const rect = assinaturaCanvas.getBoundingClientRect();
+
+      return {
+        x: (evento.clientX - rect.left) * (assinaturaCanvas.width / rect.width),
+        y: (evento.clientY - rect.top) * (assinaturaCanvas.height / rect.height)
+      };
+    }
+
+    /**
+     * Finaliza o traço atual da assinatura.
+     */
+    function finalizarAssinatura() {
+      assinando = false;
+      assinaturaCtx.beginPath();
+    }
+
+    /**
+     * Limpa a assinatura e volta o campo ao estado obrigatório.
+     */
+    function limparAssinatura() {
+      assinaturaCtx.clearRect(0, 0, assinaturaCanvas.width, assinaturaCanvas.height);
+      assinaturaPreenchida = false;
+      campoAssinatura.value = '';
+      campoAssinatura.setCustomValidity('Realize a assinatura do árbitro antes do envio.');
+    }
+
+    /**
+     * Define mensagens customizadas para os campos obrigatórios.
+     */
+    function configurarValidacaoFormulario(formulario) {
+      formulario.addEventListener('invalid', function (evento) {
+        const campo = evento.target;
+        const mensagens = {
+          arbitro: 'Informe o nome do árbitro.',
+          documento: 'Informe o documento do árbitro.',
+          time1: 'Selecione o primeiro time.',
+          time2: 'Selecione o segundo time.',
+          dataJogo: 'Informe a data da partida.',
+          horaJogo: 'Informe o horário da partida.',
+          fatos: 'Informe o relato da arbitragem.',
+          assinatura: 'Realize a assinatura do árbitro antes do envio.',
+          confirmacao: 'O árbitro deve marcar a declaração de responsabilidade antes do envio.'
+        };
+
+        campo.setCustomValidity(mensagens[campo.id] || 'Preencha este campo obrigatório.');
+      }, true);
+
+      formulario.addEventListener('input', function (evento) {
+        evento.target.setCustomValidity('');
+      }, true);
+
+      formulario.addEventListener('change', function (evento) {
+        evento.target.setCustomValidity('');
+      }, true);
+    }
+
+    /**
+     * Valida o preenchimento da assinatura antes do envio.
+     */
+    function validarAssinatura() {
+      if (!assinaturaPreenchida) {
+        campoAssinatura.setCustomValidity('Realize a assinatura do árbitro antes do envio.');
+      } else {
+        campoAssinatura.setCustomValidity('');
+      }
+    }
+
+    /**
+     * Envia a súmula para o back-end do Apps Script.
+     */
+    async function enviarSumula() {
+      const formulario = document.getElementById('formSumula');
+      const botaoEnviar = document.getElementById('enviar');
+
+      mensagem.innerHTML = '';
+      mensagem.className = 'mensagem';
+
+      validarAssinatura();
+
+      if (formulario && !formulario.checkValidity()) {
+        formulario.reportValidity();
+        return;
+      }
+
+      botaoEnviar.disabled = true;
+      botaoEnviar.textContent = 'Enviando...';
+
+      const anexos = await obterAnexos();
+      const dados = obterDados();
+      dados.anexos = anexos;
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          botaoEnviar.disabled = false;
+          botaoEnviar.textContent = 'Enviar Súmula';
+
+          baixarTxt(res.arquivoTxtNome, res.arquivoTxtConteudo);
+
+          mostrarMensagem(
+            '✅ Súmula enviada com sucesso!<br><br>' +
+            '<strong>Protocolo:</strong> ' + res.protocolo +
+            '<br><br>' +
+            '📄 Arquivo TXT gerado automaticamente.<br>' +
+            '📑 PDF gerado e arquivado no sistema.<br>' +
+            '<a href="' + res.arquivoPdfUrl + '" target="_blank">' +
+            '📄 Abrir PDF da Súmula' +
+            '</a>',
+            'sucesso'
+          );
+        })
+        .withFailureHandler(function (erro) {
+          botaoEnviar.disabled = false;
+          botaoEnviar.textContent = 'Enviar Súmula';
+          mostrarMensagem(erro.message, 'erro');
+        })
+        .salvarSumula(dados);
+    }
+
+    tbody.addEventListener('click', function (e) {
+      if (e.target.classList.contains('excluir')) {
+        if (tbody.children.length <= 1) {
+          return;
+        }
+
+        e.target.closest('tr').remove();
+        atualizar();
+      }
+    });
+
+    document.getElementById('adicionar').addEventListener('click', adicionarLinha);
+
+    assinaturaCanvas.addEventListener('pointerdown', function (evento) {
+      evento.preventDefault();
+      assinando = true;
+
+      const pos = posicaoAssinatura(evento);
+      assinaturaCtx.beginPath();
+      assinaturaCtx.moveTo(pos.x, pos.y);
+    });
+
+    assinaturaCanvas.addEventListener('pointermove', function (evento) {
+      if (!assinando) {
+        return;
+      }
+
+      evento.preventDefault();
+
+      const pos = posicaoAssinatura(evento);
+      assinaturaCtx.lineTo(pos.x, pos.y);
+      assinaturaCtx.stroke();
+
+      assinaturaPreenchida = true;
+      campoAssinatura.value = 'OK';
+      campoAssinatura.setCustomValidity('');
+    });
+
+    assinaturaCanvas.addEventListener('pointerup', finalizarAssinatura);
+    assinaturaCanvas.addEventListener('pointercancel', finalizarAssinatura);
+    assinaturaCanvas.addEventListener('pointerleave', finalizarAssinatura);
+
+    configurarValidacaoFormulario(document.getElementById('formSumula'));
+    adicionarLinha();
+  </script>
+</body>
+</html>

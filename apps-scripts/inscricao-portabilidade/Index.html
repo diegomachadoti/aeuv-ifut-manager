@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      --azul: #14213d;
+      --azul-claro: #e9eef8;
+      --dourado: #fca311;
+      --fundo: #f5f7fb;
+      --borda: #d8deea;
+      --texto: #172033;
+      --perigo: #b42318;
+      --sucesso: #067647;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--fundo);
+      color: var(--texto);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .topo {
+      background: linear-gradient(135deg, #0c1631, var(--azul));
+      color: #fff;
+      padding: 28px 18px;
+      border-bottom: 5px solid var(--dourado);
+    }
+
+    .topo-conteudo, .container { max-width: 1240px; margin: 0 auto; }
+    .topo-conteudo { display: flex; align-items: center; gap: 18px; }
+    .marca { flex: 1; }
+    .logo-competicao {
+      width: 92px;
+      height: 92px;
+      flex: 0 0 92px;
+      object-fit: contain;
+      border-radius: 12px;
+      background: #fff;
+      padding: 7px;
+    }
+    .logo-placeholder {
+      width: 92px;
+      height: 92px;
+      flex: 0 0 92px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      border: 2px dashed rgba(255, 255, 255, .65);
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 8px;
+    }
+    h1 { margin: 0 0 8px; font-size: clamp(22px, 4vw, 34px); }
+    .topo p { margin: 0; opacity: .9; }
+
+    .container { padding: 22px 14px 45px; }
+
+    .aviso, .card {
+      background: #fff;
+      border: 1px solid var(--borda);
+      border-radius: 14px;
+      box-shadow: 0 5px 20px rgba(20, 33, 61, .07);
+    }
+
+    .aviso { padding: 16px 18px; margin-bottom: 18px; border-left: 5px solid var(--dourado); }
+    .aviso strong { display: block; margin-bottom: 5px; }
+    .card { padding: 20px; margin-bottom: 18px; }
+    h2 { margin: 0 0 16px; font-size: 20px; color: var(--azul); }
+
+    .grade-principal {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    label { display: block; font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+    input, select {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid #aeb8ca;
+      border-radius: 8px;
+      padding: 9px 10px;
+      background: #fff;
+      color: var(--texto);
+      font-size: 14px;
+    }
+    input:focus, select:focus { outline: 3px solid rgba(252, 163, 17, .25); border-color: var(--dourado); }
+
+    .tabela-wrap { overflow-x: auto; border: 1px solid var(--borda); border-radius: 10px; }
+    table { width: 100%; min-width: 1160px; border-collapse: collapse; background: #fff; }
+    th { background: var(--azul); color: #fff; font-size: 12px; padding: 11px 8px; text-align: left; }
+    td { border-top: 1px solid var(--borda); padding: 7px; vertical-align: middle; }
+    td.numero { width: 44px; text-align: center; font-weight: 700; color: var(--azul); }
+    td.acao { width: 145px; }
+    td.tipo { width: 155px; }
+    td.nome { width: 230px; }
+    td.data { width: 150px; }
+    td.cpf { width: 170px; }
+    td.competicao-anterior { width: 260px; }
+    td.remover { width: 55px; text-align: center; }
+    td.nao-necessario {
+      background: #f2f4f7;
+      text-align: center;
+      color: #667085;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    td.nao-necessario input,
+    td.nao-necessario select { display: none; }
+    td.nao-necessario::after { content: 'Não necessário'; }
+
+    .botoes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    button {
+      border: 0;
+      border-radius: 9px;
+      padding: 11px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:disabled { opacity: .6; cursor: wait; }
+    .adicionar { background: var(--azul-claro); color: var(--azul); }
+    .enviar { background: var(--dourado); color: #111827; min-width: 180px; }
+    .excluir { background: #fee4e2; color: var(--perigo); padding: 9px 11px; }
+
+    .confirmacoes { display: grid; gap: 12px; }
+    .check {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 8px;
+      align-items: start;
+      font-weight: 400;
+      line-height: 1.45;
+    }
+    .check input { width: 18px; min-height: 18px; margin: 1px 0 0; }
+    .termo-box {
+      margin: 0 0 4px 30px;
+      padding: 13px;
+      border: 1px solid #b8c2d3;
+      border-radius: 8px;
+      background: #f9fafc;
+      line-height: 1.55;
+      font-size: 14px;
+      color: #3d4960;
+    }
+
+    .upload-area {
+      display: block;
+      padding: 25px 16px;
+      border: 2px dashed #8995aa;
+      border-radius: 10px;
+      text-align: center;
+      background: #fafbfe;
+      cursor: pointer;
+    }
+    .upload-area:hover { background: var(--azul-claro); }
+    .upload-area input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .upload-titulo { display: block; font-size: 18px; color: var(--azul); margin-bottom: 5px; }
+    .upload-ajuda { display: block; font-weight: 400; color: #647089; }
+    .arquivo-nome { display: block; margin-top: 8px; font-weight: 700; color: var(--sucesso); }
+
+    .mensagem { display: none; padding: 14px; border-radius: 9px; margin-top: 14px; font-weight: 700; }
+    .mensagem.sucesso { display: block; background: #dcfae6; color: var(--sucesso); }
+    .mensagem.erro { display: block; background: #fee4e2; color: var(--perigo); }
+    .contador { margin-left: auto; align-self: center; font-size: 13px; color: #596579; }
+
+    @media (max-width: 720px) {
+      .grade-principal { grid-template-columns: 1fr; }
+      .card { padding: 16px 12px; }
+      .topo { padding: 22px 14px; }
+      .topo-conteudo { align-items: flex-start; }
+      .logo-competicao, .logo-placeholder { width: 72px; height: 72px; flex-basis: 72px; }
+      .contador { width: 100%; margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-conteudo">
+      <img class="logo-competicao" src="<?!= config.logoUrl ?>" alt="Logomarca da competição">
+      <div class="marca">
+        <h1>Inscrição, Remoção e Portabilidade</h1>
+        <p>Formulário da AEUV</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="aviso">
+      <strong>IMPORTANTE</strong>
+      Realize o Pix para o CNPJ <?= config.cnpjPix ?> antes do envio. Após a conferência, os registros serão incluídos no sistema oficial da competição.
+    </div>
+
+    <form id="formulario">
+      <section class="card">
+        <h2>Dados principais</h2>
+        <div class="grade-principal">
+          <div>
+            <label for="competicao">Competição *</label>
+            <select id="competicao" required>
+              <option value="COPA AMERICA">COPA AMERICA</option>
+              <option value="SUPER LIGA UNIÃO" selected>SUPER LIGA UNIÃO</option>
+              <option value="COPA METROPOLITANA">COPA METROPOLITANA</option>
+              <option value="COPA PREMIER">COPA PREMIER</option>
+            </select>
+          </div>
+          <div>
+            <label for="equipe">Equipe *</label>
+            <select id="equipe" required>
+              <option value="">Selecione a equipe</option>
+              <option value="AJAX">AJAX</option>
+              <option value="BEATS">BEATS</option>
+              <option value="BOCA JRS">BOCA JRS</option>
+              <option value="CRUZMALTINO">CRUZMALTINO</option>
+              <option value="INTEGRAÇÃO">INTEGRAÇÃO</option>
+              <option value="KADOSH">KADOSH</option>
+              <option value="LEÕES DO MORUMBI">LEÕES DO MORUMBI</option>
+              <option value="ONZE GAROTOS">ONZE GAROTOS</option>
+              <option value="PEQUIS">PEQUIS</option>
+              <option value="RIVER">RIVER</option>
+              <option value="TRANSNANE/BRASILIENSE">TRANSNANE/BRASILIENSE</option>
+              <option value="TRK">TRK</option>
+              <option value="UNIÃO">UNIÃO</option>
+              <option value="UNIAO SANTA MARIA">UNIAO SANTA MARIA</option>
+              <option value="OLHOS DÁGUA">OLHOS DÁGUA</option>
+              <option value="FUT ART">FUT ART</option>
+              <option value="VENUS">VENUS</option>
+              <option value="REAL PREDADOR">REAL PREDADOR</option>
+            </select>
+          </div>
+          <div>
+            <label for="responsavel">Nome completo do responsável *</label>
+            <input id="responsavel" maxlength="150" required>
+          </div>
+          <div>
+            <label for="telefone">Telefone/WhatsApp *</label>
+            <input id="telefone" maxlength="15" required inputmode="numeric" autocomplete="tel" placeholder="(00) 00000-0000" pattern="\(\d{2}\) \d{5}-\d{4}" title="Digite o telefone completo no formato (00) 00000-0000">
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Comprovante de pagamento</h2>
+        <label class="upload-area" for="comprovante">
+          <input id="comprovante" type="file" accept=".pdf,image/jpeg,image/png,image/webp" required>
+          <strong class="upload-titulo">Pesquisar arquivo</strong>
+          <span class="upload-ajuda">Selecione um PDF ou imagem de até 5 MB.</span>
+          <span class="arquivo-nome" id="arquivoNome"></span>
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Atletas e comissão</h2>
+        <div class="tabela-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nº</th>
+                <th>Ação</th>
+                <th>Tipo</th>
+                <th>Nome completo</th>
+                <th>Nascimento</th>
+                <th>CPF</th>
+                <th>Competição anterior</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="linhas"></tbody>
+          </table>
+        </div>
+        <div class="botoes">
+          <button type="button" class="adicionar" id="adicionar">+ Adicionar pessoa</button>
+          <span class="contador" id="contador"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Confirmações</h2>
+        <div class="confirmacoes">
+          <label class="check">
+            <input type="checkbox" id="pagamento" required>
+            <span>Declaro que o Pix foi realizado para o CNPJ informado.</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="termoMedico" required>
+            <span><strong>TERMO DE ISENÇÃO DE RESPONSABILIDADE MÉDICA</strong></span>
+          </label>
+          <div class="termo-box">
+            DECLARO: Eu, como responsável da equipe para fins de direito, declaro que meus atletas estão APTOS à prática do futebol, responsabilizando-me inteiramente por qualquer fato que venha a ocorrer, tendo conhecimento do regulamento do campeonato que estiverem disputando. Declaro ainda que todas as informações prestadas são verdadeiras, ficando a organização do campeonato autorizada a utilizar minha imagem para as divulgações dos eventos dos quais estiver participando.
+          </div>
+          <label class="check">
+            <input type="checkbox" id="regulamento" required>
+            <span>
+              Concordo com os
+              <? if (config.regulamentoUrl) { ?>
+                <a href="<?= config.regulamentoUrl ?>" target="_blank" rel="noopener">termos do Regulamento da competição</a>.
+              <? } else { ?>
+                <strong>termos do Regulamento da competição</strong>.
+              <? } ?>
+            </span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="autorizacao" required>
+            <span>Declaro que as informações são verdadeiras e que possuo autorização para fornecer os dados cadastrados.</span>
+          </label>
+        </div>
+        <div class="botoes">
+          <button type="submit" class="enviar" id="enviar">Enviar inscrição</button>
+        </div>
+        <div id="mensagem" class="mensagem" role="alert"></div>
+      </section>
+    </form>
+  </main>
+
+  <template id="modeloLinha">
+    <tr>
+      <td class="numero"></td>
+      <td class="acao">
+        <select data-campo="acao" required>
+          <option value="">Selecione</option>
+          <option>Inclusao</option>
+          <option>Remocao</option>
+          <option>Portabilidade</option>
+        </select>
+      </td>
+      <td class="tipo">
+        <select data-campo="tipo" required>
+          <option value="">Selecione</option>
+          <option>Atleta</option>
+          <option>Comissao tecnica</option>
+        </select>
+      </td>
+      <td class="nome"><input data-campo="nome" maxlength="150" required></td>
+      <td class="data"><input data-campo="nascimento" type="date" min="1900-01-01" required></td>
+      <td class="cpf"><input data-campo="cpf" maxlength="14" required inputmode="numeric" placeholder="000.000.000-00"></td>
+      <td class="competicao-anterior nao-necessario">
+        <select data-campo="competicaoAnterior" disabled>
+          <option value="">Selecione</option>
+          <option>COPA METROPOLITANA</option>
+          <option>4° SUPER LIGA UNIAO 99 BET 2023</option>
+          <option>2° COPA METROPOLITANA 2023</option>
+          <option>RECOPA 2023</option>
+          <option>SUPER LIGA UNIÃO 2024</option>
+          <option>4º COPA METROPOLITANA 2025</option>
+          <option>6º SUPER LIGA UNIÃO 2025</option>
+          <option>5º COPA METROPOLITANA</option>
+          <option>3º COPA PREMIER 2026</option>
+          <option>2º COPA AMERICA 2026</option>
+          <option>7º SUPER LIGA UNIÃO 2026</option>
+        </select>
+      </td>
+      <td class="remover"><button type="button" class="excluir" title="Remover linha">×</button></td>
+    </tr>
+  </template>
+
+  <script>
+    const MAX_PESSOAS = 30;
+    const MAX_ARQUIVO_BYTES = 5 * 1024 * 1024;
+    const tbody = document.getElementById('linhas');
+    const modelo = document.getElementById('modeloLinha');
+    const mensagem = document.getElementById('mensagem');
+    const botaoEnviar = document.getElementById('enviar');
+    const formulario = document.getElementById('formulario');
+    const campoTelefone = document.getElementById('telefone');
+
+    function obterDataAtualIso() {
+      const hoje = new Date();
+      const ano = hoje.getFullYear();
+      const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+      const dia = String(hoje.getDate()).padStart(2, '0');
+      return ano + '-' + mes + '-' + dia;
+    }
+
+    const DATA_MAXIMA_NASCIMENTO = obterDataAtualIso();
+
+    function validarDataNascimento(campo) {
+      campo.setCustomValidity('');
+      if (!campo.value) return;
+
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(campo.value) ||
+        campo.value < '1900-01-01' ||
+        campo.value > DATA_MAXIMA_NASCIMENTO
+      ) {
+        campo.setCustomValidity('Informe uma data válida entre 01/01/1900 e hoje.');
+      }
+    }
+
+    function aplicarMascaraTelefone(valor) {
+      const numeros = String(valor || '').replace(/\D/g, '').slice(0, 11);
+      if (!numeros) return '';
+      if (numeros.length <= 2) return '(' + numeros;
+      if (numeros.length <= 7) {
+        return '(' + numeros.slice(0, 2) + ') ' + numeros.slice(2);
+      }
+      return '(' + numeros.slice(0, 2) + ') ' +
+        numeros.slice(2, 7) + '-' + numeros.slice(7);
+    }
+
+    campoTelefone.addEventListener('beforeinput', evento => {
+      if (evento.inputType === 'insertText' && evento.data && /\D/.test(evento.data)) {
+        evento.preventDefault();
+      }
+    });
+
+    campoTelefone.addEventListener('input', () => {
+      campoTelefone.value = aplicarMascaraTelefone(campoTelefone.value);
+    });
+
+    formulario.addEventListener('invalid', evento => {
+      const campo = evento.target;
+
+      if (campo.dataset.campo === 'nascimento') {
+        campo.setCustomValidity('Informe uma data válida entre 01/01/1900 e hoje.');
+        return;
+      }
+      const mensagens = {
+        competicao: 'Selecione a competição.',
+        equipe: 'Selecione a equipe.',
+        responsavel: 'Informe o nome completo do responsável.',
+        telefone: 'Informe o telefone completo no formato (00) 00000-0000.',
+        comprovante: 'Anexe o comprovante de pagamento do Pix.',
+        pagamento: 'Confirme que o pagamento do Pix foi realizado.',
+        termoMedico: 'É necessário aceitar o termo de responsabilidade médica.',
+        regulamento: 'É necessário concordar com o regulamento da competição.',
+        autorizacao: 'É necessário aceitar a declaração e autorização.',
+      };
+      const mensagensTabela = {
+        acao: 'Selecione a ação.',
+        tipo: 'Selecione o tipo.',
+        nome: 'Informe o nome completo.',
+        competicaoAnterior: 'Selecione a competição anterior.',
+        nascimento: 'Informe a data de nascimento.',
+        cpf: 'Informe o CPF.',
+      };
+      campo.setCustomValidity(
+        mensagens[campo.id] || mensagensTabela[campo.dataset.campo] || 'Preencha este campo obrigatório.'
+      );
+    }, true);
+
+    formulario.addEventListener('input', evento => {
+      evento.target.setCustomValidity('');
+      if (evento.target.dataset.campo === 'nascimento') {
+        validarDataNascimento(evento.target);
+      }
+    }, true);
+
+    formulario.addEventListener('change', evento => {
+      evento.target.setCustomValidity('');
+      if (evento.target.dataset.campo === 'nascimento') {
+        validarDataNascimento(evento.target);
+      }
+    }, true);
+
+    function adicionarLinha() {
+      if (tbody.children.length >= MAX_PESSOAS) {
+        mostrarMensagem('O limite é de ' + MAX_PESSOAS + ' pessoas por envio.', 'erro');
+        return;
+      }
+      const novaLinha = modelo.content.cloneNode(true);
+      novaLinha.querySelector('[data-campo="nascimento"]').max = DATA_MAXIMA_NASCIMENTO;
+      tbody.appendChild(novaLinha);
+      atualizarLinhas();
+    }
+
+    function atualizarLinhas() {
+      [...tbody.querySelectorAll('tr')].forEach((linha, indice) => {
+        linha.querySelector('.numero').textContent = indice + 1;
+        linha.querySelector('.excluir').disabled = tbody.children.length === 1;
+      });
+      document.getElementById('contador').textContent =
+        tbody.children.length + ' de ' + MAX_PESSOAS + ' pessoas';
+    }
+
+    function mostrarMensagem(texto, tipo) {
+      mensagem.textContent = texto;
+      mensagem.className = 'mensagem ' + tipo;
+      mensagem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function baixarArquivoTxt(nome, conteudo) {
+      const blob = new Blob(['\uFEFF', conteudo], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = nome;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function obterPayload(comprovante) {
+      const pessoas = [...tbody.querySelectorAll('tr')].map(linha => ({
+        acao: linha.querySelector('[data-campo="acao"]').value,
+        tipo: linha.querySelector('[data-campo="tipo"]').value,
+        nome: linha.querySelector('[data-campo="nome"]').value.trim(),
+        nascimento: linha.querySelector('[data-campo="nascimento"]').value,
+        cpf: linha.querySelector('[data-campo="cpf"]').value.trim(),
+        competicaoAnterior: linha.querySelector('[data-campo="competicaoAnterior"]').value,
+      }));
+
+      return {
+        competicao: document.getElementById('competicao').value.trim(),
+        equipe: document.getElementById('equipe').value.trim(),
+        responsavel: document.getElementById('responsavel').value.trim(),
+        telefone: document.getElementById('telefone').value.trim(),
+        pagamento: document.getElementById('pagamento').checked,
+        termoMedico: document.getElementById('termoMedico').checked,
+        regulamento: document.getElementById('regulamento').checked,
+        autorizacao: document.getElementById('autorizacao').checked,
+        comprovante,
+        pessoas,
+      };
+    }
+
+    function lerComprovante() {
+      const arquivo = document.getElementById('comprovante').files[0];
+      if (!arquivo) return Promise.reject(new Error('Anexe o comprovante de pagamento.'));
+      if (arquivo.size > MAX_ARQUIVO_BYTES) {
+        return Promise.reject(new Error('O comprovante deve ter no máximo 5 MB.'));
+      }
+
+      return new Promise((resolve, reject) => {
+        const leitor = new FileReader();
+        leitor.onload = () => resolve({
+          nome: arquivo.name,
+          tipo: arquivo.type,
+          tamanho: arquivo.size,
+          base64: String(leitor.result).split(',')[1],
+        });
+        leitor.onerror = () => reject(new Error('Não foi possível ler o comprovante.'));
+        leitor.readAsDataURL(arquivo);
+      });
+    }
+
+    document.getElementById('adicionar').addEventListener('click', adicionarLinha);
+
+    tbody.addEventListener('click', evento => {
+      const botao = evento.target.closest('.excluir');
+      if (!botao || tbody.children.length === 1) return;
+      botao.closest('tr').remove();
+      atualizarLinhas();
+    });
+
+    tbody.addEventListener('change', evento => {
+      if (evento.target.dataset.campo === 'acao') {
+        const linha = evento.target.closest('tr');
+        const inclusao = evento.target.value === 'Inclusao';
+        const portabilidade = evento.target.value === 'Portabilidade';
+        const simplificada = ['Remocao', 'Portabilidade'].includes(evento.target.value);
+        const nascimento = linha.querySelector('[data-campo="nascimento"]');
+        const cpf = linha.querySelector('[data-campo="cpf"]');
+        const competicaoAnterior = linha.querySelector('[data-campo="competicaoAnterior"]');
+
+        linha.querySelector('[data-campo="tipo"]').required = true;
+        nascimento.required = inclusao;
+        cpf.required = inclusao;
+        competicaoAnterior.required = portabilidade;
+        competicaoAnterior.disabled = !portabilidade;
+        nascimento.closest('td').classList.toggle('nao-necessario', simplificada);
+        cpf.closest('td').classList.toggle('nao-necessario', simplificada);
+        competicaoAnterior.closest('td').classList.toggle('nao-necessario', !portabilidade);
+
+        if (simplificada) {
+          nascimento.value = '';
+          cpf.value = '';
+        }
+
+        if (!portabilidade) {
+          competicaoAnterior.value = '';
+        }
+      }
+    });
+
+    tbody.addEventListener('input', evento => {
+      if (evento.target.dataset.campo !== 'cpf') return;
+      const numeros = evento.target.value.replace(/\D/g, '').slice(0, 11);
+      evento.target.value = numeros
+        .replace(/^(\d{3})(\d)/, '$1.$2')
+        .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+        .replace(/\.(\d{3})(\d)/, '.$1-$2');
+    });
+
+    document.getElementById('comprovante').addEventListener('change', evento => {
+      const arquivo = evento.target.files[0];
+      document.getElementById('arquivoNome').textContent = arquivo ? arquivo.name : '';
+    });
+
+    formulario.addEventListener('submit', async evento => {
+      evento.preventDefault();
+      mensagem.className = 'mensagem';
+      botaoEnviar.disabled = true;
+      botaoEnviar.textContent = 'Enviando...';
+
+      let comprovante;
+      try {
+        comprovante = await lerComprovante();
+      } catch (erro) {
+        mostrarMensagem(erro.message, 'erro');
+        botaoEnviar.disabled = false;
+        botaoEnviar.textContent = 'Enviar inscrição';
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(resultado => {
+          baixarArquivoTxt(resultado.arquivoTxtNome, resultado.arquivoTxtConteudo);
+          mostrarMensagem(
+            'Formulário enviado com sucesso! Guarde o protocolo ' + resultado.protocolo +
+            '. Total de pessoas registradas: ' + resultado.quantidade,
+            'sucesso'
+          );
+          formulario.reset();
+          document.getElementById('arquivoNome').textContent = '';
+          tbody.innerHTML = '';
+          adicionarLinha();
+          botaoEnviar.disabled = false;
+          botaoEnviar.textContent = 'Enviar inscrição';
+        })
+        .withFailureHandler(erro => {
+          mostrarMensagem(erro.message || 'Não foi possível enviar o formulário. Tente novamente.', 'erro');
+          botaoEnviar.disabled = false;
+          botaoEnviar.textContent = 'Enviar inscrição';
+        })
+        .salvarInscricao(obterPayload(comprovante));
+    });
+
+    adicionarLinha();
+  </script>
+</body>
+</html>

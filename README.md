@@ -3,10 +3,19 @@
 Automação em Python para:
 
 - fazer login no iFut
-- baixar arquivos `.txt` de uma pasta pública do Google Drive
+- baixar arquivos `.txt` de entrada do Google Drive
 - ler cada formulário
 - localizar o time no campeonato
 - executar **inclusão**, **remoção** ou **portabilidade**
+
+O formulário Web de **inscrição, remoção e portabilidade** gera os arquivos TXT
+que alimentam este processamento. Para que o Python os processe, coloque os
+arquivos gerados na pasta `Entrada` do Drive configurada em `[drive]` no
+`config.ini`. A súmula digital também gera TXT, mas tem finalidade de registro
+da arbitragem e não é entrada do parser Python.
+
+Veja como os formulários geram e armazenam esses arquivos no
+[guia dos aplicativos Apps Script](apps-scripts/README.md).
 
 ## Arquivos principais
 
