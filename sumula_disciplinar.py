@@ -658,7 +658,7 @@ def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: 
         f"{cidade}, {data_por_extenso(hoje)}.",
         "",
         "",
-        "COMISSÃO ORGANIZADORA",
+        "ASSOCIAÇÃO AEUV",
         f" {competicao}",
     ]
     return "\n".join(linhas) + "\n"

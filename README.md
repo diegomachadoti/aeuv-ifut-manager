@@ -24,6 +24,7 @@ Veja como os formulários geram e armazenam esses arquivos no
 - `sumula_disciplinar.py`: análise das súmulas e geração das notas oficiais
 - `sumula_ia.py`: geração da nota oficial por IA (`--ia`)
 - `nota_pdf.py`: PDF da nota oficial com a identidade da AEUV (`--gerar-pdf-nota`)
+- `regulamento_pdf.py`: PDF do regulamento no mesmo layout, assinado pelo Presidente (`--gerar-pdf-regulamento`)
 - `regulamento\`: texto do regulamento usado na análise disciplinar
 - `config.ini`: credenciais, delays e URLs
 - `selectors.ini`: seletores Selenium do iFut
@@ -503,17 +504,51 @@ analisar a súmula de novo:
 logo = assets\logo-aeuv.png
 logo_url = https://drive.google.com/uc?export=download&id=1FZ5UyGPfciIp23D8d7XYJnY9vhFmSAhV
 associacao = ASSOCIAÇÃO AEUV
-assinatura = assets\assinatura-vice-presidente.png
-assinatura_nome = Ivanildo Xavier de Oliveira
-assinatura_cargo = Vice-Presidente – Associação AEUV
+assinatura = assets\assinatura-presidente.png
+assinatura_nome = Iure Costtiti
+assinatura_cargo = Presidente
 ```
 
-A assinatura digitalizada do Vice-Presidente (PNG com fundo transparente) é
+A assinatura digitalizada do Presidente (PNG com fundo transparente) é
 aplicada sobre a linha de assinatura, com nome e cargo abaixo e, em seguida,
-"COMISSÃO ORGANIZADORA". Por segurança, ela aparece **somente no PDF final**:
+o valor de `associacao` ("ASSOCIAÇÃO AEUV") e a competição. Notas antigas
+assinadas como "COMISSÃO ORGANIZADORA" também saem com "ASSOCIAÇÃO AEUV" ao
+regerar o PDF. Por segurança, ela aparece **somente no PDF final**:
 PDFs marcados como RASCUNHO saem com a linha em branco. O arquivo
 `assets/assinatura-*.png` está no `.gitignore` e não é commitado.
 
 Se `logo` não existir, a logomarca é baixada de `logo_url` (link público do
 Drive) e salva reduzida. Para trocar a logo, substitua o arquivo ou apague-o
 para baixar de novo. Usa `reportlab` e `pillow` (em `requirements.txt`).
+
+### PDF do regulamento
+
+Gera o PDF do regulamento no mesmo layout da Nota Oficial (logomarca,
+cabeçalho, rodapé com página) e, ao final, a data, a assinatura digitalizada do
+Presidente, "ASSOCIAÇÃO AEUV" e a competição. Informe o nome ou o caminho do
+arquivo texto; ele é procurado também na pasta `regulamento\`, com ou sem a
+extensão `.txt`:
+
+```powershell
+# pelo nome do arquivo (procurado na pasta regulamento\)
+.\.venv\Scripts\python.exe .\main.py --gerar-pdf-regulamento regulamento-7-super-liga-união-2026.txt
+# sem a extensão .txt
+.\.venv\Scripts\python.exe .\main.py --gerar-pdf-regulamento regulamento-7-super-liga-união-2026
+# pelo caminho completo
+.\.venv\Scripts\python.exe .\main.py --gerar-pdf-regulamento "regulamento\regulamento-7-super-liga-união-2026"
+# subtítulo personalizado (padrão: derivado do nome do arquivo -> "7ª SUPER LIGA UNIÃO 2026")
+.\.venv\Scripts\python.exe .\regulamento_pdf.py regulamento-7-super-liga-união-2026.txt --titulo "7ª SUPER LIGA UNIÃO 2026"
+```
+
+Resultado: `regulamento\regulamento-7-super-liga-união-2026.pdf`.
+
+O PDF é salvo ao lado do arquivo de origem, com o mesmo nome e extensão `.pdf`.
+A formatação é automática:
+
+- Linhas curtas iniciadas por emoji (ex.: "🖊️ Inscrições") viram faixas de capítulo.
+- `ART X:` vira destaque do artigo.
+- `§` tem o rótulo em negrito.
+- Incisos (`I –`, `II –`...) saem recuados.
+
+Os emojis são removidos no PDF, pois a fonte não os desenha. Sempre que o
+regulamento mudar, basta rodar o comando de novo.

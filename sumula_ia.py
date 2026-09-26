@@ -122,7 +122,7 @@ def montar_mensagens(sumula: Sumula, texto_sumula: str, regulamento_texto: str, 
 - Competição: {competicao}
 - Partida: {sumula.time1} x {sumula.time2}, realizada em {formatar_data_jogo(sumula.data_jogo)}
 - Local e data de assinatura: {cidade}, {data_por_extenso(hoje)}.
-- Assinatura final: "COMISSÃO ORGANIZADORA" e, na linha seguinte, "{competicao}".
+- Assinatura final: "ASSOCIAÇÃO AEUV" e, na linha seguinte, "{competicao}".
 
 ENVOLVIDOS INFORMADOS PELO ÁRBITRO
 {envolvidos}"""

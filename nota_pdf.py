@@ -41,7 +41,7 @@ class ConfigPdf:
     associacao: str
     competicao: str
     cidade: str
-    assinatura: Path = Path("assets\\assinatura-vice-presidente.png")
+    assinatura: Path = Path("assets\\assinatura-presidente.png")
     assinatura_nome: str = ""
     assinatura_cargo: str = ""
     @classmethod
@@ -59,7 +59,7 @@ class ConfigPdf:
             associacao=p.get("associacao", "ASSOCIAÇÃO AEUV"),
             competicao=n.get("competicao", ""),
             cidade=n.get("cidade", ""),
-            assinatura=Path(p.get("assinatura", "assets\\assinatura-vice-presidente.png")),
+            assinatura=Path(p.get("assinatura", "assets\\assinatura-presidente.png")),
             assinatura_nome=p.get("assinatura_nome", ""),
             assinatura_cargo=p.get("assinatura_cargo", ""),
         )
@@ -157,38 +157,169 @@ def _eh_maiuscula(linha: str) -> bool:
 # Montagem do PDF
 # ---------------------------------------------------------------------------
 
-def gerar_pdf_nota(txt_path: Path, config: ConfigPdf | None = None, logger: logging.Logger = LOGGER) -> Path:
-    from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.units import cm
-    from reportlab.platypus import (
-        CondPageBreak, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
-    )
+@dataclass
+class LayoutPdf:
+    """Recursos visuais comuns aos PDFs da associacao (nota oficial, regulamento)."""
+    config: ConfigPdf
+    normal: str
+    negrito: str
+    italico: str
+    fonte_simbolos: str | None
+    logo: Path | None
+    estilos: dict
 
-    config = config or ConfigPdf.carregar()
-    txt_path = Path(txt_path)
-    texto = txt_path.read_text(encoding="utf-8-sig")
-    avisos, corpo, titulo = ler_nota(texto)
-    pendente = tem_pendencias(texto)
-    normal, negrito, italico, fonte_simbolos = _registrar_fontes()
-    logo = garantir_logo(config, logger)
+    @classmethod
+    def criar(cls, config: ConfigPdf, logger: logging.Logger = LOGGER) -> "LayoutPdf":
+        normal, negrito, italico, simbolos = _registrar_fontes()
+        return cls(config, normal, negrito, italico, simbolos, garantir_logo(config, logger),
+                   _criar_estilos(normal, negrito, italico))
 
-    def fmt(linha: str) -> str:
+    @property
+    def base(self):
+        return self.estilos["base"]
+
+    def fmt(self, linha: str) -> str:
         html = escape(linha.replace("\ufe0f", "").strip())
         html = re.sub(r"\*\*(.+?)\*\*", rf'<font color="{VERMELHO}"><b>\1</b></font>', html)
         html = re.sub(r"(https?://\S+)", r'<link href="\1" color="#1F3A68"><u>\1</u></link>', html)
         for simbolo in SIMBOLOS:
             if simbolo in html:
-                troca = (f'<font name="{fonte_simbolos}">{simbolo}</font>' if fonte_simbolos
+                troca = (f'<font name="{self.fonte_simbolos}">{simbolo}</font>' if self.fonte_simbolos
                          else SIMBOLOS_ASCII[simbolo])
                 html = html.replace(simbolo, troca)
         return html
 
+    def faixa(self, texto_secao: str):
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        from reportlab.platypus import Paragraph, Table, TableStyle
+
+        tabela = Table([[Paragraph(self.fmt(texto_secao), self.estilos["secao"])]], colWidths=[17 * cm])
+        tabela.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(AZUL)),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        return tabela
+
+    def caixa(self, paragrafos: list, fundo: str, borda: str):
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        from reportlab.platypus import Table, TableStyle
+
+        tabela = Table([[p] for p in paragrafos], colWidths=[17 * cm])
+        tabela.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(fundo)),
+            ("LINEBEFORE", (0, 0), (0, -1), 3, colors.HexColor(borda)),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        return tabela
+
+    def bloco_assinatura(self, linha_data: str, linhas_finais: list[str], assinar: bool):
+        """Data, assinatura digitalizada sobre a linha, nome/cargo e linhas finais (associacao, competicao)."""
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        from reportlab.platypus import KeepTogether, Paragraph, Spacer, Table, TableStyle
+
+        config = self.config
+        bloco = [Spacer(1, 18), Paragraph(self.fmt(linha_data), self.estilos["centro"]), Spacer(1, 18)]
+        imagem_assinatura = config.assinatura if assinar and config.assinatura.exists() else None
+        if imagem_assinatura:
+            from reportlab.lib.utils import ImageReader
+            from reportlab.platypus import Image as ImagemPdf
+
+            largura_img, altura_img = ImageReader(str(imagem_assinatura)).getSize()
+            largura = 4.5 * cm
+            conteudo = ImagemPdf(str(imagem_assinatura), width=largura, height=largura * altura_img / largura_img)
+        else:
+            conteudo = Spacer(1, 18)
+        linha = Table([[conteudo]], colWidths=[9 * cm])
+        linha.setStyle(TableStyle([
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.8, colors.HexColor("#1B1B1B")),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1), ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        bloco.append(linha)
+        if config.assinatura_nome:
+            bloco.append(Paragraph(self.fmt(config.assinatura_nome), self.estilos["centro"]))
+        if config.assinatura_cargo:
+            bloco.append(Paragraph(self.fmt(config.assinatura_cargo), self.estilos["centro"]))
+        bloco.append(Spacer(1, 4))
+        # Notas antigas assinavam como "COMISSÃO ORGANIZADORA"; o PDF assina pela associacao.
+        bloco += [Paragraph(self.fmt(config.associacao if l.upper() == "COMISSÃO ORGANIZADORA" else l),
+                            self.estilos["assinatura"]) for l in linhas_finais]
+        return KeepTogether(bloco)
+
+    def moldura(self, rodape: str, marca_dagua: str = ""):
+        """Funcao de pagina: cabecalho com logo, rodape com texto/pagina e marca d'agua opcional."""
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import cm
+
+        config, logo = self.config, self.logo
+        competicao = config.competicao
+
+        def pagina(canvas, doc) -> None:
+            largura, altura = A4
+            canvas.saveState()
+            topo = altura - 1.2 * cm
+            x_texto = 2 * cm
+            if logo:
+                canvas.drawImage(str(logo), 2 * cm, topo - 2 * cm, width=2 * cm, height=2 * cm,
+                                 preserveAspectRatio=True, mask="auto")
+                x_texto = 4.4 * cm
+            canvas.setFillColor(colors.HexColor(AZUL))
+            canvas.setFont(self.negrito, 15)
+            canvas.drawString(x_texto, topo - 0.8 * cm, config.associacao)
+            canvas.setFillColor(colors.HexColor(CINZA))
+            canvas.setFont(self.normal, 9.5)
+            canvas.drawString(x_texto, topo - 1.35 * cm,
+                              "Comissão Organizadora" + (f" · {competicao}" if competicao else ""))
+            canvas.setStrokeColor(colors.HexColor(AZUL))
+            canvas.setLineWidth(1.5)
+            canvas.line(2 * cm, topo - 2.3 * cm, largura - 2 * cm, topo - 2.3 * cm)
+
+            canvas.setStrokeColor(colors.HexColor("#C9D1DE"))
+            canvas.setLineWidth(0.6)
+            canvas.line(2 * cm, 1.7 * cm, largura - 2 * cm, 1.7 * cm)
+            canvas.setFont(self.normal, 8)
+            canvas.setFillColor(colors.HexColor(CINZA))
+            canvas.drawString(2 * cm, 1.25 * cm, f"{config.associacao} · {rodape}")
+            canvas.drawRightString(largura - 2 * cm, 1.25 * cm, f"Página {doc.page}")
+
+            if marca_dagua:
+                canvas.setFillColor(colors.Color(0.85, 0.1, 0.1, alpha=0.08))
+                canvas.setFont(self.negrito, 90)
+                canvas.translate(largura / 2, altura / 2)
+                canvas.rotate(45)
+                canvas.drawCentredString(0, 0, marca_dagua)
+            canvas.restoreState()
+
+        return pagina
+
+    def construir(self, destino: Path, historia: list, titulo: str, rodape: str, marca_dagua: str = "") -> None:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate
+
+        doc = SimpleDocTemplate(
+            str(destino), pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm, topMargin=4 * cm,
+            bottomMargin=2.3 * cm, title=titulo, author=self.config.associacao, subject=self.config.competicao,
+        )
+        pagina = self.moldura(rodape, marca_dagua)
+        doc.build(historia, onFirstPage=pagina, onLaterPages=pagina)
+
+
+def _criar_estilos(normal: str, negrito: str, italico: str) -> dict:
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
+    from reportlab.lib.styles import ParagraphStyle
+
     base = ParagraphStyle("base", fontName=normal, fontSize=10.5, leading=15, alignment=TA_JUSTIFY,
                           spaceAfter=5, textColor=colors.HexColor("#1B1B1B"))
-    estilos = {
+    return {
+        "base": base,
         "titulo": ParagraphStyle("titulo", parent=base, fontName=negrito, fontSize=17, leading=21,
                                  alignment=TA_CENTER, textColor=colors.HexColor(AZUL), spaceAfter=2),
         "subtitulo": ParagraphStyle("subtitulo", parent=base, fontName=negrito, fontSize=11.5,
@@ -208,24 +339,18 @@ def gerar_pdf_nota(txt_path: Path, config: ConfigPdf | None = None, logger: logg
                                      spaceAfter=0),
     }
 
-    def faixa(texto_secao: str) -> Table:
-        tabela = Table([[Paragraph(fmt(texto_secao), estilos["secao"])]], colWidths=[17 * cm])
-        tabela.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(AZUL)),
-            ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ]))
-        return tabela
 
-    def caixa(paragrafos: list, fundo: str, borda: str) -> Table:
-        tabela = Table([[p] for p in paragrafos], colWidths=[17 * cm])
-        tabela.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(fundo)),
-            ("LINEBEFORE", (0, 0), (0, -1), 3, colors.HexColor(borda)),
-            ("LEFTPADDING", (0, 0), (-1, -1), 10), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ]))
-        return tabela
+def gerar_pdf_nota(txt_path: Path, config: ConfigPdf | None = None, logger: logging.Logger = LOGGER) -> Path:
+    from reportlab.lib.units import cm
+    from reportlab.platypus import CondPageBreak, KeepTogether, Paragraph, Spacer
+
+    config = config or ConfigPdf.carregar()
+    txt_path = Path(txt_path)
+    texto = txt_path.read_text(encoding="utf-8-sig")
+    avisos, corpo, titulo = ler_nota(texto)
+    pendente = tem_pendencias(texto)
+    layout = LayoutPdf.criar(config, logger)
+    fmt, estilos, base, faixa, caixa = layout.fmt, layout.estilos, layout.base, layout.faixa, layout.caixa
 
     historia: list = []
     if avisos and pendente:
@@ -284,76 +409,11 @@ def gerar_pdf_nota(txt_path: Path, config: ConfigPdf | None = None, logger: logg
     descarregar_decisoes()
 
     if assinatura:
-        bloco = [Spacer(1, 18), Paragraph(fmt(assinatura[0]), estilos["centro"]), Spacer(1, 18)]
         # Assinatura digitalizada so no PDF final: rascunho nao sai assinado.
-        imagem_assinatura = config.assinatura if config.assinatura.exists() and not pendente else None
-        if imagem_assinatura:
-            from reportlab.lib.utils import ImageReader
-            from reportlab.platypus import Image as ImagemPdf
-
-            largura_img, altura_img = ImageReader(str(imagem_assinatura)).getSize()
-            largura = 7.5 * cm
-            conteudo = ImagemPdf(str(imagem_assinatura), width=largura, height=largura * altura_img / largura_img)
-        else:
-            conteudo = Spacer(1, 18)
-        linha = Table([[conteudo]], colWidths=[9 * cm])
-        linha.setStyle(TableStyle([
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
-            ("LINEBELOW", (0, 0), (-1, -1), 0.8, colors.HexColor("#1B1B1B")),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 1), ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ]))
-        bloco.append(linha)
-        if config.assinatura_nome:
-            bloco.append(Paragraph(fmt(config.assinatura_nome), estilos["centro"]))
-        if config.assinatura_cargo:
-            bloco.append(Paragraph(fmt(config.assinatura_cargo), estilos["centro"]))
-        bloco.append(Spacer(1, 4))
-        bloco += [Paragraph(fmt(l), estilos["assinatura"]) for l in assinatura[1:]]
-        historia.append(KeepTogether(bloco))
-
-    competicao = config.competicao
-
-    def pagina(canvas, doc) -> None:
-        largura, altura = A4
-        canvas.saveState()
-        topo = altura - 1.2 * cm
-        x_texto = 2 * cm
-        if logo:
-            canvas.drawImage(str(logo), 2 * cm, topo - 2 * cm, width=2 * cm, height=2 * cm,
-                             preserveAspectRatio=True, mask="auto")
-            x_texto = 4.4 * cm
-        canvas.setFillColor(colors.HexColor(AZUL))
-        canvas.setFont(negrito, 15)
-        canvas.drawString(x_texto, topo - 0.8 * cm, config.associacao)
-        canvas.setFillColor(colors.HexColor(CINZA))
-        canvas.setFont(normal, 9.5)
-        canvas.drawString(x_texto, topo - 1.35 * cm, "Comissão Organizadora" + (f" · {competicao}" if competicao else ""))
-        canvas.setStrokeColor(colors.HexColor(AZUL))
-        canvas.setLineWidth(1.5)
-        canvas.line(2 * cm, topo - 2.3 * cm, largura - 2 * cm, topo - 2.3 * cm)
-
-        canvas.setStrokeColor(colors.HexColor("#C9D1DE"))
-        canvas.setLineWidth(0.6)
-        canvas.line(2 * cm, 1.7 * cm, largura - 2 * cm, 1.7 * cm)
-        canvas.setFont(normal, 8)
-        canvas.setFillColor(colors.HexColor(CINZA))
-        canvas.drawString(2 * cm, 1.25 * cm, f"{config.associacao} · {titulo}")
-        canvas.drawRightString(largura - 2 * cm, 1.25 * cm, f"Página {doc.page}")
-
-        if pendente:
-            canvas.setFillColor(colors.Color(0.85, 0.1, 0.1, alpha=0.08))
-            canvas.setFont(negrito, 90)
-            canvas.translate(largura / 2, altura / 2)
-            canvas.rotate(45)
-            canvas.drawCentredString(0, 0, "RASCUNHO")
-        canvas.restoreState()
+        historia.append(layout.bloco_assinatura(assinatura[0], assinatura[1:], assinar=not pendente))
 
     destino = txt_path.with_suffix(".pdf")
-    doc = SimpleDocTemplate(
-        str(destino), pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm, topMargin=4 * cm,
-        bottomMargin=2.3 * cm, title=titulo, author=config.associacao, subject=competicao,
-    )
-    doc.build(historia, onFirstPage=pagina, onLaterPages=pagina)
+    layout.construir(destino, historia, titulo, rodape=titulo, marca_dagua="RASCUNHO" if pendente else "")
     if pendente:
         logger.warning("[PDF] %s possui pendencias ([A DEFINIR]/divergencias); PDF marcado como RASCUNHO",
                        txt_path.name)

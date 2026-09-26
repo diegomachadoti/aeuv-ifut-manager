@@ -1383,12 +1383,26 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Regera o PDF de uma nota oficial a partir do TXT: caminho do TXT, numero da nota (ex.: 4) "
              "ou protocolo da sumula (SUM-...)",
     )
+    parser.add_argument(
+        "--gerar-pdf-regulamento",
+        metavar="ARQUIVO",
+        help="Gera o PDF do regulamento (layout AEUV, com assinatura do Presidente) a partir do arquivo texto, "
+             "ex.: regulamento-7-super-liga-união-2026.txt (procurado tambem na pasta regulamento)",
+    )
     return parser
 
 
 def main() -> int:
     write_default_config()
     args = build_argument_parser().parse_args()
+    if args.gerar_pdf_regulamento:
+        from nota_pdf import ConfigPdf
+        from regulamento_pdf import gerar_pdf_regulamento
+
+        config = AppConfig(Path(args.config))
+        gerar_pdf_regulamento(args.gerar_pdf_regulamento, ConfigPdf.carregar(Path(args.config)),
+                              logger=configure_logging(config.log_path))
+        return 0
     if args.gerar_pdf_nota:
         from nota_pdf import regerar_pdf
 
