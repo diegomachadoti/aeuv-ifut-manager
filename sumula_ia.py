@@ -20,7 +20,7 @@ from pathlib import Path
 import requests
 
 from sumula_disciplinar import (
-    Regulamento, Sumula, bloco_relatorio_pdf, data_por_extenso, extrair_pena, formatar_data_jogo,
+    ASSOCIACAO, Regulamento, Sumula, bloco_relatorio_pdf, data_por_extenso, extrair_pena, formatar_data_jogo,
     inserir_antes_assinatura,
 )
 
@@ -112,7 +112,7 @@ def obter_chave(config: ConfigIA | None = None) -> str:
 
 
 def montar_mensagens(sumula: Sumula, texto_sumula: str, regulamento_texto: str, modelo_nota: str,
-                     competicao: str, cidade: str, hoje: date) -> list[dict]:
+                     competicao: str, cidade: str, hoje: date, associacao: str = ASSOCIACAO) -> list[dict]:
     envolvidos = "\n".join(
         f"- {e.nome} | {e.tipo} | equipe {e.equipe}" + (f" | camisa {e.camisa}" if e.camisa else "")
         for e in sumula.envolvidos
@@ -122,7 +122,7 @@ def montar_mensagens(sumula: Sumula, texto_sumula: str, regulamento_texto: str, 
 - Competição: {competicao}
 - Partida: {sumula.time1} x {sumula.time2}, realizada em {formatar_data_jogo(sumula.data_jogo)}
 - Local e data de assinatura: {cidade}, {data_por_extenso(hoje)}.
-- Assinatura final: "ASSOCIAÇÃO AEUV" e, na linha seguinte, "{competicao}".
+- Assinatura final: "{associacao}" e, na linha seguinte, "{competicao}".
 
 ENVOLVIDOS INFORMADOS PELO ÁRBITRO
 {envolvidos}"""
@@ -222,11 +222,12 @@ def validar_resposta(dados: dict, regulamento: Regulamento) -> list[str]:
 
 
 def gerar_nota_ia(sumula: Sumula, regulamento: Regulamento, config: ConfigIA, competicao: str, cidade: str,
-                  hoje: date, chave: str) -> ResultadoIA:
+                  hoje: date, chave: str, associacao: str = ASSOCIACAO) -> ResultadoIA:
     texto_sumula = sumula.arquivo.read_text(encoding="utf-8-sig", errors="ignore")
     regulamento_texto = regulamento.path.read_text(encoding="utf-8-sig")
     modelo_nota = config.modelo_nota.read_text(encoding="utf-8-sig") if config.modelo_nota.exists() else ""
-    mensagens = montar_mensagens(sumula, texto_sumula, regulamento_texto, modelo_nota, competicao, cidade, hoje)
+    mensagens = montar_mensagens(sumula, texto_sumula, regulamento_texto, modelo_nota, competicao, cidade, hoje,
+                                 associacao)
     dados = chamar_openai(mensagens, config, chave)
     return ResultadoIA(
         ha_infracao=bool(dados.get("ha_infracao")),
@@ -241,7 +242,8 @@ def finalizar_nota_ia(resultado: ResultadoIA, numero: int, ano: int, modelo: str
     nota = resultado.nota.replace("{NUMERO}", f"{numero:03d}/{ano}")
     if sumula is not None:
         nota = inserir_antes_assinatura(nota, bloco_relatorio_pdf(sumula), cidade).rstrip("\n")
-    cabecalho = [f"⚠️ RASCUNHO GERADO POR IA ({modelo}) – revise antes de publicar."]
+    protocolo = f" – súmula {sumula.protocolo}" if sumula is not None and sumula.protocolo else ""
+    cabecalho = [f"⚠️ RASCUNHO GERADO POR IA ({modelo}){protocolo} – revise antes de publicar."]
     if resultado.alertas:
         cabecalho.append("⛔ DIVERGÊNCIAS COM O REGULAMENTO DETECTADAS – corrija antes de publicar:")
         cabecalho += [f"   - {alerta}" for alerta in resultado.alertas]

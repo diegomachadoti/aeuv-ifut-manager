@@ -30,10 +30,10 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 
 DEFAULT_CONFIG_PATH = Path("config.ini")
-DEFAULT_DOWNLOAD_DIR = Path("downloads")
+DEFAULT_DOWNLOAD_DIR = Path("downloads") / "inscricoes"
 DEFAULT_LOG_PATH = Path("logs") / "ifut.log"
-DEFAULT_PROCESSED_DIR = Path("downloads") / "processados"
-DEFAULT_FAILED_DIR = Path("downloads") / "falhas"
+DEFAULT_PROCESSED_DIR = DEFAULT_DOWNLOAD_DIR / "processados"
+DEFAULT_FAILED_DIR = DEFAULT_DOWNLOAD_DIR / "falhas"
 DEFAULT_SELECTORS_PATH = Path("selectors.ini")
 
 
@@ -203,7 +203,7 @@ class AppConfig:
         self.download_dir = Path(parser.get("drive", "download_dir", fallback=str(DEFAULT_DOWNLOAD_DIR)))
         self.processed_dir = Path(parser.get("drive", "processed_dir", fallback=str(DEFAULT_PROCESSED_DIR)))
         self.failed_dir = Path(parser.get("drive", "failed_dir", fallback=str(DEFAULT_FAILED_DIR)))
-        self.results_dir = Path(parser.get("drive", "results_dir", fallback="downloads\\resultados"))
+        self.results_dir = Path(parser.get("drive", "results_dir", fallback=str(DEFAULT_DOWNLOAD_DIR / "resultados")))
         self.folder_embed_url = parser.get("drive", "folder_embed_url")
         self.service_account_json = Path(parser.get("drive", "service_account_json", fallback="google-service-account.json"))
         self.log_path = Path(parser.get("app", "log_path", fallback=str(DEFAULT_LOG_PATH)))
@@ -219,6 +219,9 @@ class AppConfig:
         self.spreadsheet_id = parser.get("sheets", "spreadsheet_id", fallback="")
         self.sheets_range_times = parser.get("sheets", "range_times", fallback="A2:C")
         self.sheets_update_enabled = parse_bool(parser.get("sheets", "update_enabled", fallback="false"), default=False)
+        self.associacao = parser.get(
+            "pdf", "associacao", fallback="AEUV (Associação Esportiva Uberlandense Varzeana)"
+        ).strip()
 
 
 class SelectorConfig:
@@ -961,7 +964,8 @@ class IfutBot:
             and normalize_text(result.action) in {"inclusao", "portabilidade"}
         ]
         lines = [
-            "RESULTADO DA AUTOMACAO AEUV",
+            self.config.associacao,
+            "RESULTADO DO PROCESSAMENTO - INSCRICAO, REMOCAO E PORTABILIDADE",
             "",
             f"PROTOCOLO: {request.protocol}",
             f"COMPETICAO: {request.competition_name}",
@@ -1295,9 +1299,10 @@ teams_url = https://admin.ifut.com.br/campeonatos/131038/times
  
 [drive]
 folder_embed_url = https://drive.google.com/embeddedfolderview?id=10hhnvDF_J7C0LE5JU9BrPST9D8Rf9qk1#list
-download_dir = downloads
-processed_dir = downloads\\processados
-failed_dir = downloads\\falhas
+download_dir = downloads\\inscricoes
+processed_dir = downloads\\inscricoes\\processados
+failed_dir = downloads\\inscricoes\\falhas
+results_dir = downloads\\inscricoes\\resultados
  
 [selenium]
 headless = false
@@ -1389,12 +1394,23 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Gera o PDF do regulamento (layout AEUV, com assinatura do Presidente) a partir do arquivo texto, "
              "ex.: regulamento-7-super-liga-união-2026.txt (procurado tambem na pasta regulamento)",
     )
+    parser.add_argument(
+        "--atualizar-controle-punicoes",
+        action="store_true",
+        help="Refaz o TXT de controle de punicoes da associacao a partir de todas as notas oficiais",
+    )
     return parser
 
 
 def main() -> int:
     write_default_config()
     args = build_argument_parser().parse_args()
+    if args.atualizar_controle_punicoes:
+        from controle_punicoes import reconstruir_controle
+
+        config = AppConfig(Path(args.config))
+        reconstruir_controle(Path(args.config), configure_logging(config.log_path))
+        return 0
     if args.gerar_pdf_regulamento:
         from nota_pdf import ConfigPdf
         from regulamento_pdf import gerar_pdf_regulamento

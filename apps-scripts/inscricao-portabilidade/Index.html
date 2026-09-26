@@ -56,8 +56,8 @@
       font-weight: 700;
       padding: 8px;
     }
-    h1 { margin: 0 0 8px; font-size: clamp(22px, 4vw, 34px); }
-    .topo p { margin: 0; opacity: .9; }
+    h1 { margin: 0 0 6px; font-size: clamp(19px, 3vw, 28px); line-height: 1.2; }
+    .topo p { margin: 0; opacity: .9; font-size: 15px; }
 
     .container { padding: 22px 14px 45px; }
 
@@ -185,8 +185,8 @@
     <div class="topo-conteudo">
       <img class="logo-competicao" src="<?!= config.logoUrl ?>" alt="Logomarca da competição">
       <div class="marca">
-        <h1>Inscrição, Remoção e Portabilidade</h1>
-        <p>Formulário da AEUV</p>
+        <h1><?= config.associacao ?></h1>
+        <p>Formulário de Inscrição, Remoção e Portabilidade</p>
       </div>
     </div>
   </header>
@@ -337,7 +337,7 @@
         </select>
       </td>
       <td class="nome"><input data-campo="nome" maxlength="150" required></td>
-      <td class="data"><input data-campo="nascimento" type="date" min="1900-01-01" required></td>
+      <td class="data"><input data-campo="nascimento" type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" autocomplete="off" required></td>
       <td class="cpf"><input data-campo="cpf" maxlength="14" required inputmode="numeric" placeholder="000.000.000-00"></td>
       <td class="competicao-anterior nao-necessario">
         <select data-campo="competicaoAnterior" disabled>
@@ -379,16 +379,36 @@
 
     const DATA_MAXIMA_NASCIMENTO = obterDataAtualIso();
 
+    const MENSAGEM_DATA_INVALIDA = 'Informe uma data válida no formato dd/mm/aaaa, entre 01/01/1900 e hoje.';
+
+    function aplicarMascaraData(valor) {
+      const numeros = String(valor || '').replace(/\D/g, '').slice(0, 8);
+      if (numeros.length <= 2) return numeros;
+      if (numeros.length <= 4) return numeros.slice(0, 2) + '/' + numeros.slice(2);
+      return numeros.slice(0, 2) + '/' + numeros.slice(2, 4) + '/' + numeros.slice(4);
+    }
+
+    // Converte dd/mm/aaaa para aaaa-mm-dd (formato esperado pelo servidor); retorna '' se inválida.
+    function dataBrasileiraParaIso(valor) {
+      const partes = String(valor || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (!partes) return '';
+      const dia = Number(partes[1]);
+      const mes = Number(partes[2]);
+      const ano = Number(partes[3]);
+      const data = new Date(ano, mes - 1, dia);
+      if (data.getFullYear() !== ano || data.getMonth() !== mes - 1 || data.getDate() !== dia) {
+        return '';
+      }
+      return partes[3] + '-' + partes[2] + '-' + partes[1];
+    }
+
     function validarDataNascimento(campo) {
       campo.setCustomValidity('');
       if (!campo.value) return;
 
-      if (
-        !/^\d{4}-\d{2}-\d{2}$/.test(campo.value) ||
-        campo.value < '1900-01-01' ||
-        campo.value > DATA_MAXIMA_NASCIMENTO
-      ) {
-        campo.setCustomValidity('Informe uma data válida entre 01/01/1900 e hoje.');
+      const iso = dataBrasileiraParaIso(campo.value);
+      if (!iso || iso < '1900-01-01' || iso > DATA_MAXIMA_NASCIMENTO) {
+        campo.setCustomValidity(MENSAGEM_DATA_INVALIDA);
       }
     }
 
@@ -417,7 +437,7 @@
       const campo = evento.target;
 
       if (campo.dataset.campo === 'nascimento') {
-        campo.setCustomValidity('Informe uma data válida entre 01/01/1900 e hoje.');
+        campo.setCustomValidity(campo.value ? MENSAGEM_DATA_INVALIDA : 'Informe a data de nascimento.');
         return;
       }
       const mensagens = {
@@ -444,9 +464,19 @@
       );
     }, true);
 
+    formulario.addEventListener('beforeinput', evento => {
+      if (
+        evento.target.dataset.campo === 'nascimento' &&
+        evento.inputType === 'insertText' && evento.data && /\D/.test(evento.data)
+      ) {
+        evento.preventDefault();
+      }
+    }, true);
+
     formulario.addEventListener('input', evento => {
       evento.target.setCustomValidity('');
       if (evento.target.dataset.campo === 'nascimento') {
+        evento.target.value = aplicarMascaraData(evento.target.value);
         validarDataNascimento(evento.target);
       }
     }, true);
@@ -464,7 +494,6 @@
         return;
       }
       const novaLinha = modelo.content.cloneNode(true);
-      novaLinha.querySelector('[data-campo="nascimento"]').max = DATA_MAXIMA_NASCIMENTO;
       tbody.appendChild(novaLinha);
       atualizarLinhas();
     }
@@ -501,7 +530,7 @@
         acao: linha.querySelector('[data-campo="acao"]').value,
         tipo: linha.querySelector('[data-campo="tipo"]').value,
         nome: linha.querySelector('[data-campo="nome"]').value.trim(),
-        nascimento: linha.querySelector('[data-campo="nascimento"]').value,
+        nascimento: dataBrasileiraParaIso(linha.querySelector('[data-campo="nascimento"]').value),
         cpf: linha.querySelector('[data-campo="cpf"]').value.trim(),
         competicaoAnterior: linha.querySelector('[data-campo="competicaoAnterior"]').value,
       }));

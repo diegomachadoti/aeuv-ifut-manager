@@ -25,6 +25,7 @@ Veja como os formulários geram e armazenam esses arquivos no
 - `sumula_ia.py`: geração da nota oficial por IA (`--ia`)
 - `nota_pdf.py`: PDF da nota oficial com a identidade da AEUV (`--gerar-pdf-nota`)
 - `regulamento_pdf.py`: PDF do regulamento no mesmo layout, assinado pelo Presidente (`--gerar-pdf-regulamento`)
+- `controle_punicoes.py`: TXT e PDF de controle com todos os punidos pelas notas oficiais (`--atualizar-controle-punicoes`)
 - `regulamento\`: texto do regulamento usado na análise disciplinar
 - `config.ini`: credenciais, delays e URLs
 - `selectors.ini`: seletores Selenium do iFut
@@ -136,9 +137,12 @@ Para portabilidade, também lê:
 
 ## Saída gerada
 
-- Processados: `downloads\processados`
-- Falhas: `downloads\falhas`
-- Resultados: `downloads\resultados`
+Os arquivos do fluxo de inscrição, remoção e portabilidade ficam em `downloads\inscricoes`, separados das súmulas (`downloads\sumulas`):
+
+- Entrada (TXT baixados do Drive): `downloads\inscricoes`
+- Processados: `downloads\inscricoes\processados`
+- Falhas: `downloads\inscricoes\falhas`
+- Resultados: `downloads\inscricoes\resultados`
 
 O arquivo de resultado traz:
 
@@ -163,13 +167,13 @@ Quando `service_account_json` está configurado:
 
 **Sucesso:**
 ```
-Local:   downloads/ARQUIVO.txt → downloads/processados/ARQUIVO.txt
+Local:   downloads/inscricoes/ARQUIVO.txt → downloads/inscricoes/processados/ARQUIVO.txt
 Drive:   Entrada/ARQUIVO.txt → Processados/ARQUIVO.txt
 ```
 
 **Falha:**
 ```
-Local:   downloads/ARQUIVO.txt → downloads/falhas/ARQUIVO.txt
+Local:   downloads/inscricoes/ARQUIVO.txt → downloads/inscricoes/falhas/ARQUIVO.txt
 Drive:   Entrada/ARQUIVO.txt → Falhas/ARQUIVO.txt
 ```
 
@@ -458,7 +462,11 @@ cidade = Uberlândia/MG
 ```
 
 - `ultimo_numero` é atualizado a cada nota gerada (a próxima será `009/2026`).
-  Na virada do ano, a numeração reinicia.
+  A numeração é **da associação, não da competição**: é única e sequencial para
+  todas as competições (trocar `competicao` não altera a contagem). Ela
+  reinicia apenas na virada do ano (ex.: `045/2026` → `001/2027`). Por isso
+  `Nº/ano` identifica cada nota de forma única, inclusive no controle de
+  punições. Não zere `ultimo_numero` manualmente.
 
 Estrutura local:
 
@@ -475,7 +483,7 @@ downloads\sumulas\
 ### PDF da Nota Oficial
 
 Cada nota gerada (nos dois modos) ganha também um **PDF** com a identidade da
-Associação AEUV, salvo ao lado do TXT com o mesmo nome: logomarca e nome da
+AEUV (Associação Esportiva Uberlandense Varzeana), salvo ao lado do TXT com o mesmo nome: logomarca e nome da
 associação no cabeçalho, seções destacadas, decisões (➡️) em caixa, citações
 do regulamento em itálico, link clicável do relatório oficial do árbitro,
 bloco de assinatura e rodapé com número da nota e página.
@@ -503,7 +511,7 @@ analisar a súmula de novo:
 [pdf]
 logo = assets\logo-aeuv.png
 logo_url = https://drive.google.com/uc?export=download&id=1FZ5UyGPfciIp23D8d7XYJnY9vhFmSAhV
-associacao = ASSOCIAÇÃO AEUV
+associacao = AEUV (Associação Esportiva Uberlandense Varzeana)
 assinatura = assets\assinatura-presidente.png
 assinatura_nome = Iure Costtiti
 assinatura_cargo = Presidente
@@ -511,9 +519,11 @@ assinatura_cargo = Presidente
 
 A assinatura digitalizada do Presidente (PNG com fundo transparente) é
 aplicada sobre a linha de assinatura, com nome e cargo abaixo e, em seguida,
-o valor de `associacao` ("ASSOCIAÇÃO AEUV") e a competição. Notas antigas
-assinadas como "COMISSÃO ORGANIZADORA" também saem com "ASSOCIAÇÃO AEUV" ao
-regerar o PDF. Por segurança, ela aparece **somente no PDF final**:
+o valor de `associacao` e a competição. `associacao` é o nome oficial padronizado,
+**AEUV (Associação Esportiva Uberlandense Varzeana)**, usado em todos os
+cabeçalhos, rodapés e assinaturas dos PDFs, nas notas geradas (regras fixas e
+IA) e no PDF/TXT da súmula digital. Notas antigas assinadas como "COMISSÃO
+ORGANIZADORA" ou "ASSOCIAÇÃO AEUV" saem com o nome oficial ao regerar o PDF. Por segurança, ela aparece **somente no PDF final**:
 PDFs marcados como RASCUNHO saem com a linha em branco. O arquivo
 `assets/assinatura-*.png` está no `.gitignore` e não é commitado.
 
@@ -521,11 +531,74 @@ Se `logo` não existir, a logomarca é baixada de `logo_url` (link público do
 Drive) e salva reduzida. Para trocar a logo, substitua o arquivo ou apague-o
 para baixar de novo. Usa `reportlab` e `pillow` (em `requirements.txt`).
 
+### Controle de punições da associação
+
+Depois de cada Nota Oficial (regras fixas ou IA), os punidos da seção **DA
+PUNIÇÃO** são registrados em um TXT único de controle da AEUV:
+
+```ini
+[sumulas]
+controle_punicoes = downloads\sumulas\CONTROLE DE PUNIÇÕES - AEUV.txt
+```
+
+Cada linha é uma penalidade (uma pessoa enquadrada em dois artigos gera duas
+linhas). As colunas são separadas por `|`, o que permite abrir o arquivo no
+Excel como texto delimitado.
+
+| Coluna | Conteúdo |
+|---|---|
+| NOTA / DATA NOTA | Número e data da nota oficial |
+| COMPETIÇÃO | Campeonato em que a punição foi aplicada |
+| DATA JOGO / PARTIDA | Data e confronto da súmula |
+| EQUIPE / PUNIDO / TIPO / CAMISA | Quem foi punido: atleta, comissão técnica ou equipe |
+| ARTIGO | Dispositivo enquadrado, ex.: `ART. 11, §1º` |
+| PARTIDAS | Número de partidas de suspensão adicional (`-` se não houver) |
+| TEMPO | Punição em tempo, ex.: `1 ano` (`-` se não houver) |
+| DECISÃO | Texto da decisão da nota, útil para penas de equipe ou outras penalidades |
+| CARTÃO VERMELHO | Se o punido foi expulso, com suspensão automática além da adicional |
+| STATUS | `DEFINIDA`; `PENDENTE` se ainda tem `[A DEFINIR]`; `RASCUNHO` se a nota tem divergências |
+| SITUAÇÃO | Editável pela comissão, ex.: `A CUMPRIR` → `CUMPRIDA`; é preservada nas atualizações |
+| SÚMULA / MODO | Protocolo da súmula e modo de geração (Regras fixas/IA) |
+
+Os dados são lidos do próprio TXT da nota. Por isso, depois de revisar a
+nota e rodar `--gerar-pdf-nota`, o controle é atualizado junto: por exemplo, um
+`[A DEFINIR]` decidido passa de `PENDENTE` para `DEFINIDA`, com as partidas.
+Uma nova nota da mesma súmula substitui os registros da nota anterior. Punidos
+com "sem penalidade adicional" não entram.
+
+Para refazer o controle a partir de todas as notas da pasta, valendo a nota de
+maior número de cada súmula:
+
+```powershell
+.\.venv\Scripts\python.exe .\main.py --atualizar-controle-punicoes
+```
+
+#### PDF do controle
+
+Sempre que o TXT de controle é gravado, o PDF é regerado ao lado dele
+(`CONTROLE DE PUNIÇÕES - AEUV.pdf`). Isso acontece após cada nota, ao rodar
+`--gerar-pdf-nota` e ao rodar `--atualizar-controle-punicoes`. A geração fica
+dentro da gravação do controle, e não no PDF da nota, porque o controle também
+muda sem gerar nota (reconstrução, edição da SITUAÇÃO). Assim, TXT e PDF
+nunca ficam diferentes. Uma falha no PDF é registrada no log e não interrompe
+a análise.
+
+O PDF segue o layout dos demais, em A4 paisagem por causa das colunas:
+
+- cabeçalho e rodapé apenas com o nome da associação, sem campeonato, pois o
+  controle reúne todas as competições;
+- resumo com registros, punidos, a cumprir, pendentes e rascunhos;
+- tabela por competição, com o STATUS colorido;
+- ao final, a data e a assinatura do Presidente.
+
+Depois de editar a SITUAÇÃO no TXT, rode `--atualizar-controle-punicoes` para
+atualizar o PDF.
+
 ### PDF do regulamento
 
 Gera o PDF do regulamento no mesmo layout da Nota Oficial (logomarca,
 cabeçalho, rodapé com página) e, ao final, a data, a assinatura digitalizada do
-Presidente, "ASSOCIAÇÃO AEUV" e a competição. Informe o nome ou o caminho do
+Presidente, o nome da associação e a competição. Informe o nome ou o caminho do
 arquivo texto; ele é procurado também na pasta `regulamento\`, com ou sem a
 extensão `.txt`:
 

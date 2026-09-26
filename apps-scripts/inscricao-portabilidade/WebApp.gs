@@ -6,6 +6,7 @@
  */
 
 const WEBAPP_CONFIG = {
+  associacao: 'AEUV (Associação Esportiva Uberlandense Varzeana)',
   spreadsheetId: '1i0-gA6mfH4W_loy3ELqtn3uZg7dL2GzZeBLdrgPHBns',
   spreadsheetName: 'AEUV - Respostas - Inscricao, Remocao e Portabilidade',
   sheetName: 'Inscricoes_Web',
@@ -62,6 +63,7 @@ const WEBAPP_CONFIG = {
 function doGet() {
   const template = HtmlService.createTemplateFromFile('Index');
   template.config = {
+    associacao: WEBAPP_CONFIG.associacao,
     maxPessoas: WEBAPP_CONFIG.maxPessoas,
     cnpjPix: WEBAPP_CONFIG.cnpjPix,
     valorPorAtleta: WEBAPP_CONFIG.valorPorAtleta,
@@ -73,7 +75,7 @@ function doGet() {
 
   return template
     .evaluate()
-    .setTitle('Inscricao, Remocao e Portabilidade')
+    .setTitle('AEUV - Inscrição, Remoção e Portabilidade')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -456,8 +458,8 @@ function gerarArquivoTxt_(payload, protocolo, dataHora, comprovanteUrl) {
   const timestampArquivo = dataHora.getTime();
 
   const linhas = [
-    'FORMULARIO DA AEUV',
-    'INSCRICAO, REMOCAO E PORTABILIDADE',
+    WEBAPP_CONFIG.associacao,
+    'FORMULARIO DE INSCRICAO, REMOCAO E PORTABILIDADE',
     '',
     'PROTOCOLO: ' + protocolo,
     'DATA/HORA: ' + dataFormatada,

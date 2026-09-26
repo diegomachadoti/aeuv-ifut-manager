@@ -52,12 +52,14 @@
 
     h1 {
       margin: 0;
-      font-size: 32px;
+      font-size: clamp(19px, 3vw, 28px);
+      line-height: 1.2;
     }
 
     .topo p {
-      margin: 8px 0 0;
+      margin: 6px 0 0;
       opacity: 0.9;
+      font-size: 15px;
     }
 
     .container {
@@ -320,7 +322,7 @@
       }
 
       h1 {
-        font-size: 24px;
+        font-size: 19px;
       }
 
       .logo {
@@ -335,8 +337,8 @@
     <div class="topo-conteudo">
       <img class="logo" src="<?!= config.logoUrl ?>">
       <div>
-        <h1>Relatório de Súmula</h1>
-        <p>Preenchimento oficial da arbitragem</p>
+        <h1><?= config.associacao ?></h1>
+        <p>Relatório de Súmula · Preenchimento oficial da arbitragem</p>
       </div>
     </div>
   </header>

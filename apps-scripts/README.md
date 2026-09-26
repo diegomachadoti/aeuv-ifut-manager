@@ -69,7 +69,7 @@ telefone/WhatsApp — e inclui de 1 a 30 pessoas. Para cada pessoa, seleciona-se
 | Ação | Inclusão, remoção ou portabilidade |
 | Tipo | Atleta ou comissão técnica |
 | Nome completo | Obrigatório para todas as ações |
-| Nascimento e CPF | Obrigatórios na inclusão; opcionais nas demais ações |
+| Nascimento e CPF | Obrigatórios na inclusão; opcionais nas demais ações. Nascimento é digitado com máscara `dd/mm/aaaa` e enviado ao servidor como `aaaa-mm-dd`; no TXT sai `dd-mm-aaaa` |
 | Competição anterior | Obrigatória na portabilidade |
 
 O envio também exige um comprovante Pix e a confirmação de pagamento, do termo

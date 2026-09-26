@@ -3,6 +3,9 @@
  * Projeto independente
  ******************************************************/
 
+// Nome oficial da associação, usado no PDF e no TXT da súmula.
+const ASSOCIACAO_NOME = 'AEUV (Associação Esportiva Uberlandense Varzeana)';
+
 const CONFIG = {
   // Mesma planilha utilizada pelo sistema atual.
   spreadsheetId: '1xYG2w3sRiL-UGuJCfYOIzUoJaxPQ8XI6T8A3hz1LI8M',
@@ -57,6 +60,7 @@ function doGet() {
   const template = HtmlService.createTemplateFromFile('Index');
 
   template.config = {
+    associacao: ASSOCIACAO_NOME,
     equipes: CONFIG.equipes,
     logoUrl: obterLogo_(),
     limite: CONFIG.maxEnvolvidos
@@ -64,7 +68,7 @@ function doGet() {
 
   return template
     .evaluate()
-    .setTitle('Súmula Digital AEUV')
+    .setTitle('AEUV - Relatório de Súmula')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -185,12 +189,12 @@ function gerarPdf_(payload, id, data, pastaAnexosUrl) {
   imagemLogo.getParent().asParagraph()
     .setAlignment(DocumentApp.HorizontalAlignment.CENTER);
 
-  const titulo = corpo.appendParagraph('ASSOCIAÇÃO AEUV');
+  const titulo = corpo.appendParagraph(ASSOCIACAO_NOME);
   titulo.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
   titulo.setHeading(DocumentApp.ParagraphHeading.HEADING1);
   titulo.editAsText()
     .setForegroundColor('#14213d')
-    .setFontSize(18)
+    .setFontSize(15)
     .setBold(true);
 
   const subtitulo = corpo.appendParagraph('SÚMULA DIGITAL OFICIAL DE PARTIDA');
@@ -332,7 +336,8 @@ function gerarPdf_(payload, id, data, pastaAnexosUrl) {
 function testarGeracaoPdf() {
   const pngBase64 =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-  const assinaturaTeste = 'data:image/png;base64,' + pngBase64;
+
+  const assinaturaTeste = 'data:image/png;base64,' + pngBase64;
 
   // Mesmo formato montado por obterDados()/obterAnexos() no Index.html.
   const payload = {
@@ -612,7 +617,7 @@ function validarDados_(p) {
 function gerarTxt_(payload, id, data, pdfUrl) {
   const linhas = [];
 
-  linhas.push('ASSOCIAÇÃO AEUV');
+  linhas.push(ASSOCIACAO_NOME);
   linhas.push('SÚMULA DIGITAL');
   linhas.push('');
   linhas.push('PROTOCOLO: ' + id);

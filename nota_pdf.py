@@ -25,6 +25,8 @@ AZUL = "#1F3A68"
 AZUL_CLARO = "#E9EEF8"
 CINZA = "#5A6270"
 VERMELHO = "#B3261E"
+ASSOCIACAO_PADRAO = "AEUV (Associação Esportiva Uberlandense Varzeana)"
+ASSINATURAS_ANTIGAS = ("COMISSÃO ORGANIZADORA", "ASSOCIAÇÃO AEUV")
 SIMBOLOS = {"➡": "➡", "⬇": "⬇", "⚠": "⚠", "⛔": "⛔"}
 SIMBOLOS_ASCII = {"➡": "->", "⬇": "v", "⚠": "!", "⛔": "X"}
 SECOES = (
@@ -56,7 +58,7 @@ class ConfigPdf:
             notas_dir=Path(s.get("notas_dir", "downloads\\sumulas\\notas-oficiais")),
             logo=Path(p.get("logo", "assets\\logo-aeuv.png")),
             logo_url=p.get("logo_url", ""),
-            associacao=p.get("associacao", "ASSOCIAÇÃO AEUV"),
+            associacao=p.get("associacao", ASSOCIACAO_PADRAO),
             competicao=n.get("competicao", ""),
             cidade=n.get("cidade", ""),
             assinatura=Path(p.get("assinatura", "assets\\assinatura-presidente.png")),
@@ -159,7 +161,7 @@ def _eh_maiuscula(linha: str) -> bool:
 
 @dataclass
 class LayoutPdf:
-    """Recursos visuais comuns aos PDFs da associacao (nota oficial, regulamento)."""
+    """Recursos visuais comuns aos PDFs da associacao (nota oficial, regulamento, controle de punicoes)."""
     config: ConfigPdf
     normal: str
     negrito: str
@@ -167,16 +169,29 @@ class LayoutPdf:
     fonte_simbolos: str | None
     logo: Path | None
     estilos: dict
+    paisagem: bool = False
 
     @classmethod
-    def criar(cls, config: ConfigPdf, logger: logging.Logger = LOGGER) -> "LayoutPdf":
+    def criar(cls, config: ConfigPdf, logger: logging.Logger = LOGGER, paisagem: bool = False) -> "LayoutPdf":
         normal, negrito, italico, simbolos = _registrar_fontes()
         return cls(config, normal, negrito, italico, simbolos, garantir_logo(config, logger),
-                   _criar_estilos(normal, negrito, italico))
+                   _criar_estilos(normal, negrito, italico), paisagem)
 
     @property
     def base(self):
         return self.estilos["base"]
+
+    @property
+    def tamanho_pagina(self) -> tuple[float, float]:
+        from reportlab.lib.pagesizes import A4, landscape
+
+        return landscape(A4) if self.paisagem else A4
+
+    @property
+    def largura_util(self) -> float:
+        from reportlab.lib.units import cm
+
+        return self.tamanho_pagina[0] - 4 * cm
 
     def fmt(self, linha: str) -> str:
         html = escape(linha.replace("\ufe0f", "").strip())
@@ -194,7 +209,7 @@ class LayoutPdf:
         from reportlab.lib.units import cm
         from reportlab.platypus import Paragraph, Table, TableStyle
 
-        tabela = Table([[Paragraph(self.fmt(texto_secao), self.estilos["secao"])]], colWidths=[17 * cm])
+        tabela = Table([[Paragraph(self.fmt(texto_secao), self.estilos["secao"])]], colWidths=[self.largura_util])
         tabela.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(AZUL)),
             ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 4),
@@ -207,7 +222,7 @@ class LayoutPdf:
         from reportlab.lib.units import cm
         from reportlab.platypus import Table, TableStyle
 
-        tabela = Table([[p] for p in paragrafos], colWidths=[17 * cm])
+        tabela = Table([[p] for p in paragrafos], colWidths=[self.largura_util])
         tabela.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(fundo)),
             ("LINEBEFORE", (0, 0), (0, -1), 3, colors.HexColor(borda)),
@@ -246,22 +261,28 @@ class LayoutPdf:
         if config.assinatura_cargo:
             bloco.append(Paragraph(self.fmt(config.assinatura_cargo), self.estilos["centro"]))
         bloco.append(Spacer(1, 4))
-        # Notas antigas assinavam como "COMISSÃO ORGANIZADORA"; o PDF assina pela associacao.
-        bloco += [Paragraph(self.fmt(config.associacao if l.upper() == "COMISSÃO ORGANIZADORA" else l),
+        # Notas antigas assinavam como "COMISSÃO ORGANIZADORA"/"ASSOCIAÇÃO AEUV"; padroniza pelo nome oficial.
+        bloco += [Paragraph(self.fmt(config.associacao if l.upper() in ASSINATURAS_ANTIGAS else l),
                             self.estilos["assinatura"]) for l in linhas_finais]
         return KeepTogether(bloco)
 
-    def moldura(self, rodape: str, marca_dagua: str = ""):
-        """Funcao de pagina: cabecalho com logo, rodape com texto/pagina e marca d'agua opcional."""
+    def moldura(self, rodape: str, marca_dagua: str = "", subtitulo: str | None = None):
+        """Funcao de pagina: cabecalho com logo, rodape com texto/pagina e marca d'agua opcional.
+
+        subtitulo=None usa "Comissão Organizadora · competicao"; informe outro texto para documentos
+        da associacao que nao pertencem a uma competicao (ex.: controle de punicoes).
+        """
         from reportlab.lib import colors
-        from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import cm
+        from reportlab.pdfbase.pdfmetrics import stringWidth
 
         config, logo = self.config, self.logo
         competicao = config.competicao
+        if subtitulo is None:
+            subtitulo = "Comissão Organizadora" + (f" · {competicao}" if competicao else "")
 
         def pagina(canvas, doc) -> None:
-            largura, altura = A4
+            largura, altura = self.tamanho_pagina
             canvas.saveState()
             topo = altura - 1.2 * cm
             x_texto = 2 * cm
@@ -270,12 +291,15 @@ class LayoutPdf:
                                  preserveAspectRatio=True, mask="auto")
                 x_texto = 4.4 * cm
             canvas.setFillColor(colors.HexColor(AZUL))
-            canvas.setFont(self.negrito, 15)
+            espaco = largura - 2 * cm - x_texto
+            tamanho = 15
+            while tamanho > 10 and stringWidth(config.associacao, self.negrito, tamanho) > espaco:
+                tamanho -= 0.5
+            canvas.setFont(self.negrito, tamanho)
             canvas.drawString(x_texto, topo - 0.8 * cm, config.associacao)
             canvas.setFillColor(colors.HexColor(CINZA))
             canvas.setFont(self.normal, 9.5)
-            canvas.drawString(x_texto, topo - 1.35 * cm,
-                              "Comissão Organizadora" + (f" · {competicao}" if competicao else ""))
+            canvas.drawString(x_texto, topo - 1.35 * cm, subtitulo)
             canvas.setStrokeColor(colors.HexColor(AZUL))
             canvas.setLineWidth(1.5)
             canvas.line(2 * cm, topo - 2.3 * cm, largura - 2 * cm, topo - 2.3 * cm)
@@ -298,16 +322,17 @@ class LayoutPdf:
 
         return pagina
 
-    def construir(self, destino: Path, historia: list, titulo: str, rodape: str, marca_dagua: str = "") -> None:
-        from reportlab.lib.pagesizes import A4
+    def construir(self, destino: Path, historia: list, titulo: str, rodape: str, marca_dagua: str = "",
+                  subtitulo: str | None = None, assunto: str | None = None) -> None:
         from reportlab.lib.units import cm
         from reportlab.platypus import SimpleDocTemplate
 
         doc = SimpleDocTemplate(
-            str(destino), pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm, topMargin=4 * cm,
-            bottomMargin=2.3 * cm, title=titulo, author=self.config.associacao, subject=self.config.competicao,
+            str(destino), pagesize=self.tamanho_pagina, leftMargin=2 * cm, rightMargin=2 * cm, topMargin=4 * cm,
+            bottomMargin=2.3 * cm, title=titulo, author=self.config.associacao,
+            subject=self.config.competicao if assunto is None else assunto,
         )
-        pagina = self.moldura(rodape, marca_dagua)
+        pagina = self.moldura(rodape, marca_dagua, subtitulo)
         doc.build(historia, onFirstPage=pagina, onLaterPages=pagina)
 
 
@@ -449,7 +474,13 @@ def localizar_nota(alvo: str, notas_dir: Path) -> Path:
 
 def regerar_pdf(alvo: str, config_path: Path = DEFAULT_CONFIG_PATH, logger: logging.Logger = LOGGER) -> Path:
     config = ConfigPdf.carregar(config_path)
-    return gerar_pdf_nota(localizar_nota(alvo, config.notas_dir), config, logger)
+    nota_txt = localizar_nota(alvo, config.notas_dir)
+    destino = gerar_pdf_nota(nota_txt, config, logger)
+    # A nota pode ter sido revisada (ex.: [A DEFINIR] decidido): atualiza o controle de punicoes.
+    import controle_punicoes
+
+    controle_punicoes.registrar_nota(nota_txt, None, config_path, logger)
+    return destino
 
 
 def main() -> int:

@@ -34,6 +34,7 @@ MESES = [
     "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
 ]
 MARCADOR_DEFINIR = "[A DEFINIR PELA COMISSÃO]"
+ASSOCIACAO = "AEUV (Associação Esportiva Uberlandense Varzeana)"
 PADRAO_TORCEDOR = r"\b(torcedor\w*|torcida|parente\w*|familiar\w*|pai|mae|irmao|irma|esposa|namorada)\b"
 PADRAO_NEGACAO = re.compile(r"\b(nao|sem|nenhum|nenhuma|nem)\b(\s+\w+){0,3}\s*$")
 
@@ -503,7 +504,7 @@ def dosimetria(o: Ocorrencia, ocorrencias: list[Ocorrencia], sumula: Sumula) -> 
 
 
 def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: int,
-               competicao: str, cidade: str, hoje: date) -> str:
+               competicao: str, cidade: str, hoje: date, associacao: str = ASSOCIACAO) -> str:
     pessoas = [o for o in ocorrencias if isinstance(o.sujeito, Envolvido) and not o.regra.sem_dispositivo]
     equipes = [o for o in ocorrencias if o.regra.sujeito == "equipe" and o.sujeito]
     sem_sujeito = [o for o in ocorrencias if o.sujeito is None]
@@ -658,7 +659,7 @@ def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: 
         f"{cidade}, {data_por_extenso(hoje)}.",
         "",
         "",
-        "ASSOCIAÇÃO AEUV",
+        associacao,
         f" {competicao}",
     ]
     return "\n".join(linhas) + "\n"
@@ -714,6 +715,7 @@ class ConfigSumulas:
     competicao: str
     cidade: str
     parser: configparser.ConfigParser | None = None
+    associacao: str = ASSOCIACAO
 
     @classmethod
     def carregar(cls, path: Path) -> "ConfigSumulas":
@@ -741,6 +743,7 @@ class ConfigSumulas:
             competicao=n.get("competicao", "7ª Super Liga União 2026"),
             cidade=n.get("cidade", "Uberlândia/MG"),
             parser=parser,
+            associacao=parser.get("pdf", "associacao", fallback=ASSOCIACAO),
         )
 
 
@@ -775,6 +778,14 @@ def _gerar_pdf(nota_txt: Path, config_path: Path, logger: logging.Logger) -> Non
         nota_pdf.gerar_pdf_nota(nota_txt, nota_pdf.ConfigPdf.carregar(config_path), logger)
     except Exception as exc:
         logger.exception("[PDF] Falha ao gerar o PDF de %s: %s", nota_txt.name, exc)
+
+
+def _registrar_controle(nota_txt: Path, sumula: Sumula, config_path: Path, logger: logging.Logger) -> None:
+    """Registra os punidos da nota no TXT de controle da associacao (falhas nao interrompem a analise)."""
+    import controle_punicoes
+
+    controle_punicoes.registrar_nota(nota_txt, sumula, config_path, logger)
+
 
 def processar_sumulas(config_path: Path = DEFAULT_CONFIG_PATH, local_only: bool = False,
                       logger: logging.Logger | None = None, usar_ia: bool = False) -> list[Path]:
@@ -812,7 +823,8 @@ def processar_sumulas(config_path: Path = DEFAULT_CONFIG_PATH, local_only: bool 
             sumula = ler_sumula(arquivo)
             if usar_ia:
                 resultado = sumula_ia.gerar_nota_ia(
-                    sumula, regulamento, config_ia, config.competicao, config.cidade, hoje, chave_ia
+                    sumula, regulamento, config_ia, config.competicao, config.cidade, hoje, chave_ia,
+                    config.associacao,
                 )
                 if resultado.ha_infracao and resultado.nota:
                     numero += 1
@@ -826,6 +838,7 @@ def processar_sumulas(config_path: Path = DEFAULT_CONFIG_PATH, local_only: bool 
                         logger.warning("[SUMULAS][IA] %s: %s", sumula.protocolo, alerta)
                     logger.info("[SUMULAS][IA] %s: nota gerada em %s", sumula.protocolo, destino)
                     _gerar_pdf(destino, config.path, logger)
+                    _registrar_controle(destino, sumula, config.path, logger)
                 else:
                     destino = config.notas_dir / f"ANALISE_{sumula.protocolo}_sem-enquadramento (IA).txt"
                     destino.write_text(
@@ -842,13 +855,15 @@ def processar_sumulas(config_path: Path = DEFAULT_CONFIG_PATH, local_only: bool 
                 numero += 1
                 destino = config.notas_dir / nome_arquivo_nota(numero, ano, sumula)
                 destino.write_text(
-                    gerar_nota(sumula, ocorrencias, numero, ano, config.competicao, config.cidade, hoje),
+                    gerar_nota(sumula, ocorrencias, numero, ano, config.competicao, config.cidade, hoje,
+                               config.associacao),
                     encoding="utf-8",
                 )
                 atualizar_valor_ini(config.path, "notas", "ultimo_numero", str(numero))
                 logger.info("[SUMULAS] %s: %s ocorrencia(s); nota gerada em %s",
                             sumula.protocolo, len(ocorrencias), destino)
                 _gerar_pdf(destino, config.path, logger)
+                _registrar_controle(destino, sumula, config.path, logger)
             else:
                 destino = config.notas_dir / f"ANALISE_{sumula.protocolo}_sem-enquadramento.txt"
                 destino.write_text(gerar_analise_sem_enquadramento(sumula), encoding="utf-8")
