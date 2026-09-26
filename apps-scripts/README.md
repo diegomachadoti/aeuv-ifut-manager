@@ -19,9 +19,10 @@ ambos declaram `doGet()` e funções auxiliares com nomes iguais.
 > TXT na pasta `Arquivos TXT - Inscricoes de Atletas`. Para processamento
 > automático, esse arquivo também precisa estar na pasta `Entrada` da estrutura
 > do Drive configurada no `config.ini` do projeto Python. A movimentação entre
-> essas pastas não é feita pelo formulário Web. O TXT da súmula digital é um
-> documento de registro e não é reconhecido como solicitação pelo parser
-> Python. Consulte o [README da automação Python](../README.md) para configurar
+> essas pastas não é feita pelo formulário Web. O TXT da súmula digital
+> (`Arquivos TXT - Sumulas Digitais`) é lido pelo comando
+> `main.py --analisar-sumulas`, que gera o rascunho da Nota Oficial com base no
+> regulamento. Consulte o [README da automação Python](../README.md) para configurar
 > a pasta de entrada e executar o processamento.
 
 ## Conteúdo
@@ -168,20 +169,30 @@ obrigatórios. Os times devem ser diferentes. A interface informa o prazo de at�
 24 horas após a partida, mas o servidor não verifica esse prazo nem rejeita uma
 data futura.
 
+Data e horário usam o formato brasileiro, com máscara automática:
+`dd/mm/aaaa` e `hh:mm` (24 horas), independentemente do idioma do navegador.
+Datas ou horários inválidos (ex.: 31/02, 24:00) são rejeitados. No envio, a
+data é convertida para `aaaa-mm-dd`, formato gravado na planilha e no TXT
+(usado pela análise Python).
+
 **Equipes configuradas:** AJAX, BEATS, BOCA JRS, CRUZMALTINO, INTEGRAÇÃO,
 KADOSH, LEÕES DO MORUMBI, ONZE GAROTOS, PEQUIS, RIVER,
 TRANSNANE/BRASILIENSE, TRK, UNIÃO, UNIAO SANTA MARIA, OLHOS DÁGUA, VENUS,
 FUT ART e REAL PREDADOR.
 
-É possível incluir até 30 envolvidos. Cada item com nome deve ter equipe e
-tipo (`Atleta` ou `Comissão`); o número da camisa é opcional. A interface
-mantém uma linha vazia quando não há envolvidos. Embora o servidor não valide
-linhas sem nome, ainda as inclui no TXT, PDF e aba de envolvidos.
+É possível incluir até 30 envolvidos. A equipe de cada envolvido só pode ser
+um dos dois times selecionados no cabeçalho da partida; ao trocar um time, as
+opções são atualizadas e seleções inválidas são limpas. A tabela pode ficar vazia; porém, ao
+preencher qualquer campo de uma linha, equipe, tipo (`Atleta` ou `Comissão`),
+nome completo e número da camisa tornam-se obrigatórios. O número da camisa
+deve estar entre 0 e 99. Para o tipo `Comissão`, a camisa fica marcada como
+"Não necessário" e é gravada em branco. Linhas completamente vazias são ignoradas e não são
+incluídas no TXT, PDF ou aba de envolvidos.
 
 O seletor de anexos aceita PDF, JPG/JPEG e PNG. Eles são enviados em base64 e
 salvos no Drive. **O código não define limite de tamanho nem de quantidade de
-anexos no servidor.** O PDF registra apenas a quantidade de anexos; os arquivos
-não são incorporados ao documento.
+anexos no servidor.** O PDF lista os nomes dos arquivos e traz um link para a
+pasta de evidências no Drive; os arquivos não são incorporados ao documento.
 
 ### Configuração e processamento
 
@@ -195,9 +206,10 @@ Ao receber um envio válido, `salvarSumula()`:
 1. Adquire um bloqueio de script e gera um protocolo no formato
    `SUM-AAAAMMDD-XXXXXXXX`.
 2. Salva anexos, quando existirem, em uma subpasta identificada pelo protocolo.
-3. Gera `SUMULA_<protocolo>.txt`.
-4. Cria um Google Doc temporário, converte-o para PDF, salva
+3. Cria um Google Doc temporário, converte-o para PDF, salva
    `SUMULA_<protocolo>.pdf` e envia o documento temporário para a lixeira.
+4. Gera `SUMULA_<protocolo>.txt`, com o link do PDF oficial na seção final
+   `SÚMULA OFICIAL (PDF)`.
 5. Registra a súmula e os envolvidos nas abas da planilha.
 6. Retorna o protocolo, o TXT para download local e a URL do PDF.
 
@@ -209,6 +221,13 @@ Ao receber um envio válido, `salvarSumula()`:
 | Dados principais | Aba `SUMULAS_DIGITAIS` |
 | Envolvidos | Aba `SUMULA_ENVOLVIDOS` |
 
+> [!TIP]
+> Para testar só o layout do PDF, execute `testarGeracaoPdf` no editor do Apps
+> Script. A função monta o mesmo payload enviado pelo formulário, passa pela
+> mesma validação (`validarDados_`), salva `SUMULA_TESTE-<data-hora>.pdf` na
+> pasta de PDFs e mostra a URL no log. Ela não grava na planilha, não gera TXT
+> e não salva anexos.
+
 As pastas são procuradas pelo nome no Drive da conta executora e criadas se não
 existirem.
 
@@ -218,8 +237,8 @@ confirmação, URL do TXT, URL do PDF, URL da pasta de anexos, quantidade de
 anexos, quantidade de itens de envolvidos e status.
 
 **Dados gravados em `SUMULA_ENVOLVIDOS`:** protocolo, equipe, tipo, nome
-completo e número da camisa. A implementação grava uma linha para cada item
-recebido, inclusive linhas sem nome.
+completo e número da camisa, uma linha para cada envolvido preenchido e
+validado.
 
 ### Atenção aos cabeçalhos da planilha
 

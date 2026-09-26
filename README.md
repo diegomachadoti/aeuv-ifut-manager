@@ -11,8 +11,9 @@ Automação em Python para:
 O formulário Web de **inscrição, remoção e portabilidade** gera os arquivos TXT
 que alimentam este processamento. Para que o Python os processe, coloque os
 arquivos gerados na pasta `Entrada` do Drive configurada em `[drive]` no
-`config.ini`. A súmula digital também gera TXT, mas tem finalidade de registro
-da arbitragem e não é entrada do parser Python.
+`config.ini`. A súmula digital também gera TXT, que é a entrada da
+[análise disciplinar](#análise-disciplinar-das-súmulas) (geração do rascunho da
+Nota Oficial).
 
 Veja como os formulários geram e armazenam esses arquivos no
 [guia dos aplicativos Apps Script](apps-scripts/README.md).
@@ -20,6 +21,10 @@ Veja como os formulários geram e armazenam esses arquivos no
 ## Arquivos principais
 
 - `main.py`: fluxo principal
+- `sumula_disciplinar.py`: análise das súmulas e geração das notas oficiais
+- `sumula_ia.py`: geração da nota oficial por IA (`--ia`)
+- `nota_pdf.py`: PDF da nota oficial com a identidade da AEUV (`--gerar-pdf-nota`)
+- `regulamento\`: texto do regulamento usado na análise disciplinar
 - `config.ini`: credenciais, delays e URLs
 - `selectors.ini`: seletores Selenium do iFut
 - `downloads\`: entrada, processados, falhas e resultados
@@ -300,3 +305,215 @@ Essa rotina:
 - A portabilidade opera na aba principal de **Elenco**.
 - Remoção valida o nome do atleta/comissão antes de confirmar (segurança).
 - A atualização da planilha é a **última etapa** e **não afeta** o resultado geral da execução.
+
+## Análise disciplinar das súmulas
+
+Lê as súmulas geradas pelo formulário [súmula digital](apps-scripts/README.md),
+confronta o relato do árbitro com o regulamento e gera o **rascunho da Nota
+Oficial** da Comissão Disciplinar.
+
+```powershell
+.\.venv\Scripts\python.exe .\main.py --analisar-sumulas
+# ou somente com arquivos já baixados em downloads\sumulas
+.\.venv\Scripts\python.exe .\main.py --analisar-sumulas --process-local-only
+# gerando a nota com IA (Gemini/OpenAI) em vez das regras fixas
+.\.venv\Scripts\python.exe .\main.py --analisar-sumulas --ia
+```
+
+Há dois modos de gerar a nota:
+
+| | Regras fixas (padrão) | IA (`--ia`) |
+| --- | --- | --- |
+| Quem decide | Código, por palavras-chave | Modelo de IA (Gemini ou OpenAI) |
+| Pena | Sugerida por critério brando (mínima + agravantes do relato) | Definida e justificada pela IA |
+| Redação | Estruturada, com citações literais | Completa, no padrão do modelo de nota |
+| Requisitos | Nenhum | Chave de API no `config.local.ini` e internet |
+| Arquivo | `NOTA OFICIAL Nº 009-2026 … .txt` | `NOTA OFICIAL Nº 009-2026 … (IA).txt` |
+
+Os dois modos usam a mesma numeração sequencial.
+
+### Como funciona
+
+1. Baixa os `SUMULA_*.txt` da pasta do Drive configurada em `[sumulas]`.
+2. Lê protocolo, árbitro, confronto, data, relato (`DOS FATOS`), envolvidos e
+   o link do PDF oficial (seção `SÚMULA OFICIAL (PDF)`).
+3. Procura no relato, frase a frase, condutas previstas nos artigos
+   disciplinares do regulamento (ART. 7.2, 7.5, 8, 9, 10, 11, 12, 13, 14, 15,
+   18). Termos negados ("não houve agressão") são ignorados.
+4. Relaciona cada conduta ao envolvido citado pelo nome ou pela camisa.
+5. Gera a nota em `downloads\sumulas\notas-oficiais` e move o TXT para
+   `Processados` (ou `Falhas`) no Drive e localmente.
+
+Nos dois modos, a nota traz antes da assinatura o bloco
+`RELATÓRIO OFICIAL DA ARBITRAGEM` com o link do PDF da súmula, para consulta
+da íntegra do relato. Súmulas antigas, sem o link, geram a nota sem esse bloco.
+
+> [!IMPORTANT]
+> O regulamento é o documento máximo. A análise **não interpreta nada fora
+> dele**: cada enquadramento traz o trecho do relato e o texto literal do
+> dispositivo, lido de `regulamento\*.txt`. Se um dispositivo não existir no
+> arquivo, a regra é ignorada. Condutas sem artigo
+> específico (ex.: ameaça) são listadas com referência ao ART. 19, §2º.
+> Ocorrências sem envolvido identificado ou com mais de um citado no mesmo
+> trecho ficam sinalizadas para conferência.
+
+#### Dosimetria (critério brando e equilibrado)
+
+O modo de regras fixas já sugere a pena, sempre dentro da faixa literal do
+dispositivo:
+
+1. Parte da **pena mínima** do dispositivo.
+2. Soma **1 partida** para cada circunstância registrada no relato:
+   - reiteração da conduta (em 2 ou mais trechos do relatório);
+   - ameaça do mesmo envolvido (conta uma vez, no primeiro enquadramento dele);
+   - continuidade da conduta após a expulsão ("após a expulsão", "mesmo expulso").
+3. Nunca ultrapassa o **máximo** previsto.
+
+Penas fixas (ex.: ART. 14, §2º, "acrescida de mais 2 jogos") são aplicadas
+como previstas. Infrações de equipe sem pena em partidas (W.O., abandono,
+interrupção) recebem "aplicação das penalidades previstas no ART. X". Penas
+"por até 2 anos" (ART. 8 e 13) e ocorrências sem autoria identificada ficam
+como `[A DEFINIR PELA COMISSÃO]`.
+
+As decisões sugeridas ficam entre `** **` no TXT, por exemplo
+`➡️ **3 (três) partidas**`, e saem em **vermelho e negrito** no PDF para
+indicar o ponto que a comissão pode alterar. Para mudar a decisão, edite o
+texto entre os `**` no TXT e rode `--gerar-pdf-nota`.
+
+Se nenhuma conduta for identificada, é gerado
+`ANALISE_<protocolo>_sem-enquadramento.txt` para revisão manual, sem consumir
+número de nota.
+
+### Modo IA (`--ia`)
+
+Não usa as regras fixas. A IA recebe o **texto integral do regulamento**, o
+modelo de nota (`regulamento\modelo-nota-oficial.txt`, usado só como formato) e
+a súmula, e redige a nota completa, com enquadramento e pena. As instruções
+proíbem citar dispositivos, penas ou fatos que não estejam no regulamento ou no
+relato.
+
+Depois da resposta, o código **confere** a nota com o regulamento:
+
+- todo artigo/§ citado precisa existir no arquivo do regulamento;
+- toda pena em partidas precisa estar dentro da faixa do dispositivo.
+
+Divergências aparecem no topo da nota como `⛔ DIVERGÊNCIAS COM O REGULAMENTO`
+e no log. Se a IA não identificar infração, é gerado
+`ANALISE_<protocolo>_sem-enquadramento (IA).txt`. Em falha de conexão ou erro
+da API de IA, a súmula continua em `downloads\sumulas` para nova tentativa.
+Se a API estiver temporariamente indisponível (429/5xx, comum no plano
+gratuito), o programa tenta de novo automaticamente até 4 vezes, aguardando
+15 s, 30 s e 60 s entre as tentativas.
+
+> [!WARNING]
+> No modo IA o regulamento e o relato da súmula (com nomes dos envolvidos)
+> são enviados ao provedor de IA. No plano gratuito do Gemini, o Google pode usar
+> esses dados para melhorar seus produtos. A nota continua sendo rascunho e deve ser revisada.
+
+A chave fica no `config.local.ini` (no `.gitignore`, nunca é commitado), que
+sobrepõe os valores do `config.ini`:
+
+```ini
+[ia]
+; Google Gemini (plano gratuito): chave em https://aistudio.google.com/apikey
+api_url = https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+modelo = gemini-3.8-flash
+temperatura =
+api_key = SUA_CHAVE
+```
+
+Para a OpenAI (paga, exige crédito em https://platform.openai.com/api-keys),
+use `api_url = https://api.openai.com/v1/chat/completions`, `modelo = gpt-4.1`
+e `api_key = sk-...`. A variável de ambiente `OPENAI_API_KEY`, se definida, tem
+prioridade sobre o `api_key` do arquivo.
+
+Demais opções, no `config.ini`:
+
+```ini
+[ia]
+temperatura = 0
+timeout_seconds = 180
+modelo_nota = regulamento\modelo-nota-oficial.txt
+```
+
+Deixe `temperatura` vazio para modelos que não aceitam esse parâmetro.
+
+### Configuração
+
+```ini
+[sumulas]
+folder_embed_url = https://drive.google.com/embeddedfolderview?id=1OfcX-AFyeGEznieKfyqgQRiEjBDJockP#list
+download_dir = downloads\sumulas
+processed_dir = downloads\sumulas\processados
+failed_dir = downloads\sumulas\falhas
+notas_dir = downloads\sumulas\notas-oficiais
+regulamento = regulamento\regulamento-7-super-liga-união-2026
+
+[notas]
+ultimo_numero = 8
+ano = 2026
+competicao = 7ª Super Liga União 2026
+cidade = Uberlândia/MG
+```
+
+- `ultimo_numero` é atualizado a cada nota gerada (a próxima será `009/2026`).
+  Na virada do ano, a numeração reinicia.
+
+Estrutura local:
+
+```
+downloads\sumulas\
+├── SUMULA_*.txt      (baixadas, aguardando análise)
+├── processados\      (súmulas analisadas)
+├── falhas\           (súmulas com erro de leitura)
+└── notas-oficiais\   (notas .txt e .pdf e análises geradas)
+```
+- A service account de `[drive]` precisa ser **Editor** da pasta das súmulas;
+  as subpastas `Processados` e `Falhas` são criadas automaticamente.
+
+### PDF da Nota Oficial
+
+Cada nota gerada (nos dois modos) ganha também um **PDF** com a identidade da
+Associação AEUV, salvo ao lado do TXT com o mesmo nome: logomarca e nome da
+associação no cabeçalho, seções destacadas, decisões (➡️) em caixa, citações
+do regulamento em itálico, link clicável do relatório oficial do árbitro,
+bloco de assinatura e rodapé com número da nota e página.
+
+Trechos entre `** **` no TXT (decisões sugeridas) saem em vermelho e negrito.
+Enquanto o corpo do TXT tiver `[A DEFINIR PELA COMISSÃO]` ou houver
+divergências da IA, o PDF sai com a marca d'água **RASCUNHO** e os avisos no
+topo. Depois que a comissão substitui todos os marcadores pela decisão e roda
+`--gerar-pdf-nota`, o PDF sai como versão final, sem marca d'água nem avisos. A
+linha de aviso do topo do TXT não precisa ser apagada.
+
+Para regerar o PDF depois de revisar o TXT ou de refazer a análise, sem
+analisar a súmula de novo:
+
+```powershell
+# pelo número da nota
+.\.venv\Scripts\python.exe .\main.py --gerar-pdf-nota 5
+# pelo protocolo da súmula (usa a nota de maior número dessa súmula)
+.\.venv\Scripts\python.exe .\main.py --gerar-pdf-nota SUM-20260925-BAE8C370
+# pelo caminho do TXT
+.\.venv\Scripts\python.exe .\main.py --gerar-pdf-nota "downloads\sumulas\notas-oficiais\NOTA OFICIAL Nº 005-2026 – COMISSÃO DISCIPLINAR - CRUZMALTINOxTRK.txt"
+```
+
+```ini
+[pdf]
+logo = assets\logo-aeuv.png
+logo_url = https://drive.google.com/uc?export=download&id=1FZ5UyGPfciIp23D8d7XYJnY9vhFmSAhV
+associacao = ASSOCIAÇÃO AEUV
+assinatura = assets\assinatura-vice-presidente.png
+assinatura_nome = Ivanildo Xavier de Oliveira
+assinatura_cargo = Vice-Presidente – Associação AEUV
+```
+
+A assinatura digitalizada do Vice-Presidente (PNG com fundo transparente) é
+aplicada sobre a linha de assinatura, com nome e cargo abaixo e, em seguida,
+"COMISSÃO ORGANIZADORA". Por segurança, ela aparece **somente no PDF final**:
+PDFs marcados como RASCUNHO saem com a linha em branco. O arquivo
+`assets/assinatura-*.png` está no `.gitignore` e não é commitado.
+
+Se `logo` não existir, a logomarca é baixada de `logo_url` (link público do
+Drive) e salva reduzida. Para trocar a logo, substitua o arquivo ou apague-o
+para baixar de novo. Usa `reportlab` e `pillow` (em `requirements.txt`).

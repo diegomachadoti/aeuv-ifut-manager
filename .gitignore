@@ -10,3 +10,4 @@ __pycache__/main.cpython-313.pyc
 config.local.ini
 .logs/
 .logs/ifut.log
+assets/assinatura-*.png

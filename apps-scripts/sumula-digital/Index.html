@@ -6,6 +6,7 @@
   <style>
     :root {
       --azul: #14213d;
+      --azul-claro: #e9eef8;
       --dourado: #fca311;
       --fundo: #f5f7fb;
       --borda: #d8deea;
@@ -143,6 +144,17 @@
       border-top: 1px solid var(--borda);
     }
 
+    td.nao-necessario {
+      background: #f2f4f7;
+      text-align: center;
+      color: #667085;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    td.nao-necessario input { display: none; }
+    td.nao-necessario::after { content: 'Não necessário'; }
+
     .numero {
       width: 45px;
       text-align: center;
@@ -215,17 +227,7 @@
     }
 
     .upload-area:hover {
-      background: #e9eef8;
-    }
-
-    .upload-btn {
-      display: inline-block;
-      padding: 12px 25px;
-      border-radius: 8px;
-      background: #0b3d91;
-      color: white;
-      cursor: pointer;
-      font-weight: bold;
+      background: var(--azul-claro);
     }
 
     .upload-area input {
@@ -235,31 +237,25 @@
       opacity: 0;
     }
 
-    #listaArquivos {
-      margin-top: 15px;
-      font-size: 14px;
-      color: #444;
-    }
-
     .upload-titulo {
       display: block;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
       font-size: 18px;
-      font-weight: bold;
-      color: #14213d;
+      color: var(--azul);
     }
 
     .upload-ajuda {
       display: block;
-      font-weight: normal;
+      font-weight: 400;
       color: #647089;
     }
 
     .arquivo-nome {
       display: block;
       margin-top: 8px;
-      font-weight: bold;
+      font-weight: 700;
       color: #067647;
+      overflow-wrap: anywhere;
     }
 
     .check {
@@ -388,11 +384,13 @@
           </div>
           <div>
             <label>Data da partida *</label>
-            <input type="date" id="dataJogo" required title="Informe a data da partida.">
+            <input type="text" id="dataJogo" required inputmode="numeric" maxlength="10"
+              placeholder="dd/mm/aaaa" autocomplete="off" title="Informe a data da partida (dd/mm/aaaa).">
           </div>
           <div>
             <label>Horário *</label>
-            <input type="time" id="horaJogo" required title="Informe o horário da partida.">
+            <input type="text" id="horaJogo" required inputmode="numeric" maxlength="5"
+              placeholder="hh:mm" autocomplete="off" title="Informe o horário da partida (hh:mm, 24 horas).">
           </div>
         </div>
       </section>
@@ -410,7 +408,7 @@
 
       <section class="card">
         <h2>Atletas envolvidos</h2>
-        <p class="campo-info">Preencher somente quando houver atleta ou membro da comissão relacionado aos fatos.</p>
+        <p class="campo-info">Opcional. Selecione os times da partida para escolher a equipe dos envolvidos. Ao preencher qualquer campo de um envolvido, complete equipe, tipo, nome e número da camisa. Para comissão, o número da camisa não é necessário.</p>
         <div class="tabela">
           <table>
             <thead>
@@ -434,16 +432,11 @@
 
       <section class="card">
         <h2>Anexos e evidências</h2>
-        <p class="campo-info">Anexe súmula física, imagens, documentos ou evidências complementares. Formatos permitidos: PDF, JPG e PNG.</p>
         <label class="upload-area" for="anexos">
-          <div>
-            <span class="upload-btn">📎 Pesquisar arquivos</span>
-            <input id="anexos" type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onchange="mostrarAnexos(this)">
-            <div id="listaArquivos">Nenhum arquivo selecionado.</div>
-          </div>
+          <input id="anexos" type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onchange="mostrarAnexos(this)">
           <strong class="upload-titulo">Pesquisar arquivos</strong>
-          <span class="upload-ajuda">Arraste ou selecione fotos da súmula física, provas ou documentos complementares</span>
-          <span class="arquivo-nome" id="nomeAnexos"></span>
+          <span class="upload-ajuda">Selecione um ou mais arquivos PDF, JPG ou PNG.</span>
+          <span class="arquivo-nome" id="listaArquivos">Nenhum arquivo selecionado.</span>
         </label>
       </section>
 
@@ -486,9 +479,6 @@
       <td>
         <select data-campo="equipe">
           <option value="">Selecione</option>
-          <? for (let i = 0; i < config.equipes.length; i++) { ?>
-            <option><?= config.equipes[i] ?></option>
-          <? } ?>
         </select>
       </td>
       <td>
@@ -538,8 +528,43 @@
       }
 
       const linha = modelo.content.cloneNode(true);
+      const selectEquipe = linha.querySelector('[data-campo="equipe"]');
       tbody.appendChild(linha);
+      atualizarEquipesEnvolvido(selectEquipe);
       atualizar();
+    }
+
+    /**
+     * Retorna os times selecionados no cabeçalho da partida.
+     */
+    function obterTimesPartida() {
+      return [
+        document.getElementById('time1').value,
+        document.getElementById('time2').value
+      ].filter(Boolean);
+    }
+
+    /**
+     * Limita a equipe do envolvido aos times da partida.
+     */
+    function atualizarEquipesEnvolvido(select) {
+      const times = obterTimesPartida();
+      const atual = select.value;
+
+      select.innerHTML = '';
+      select.add(new Option(times.length ? 'Selecione' : 'Selecione os times', ''));
+
+      times.forEach(function (time) {
+        select.add(new Option(time, time));
+      });
+
+      select.value = times.includes(atual) ? atual : '';
+      select.disabled = !times.length;
+      atualizarValidacaoEnvolvido(select);
+    }
+
+    function atualizarEquipesEnvolvidos() {
+      tbody.querySelectorAll('[data-campo="equipe"]').forEach(atualizarEquipesEnvolvido);
     }
 
     /**
@@ -566,6 +591,38 @@
           nome: linha.querySelector('[data-campo="nome"]').value.trim(),
           camisa: linha.querySelector('[data-campo="camisa"]').value
         };
+      }).filter(function (envolvido) {
+        return [envolvido.equipe, envolvido.tipo, envolvido.nome, envolvido.camisa]
+          .some(function (valor) { return String(valor || '').trim() !== ''; });
+      });
+    }
+
+    /**
+     * Mantém a linha opcional até que qualquer campo seja preenchido.
+     */
+    function atualizarValidacaoEnvolvido(campo) {
+      const linha = campo.closest('tr');
+      if (!linha) return;
+
+      const campos = [...linha.querySelectorAll('[data-campo]')];
+      const tipo = linha.querySelector('[data-campo="tipo"]');
+      const camisa = linha.querySelector('[data-campo="camisa"]');
+      const comissao = tipo.value === 'Comissão';
+
+      if (comissao) {
+        camisa.value = '';
+        camisa.setCustomValidity('');
+      }
+
+      camisa.disabled = comissao;
+      camisa.closest('td').classList.toggle('nao-necessario', comissao);
+
+      const preenchida = campos.some(function (item) {
+        return String(item.value || '').trim() !== '';
+      });
+
+      campos.forEach(function (item) {
+        item.required = preenchida && !(item === camisa && comissao);
       });
     }
 
@@ -579,8 +636,8 @@
         documento: document.getElementById('documento').value.trim(),
         time1: document.getElementById('time1').value,
         time2: document.getElementById('time2').value,
-        dataJogo: document.getElementById('dataJogo').value,
-        horaJogo: document.getElementById('horaJogo').value,
+        dataJogo: dataParaIso(document.getElementById('dataJogo').value),
+        horaJogo: document.getElementById('horaJogo').value.trim(),
         fatos: document.getElementById('fatos').value.trim(),
         envolvidos: obterEnvolvidos(),
         assinatura: assinaturaPreenchida ? assinaturaCanvas.toDataURL('image/png') : '',
@@ -629,15 +686,9 @@
      */
     function mostrarAnexos(input) {
       const lista = document.getElementById('listaArquivos');
-      lista.innerHTML = '';
-
-      Array.from(input.files).forEach(function (arquivo) {
-        const item = document.createElement('div');
-        item.style.color = '#008000';
-        item.style.marginTop = '5px';
-        item.innerHTML = arquivo.name;
-        lista.appendChild(item);
-      });
+      lista.textContent = input.files.length
+        ? Array.from(input.files).map(function (arquivo) { return arquivo.name; }).join(', ')
+        : 'Nenhum arquivo selecionado.';
     }
 
     /**
@@ -717,6 +768,9 @@
     function configurarValidacaoFormulario(formulario) {
       formulario.addEventListener('invalid', function (evento) {
         const campo = evento.target;
+        if (campo.validity.customError && campo.validationMessage) {
+          return;
+        }
         const mensagens = {
           arbitro: 'Informe o nome do árbitro.',
           documento: 'Informe o documento do árbitro.',
@@ -728,8 +782,18 @@
           assinatura: 'Realize a assinatura do árbitro antes do envio.',
           confirmacao: 'O árbitro deve marcar a declaração de responsabilidade antes do envio.'
         };
+        const mensagensEnvolvido = {
+          equipe: 'Selecione a equipe do envolvido.',
+          tipo: 'Selecione o tipo do envolvido.',
+          nome: 'Informe o nome completo do envolvido.',
+          camisa: 'Informe o número da camisa do envolvido.'
+        };
 
-        campo.setCustomValidity(mensagens[campo.id] || 'Preencha este campo obrigatório.');
+        campo.setCustomValidity(
+          mensagens[campo.id] ||
+          mensagensEnvolvido[campo.dataset.campo] ||
+          'Preencha este campo obrigatório.'
+        );
       }, true);
 
       formulario.addEventListener('input', function (evento) {
@@ -739,6 +803,62 @@
       formulario.addEventListener('change', function (evento) {
         evento.target.setCustomValidity('');
       }, true);
+    }
+
+    /**
+     * Converte "dd/mm/aaaa" em "aaaa-mm-dd" (formato gravado no TXT/planilha).
+     */
+    function dataParaIso(valor) {
+      const partes = String(valor || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      return partes ? partes[3] + '-' + partes[2] + '-' + partes[1] : '';
+    }
+
+    function dataBrValida(valor) {
+      const partes = String(valor || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (!partes) return false;
+      const dia = Number(partes[1]);
+      const mes = Number(partes[2]);
+      const ano = Number(partes[3]);
+      const data = new Date(ano, mes - 1, dia);
+      return ano >= 2000 && data.getFullYear() === ano && data.getMonth() === mes - 1 && data.getDate() === dia;
+    }
+
+    function horaValida(valor) {
+      return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(valor || ''));
+    }
+
+    /**
+     * Aplica máscara brasileira aos campos de data (dd/mm/aaaa) e hora (hh:mm, 24h).
+     */
+    function configurarDataHora() {
+      const campoData = document.getElementById('dataJogo');
+      const campoHora = document.getElementById('horaJogo');
+
+      campoData.addEventListener('input', function () {
+        const d = campoData.value.replace(/\D/g, '').slice(0, 8);
+        campoData.value = d.length > 4 ? d.slice(0, 2) + '/' + d.slice(2, 4) + '/' + d.slice(4)
+          : d.length > 2 ? d.slice(0, 2) + '/' + d.slice(2) : d;
+      });
+      campoHora.addEventListener('input', function () {
+        const h = campoHora.value.replace(/\D/g, '').slice(0, 4);
+        campoHora.value = h.length > 2 ? h.slice(0, 2) + ':' + h.slice(2) : h;
+      });
+      campoData.addEventListener('blur', validarDataHora);
+      campoHora.addEventListener('blur', validarDataHora);
+    }
+
+    /**
+     * Valida data e hora preenchidas; campos vazios ficam com a mensagem de obrigatório.
+     */
+    function validarDataHora() {
+      const campoData = document.getElementById('dataJogo');
+      const campoHora = document.getElementById('horaJogo');
+      campoData.setCustomValidity(
+        campoData.value && !dataBrValida(campoData.value) ? 'Informe uma data válida no formato dd/mm/aaaa.' : ''
+      );
+      campoHora.setCustomValidity(
+        campoHora.value && !horaValida(campoHora.value) ? 'Informe um horário válido no formato hh:mm (24 horas).' : ''
+      );
     }
 
     /**
@@ -763,6 +883,7 @@
       mensagem.className = 'mensagem';
 
       validarAssinatura();
+      validarDataHora();
 
       if (formulario && !formulario.checkValidity()) {
         formulario.reportValidity();
@@ -816,6 +937,17 @@
 
     document.getElementById('adicionar').addEventListener('click', adicionarLinha);
 
+    ['time1', 'time2'].forEach(function (id) {
+      document.getElementById(id).addEventListener('change', atualizarEquipesEnvolvidos);
+    });
+
+    ['input', 'change'].forEach(function (tipoEvento) {
+      tbody.addEventListener(tipoEvento, function (evento) {
+        const campo = evento.target.closest('[data-campo]');
+        if (campo) atualizarValidacaoEnvolvido(campo);
+      });
+    });
+
     assinaturaCanvas.addEventListener('pointerdown', function (evento) {
       evento.preventDefault();
       assinando = true;
@@ -846,6 +978,7 @@
     assinaturaCanvas.addEventListener('pointerleave', finalizarAssinatura);
 
     configurarValidacaoFormulario(document.getElementById('formSumula'));
+    configurarDataHora();
     adicionarLinha();
   </script>
 </body>

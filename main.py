@@ -352,6 +352,25 @@ class DriveTxtDownloader:
         files = response.get("files", [])
         return files[0]["id"] if files else None
 
+    def ensure_status_folders(self, logger=None) -> None:
+        """Cria as pastas Processados/Falhas no Drive quando ainda nao existirem."""
+        if not self._drive_service or not self._root_folder_id:
+            return
+        for attribute, folder_name in (("_processed_folder_id", "Processados"), ("_failed_folder_id", "Falhas")):
+            if getattr(self, attribute):
+                continue
+            created = self._drive_service.files().create(
+                body={
+                    "name": folder_name,
+                    "mimeType": "application/vnd.google-apps.folder",
+                    "parents": [self._root_folder_id],
+                },
+                fields="id",
+            ).execute()
+            setattr(self, attribute, created["id"])
+            if logger:
+                logger.info("Pasta %s criada no Drive", folder_name)
+
     def move_remote_file(self, file_name: str, destination_kind: str, logger=None) -> None:
         if not self._drive_service:
             if logger:
@@ -1348,12 +1367,39 @@ def build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Atualiza somente a quantidade de atletas de todos os times configurados na planilha",
     )
+    parser.add_argument(
+        "--analisar-sumulas",
+        action="store_true",
+        help="Baixa as sumulas digitais do Drive e gera o rascunho das notas oficiais disciplinares",
+    )
+    parser.add_argument(
+        "--ia",
+        action="store_true",
+        help="Com --analisar-sumulas: gera a nota com IA (Gemini/OpenAI) em vez das regras fixas",
+    )
+    parser.add_argument(
+        "--gerar-pdf-nota",
+        metavar="ALVO",
+        help="Regera o PDF de uma nota oficial a partir do TXT: caminho do TXT, numero da nota (ex.: 4) "
+             "ou protocolo da sumula (SUM-...)",
+    )
     return parser
 
 
 def main() -> int:
     write_default_config()
     args = build_argument_parser().parse_args()
+    if args.gerar_pdf_nota:
+        from nota_pdf import regerar_pdf
+
+        config = AppConfig(Path(args.config))
+        regerar_pdf(args.gerar_pdf_nota, Path(args.config), configure_logging(config.log_path))
+        return 0
+    if args.analisar_sumulas:
+        from sumula_disciplinar import processar_sumulas
+
+        processar_sumulas(Path(args.config), local_only=args.process_local_only, usar_ia=args.ia)
+        return 0
     config = AppConfig(Path(args.config))
     selectors = SelectorConfig(Path(args.selectors))
     logger = configure_logging(config.log_path)
