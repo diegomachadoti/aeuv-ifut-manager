@@ -96,7 +96,7 @@ que é o tempo típico do Apps Script, e só completa quando o formulário fica 
 fato pronto; então a tela de carregamento desaparece em transição suave. Assim o
 usuário vê uma única espera, e não o encadeamento de duas páginas em branco do
 redirecionamento. O endereço na barra continua sendo o da associação. Se o
-carregamento passar de 35 segundos, a página oferece um botão para abrir o
+carregamento passar de 25 segundos, a página oferece um botão para abrir o
 formulário em nova aba.
 
 Pontos de manutenção:
