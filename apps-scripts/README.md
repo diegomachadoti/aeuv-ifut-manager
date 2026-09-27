@@ -91,21 +91,22 @@ carregar junto com a página, escondido atrás de uma tela de carregamento com a
 logomarca da AEUV. Enquanto espera, a tela mostra um anel girando ao redor da
 logomarca, uma barra de progresso e o nome da etapa em andamento ("Conectando ao
 servidor", "Carregando o aplicativo", "Montando os campos do formulário" e
-"Quase pronto"). A barra avança desacelerando até 90% ao longo de 20 segundos,
+"Quase pronto"). A barra avança desacelerando até 98% ao longo de 20 segundos,
 que é o tempo típico do Apps Script, e só completa quando o formulário fica de
 fato pronto; então a tela de carregamento desaparece em transição suave. Assim o
 usuário vê uma única espera, e não o encadeamento de duas páginas em branco do
-redirecionamento. O endereço na barra continua sendo o da associação. Se o
-carregamento passar de 25 segundos, a página oferece um botão para abrir o
-formulário em nova aba.
+redirecionamento. O endereço na barra continua sendo o da associação. Não há
+limite de tempo nem atalho alternativo: a página aguarda o carregamento terminar
+normalmente, mesmo que o Apps Script demore mais que o previsto.
 
 Pontos de manutenção:
 
 - A URL `/exec` de cada formulário fica na constante `URL_FORMULARIO` da página
   correspondente. Publicar uma **nova versão** da mesma implantação mantém a
   URL; criar uma **nova implantação** gera outra URL e exige atualizar a página.
-- O tempo estimado da barra e o limite do botão alternativo ficam nas constantes
-  `DURACAO_ESTIMADA` e `LIMITE_ALTERNATIVO`, em milissegundos.
+- O tempo estimado usado pela barra de progresso fica na constante
+  `DURACAO_ESTIMADA`, em milissegundos. Ele só controla a animação: a tela de
+  carregamento some pelo evento `load` do `iframe`, não pelo relógio.
 - O `iframe` depende de `XFrameOptionsMode.ALLOWALL` no `doGet()` dos dois
   projetos e de a implantação estar publicada para acesso sem login. Alterar
   qualquer um dos dois quebra a exibição embutida.
@@ -227,6 +228,13 @@ definido e, se necessário, cria uma.
 O formulário registra árbitro e documento; os dois times da partida, data e
 horário; relato dos fatos; envolvidos opcionais; anexos opcionais; assinatura
 desenhada e declaração de responsabilidade.
+
+A assinatura é desenhada no próprio canvas, com mouse no computador ou com o
+dedo no celular e no tablet. O campo se redimensiona ao tamanho real da tela e à
+densidade do aparelho, de modo que o traço sai na mesma espessura em qualquer
+dispositivo, e o desenho é preservado ao girar a tela. Enquanto o árbitro assina,
+a rolagem da página fica bloqueada sobre o campo. Navegadores sem suporte a
+eventos de ponteiro usam automaticamente os eventos de toque e de mouse.
 
 Árbitro, documento, times, data, horário, relato, assinatura e confirmação são
 obrigatórios. Os times devem ser diferentes. A interface informa o prazo de até

@@ -41,13 +41,52 @@
       gap: 18px;
     }
 
-    .logo {
-      width: 90px;
-      height: 90px;
-      background: white;
-      border-radius: 12px;
-      padding: 7px;
+    /* Brasao: circulo branco com anel dourado, entrada animada e halo discreto. */
+    .brasao {
+      position: relative;
+      flex: 0 0 112px;
+      width: 112px;
+      height: 112px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
+      animation: brasao-entrada .7s cubic-bezier(.22, 1, .36, 1) both;
+    }
+
+    /* Anel dourado externo, com respiracao lenta. */
+    .brasao::before {
+      content: '';
+      position: absolute;
+      inset: -7px;
+      border-radius: 50%;
+      border: 2px solid rgba(252, 163, 17, .55);
+      animation: brasao-halo 3.2s ease-in-out infinite;
+    }
+
+    .brasao img {
+      width: 78%;
+      height: 78%;
       object-fit: contain;
+      transition: transform .3s ease;
+    }
+
+    .brasao:hover img { transform: scale(1.06); }
+
+    @keyframes brasao-entrada {
+      from { opacity: 0; transform: scale(.7); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes brasao-halo {
+      0%, 100% { transform: scale(1); opacity: .5; }
+      50% { transform: scale(1.07); opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .brasao, .brasao::before { animation: none; }
+      .brasao:hover img { transform: none; }
     }
 
     h1 {
@@ -295,6 +334,11 @@
       background: #ffffff;
       cursor: crosshair;
       touch-action: none;
+      -ms-touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
     }
 
     .assinatura-acoes {
@@ -325,9 +369,10 @@
         font-size: 19px;
       }
 
-      .logo {
-        width: 70px;
-        height: 70px;
+      .brasao {
+        width: 84px;
+        height: 84px;
+        flex-basis: 84px;
       }
     }
   </style>
@@ -335,7 +380,9 @@
 <body>
   <header class="topo">
     <div class="topo-conteudo">
-      <img class="logo" src="<?!= config.logoUrl ?>">
+      <div class="brasao">
+        <img src="<?!= config.logoUrl ?>" alt="Logomarca da AEUV">
+      </div>
       <div>
         <h1><?= config.associacao ?></h1>
         <p>Relatório de Súmula · Preenchimento oficial da arbitragem</p>
@@ -514,11 +561,56 @@
 
     let assinando = false;
     let assinaturaPreenchida = false;
+    let ponteiroAssinatura = null;
 
-    assinaturaCtx.lineWidth = 4;
-    assinaturaCtx.lineCap = 'round';
-    assinaturaCtx.lineJoin = 'round';
-    assinaturaCtx.strokeStyle = '#172033';
+    /**
+     * Reaplica o estilo do traço, perdido sempre que o canvas é redimensionado.
+     * A escala converte pixels físicos do aparelho em pixels de tela.
+     */
+    function prepararContextoAssinatura(escala) {
+      assinaturaCtx.setTransform(escala, 0, 0, escala, 0, 0);
+      assinaturaCtx.lineWidth = 2.5;
+      assinaturaCtx.lineCap = 'round';
+      assinaturaCtx.lineJoin = 'round';
+      assinaturaCtx.strokeStyle = '#172033';
+    }
+
+    /**
+     * Ajusta o canvas ao tamanho realmente exibido na tela. Sem isso o traço
+     * sai esticado e fino no celular, onde a área é muito menor que 900x240.
+     */
+    function ajustarCanvasAssinatura() {
+      const largura = Math.round(assinaturaCanvas.clientWidth);
+      const altura = Math.round(assinaturaCanvas.clientHeight);
+
+      if (!largura || !altura) {
+        return;
+      }
+
+      const escala = Math.min(window.devicePixelRatio || 1, 3);
+      const larguraFisica = Math.round(largura * escala);
+      const alturaFisica = Math.round(altura * escala);
+
+      if (assinaturaCanvas.width === larguraFisica && assinaturaCanvas.height === alturaFisica) {
+        return;
+      }
+
+      const copia = assinaturaPreenchida ? assinaturaCanvas.toDataURL('image/png') : '';
+
+      assinaturaCanvas.width = larguraFisica;
+      assinaturaCanvas.height = alturaFisica;
+      prepararContextoAssinatura(escala);
+
+      if (copia) {
+        const imagem = new Image();
+        imagem.onload = function () {
+          assinaturaCtx.drawImage(imagem, 0, 0, largura, altura);
+        };
+        imagem.src = copia;
+      }
+    }
+
+    prepararContextoAssinatura(1);
 
     /**
      * Adiciona uma nova linha de envolvido à tabela.
@@ -735,15 +827,51 @@
     }
 
     /**
-     * Calcula a posição do ponteiro relativa ao canvas da assinatura.
+     * Calcula a posição do ponteiro relativa ao canvas, em pixels de tela.
+     * Aceita eventos de ponteiro, de mouse e de toque.
      */
     function posicaoAssinatura(evento) {
       const rect = assinaturaCanvas.getBoundingClientRect();
+      const origem = evento.touches && evento.touches.length ? evento.touches[0] : evento;
 
       return {
-        x: (evento.clientX - rect.left) * (assinaturaCanvas.width / rect.width),
-        y: (evento.clientY - rect.top) * (assinaturaCanvas.height / rect.height)
+        x: origem.clientX - rect.left,
+        y: origem.clientY - rect.top
       };
+    }
+
+    /**
+     * Marca a assinatura como preenchida e libera a validação do formulário.
+     */
+    function registrarAssinatura() {
+      assinaturaPreenchida = true;
+      campoAssinatura.value = 'OK';
+      campoAssinatura.setCustomValidity('');
+    }
+
+    /**
+     * Inicia um traço. Um toque curto também deixa marca visível.
+     */
+    function iniciarAssinatura(evento) {
+      ajustarCanvasAssinatura();
+      assinando = true;
+
+      const pos = posicaoAssinatura(evento);
+      assinaturaCtx.beginPath();
+      assinaturaCtx.moveTo(pos.x, pos.y);
+      assinaturaCtx.lineTo(pos.x + 0.01, pos.y);
+      assinaturaCtx.stroke();
+      registrarAssinatura();
+    }
+
+    /**
+     * Continua o traço atual da assinatura.
+     */
+    function moverAssinatura(evento) {
+      const pos = posicaoAssinatura(evento);
+      assinaturaCtx.lineTo(pos.x, pos.y);
+      assinaturaCtx.stroke();
+      registrarAssinatura();
     }
 
     /**
@@ -751,6 +879,7 @@
      */
     function finalizarAssinatura() {
       assinando = false;
+      ponteiroAssinatura = null;
       assinaturaCtx.beginPath();
     }
 
@@ -758,7 +887,11 @@
      * Limpa a assinatura e volta o campo ao estado obrigatório.
      */
     function limparAssinatura() {
-      assinaturaCtx.clearRect(0, 0, assinaturaCanvas.width, assinaturaCanvas.height);
+      const largura = assinaturaCanvas.clientWidth || assinaturaCanvas.width;
+      const altura = assinaturaCanvas.clientHeight || assinaturaCanvas.height;
+
+      assinaturaCtx.clearRect(0, 0, largura, altura);
+      assinando = false;
       assinaturaPreenchida = false;
       campoAssinatura.value = '';
       campoAssinatura.setCustomValidity('Realize a assinatura do árbitro antes do envio.');
@@ -950,38 +1083,95 @@
       });
     });
 
-    assinaturaCanvas.addEventListener('pointerdown', function (evento) {
-      evento.preventDefault();
-      assinando = true;
+    if (window.PointerEvent) {
+      assinaturaCanvas.addEventListener('pointerdown', function (evento) {
+        if (evento.button > 0) {
+          return;
+        }
 
-      const pos = posicaoAssinatura(evento);
-      assinaturaCtx.beginPath();
-      assinaturaCtx.moveTo(pos.x, pos.y);
-    });
+        evento.preventDefault();
+        ponteiroAssinatura = evento.pointerId;
 
-    assinaturaCanvas.addEventListener('pointermove', function (evento) {
-      if (!assinando) {
-        return;
-      }
+        if (assinaturaCanvas.setPointerCapture) {
+          try {
+            assinaturaCanvas.setPointerCapture(evento.pointerId);
+          } catch (erro) {
+            // Alguns navegadores recusam a captura; o traço continua funcionando.
+          }
+        }
 
-      evento.preventDefault();
+        iniciarAssinatura(evento);
+      });
 
-      const pos = posicaoAssinatura(evento);
-      assinaturaCtx.lineTo(pos.x, pos.y);
-      assinaturaCtx.stroke();
+      assinaturaCanvas.addEventListener('pointermove', function (evento) {
+        if (!assinando || evento.pointerId !== ponteiroAssinatura) {
+          return;
+        }
 
-      assinaturaPreenchida = true;
-      campoAssinatura.value = 'OK';
-      campoAssinatura.setCustomValidity('');
-    });
+        evento.preventDefault();
+        moverAssinatura(evento);
+      });
 
-    assinaturaCanvas.addEventListener('pointerup', finalizarAssinatura);
-    assinaturaCanvas.addEventListener('pointercancel', finalizarAssinatura);
-    assinaturaCanvas.addEventListener('pointerleave', finalizarAssinatura);
+      ['pointerup', 'pointercancel'].forEach(function (tipo) {
+        assinaturaCanvas.addEventListener(tipo, function (evento) {
+          if (evento.pointerId !== ponteiroAssinatura) {
+            return;
+          }
+
+          finalizarAssinatura();
+        });
+      });
+    } else {
+      assinaturaCanvas.addEventListener('touchstart', function (evento) {
+        if (evento.touches.length > 1) {
+          return;
+        }
+
+        evento.preventDefault();
+        iniciarAssinatura(evento);
+      }, { passive: false });
+
+      assinaturaCanvas.addEventListener('touchmove', function (evento) {
+        if (!assinando) {
+          return;
+        }
+
+        evento.preventDefault();
+        moverAssinatura(evento);
+      }, { passive: false });
+
+      ['touchend', 'touchcancel'].forEach(function (tipo) {
+        assinaturaCanvas.addEventListener(tipo, finalizarAssinatura);
+      });
+
+      assinaturaCanvas.addEventListener('mousedown', function (evento) {
+        if (evento.button > 0) {
+          return;
+        }
+
+        evento.preventDefault();
+        iniciarAssinatura(evento);
+      });
+
+      assinaturaCanvas.addEventListener('mousemove', function (evento) {
+        if (!assinando) {
+          return;
+        }
+
+        moverAssinatura(evento);
+      });
+
+      window.addEventListener('mouseup', finalizarAssinatura);
+    }
+
+    window.addEventListener('resize', ajustarCanvasAssinatura);
+    window.addEventListener('orientationchange', ajustarCanvasAssinatura);
+    window.addEventListener('load', ajustarCanvasAssinatura);
 
     configurarValidacaoFormulario(document.getElementById('formSumula'));
     configurarDataHora();
     adicionarLinha();
+    ajustarCanvasAssinatura();
   </script>
 </body>
 </html>

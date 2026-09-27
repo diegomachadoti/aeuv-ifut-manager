@@ -34,24 +34,63 @@
     .topo-conteudo, .container { max-width: 1240px; margin: 0 auto; }
     .topo-conteudo { display: flex; align-items: center; gap: 18px; }
     .marca { flex: 1; }
-    .logo-competicao {
-      width: 92px;
-      height: 92px;
-      flex: 0 0 92px;
-      object-fit: contain;
-      border-radius: 12px;
+    /* Brasao: circulo branco com anel dourado, entrada animada e halo discreto. */
+    .brasao {
+      position: relative;
+      flex: 0 0 112px;
+      width: 112px;
+      height: 112px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
       background: #fff;
-      padding: 7px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
+      animation: brasao-entrada .7s cubic-bezier(.22, 1, .36, 1) both;
     }
+
+    /* Anel dourado externo, com respiracao lenta. */
+    .brasao::before {
+      content: '';
+      position: absolute;
+      inset: -7px;
+      border-radius: 50%;
+      border: 2px solid rgba(252, 163, 17, .55);
+      animation: brasao-halo 3.2s ease-in-out infinite;
+    }
+
+    .brasao img {
+      width: 78%;
+      height: 78%;
+      object-fit: contain;
+      transition: transform .3s ease;
+    }
+
+    .brasao:hover img { transform: scale(1.06); }
+
+    @keyframes brasao-entrada {
+      from { opacity: 0; transform: scale(.7); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes brasao-halo {
+      0%, 100% { transform: scale(1); opacity: .5; }
+      50% { transform: scale(1.07); opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .brasao, .brasao::before { animation: none; }
+      .brasao:hover img { transform: none; }
+    }
+
     .logo-placeholder {
-      width: 92px;
-      height: 92px;
-      flex: 0 0 92px;
+      width: 112px;
+      height: 112px;
+      flex: 0 0 112px;
       display: grid;
       place-items: center;
       text-align: center;
       border: 2px dashed rgba(255, 255, 255, .65);
-      border-radius: 12px;
+      border-radius: 50%;
       font-size: 11px;
       font-weight: 700;
       padding: 8px;
@@ -175,7 +214,7 @@
       .card { padding: 16px 12px; }
       .topo { padding: 22px 14px; }
       .topo-conteudo { align-items: flex-start; }
-      .logo-competicao, .logo-placeholder { width: 72px; height: 72px; flex-basis: 72px; }
+      .brasao, .logo-placeholder { width: 84px; height: 84px; flex-basis: 84px; }
       .contador { width: 100%; margin-left: 0; }
     }
   </style>
@@ -183,7 +222,9 @@
 <body>
   <header class="topo">
     <div class="topo-conteudo">
-      <img class="logo-competicao" src="<?!= config.logoUrl ?>" alt="Logomarca da competição">
+      <div class="brasao">
+        <img src="<?!= config.logoUrl ?>" alt="Logomarca da AEUV">
+      </div>
       <div class="marca">
         <h1><?= config.associacao ?></h1>
         <p>Formulário de Inscrição, Remoção e Portabilidade</p>
