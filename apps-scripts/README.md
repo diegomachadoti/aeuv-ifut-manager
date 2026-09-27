@@ -1,31 +1,21 @@
 # Aplicativos Google Apps Script da AEUV
 
-Este diretório reúne dois formulários Web desenvolvidos com Google Apps Script
-(GAS). O formulário de inscrição, remoção e portabilidade produz os arquivos
-TXT de solicitação que servem de entrada para a automação Python. Os projetos
-Web e o processamento Python são aplicações distintas, conectadas por esses
-arquivos no Google Drive.
+Este diretório reúne os aplicativos Web da AEUV desenvolvidos com Google Apps
+Script (GAS): dois formulários públicos e o sistema interno da associação. O
+formulário de inscrição, remoção e portabilidade produz os arquivos TXT de
+solicitação que servem de entrada para a automação Python. Os projetos Web e o
+processamento Python são aplicações distintas, conectadas por esses arquivos no
+Google Drive.
 
 | Aplicativo | Diretório | Para que serve |
 | --- | --- | --- |
 | **Inscrição, remoção e portabilidade** | `inscricao-portabilidade/` | Receber solicitações para atletas e comissão técnica, salvar comprovantes e gerar arquivos TXT. |
 | **Súmula digital** | `sumula-digital/` | Registrar relatórios de arbitragem e gerar arquivos TXT e PDF. |
+| **Sistema interno** | `sistema-interno/` | Área restrita da associação, com login Google e menu das funcionalidades internas. |
 
-### Endereços publicados
-
-| Aplicativo | Link de divulgação | URL da implantação (Apps Script) |
-| --- | --- | --- |
-| Inscrição, remoção e portabilidade | https://formularios.aeuv.org/inscricao/ | `https://script.google.com/macros/s/AKfycbyP2WRKuyR9dbF4HVUFM14_p-exiNoPlQFyOlIx05_BBzcNkCR_fS7ruxXhtQ0rsnDBbg/exec` |
-| Súmula digital | https://formularios.aeuv.org/sumula/ | `https://script.google.com/macros/s/AKfycbyTkmXq4OU_aCO7uZazbnY2jM95pTRzAVbna8_4b2Cy2TSQfq76uUpXh46LQ47eSRtQsA/exec` |
-
-Divulgue sempre o link de `formularios.aeuv.org`, que exibe a logomarca e o nome
-da associação na prévia do compartilhamento e redireciona para a implantação
-correspondente. As URLs do Apps Script continuam válidas para acesso direto e
-para testes. Veja [Ícone da aba e prévia do link](#ícone-da-aba-e-prévia-do-link).
-
-Cada aplicativo é um projeto GAS independente composto por `WebApp.gs` e
-`Index.html`. **Não combine os arquivos das duas pastas em um único projeto:**
-ambos declaram `doGet()` e funções auxiliares com nomes iguais.
+Cada aplicativo é um projeto GAS independente. **Não combine os arquivos das
+pastas em um único projeto:** todos declaram `doGet()` e funções auxiliares com
+nomes iguais.
 
 > **Integração com Python:** após o envio, o formulário de inscrição salva o
 > TXT na pasta `Arquivos TXT - Inscricoes de Atletas`. Para processamento
@@ -43,30 +33,63 @@ ambos declaram `doGet()` e funções auxiliares com nomes iguais.
 - [Publicação e permissões](#publicação-e-permissões)
 - [Inscrição, remoção e portabilidade](#inscrição-remoção-e-portabilidade)
 - [Súmula digital](#súmula-digital)
+- [Sistema interno](#sistema-interno)
 - [Operação e manutenção](#operação-e-manutenção)
+
+## Endereços publicados
+
+| Aplicativo | Link de divulgação | URL da implantação (Apps Script) |
+| --- | --- | --- |
+| Inscrição, remoção e portabilidade | https://portal.aeuv.org/inscricao/ | `https://script.google.com/macros/s/AKfycbyP2WRKuyR9dbF4HVUFM14_p-exiNoPlQFyOlIx05_BBzcNkCR_fS7ruxXhtQ0rsnDBbg/exec` |
+| Súmula digital | https://portal.aeuv.org/sumula/ | `https://script.google.com/macros/s/AKfycbyTkmXq4OU_aCO7uZazbnY2jM95pTRzAVbna8_4b2Cy2TSQfq76uUpXh46LQ47eSRtQsA/exec` |
+| Sistema interno | https://portal.aeuv.org/sistema/ | `https://script.google.com/macros/s/AKfycbwKfTZWMkmv80XbwvmfNyRHltEUFGOYQ3srJz9TKODKvbL5nu5FTuB5YR7KJ_3jwF7weg/exec` |
+
+Divulgue sempre o link de `portal.aeuv.org`, que exibe a logomarca e o nome
+da associação na prévia do compartilhamento e encaminha para a implantação
+correspondente. As URLs do Apps Script continuam válidas para acesso direto e
+para testes. Veja [Ícone da aba e prévia do link](#ícone-da-aba-e-prévia-do-link).
+
+O subdomínio é definido pelo arquivo `docs/CNAME` e vale para o site inteiro do
+GitHub Pages — o repositório aceita **um único** domínio personalizado. Trocar o
+nome do subdomínio depois exige apenas editar esse arquivo, criar o CNAME
+correspondente no provedor de DNS e atualizar a tabela acima; os caminhos
+`/inscricao/`, `/sumula/` e `/sistema/` permanecem iguais.
 
 ## Publicação e permissões
 
 Repita estes passos para cada aplicativo:
 
 1. Crie um projeto independente em [Google Apps Script](https://script.google.com/).
-2. Copie `WebApp.gs` para um arquivo de script e `Index.html` para um arquivo
-   HTML chamado `Index`.
+2. Copie `WebApp.gs` para um arquivo de script e cada `.html` da pasta para um
+   arquivo HTML de mesmo nome (`Index`, e no sistema interno também `Estilos`
+   e `Negado`).
 3. Autorize os serviços solicitados. Os projetos usam Google Sheets e Drive;
    a súmula também usa Google Docs para gerar o PDF.
 4. Siga as instruções de preparação específicas do aplicativo.
 5. Publique como **Aplicativo da Web**, escolhendo a conta executora e o público
-   autorizado de acordo com a política da associação.
+   autorizado de acordo com a tabela abaixo.
 6. Após qualquer alteração, publique uma nova versão e compartilhe a URL da
    implantação atualizada.
 
+| Aplicativo | Executar como | Quem tem acesso |
+| --- | --- | --- |
+| Inscrição, remoção e portabilidade | Eu (dono do projeto) | Qualquer pessoa |
+| Súmula digital | Eu (dono do projeto) | Qualquer pessoa |
+| Sistema interno | **Usuário que acessa o app da web** | **Qualquer pessoa com Conta do Google** |
+
+A combinação do sistema interno não é opcional: só o modo "Usuário que acessa"
+entrega o e-mail de quem abriu a página, e é esse e-mail que o servidor compara
+com a lista de autorizados. Publicado como "Eu", o sistema não identifica
+ninguém e bloqueia todo mundo.
+
 Os dois formulários permitem incorporação em outras páginas
-(`XFrameOptionsMode.ALLOWALL`). A conta executora precisa manter acesso às
-planilhas, pastas e imagens utilizadas.
+(`XFrameOptionsMode.ALLOWALL`). O sistema interno **não** usa essa opção, porque
+a tela de login do Google recusa ser exibida dentro de um quadro. A conta
+executora precisa manter acesso às planilhas, pastas e imagens utilizadas.
 
 ### Ícone da aba e prévia do link
 
-Os dois projetos definem o ícone da aba do navegador pela chave `faviconUrl`,
+Os três projetos definem o ícone da aba do navegador pela chave `faviconUrl`,
 aplicada com `setFaviconUrl()` no `doGet()`. A URL precisa ser pública e
 terminar na extensão da imagem; links do Drive (`thumbnail?id=...`) não
 funcionam nesse campo. Por padrão a chave aponta para `assets/logo-aeuv.png`
@@ -76,45 +99,63 @@ ignorada pelo Apps Script.
 Já a prévia exibida ao compartilhar o link (WhatsApp, Instagram e afins) vem das
 tags Open Graph da página, e o Apps Script não permite incluí-las: o formulário é
 servido dentro de uma página do Google e `addMetaTag()` só aceita tags como
-`viewport`. Para contornar isso, a pasta `docs/` deste repositório traz duas
-páginas de redirecionamento com as tags `og:image` e `og:title` da associação:
+`viewport`. Para contornar isso, a pasta `docs/` deste repositório traz três
+páginas de entrada com as tags `og:image` e `og:title` da associação:
 
 - `docs/inscricao/index.html`
 - `docs/sumula/index.html`
+- `docs/sistema/index.html`
 
 Essas páginas já estão publicadas no GitHub Pages (pasta `docs/` do branch
 `master`) e respondem no domínio da associação, conforme a tabela de
 [endereços publicados](#endereços-publicados).
 
-Cada página abre o formulário em um `iframe` que ocupa a tela inteira e começa a
-carregar junto com a página, escondido atrás de uma tela de carregamento com a
-logomarca da AEUV. Enquanto espera, a tela mostra um anel girando ao redor da
-logomarca, uma barra de progresso e o nome da etapa em andamento ("Conectando ao
-servidor", "Carregando o aplicativo", "Montando os campos do formulário" e
-"Quase pronto"). A barra avança desacelerando até 98% ao longo de 20 segundos,
-que é o tempo típico do Apps Script, e só completa quando o formulário fica de
-fato pronto; então a tela de carregamento desaparece em transição suave. Assim o
-usuário vê uma única espera, e não o encadeamento de duas páginas em branco do
-redirecionamento. O endereço na barra continua sendo o da associação. Não há
-limite de tempo nem atalho alternativo: a página aguarda o carregamento terminar
-normalmente, mesmo que o Apps Script demore mais que o previsto.
+As duas páginas dos **formulários** abrem o aplicativo em um `iframe` que ocupa
+a tela inteira e começa a carregar junto com a página, escondido atrás de uma
+tela de carregamento com a logomarca da AEUV. Enquanto espera, a tela mostra um
+anel girando ao redor da logomarca, uma barra de progresso e o nome da etapa em
+andamento ("Conectando ao servidor", "Carregando o aplicativo", "Montando os
+campos do formulário" e "Quase pronto"). A barra avança desacelerando até 98% ao
+longo de 20 segundos, que é o tempo típico do Apps Script, e só completa quando o
+formulário fica de fato pronto; então a tela de carregamento desaparece em
+transição suave. Assim o usuário vê uma única espera, e não o encadeamento de
+duas páginas em branco do redirecionamento. O endereço na barra continua sendo o
+da associação. Não há limite de tempo nem atalho alternativo: a página aguarda o
+carregamento terminar normalmente, mesmo que o Apps Script demore mais que o
+previsto.
+
+A página do **sistema interno** é diferente de propósito: ela exibe a mesma tela
+de carregamento, mas com barra indeterminada, e navega na própria aba
+(`window.location.replace`) em vez de usar `iframe`. O motivo é que a tela de
+login do Google envia `X-Frame-Options` e apareceria em branco dentro de um
+quadro. Ela também traz `robots: noindex, nofollow`, por ser área restrita, e um
+botão "Continuar para o sistema" que surge após 5 segundos caso o navegador
+bloqueie o redirecionamento automático.
 
 Pontos de manutenção:
 
-- A URL `/exec` de cada formulário fica na constante `URL_FORMULARIO` da página
-  correspondente. Publicar uma **nova versão** da mesma implantação mantém a
-  URL; criar uma **nova implantação** gera outra URL e exige atualizar a página.
+- A URL `/exec` de cada aplicativo fica na constante `URL_FORMULARIO` (páginas
+  dos formulários) ou `URL_SISTEMA` (página do sistema interno). Publicar uma
+  **nova versão** da mesma implantação mantém a URL; criar uma **nova
+  implantação** gera outra URL e exige atualizar a página.
 - O tempo estimado usado pela barra de progresso fica na constante
   `DURACAO_ESTIMADA`, em milissegundos. Ele só controla a animação: a tela de
   carregamento some pelo evento `load` do `iframe`, não pelo relógio.
 - O `iframe` depende de `XFrameOptionsMode.ALLOWALL` no `doGet()` dos dois
-  projetos e de a implantação estar publicada para acesso sem login. Alterar
+  formulários e de a implantação estar publicada para acesso sem login. Alterar
   qualquer um dos dois quebra a exibição embutida.
 - As animações são desligadas automaticamente para quem usa a preferência de
   redução de movimento do sistema.
-- O arquivo `docs/CNAME` fixa o domínio `formularios.aeuv.org`. Ele corresponde
+- O arquivo `docs/CNAME` fixa o domínio `portal.aeuv.org`. Ele corresponde
   a um registro CNAME no DNS do domínio apontando para `diegomachadoti.github.io`
   e não interfere no site da associação, que continua no Wix.
+- **Para trocar o subdomínio:** crie o novo registro CNAME no provedor de DNS e
+  espere ele resolver; só então altere o campo *Custom domain* em
+  **Settings → Pages** do repositório, que reescreve o `docs/CNAME`. Atualize
+  também a tabela de endereços acima e as URLs dos módulos em `MODULOS`
+  (`sistema-interno/WebApp.gs`). O GitHub Pages responde por **um único**
+  domínio: assim que o novo entra no ar, o anterior passa a devolver 404, sem
+  redirecionamento. Avise quem já tinha o link antigo salvo.
 
 > **Privacidade:** os formulários coletam dados pessoais, incluindo CPF,
 > documento do árbitro e comprovantes de pagamento. Restrinja o acesso aos
@@ -325,14 +366,104 @@ auxiliar não altera `CONFIG.spreadsheetId` e não é necessária na implantaç�
 Antes de usar a planilha em relatórios, alinhe os cabeçalhos com as 16 posições
 gravadas e confirme o nome da aba de envolvidos.
 
+## Sistema interno
+
+Área restrita da associação, publicada em
+[portal.aeuv.org/sistema/](https://portal.aeuv.org/sistema/). Reúne em
+um só lugar as funcionalidades internas da AEUV, com menu lateral e controle de
+acesso por Conta Google.
+
+### Arquivos do projeto
+
+| Arquivo | Conteúdo |
+| --- | --- |
+| `WebApp.gs` | Identificação do usuário, lista de autorizados, registro de módulos e `doGet()`. |
+| `Index.html` | Tela do sistema: cabeçalho, menu e área de conteúdo. |
+| `Negado.html` | Tela exibida a quem não está autorizado. |
+| `Estilos.html` | CSS da identidade visual, compartilhado pelas duas telas. |
+
+### Como o acesso é controlado
+
+O servidor lê o e-mail de quem abriu a página com
+`Session.getActiveUser().getEmail()` e compara com a lista de autorizados. Quem
+não está na lista recebe `Negado.html` e nunca chega ao conteúdo — a verificação
+acontece no servidor, antes de qualquer HTML do sistema ser gerado.
+
+A lista de autorizados fica nas **propriedades do script**, na chave
+`USUARIOS_AUTORIZADOS`, e cai para a constante `USUARIOS_PADRAO` do código
+enquanto a propriedade não existir. Cada item tem `email`, `nome` e `perfil`.
+
+Para incluir ou remover alguém, edite a lista dentro da função
+`definirUsuariosAutorizados()` no editor do Apps Script e execute-a. A alteração
+passa a valer na hora, **sem publicar nova versão**. A função recusa listas
+vazias e listas sem nenhum administrador. `restaurarUsuariosPadrao()` apaga a
+propriedade e devolve o controle à lista do código.
+
+As propriedades do script foram escolhidas de propósito no lugar de uma aba de
+planilha: como o aplicativo roda com a permissão de quem acessa, ler uma
+planilha exigiria compartilhá-la com todos — inclusive com quem ainda não tem
+acesso liberado.
+
+Perfis disponíveis:
+
+| Perfil | Enxerga |
+| --- | --- |
+| `admin` | Todos os módulos, incluindo a lista de acessos. |
+| `diretoria` | Módulos operacionais e de consulta. |
+| `membro` | Início e os formulários. |
+
+Perfil desconhecido é tratado como `membro`. A função `diagnosticarAcesso()`
+registra no log o e-mail lido e o resultado da verificação; use-a quando a
+implantação parecer bloquear alguém indevidamente.
+
+### Módulos
+
+O menu é montado a partir da constante `MODULOS` do `WebApp.gs`, e o servidor
+envia ao navegador **apenas** os módulos liberados para o perfil de quem entrou.
+Cada módulo declara `id`, `nome`, `icone`, `tipo`, `descricao` e `perfis`.
+
+| Tipo | Comportamento |
+| --- | --- |
+| `painel` | Tela inicial, com saudação e atalhos para os demais módulos. |
+| `link` | Abre um endereço externo em nova aba (usado pelos dois formulários). |
+| `usuarios` | Tabela de autorizados; busca os dados com `listarUsuarios()`. |
+| `breve` | Funcionalidade já prevista, exibida com o aviso "em desenvolvimento". |
+
+Módulos publicados hoje: Início, Súmula digital, Inscrição e portabilidade,
+Notas oficiais, Controle de punições, Atletas e Usuários do sistema. Os três do
+meio estão marcados como `breve`, aguardando a tela correspondente.
+
+### Como acrescentar uma funcionalidade
+
+1. Inclua um item em `MODULOS` no `WebApp.gs`, com um `id` único e a lista de
+   `perfis` que podem vê-lo.
+2. Se for só um atalho para um endereço externo, use `tipo: 'link'` com a chave
+   `url`. Nada mais é necessário.
+3. Para uma tela própria, use um `tipo` novo e trate-o em `renderizarModulo()`
+   no `Index.html`.
+4. Se a tela precisar de dados, crie a função correspondente no `WebApp.gs` e
+   chame-a com `google.script.run`. **Repita a verificação de permissão no
+   servidor**, como faz `listarUsuarios()`: o que o navegador envia nunca deve
+   ser considerado confiável.
+5. Publique uma nova versão da implantação.
+
+A navegação usa o fragmento do endereço (`#usuarios`, `#notas`), então cada
+módulo pode ser guardado nos favoritos e o botão "voltar" funciona. No celular o
+menu fica recolhido atrás do botão "Menu do sistema" e se fecha sozinho ao
+escolher uma opção.
+
 ## Operação e manutenção
 
 - Mantenha os aplicativos em projetos GAS separados. Os arquivos HTML devem
-  continuar se chamando `Index`; as funções chamadas pela interface são
-  `salvarInscricao()` e `salvarSumula()`.
+  continuar se chamando `Index` (no sistema interno também `Estilos` e
+  `Negado`); as funções chamadas pela interface são `salvarInscricao()`,
+  `salvarSumula()` e `listarUsuarios()`.
 - Ao alterar equipes, competições ou outros dados de configuração, atualize as
   opções da interface e as validações do servidor em conjunto.
 - Mantenha a conta executora com acesso às planilhas, pastas e logo; verifique
   também as permissões dos arquivos gerados.
+- No sistema interno, revise periodicamente a lista de autorizados e remova
+  quem deixou a diretoria. Mantenha sempre pelo menos um `admin`.
 - Para investigar falhas, confira as execuções do Apps Script e as permissões
-  dos serviços Google. Erros do servidor são exibidos no formulário.
+  dos serviços Google. Erros do servidor são exibidos no formulário; no sistema
+  interno, use `diagnosticarAcesso()` para problemas de acesso.

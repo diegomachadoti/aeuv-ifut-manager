@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <?!= include_('Estilos') ?>
+  <style>
+    .negado-area {
+      max-width: 620px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .cadeado {
+      font-size: 44px;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+
+    .negado-area h2 { margin-bottom: 10px; }
+
+    .conta {
+      display: inline-block;
+      margin: 16px 0 4px;
+      padding: 9px 14px;
+      background: var(--fundo);
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      font-size: 14px;
+      word-break: break-all;
+    }
+
+    .acoes {
+      margin-top: 22px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .acoes a {
+      display: inline-block;
+      padding: 11px 18px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .principal { background: var(--dourado); color: var(--azul); }
+    .secundario { background: #e9eef8; color: var(--azul); }
+  </style>
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-conteudo">
+      <div class="brasao">
+        <img src="<?!= config.logoUrl ?>" alt="Logomarca da AEUV">
+      </div>
+      <div class="topo-identidade">
+        <h1><?= config.associacao ?></h1>
+        <p>Sistema Interno &middot; Acesso restrito</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card negado-area">
+      <div class="cadeado">&#128274;</div>
+
+      <? if (config.motivo === 'nao-identificado') { ?>
+        <h2>N&atilde;o foi poss&iacute;vel identificar sua conta</h2>
+        <p class="apoio">
+          O sistema interno precisa saber quem est&aacute; acessando. Entre com uma
+          Conta Google e tente novamente. Se o problema continuar, a implanta&ccedil;&atilde;o
+          precisa estar publicada como <strong>&ldquo;Executar como: Usu&aacute;rio que acessa o app
+          da web&rdquo;</strong>.
+        </p>
+      <? } else { ?>
+        <h2>Acesso n&atilde;o autorizado</h2>
+        <p class="apoio">
+          Esta &aacute;rea &eacute; exclusiva da diretoria e da equipe interna da associa&ccedil;&atilde;o.
+          A conta abaixo ainda n&atilde;o consta na lista de pessoas autorizadas.
+        </p>
+        <div class="conta"><?= config.email ?></div>
+      <? } ?>
+
+      <p class="apoio" style="margin-top: 18px;">
+        Para solicitar acesso, fale com a administra&ccedil;&atilde;o pelo e-mail
+        <strong><?= config.emailSuporte ?></strong>.
+      </p>
+
+      <div class="acoes">
+        <a class="principal" href="https://accounts.google.com/AccountChooser?continue=https://www.google.com/" target="_blank" rel="noopener">Entrar com outra conta</a>
+        <a class="secundario" href="https://www.aeuv.org/" target="_blank" rel="noopener">Ir para o site da AEUV</a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

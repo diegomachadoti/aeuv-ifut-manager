@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <?!= include_('Estilos') ?>
+  <style>
+    /* ---------- Identificacao do usuario no cabecalho ---------- */
+
+    .usuario {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255, 255, 255, .1);
+      border: 1px solid rgba(255, 255, 255, .18);
+      border-radius: 999px;
+      padding: 6px 8px 6px 6px;
+    }
+
+    .inicial {
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+      border-radius: 50%;
+      background: var(--dourado);
+      color: var(--azul);
+      display: grid;
+      place-items: center;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .usuario-dados { line-height: 1.3; min-width: 0; }
+    .usuario-nome { font-size: 13px; font-weight: bold; }
+
+    .usuario-perfil {
+      font-size: 11px;
+      opacity: .8;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+
+    .sair {
+      color: #fff;
+      text-decoration: none;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .12);
+      white-space: nowrap;
+    }
+
+    .sair:hover { background: rgba(255, 255, 255, .22); }
+
+    /* ---------- Estrutura menu + conteudo ---------- */
+
+    .layout {
+      display: grid;
+      grid-template-columns: 258px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .menu {
+      background: #fff;
+      border: 1px solid var(--borda);
+      border-radius: 12px;
+      padding: 10px;
+      position: sticky;
+      top: 16px;
+      box-shadow: 0 2px 10px rgba(20, 33, 61, .05);
+    }
+
+    .menu-titulo {
+      font-size: 11px;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      color: var(--apoio);
+      padding: 8px 10px 10px;
+    }
+
+    .menu button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 12px;
+      margin-bottom: 2px;
+      background: transparent;
+      color: var(--texto);
+      text-align: left;
+      font-size: 14px;
+      transition: background .15s ease;
+    }
+
+    .menu button:hover { background: var(--fundo); }
+
+    .menu button.ativo {
+      background: var(--azul);
+      color: #fff;
+      font-weight: bold;
+    }
+
+    .menu .icone { font-size: 17px; line-height: 1; flex: 0 0 auto; }
+    .menu .rotulo { flex: 1; min-width: 0; }
+
+    .etiqueta {
+      font-size: 10px;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+      background: #e9eef8;
+      color: var(--apoio);
+      border-radius: 999px;
+      padding: 3px 7px;
+    }
+
+    .menu button.ativo .etiqueta { background: rgba(255, 255, 255, .22); color: #fff; }
+
+    .abrir-menu {
+      display: none;
+      width: 100%;
+      margin-bottom: 12px;
+      padding: 12px 14px;
+      background: #fff;
+      border: 1px solid var(--borda);
+      color: var(--azul);
+      font-weight: bold;
+      text-align: left;
+    }
+
+    /* ---------- Conteudo ---------- */
+
+    .conteudo { min-width: 0; }
+
+    .cabecalho-modulo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+
+    .cabecalho-modulo .icone { font-size: 26px; line-height: 1; }
+
+    .cartoes {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+      gap: 14px;
+    }
+
+    .cartao {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+      padding: 16px;
+      background: #fff;
+      text-decoration: none;
+      color: inherit;
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    }
+
+    .cartao:hover {
+      transform: translateY(-2px);
+      border-color: var(--dourado);
+      box-shadow: 0 8px 20px rgba(20, 33, 61, .1);
+    }
+
+    .cartao .icone { font-size: 24px; line-height: 1; }
+
+    .cartao h3 {
+      margin: 10px 0 6px;
+      font-size: 15px;
+      color: var(--azul);
+    }
+
+    .cartao p { margin: 0; font-size: 13px; color: var(--apoio); line-height: 1.5; }
+
+    .cartao.inativo { opacity: .62; cursor: default; }
+    .cartao.inativo:hover { transform: none; border-color: var(--borda); box-shadow: none; }
+
+    .saudacao {
+      background: linear-gradient(120deg, var(--azul), var(--azul-claro));
+      color: #fff;
+      border-radius: 12px;
+      padding: 22px;
+    }
+
+    .saudacao h2 { color: #fff; margin: 0 0 6px; }
+    .saudacao p { margin: 0; opacity: .85; font-size: 14px; line-height: 1.55; }
+
+    .aviso {
+      margin-top: 18px;
+      border-left: 4px solid var(--dourado);
+      background: #fff8e9;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .botao-link {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 11px 18px;
+      background: var(--dourado);
+      color: var(--azul);
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 14px;
+      text-decoration: none;
+    }
+
+    /* ---------- Tabela de usuarios ---------- */
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--borda);
+      text-align: left;
+    }
+
+    th {
+      background: var(--azul);
+      color: #fff;
+      font-size: 13px;
+    }
+
+    th:first-child { border-radius: 8px 0 0 0; }
+    th:last-child { border-radius: 0 8px 0 0; }
+
+    td.email { word-break: break-all; }
+
+    .pilula {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: #e9eef8;
+      color: var(--azul);
+    }
+
+    .pilula.admin { background: var(--dourado); color: var(--azul); font-weight: bold; }
+
+    .carregando { color: var(--apoio); font-size: 14px; margin-top: 16px; }
+
+    .erro {
+      margin-top: 16px;
+      border-left: 4px solid #c0392b;
+      background: #fdecea;
+      color: #922b21;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 14px;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+
+      .abrir-menu { display: block; }
+
+      .menu { position: static; display: none; margin-bottom: 14px; }
+      .menu.aberto { display: block; }
+    }
+
+    @media (max-width: 700px) {
+      .topo-conteudo { flex-wrap: wrap; }
+      .usuario { width: 100%; justify-content: flex-start; }
+      .usuario-dados { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-conteudo">
+      <div class="brasao">
+        <img src="<?!= config.logoUrl ?>" alt="Logomarca da AEUV">
+      </div>
+      <div class="topo-identidade">
+        <h1><?= config.associacao ?></h1>
+        <p>Sistema Interno &middot; &Aacute;rea restrita da associa&ccedil;&atilde;o</p>
+      </div>
+      <div class="usuario">
+        <div class="inicial" id="inicial"></div>
+        <div class="usuario-dados">
+          <div class="usuario-nome" id="usuarioNome"></div>
+          <div class="usuario-perfil" id="usuarioPerfil"></div>
+        </div>
+        <a class="sair" href="https://accounts.google.com/Logout" target="_blank" rel="noopener">Sair</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <button type="button" class="abrir-menu" id="abrirMenu" onclick="alternarMenu()">&#9776; Menu do sistema</button>
+
+    <div class="layout">
+      <nav class="menu" id="menu">
+        <div class="menu-titulo">Funcionalidades</div>
+        <div id="menuItens"></div>
+      </nav>
+
+      <section class="conteudo">
+        <div class="card" id="conteudo"></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const CONFIG = <?!= JSON.stringify(config) ?>;
+    const MODULOS = CONFIG.modulos;
+
+    const menuItens = document.getElementById('menuItens');
+    const menu = document.getElementById('menu');
+    const conteudo = document.getElementById('conteudo');
+
+    let moduloAtual = '';
+
+    /**
+     * Escapa texto vindo do servidor antes de injetar no HTML.
+     */
+    function escapar(valor) {
+      return String(valor === null || valor === undefined ? '' : valor)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    /**
+     * Preenche a identificacao do usuario no cabecalho.
+     */
+    function montarUsuario() {
+      const nome = CONFIG.usuario.nome || CONFIG.usuario.email;
+
+      document.getElementById('inicial').textContent = nome.trim().charAt(0).toUpperCase();
+      document.getElementById('usuarioNome').textContent = nome;
+      document.getElementById('usuarioPerfil').textContent = CONFIG.usuario.perfilNome;
+    }
+
+    /**
+     * Monta o menu lateral com os modulos liberados para o perfil.
+     */
+    function montarMenu() {
+      menuItens.innerHTML = MODULOS.map(function (modulo) {
+        const etiqueta = modulo.tipo === 'breve'
+          ? '<span class="etiqueta">em breve</span>'
+          : (modulo.tipo === 'link' ? '<span class="etiqueta">abre fora</span>' : '');
+
+        return '<button type="button" data-modulo="' + escapar(modulo.id) + '">'
+          + '<span class="icone">' + escapar(modulo.icone) + '</span>'
+          + '<span class="rotulo">' + escapar(modulo.nome) + '</span>'
+          + etiqueta
+          + '</button>';
+      }).join('');
+
+      menuItens.querySelectorAll('button').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          abrirModulo(botao.dataset.modulo);
+        });
+      });
+    }
+
+    /**
+     * Marca o item ativo do menu.
+     */
+    function destacarMenu(id) {
+      menuItens.querySelectorAll('button').forEach(function (botao) {
+        botao.classList.toggle('ativo', botao.dataset.modulo === id);
+      });
+    }
+
+    /**
+     * Abre um modulo e registra o endereco na barra do navegador.
+     */
+    function abrirModulo(id) {
+      const modulo = MODULOS.filter(function (item) { return item.id === id; })[0];
+
+      if (!modulo) {
+        return abrirModulo(MODULOS[0].id);
+      }
+
+      moduloAtual = id;
+      destacarMenu(id);
+      renderizarModulo(modulo);
+
+      if (window.innerWidth <= 900) {
+        menu.classList.remove('aberto');
+      }
+
+      if (window.location.hash !== '#' + id) {
+        window.location.hash = id;
+      }
+    }
+
+    /**
+     * Desenha a tela de um modulo. Novas funcionalidades entram aqui.
+     */
+    function renderizarModulo(modulo) {
+      const cabecalho = '<div class="cabecalho-modulo">'
+        + '<span class="icone">' + escapar(modulo.icone) + '</span>'
+        + '<h2>' + escapar(modulo.nome) + '</h2>'
+        + '</div><p class="apoio">' + escapar(modulo.descricao) + '</p>';
+
+      if (modulo.tipo === 'painel') {
+        return renderizarPainel();
+      }
+
+      if (modulo.tipo === 'link') {
+        conteudo.innerHTML = cabecalho
+          + '<p class="apoio" style="margin-top:14px;">O formul&aacute;rio abre em uma nova aba, '
+          + 'no endere&ccedil;o oficial da associa&ccedil;&atilde;o.</p>'
+          + '<a class="botao-link" href="' + escapar(modulo.url) + '" target="_blank" rel="noopener">Abrir '
+          + escapar(modulo.nome) + '</a>';
+        return;
+      }
+
+      if (modulo.tipo === 'usuarios') {
+        conteudo.innerHTML = cabecalho + '<p class="carregando" id="statusUsuarios">Carregando a lista de acessos...</p>';
+        carregarUsuarios();
+        return;
+      }
+
+      conteudo.innerHTML = cabecalho
+        + '<div class="aviso"><strong>Em desenvolvimento.</strong> Esta funcionalidade j&aacute; est&aacute; '
+        + 'prevista no sistema e ser&aacute; liberada em uma pr&oacute;xima vers&atilde;o.</div>';
+    }
+
+    /**
+     * Tela inicial: saudacao e atalhos para os demais modulos.
+     */
+    function renderizarPainel() {
+      const hora = new Date().getHours();
+      const saudacao = hora < 12 ? 'Bom dia' : (hora < 18 ? 'Boa tarde' : 'Boa noite');
+      const primeiroNome = (CONFIG.usuario.nome || '').split(' ')[0] || CONFIG.usuario.email;
+
+      const atalhos = MODULOS.filter(function (modulo) {
+        return modulo.tipo !== 'painel';
+      }).map(function (modulo) {
+        const corpo = '<span class="icone">' + escapar(modulo.icone) + '</span>'
+          + '<h3>' + escapar(modulo.nome) + '</h3>'
+          + '<p>' + escapar(modulo.descricao) + '</p>';
+
+        if (modulo.tipo === 'breve') {
+          return '<div class="cartao inativo">' + corpo + '</div>';
+        }
+
+        return '<button type="button" class="cartao" data-atalho="' + escapar(modulo.id) + '">' + corpo + '</button>';
+      }).join('');
+
+      conteudo.innerHTML = '<div class="saudacao">'
+        + '<h2>' + saudacao + ', ' + escapar(primeiroNome) + '!</h2>'
+        + '<p>Voc&ecirc; est&aacute; na &aacute;rea interna da AEUV. Escolha abaixo uma das '
+        + 'funcionalidades liberadas para o seu perfil.</p>'
+        + '</div>'
+        + '<div class="cartoes">' + atalhos + '</div>';
+
+      conteudo.querySelectorAll('[data-atalho]').forEach(function (cartao) {
+        cartao.addEventListener('click', function () {
+          abrirModulo(cartao.dataset.atalho);
+        });
+      });
+    }
+
+    /**
+     * Busca no servidor a lista de autorizados (somente admin).
+     */
+    function carregarUsuarios() {
+      google.script.run
+        .withSuccessHandler(function (lista) {
+          if (moduloAtual !== 'usuarios') {
+            return;
+          }
+
+          const linhas = lista.map(function (usuario) {
+            const classe = usuario.perfil === 'admin' ? 'pilula admin' : 'pilula';
+
+            return '<tr>'
+              + '<td>' + escapar(usuario.nome || '-') + '</td>'
+              + '<td class="email">' + escapar(usuario.email) + '</td>'
+              + '<td><span class="' + classe + '">' + escapar(usuario.perfilNome) + '</span></td>'
+              + '</tr>';
+          }).join('');
+
+          document.getElementById('statusUsuarios').outerHTML =
+            '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th></tr></thead>'
+            + '<tbody>' + linhas + '</tbody></table>'
+            + '<div class="aviso">Para incluir ou remover algu&eacute;m, ajuste a fun&ccedil;&atilde;o '
+            + '<strong>definirUsuariosAutorizados()</strong> no editor do Apps Script e execute-a. '
+            + 'A mudan&ccedil;a vale na hora, sem publicar nova vers&atilde;o.</div>';
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'usuarios') {
+            return;
+          }
+
+          document.getElementById('statusUsuarios').outerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarUsuarios();
+    }
+
+    /**
+     * Abre e fecha o menu no celular.
+     */
+    function alternarMenu() {
+      menu.classList.toggle('aberto');
+    }
+
+    window.addEventListener('hashchange', function () {
+      const id = window.location.hash.replace('#', '');
+
+      if (id && id !== moduloAtual) {
+        abrirModulo(id);
+      }
+    });
+
+    montarUsuario();
+    montarMenu();
+    abrirModulo(window.location.hash.replace('#', '') || MODULOS[0].id);
+  </script>
+</body>
+</html>
