@@ -390,8 +390,8 @@ Essa rotina:
 4. **Sincronização**: Move arquivo processado (Processados/Falhas no Drive)
 5. **Planilha** (opcional): Atualiza planilha de controle com dados (não impede sucesso se falhar)
 
-Essa movimentação é o que alimenta a tela **Solicitações enviadas** do
-[sistema interno](apps-scripts/README.md#solicitações-enviadas): a pasta em que
+Essa movimentação é o que alimenta a tela **Solicitações de Inscrições** do
+[sistema interno](apps-scripts/README.md#solicitações-de-inscrições): a pasta em que
 o arquivo está é o status exibido para a diretoria, sem nada a sincronizar.
 
 ## Observações

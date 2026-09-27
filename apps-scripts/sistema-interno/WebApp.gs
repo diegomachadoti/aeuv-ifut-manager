@@ -84,7 +84,8 @@ const CONFIG = {
 const USUARIOS_PADRAO = [
   { email: 'deejaydiego@gmail.com', nome: 'Diego Machado', perfil: 'admin' },
   { email: 'artetopudi@gmail.com', nome: 'Diretoria', perfil: 'admin' },
-  { email: 'associacaoaeuv@gmail.com', nome: 'AEUV', perfil: 'admin' }
+  { email: 'associacaoaeuv@gmail.com', nome: 'AEUV', perfil: 'admin' },
+  { email: 'costtitiiure@gmail.com', nome: 'Iure Costtiti', perfil: 'admin' }
 ];
 
 /**
@@ -95,6 +96,15 @@ const PERFIS = {
   diretoria: 'Diretoria',
   membro: 'Membro'
 };
+
+/**
+ * Grupos do menu lateral. Um modulo entra num grupo declarando
+ * "grupo" com o id correspondente; os demais ficam soltos, no nivel
+ * de cima. Grupo sem nenhum modulo liberado nao aparece.
+ */
+const GRUPOS = [
+  { id: 'formularios', nome: 'Formulários', icone: '📨' }
+];
 
 /**
  * Modulos do sistema. Para publicar uma funcionalidade nova basta
@@ -109,6 +119,9 @@ const PERFIS = {
  *   solicitacoes - consulta dos pedidos de inscricao, remocao e portabilidade
  *   associados- cadastro e consulta das equipes associadas
  *   breve     - funcionalidade planejada, ainda sem tela
+ *
+ * grupo (opcional): id de um item de GRUPOS. Modulos do mesmo grupo
+ * ficam juntos num submenu e precisam estar lado a lado nesta lista.
  */
 const MODULOS = [
   {
@@ -124,6 +137,7 @@ const MODULOS = [
     nome: 'Súmula digital',
     icone: '📋',
     tipo: 'link',
+    grupo: 'formularios',
     url: 'https://portal.aeuv.org/sumula/',
     descricao: 'Formulário oficial preenchido pela arbitragem após cada partida.',
     perfis: ['admin', 'diretoria', 'membro']
@@ -133,13 +147,14 @@ const MODULOS = [
     nome: 'Inscrição e portabilidade',
     icone: '📝',
     tipo: 'link',
+    grupo: 'formularios',
     url: 'https://portal.aeuv.org/inscricao/',
     descricao: 'Solicitações de inscrição, remoção e portabilidade de atletas.',
     perfis: ['admin', 'diretoria', 'membro']
   },
   {
     id: 'solicitacoes',
-    nome: 'Solicitações enviadas',
+    nome: 'Solicitações de Inscrições',
     icone: '📥',
     tipo: 'solicitacoes',
     descricao: 'Consulta aos pedidos de inscrição, remoção e portabilidade e à situação de cada um.',
@@ -219,6 +234,7 @@ function doGet(e) {
     email: sessao.email,
     motivo: sessao.motivo,
     modulos: sessao.autorizado ? modulosPermitidos_(sessao.usuario.perfil) : [],
+    grupos: GRUPOS,
     embutido: origem === 'portal',
 
     // Só oferece a volta ao portal em acesso direto. Quando o proprio portal
@@ -347,6 +363,7 @@ function modulosPermitidos_(perfil) {
       icone: modulo.icone,
       tipo: modulo.tipo,
       descricao: modulo.descricao,
+      grupo: modulo.grupo || '',
       url: modulo.url || ''
     };
   });
@@ -365,7 +382,8 @@ function definirUsuariosAutorizados() {
   const lista = [
     { email: 'deejaydiego@gmail.com', nome: 'Diego Machado', perfil: 'admin' },
     { email: 'artetopudi@gmail.com', nome: 'Diretoria', perfil: 'admin' },
-    { email: 'associacaoaeuv@gmail.com', nome: 'AEUV', perfil: 'admin' }
+    { email: 'associacaoaeuv@gmail.com', nome: 'AEUV', perfil: 'admin' },
+    { email: 'costtitiiure@gmail.com', nome: 'Iure Costtiti', perfil: 'admin' }
   ];
 
   const validos = lista.filter(function (usuario) {

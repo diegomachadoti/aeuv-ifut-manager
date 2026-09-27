@@ -117,6 +117,40 @@
 
     .menu button.ativo .etiqueta { background: rgba(255, 255, 255, .22); color: #fff; }
 
+    /* ---------- Submenu ---------- */
+
+    .grupo-menu { margin-bottom: 2px; }
+
+    .titulo-grupo .seta {
+      flex: 0 0 auto;
+      font-size: 11px;
+      color: var(--apoio);
+      transition: transform .15s ease;
+    }
+
+    .grupo-menu.aberto .titulo-grupo .seta { transform: rotate(180deg); }
+
+    /* Quando o submenu esta fechado, um tracinho lembra que ha um item
+       em uso escondido ali dentro. */
+    .grupo-menu.com-ativo .titulo-grupo .rotulo::after {
+      content: '';
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      margin-left: 7px;
+      border-radius: 50%;
+      background: var(--azul);
+      vertical-align: middle;
+    }
+
+    .grupo-menu.aberto.com-ativo .titulo-grupo .rotulo::after { display: none; }
+
+    .itens-grupo { display: none; padding-left: 12px; }
+    .grupo-menu.aberto .itens-grupo { display: block; }
+
+    .itens-grupo button { font-size: 13px; padding: 9px 12px; }
+    .itens-grupo .icone { font-size: 15px; }
+
     .abrir-menu {
       display: none;
       width: 100%;
@@ -787,34 +821,120 @@
 
     /**
      * Monta o menu lateral com os modulos liberados para o perfil.
+     * Modulos do mesmo grupo entram num submenu que abre e fecha.
      */
     function montarMenu() {
-      menuItens.innerHTML = MODULOS.map(function (modulo) {
-        const etiqueta = modulo.tipo === 'breve'
-          ? '<span class="etiqueta">em breve</span>'
-          : (modulo.tipo === 'link' ? '<span class="etiqueta">abre fora</span>' : '');
+      const blocos = [];
 
-        return '<button type="button" data-modulo="' + escapar(modulo.id) + '">'
-          + '<span class="icone">' + escapar(modulo.icone) + '</span>'
-          + '<span class="rotulo">' + escapar(modulo.nome) + '</span>'
-          + etiqueta
-          + '</button>';
+      MODULOS.forEach(function (modulo) {
+        const ultimo = blocos[blocos.length - 1];
+
+        if (modulo.grupo && ultimo && ultimo.grupo === modulo.grupo) {
+          ultimo.itens.push(modulo);
+          return;
+        }
+
+        blocos.push({ grupo: modulo.grupo || '', itens: [modulo] });
+      });
+
+      menuItens.innerHTML = blocos.map(function (bloco) {
+        const itens = bloco.itens.map(botaoMenu).join('');
+
+        if (!bloco.grupo) {
+          return itens;
+        }
+
+        const grupo = descricaoGrupo(bloco.grupo);
+
+        return '<div class="grupo-menu" data-grupo="' + escapar(bloco.grupo) + '">'
+          + '<button type="button" class="titulo-grupo" data-abrir-grupo="' + escapar(bloco.grupo) + '">'
+          + '<span class="icone">' + escapar(grupo.icone) + '</span>'
+          + '<span class="rotulo">' + escapar(grupo.nome) + '</span>'
+          + '<span class="seta">&#9662;</span>'
+          + '</button>'
+          + '<div class="itens-grupo">' + itens + '</div>'
+          + '</div>';
       }).join('');
 
-      menuItens.querySelectorAll('button').forEach(function (botao) {
+      menuItens.querySelectorAll('[data-abrir-grupo]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          const id = botao.dataset.abrirGrupo;
+
+          gruposAbertos[id] = !gruposAbertos[id];
+          aplicarGrupos();
+        });
+      });
+
+      menuItens.querySelectorAll('[data-modulo]').forEach(function (botao) {
         botao.addEventListener('click', function () {
           abrirModulo(botao.dataset.modulo);
         });
       });
+
+      aplicarGrupos();
     }
 
     /**
-     * Marca o item ativo do menu.
+     * Botao de um modulo no menu.
+     */
+    function botaoMenu(modulo) {
+      const etiqueta = modulo.tipo === 'breve'
+        ? '<span class="etiqueta">em breve</span>'
+        : (modulo.tipo === 'link' ? '<span class="etiqueta">abre fora</span>' : '');
+
+      return '<button type="button" data-modulo="' + escapar(modulo.id) + '">'
+        + '<span class="icone">' + escapar(modulo.icone) + '</span>'
+        + '<span class="rotulo">' + escapar(modulo.nome) + '</span>'
+        + etiqueta
+        + '</button>';
+    }
+
+    /**
+     * Nome e icone de um grupo. Grupo nao declarado em GRUPOS ainda
+     * aparece, usando o proprio id, para nao sumir com os modulos dele.
+     */
+    function descricaoGrupo(id) {
+      const achado = (CONFIG.grupos || []).filter(function (grupo) {
+        return grupo.id === id;
+      })[0];
+
+      return achado || { id: id, nome: id, icone: '📁' };
+    }
+
+    /** Submenus abertos. Comecam fechados para encurtar o menu. */
+    let gruposAbertos = {};
+
+    /**
+     * Aplica o estado de aberto/fechado dos submenus.
+     */
+    function aplicarGrupos() {
+      menuItens.querySelectorAll('.grupo-menu').forEach(function (bloco) {
+        bloco.classList.toggle('aberto', !!gruposAbertos[bloco.dataset.grupo]);
+      });
+    }
+
+    /**
+     * Marca o item ativo do menu e abre o submenu que o contem, para
+     * o item em uso nunca ficar escondido.
      */
     function destacarMenu(id) {
-      menuItens.querySelectorAll('button').forEach(function (botao) {
+      menuItens.querySelectorAll('[data-modulo]').forEach(function (botao) {
         botao.classList.toggle('ativo', botao.dataset.modulo === id);
       });
+
+      const modulo = MODULOS.filter(function (item) { return item.id === id; })[0];
+
+      if (modulo && modulo.grupo) {
+        gruposAbertos[modulo.grupo] = true;
+      }
+
+      menuItens.querySelectorAll('.grupo-menu').forEach(function (bloco) {
+        const contem = !!bloco.querySelector('[data-modulo].ativo');
+
+        bloco.classList.toggle('com-ativo', contem);
+      });
+
+      aplicarGrupos();
     }
 
     /**
@@ -876,7 +996,7 @@
 
       if (modulo.tipo === 'solicitacoes') {
         conteudo.innerHTML = cabecalho
-          + '<p class="carregando" id="statusSolicitacoes">Carregando as solicita&ccedil;&otilde;es enviadas...</p>';
+          + '<p class="carregando" id="statusSolicitacoes">Carregando as solicita&ccedil;&otilde;es de inscri&ccedil;&atilde;o...</p>';
         carregarSolicitacoes();
         return;
       }

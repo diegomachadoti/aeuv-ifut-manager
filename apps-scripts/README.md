@@ -465,7 +465,8 @@ implantação parecer bloquear alguém indevidamente.
 
 O menu é montado a partir da constante `MODULOS` do `WebApp.gs`, e o servidor
 envia ao navegador **apenas** os módulos liberados para o perfil de quem entrou.
-Cada módulo declara `id`, `nome`, `icone`, `tipo`, `descricao` e `perfis`.
+Cada módulo declara `id`, `nome`, `icone`, `tipo`, `descricao` e `perfis`, e
+pode declarar `grupo` para entrar num submenu.
 
 | Tipo | Comportamento |
 | --- | --- |
@@ -473,14 +474,34 @@ Cada módulo declara `id`, `nome`, `icone`, `tipo`, `descricao` e `perfis`.
 | `link` | Abre um endereço externo em nova aba (usado pelos dois formulários). |
 | `usuarios` | Tabela de autorizados; busca os dados com `listarUsuarios()`. |
 | `punicoes` | Controle de punições; busca os dados com `listarPunicoes()`. |
-| `solicitacoes` | Solicitações enviadas; busca os dados com `listarSolicitacoes()`. |
+| `solicitacoes` | Solicitações de Inscrições; busca os dados com `listarSolicitacoes()`. |
 | `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
 | `breve` | Funcionalidade já prevista, exibida com o aviso "em desenvolvimento". |
 
-Módulos publicados hoje: Início, Súmula digital, Inscrição e portabilidade,
-Solicitações enviadas, Notas oficiais, Controle de punições, Associados,
-Atletas e Usuários do sistema. Notas oficiais e Atletas ainda estão marcados
-como `breve`, aguardando a tela correspondente.
+Módulos publicados hoje: Início, Formulários (Súmula digital e Inscrição e
+portabilidade), Solicitações de Inscrições, Notas oficiais, Controle de
+punições, Associados, Atletas e Usuários do sistema. Notas oficiais e Atletas
+ainda estão marcados como `breve`, aguardando a tela correspondente.
+
+#### Submenus
+
+Um módulo pode declarar `grupo` com o id de um item da constante `GRUPOS`. Os
+módulos de um mesmo grupo aparecem recolhidos sob um título que abre e fecha,
+em vez de ocupar uma linha cada no menu. Hoje existe um grupo: **Formulários**,
+que reúne a Súmula digital e a Inscrição e portabilidade — as duas telas que
+apenas levam a um endereço externo.
+
+Três regras valem a pena lembrar:
+
+- Módulos do mesmo grupo precisam estar **lado a lado** em `MODULOS`; a ordem da
+  lista é a ordem do menu.
+- O submenu começa fechado, mas **abre sozinho** quando o módulo em uso está
+  dentro dele, para o item ativo nunca ficar escondido.
+- Um grupo sem nenhum módulo liberado para o perfil simplesmente não aparece,
+  porque o servidor já filtra os módulos antes de enviá-los.
+
+No painel inicial cada módulo continua com seu próprio atalho, sem agrupamento:
+lá o objetivo é mostrar tudo o que a pessoa pode fazer.
 
 ### Controle de punições
 
@@ -577,7 +598,7 @@ Com `oauthScopes` declarado, o Apps Script deixa de acrescentar escopos sozinho.
 Por isso, ao usar um serviço novo no código, acrescente o escopo correspondente
 ao manifesto — e lembre que a mudança só vale após nova autorização.
 
-### Solicitações enviadas
+### Solicitações de Inscrições
 
 Consulta aos pedidos de inscrição, remoção e portabilidade que as equipes
 enviaram pelo formulário público. Evita abrir o Drive e ler os TXT um a um para
@@ -778,7 +799,9 @@ dos erros de permissão.
    chame-a com `google.script.run`. **Repita a verificação de permissão no
    servidor**, como faz `listarUsuarios()`: o que o navegador envia nunca deve
    ser considerado confiável.
-5. Publique uma nova versão da implantação.
+5. Para recolher o módulo num submenu, declare `grupo` com o id de um item de
+   `GRUPOS` e posicione-o junto dos irmãos na lista.
+6. Publique uma nova versão da implantação.
 
 A navegação usa o fragmento do endereço (`#usuarios`, `#notas`), então cada
 módulo pode ser guardado nos favoritos e o botão "voltar" funciona. No celular o
