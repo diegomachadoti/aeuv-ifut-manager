@@ -86,11 +86,22 @@ Essas páginas já estão publicadas no GitHub Pages (pasta `docs/` do branch
 `master`) e respondem no domínio da associação, conforme a tabela de
 [endereços publicados](#endereços-publicados).
 
+Cada página abre o formulário em um `iframe` que ocupa a tela inteira e começa a
+carregar junto com a página, escondido atrás de uma tela de carregamento com a
+logomarca da AEUV. Quando o formulário fica pronto, a tela de carregamento
+desaparece em transição suave. Assim o usuário vê uma única espera, e não o
+encadeamento de duas páginas em branco do redirecionamento. O endereço na barra
+continua sendo o da associação. Se o carregamento passar de 12 segundos, a
+página oferece um botão para abrir o formulário em nova aba.
+
 Pontos de manutenção:
 
 - A URL `/exec` de cada formulário fica na constante `URL_FORMULARIO` da página
   correspondente. Publicar uma **nova versão** da mesma implantação mantém a
   URL; criar uma **nova implantação** gera outra URL e exige atualizar a página.
+- O `iframe` depende de `XFrameOptionsMode.ALLOWALL` no `doGet()` dos dois
+  projetos e de a implantação estar publicada para acesso sem login. Alterar
+  qualquer um dos dois quebra a exibição embutida.
 - O arquivo `docs/CNAME` fixa o domínio `formularios.aeuv.org`. Ele corresponde
   a um registro CNAME no DNS do domínio apontando para `diegomachadoti.github.io`
   e não interfere no site da associação, que continua no Wix.

@@ -16,47 +16,155 @@
 
   <link rel="icon" href="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png">
   <style>
+    :root {
+      --azul: #14213d;
+      --dourado: #fca311;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
     body {
       margin: 0;
-      min-height: 100vh;
+      background: var(--azul);
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    /* O iframe carrega desde o inicio, escondido atras da tela de carregamento. */
+    #quadro {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #fff;
+      opacity: 0;
+      transition: opacity .35s ease;
+    }
+
+    #quadro.visivel { opacity: 1; }
+
+    #carregando {
+      position: fixed;
+      inset: 0;
       display: grid;
       place-items: center;
       text-align: center;
       padding: 24px;
-      background: #14213d;
-      color: #fff;
-      font-family: Arial, Helvetica, sans-serif;
+      background: var(--azul);
+      transition: opacity .35s ease;
     }
-    img { width: 120px; height: 120px; object-fit: contain; }
-    h1 { font-size: 20px; margin: 18px 0 6px; }
-    p { margin: 0 0 18px; opacity: .85; }
-    a {
+
+    #carregando.oculto {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .logo {
+      width: 110px;
+      height: 110px;
+      object-fit: contain;
+      animation: pulsar 1.8s ease-in-out infinite;
+    }
+
+    h1 { font-size: 19px; margin: 18px 0 4px; }
+    p { margin: 0; opacity: .85; font-size: 14px; }
+
+    .barra {
+      width: 190px;
+      height: 4px;
+      margin: 22px auto 0;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, .18);
+      overflow: hidden;
+    }
+
+    .barra span {
+      display: block;
+      width: 40%;
+      height: 100%;
+      border-radius: 4px;
+      background: var(--dourado);
+      animation: correr 1.2s ease-in-out infinite;
+    }
+
+    #alternativo {
+      display: none;
+      margin-top: 22px;
+    }
+
+    #alternativo a {
       display: inline-block;
-      background: #fca311;
-      color: #14213d;
+      background: var(--dourado);
+      color: var(--azul);
       font-weight: 700;
       text-decoration: none;
-      padding: 12px 22px;
+      padding: 11px 20px;
       border-radius: 8px;
+    }
+
+    @keyframes correr {
+      0% { transform: translateX(-110%); }
+      100% { transform: translateX(360%); }
+    }
+
+    @keyframes pulsar {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .logo, .barra span { animation: none; }
     }
   </style>
 </head>
 <body>
-  <main>
-    <img src="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png" alt="Logomarca da AEUV">
-    <h1>Relatório de Súmula</h1>
-    <p>Abrindo a súmula digital da AEUV...</p>
-    <a id="destino" href="#">Abrir súmula</a>
-  </main>
+  <iframe id="quadro" title="Relat&oacute;rio de S&uacute;mula" allow="clipboard-write"></iframe>
+
+  <div id="carregando">
+    <main>
+      <img class="logo" src="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png" alt="Logomarca da AEUV">
+      <h1>Relat&oacute;rio de S&uacute;mula</h1>
+      <p>Carregando a s&uacute;mula digital da AEUV...</p>
+      <div class="barra"><span></span></div>
+      <div id="alternativo">
+        <p>Est&aacute; demorando mais que o normal.</p>
+        <a id="destino" href="#" target="_blank" rel="noopener">Abrir s&uacute;mula em nova aba</a>
+      </div>
+    </main>
+  </div>
 
   <script>
-    // Cole aqui a URL /exec da implantacao da sumula digital no Apps Script.
+    // URL /exec da implantacao no Apps Script. Ao publicar uma NOVA implantacao, atualize aqui.
     const URL_FORMULARIO = 'https://script.google.com/macros/s/AKfycbyTkmXq4OU_aCO7uZazbnY2jM95pTRzAVbna8_4b2Cy2TSQfq76uUpXh46LQ47eSRtQsA/exec';
 
+    const quadro = document.getElementById('quadro');
+    const carregando = document.getElementById('carregando');
+    const alternativo = document.getElementById('alternativo');
     document.getElementById('destino').href = URL_FORMULARIO;
-    if (!URL_FORMULARIO.includes('COLE_O_ID_DA_IMPLANTACAO')) {
-      window.location.replace(URL_FORMULARIO);
+
+    let exibido = false;
+
+    function exibirFormulario() {
+      if (exibido) return;
+      exibido = true;
+      quadro.classList.add('visivel');
+      carregando.classList.add('oculto');
+      setTimeout(() => { carregando.style.display = 'none'; }, 400);
     }
+
+    // O load do iframe sinaliza a pagina do Apps Script pronta; a folga cobre a
+    // montagem do formulario dentro dela e evita a tela branca intermediaria.
+    quadro.addEventListener('load', () => setTimeout(exibirFormulario, 700));
+
+    // Se o navegador bloquear o iframe ou a resposta demorar, oferece o link direto.
+    setTimeout(() => {
+      if (!exibido) alternativo.style.display = 'block';
+    }, 12000);
+
+    quadro.src = URL_FORMULARIO;
   </script>
 </body>
 </html>
