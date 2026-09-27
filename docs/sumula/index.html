@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AEUV - Relatório de Súmula</title>
+  <meta name="description" content="Súmula digital da AEUV para preenchimento oficial da arbitragem.">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AEUV (Associação Esportiva Uberlandense Varzeana)">
+  <meta property="og:title" content="AEUV - Relatório de Súmula">
+  <meta property="og:description" content="Súmula digital da AEUV para preenchimento oficial da arbitragem.">
+  <meta property="og:image" content="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png">
+  <meta property="og:image:alt" content="Logomarca da AEUV">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" href="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 24px;
+      background: #14213d;
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    img { width: 120px; height: 120px; object-fit: contain; }
+    h1 { font-size: 20px; margin: 18px 0 6px; }
+    p { margin: 0 0 18px; opacity: .85; }
+    a {
+      display: inline-block;
+      background: #fca311;
+      color: #14213d;
+      font-weight: 700;
+      text-decoration: none;
+      padding: 12px 22px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png" alt="Logomarca da AEUV">
+    <h1>Relatório de Súmula</h1>
+    <p>Abrindo a súmula digital da AEUV...</p>
+    <a id="destino" href="#">Abrir súmula</a>
+  </main>
+
+  <script>
+    // Cole aqui a URL /exec da implantacao da sumula digital no Apps Script.
+    const URL_FORMULARIO = 'https://script.google.com/macros/s/AKfycbyTkmXq4OU_aCO7uZazbnY2jM95pTRzAVbna8_4b2Cy2TSQfq76uUpXh46LQ47eSRtQsA/exec';
+
+    document.getElementById('destino').href = URL_FORMULARIO;
+    if (!URL_FORMULARIO.includes('COLE_O_ID_DA_IMPLANTACAO')) {
+      window.location.replace(URL_FORMULARIO);
+    }
+  </script>
+</body>
+</html>

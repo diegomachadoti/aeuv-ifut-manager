@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AEUV - Inscrição, Remoção e Portabilidade</title>
+  <meta name="description" content="Formulário oficial da AEUV para inscrição, remoção e portabilidade de atletas e comissão técnica.">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AEUV (Associação Esportiva Uberlandense Varzeana)">
+  <meta property="og:title" content="AEUV - Inscrição, Remoção e Portabilidade">
+  <meta property="og:description" content="Formulário oficial da AEUV para inscrição, remoção e portabilidade de atletas e comissão técnica.">
+  <meta property="og:image" content="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png">
+  <meta property="og:image:alt" content="Logomarca da AEUV">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" href="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 24px;
+      background: #14213d;
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    img { width: 120px; height: 120px; object-fit: contain; }
+    h1 { font-size: 20px; margin: 18px 0 6px; }
+    p { margin: 0 0 18px; opacity: .85; }
+    a {
+      display: inline-block;
+      background: #fca311;
+      color: #14213d;
+      font-weight: 700;
+      text-decoration: none;
+      padding: 12px 22px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png" alt="Logomarca da AEUV">
+    <h1>Inscrição, Remoção e Portabilidade</h1>
+    <p>Abrindo o formulário da AEUV...</p>
+    <a id="destino" href="#">Abrir formulário</a>
+  </main>
+
+  <script>
+    // Cole aqui a URL /exec da implantacao do formulario de inscricao no Apps Script.
+    const URL_FORMULARIO = 'https://script.google.com/macros/s/AKfycbyP2WRKuyR9dbF4HVUFM14_p-exiNoPlQFyOlIx05_BBzcNkCR_fS7ruxXhtQ0rsnDBbg/exec';
+
+    document.getElementById('destino').href = URL_FORMULARIO;
+    if (!URL_FORMULARIO.includes('COLE_O_ID_DA_IMPLANTACAO')) {
+      window.location.replace(URL_FORMULARIO);
+    }
+  </script>
+</body>
+</html>
