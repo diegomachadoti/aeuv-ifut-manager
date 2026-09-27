@@ -150,16 +150,76 @@ O arquivo de resultado traz:
 - lista de inscritos por **inclusão** e **portabilidade**
 - bloco com todos os resultados por registro
 
+## Organização do Drive
+
+Todo o material que a automação lê ou escreve fica sob uma única pasta raiz no
+Google Drive, **`AEUV - Automação`**. Antes ela estava espalhada pela raiz do
+Meu Drive, misturada com pastas pessoais; agrupar facilita achar, compartilhar e
+fazer cópia de segurança de tudo de uma vez.
+
+```
+AEUV - Automação/
+├── Arquivos TXT - Sumulas Digitais/        ← [sumulas] folder_embed_url
+│   ├── Entrada/  Processados/  Falhas/
+│   └── Controle de Punicoes/               ← TXT + PDF lidos pelo sistema interno
+├── PDF - Sumulas Digitais/
+├── Anexos - Sumulas Digitais/
+├── Arquivos TXT - Inscricoes de Atletas/   ← [drive] folder_embed_url
+│   └── Entrada/  Processados/  Falhas/
+├── Comprovantes PIX - Inscricoes de Atletas/
+├── AEUV - Sumula Digital                   (planilha de respostas)
+├── AEUV - Respostas - Inscricao, Remocao e Portabilidade
+├── 7 SUPER LIGA UNIAO 2026 - CONTROLE FINANCEIRO...xlsx  ← [sheets] spreadsheet_id
+└── AEUV Logo.png                           ← [pdf] logo_url
+```
+
+### Como agrupar sem quebrar nada
+
+Mover um item no Drive **não altera o ID nem o nome dele**. Como a automação em
+Python usa IDs e os Apps Script procuram as pastas pelo nome, arrastar tudo para
+dentro da pasta raiz é seguro e não exige nenhuma alteração de código nem nova
+publicação dos WebApps.
+
+1. Crie a pasta `AEUV - Automação` na raiz do Meu Drive.
+2. Selecione os itens listados acima e arraste todos para dentro dela.
+3. Compartilhe a pasta raiz com quem precisa de acesso, em vez de compartilhar
+   pasta por pasta. O compartilhamento é herdado pelo conteúdo.
+4. Compartilhe a pasta raiz também com a service account, como **Editor**. O
+   endereço está no campo `client_email` do `google-service-account-*.json`.
+   Assim a automação em Python enxerga tudo de uma vez, e um item novo dentro da
+   raiz já nasce acessível — sem precisar lembrar de compartilhar de novo.
+
+**Não renomeie as pastas.** Os três Apps Script as localizam pelo nome exato,
+gravado em `CONFIG` (`pastaTxt`, `pastaPdf`, `pastaAnexos`, `pastaComprovantes`,
+`pastaArquivosTxt`, `punicoes.subpasta`). Renomear no Drive sem atualizar o
+`CONFIG` e republicar faz os formulários criarem uma pasta nova e vazia.
+
+### Cuidado com pastas duplicadas
+
+Quando não encontram a pasta pelo nome, os Apps Script **criam uma nova na raiz
+do Meu Drive** em vez de falhar. É um comportamento proposital (o formulário
+nunca perde um envio), mas silencioso: os arquivos novos passam a cair fora da
+pasta raiz e ninguém percebe. Se aparecer uma pasta com nome conhecido solta na
+raiz do Drive, mova o conteúdo de volta para a pasta original — a que tem o ID
+usado no `config.ini` — e apague a duplicata.
+
+Vale o mesmo cuidado ao criar pastas: a busca por nome é global no Drive, então
+dois itens com o mesmo nome deixam o resultado imprevisível.
+
 ## Fluxo de sincronização com Google Drive
 
 ### Estrutura de pastas esperada no Drive
 
 ```
-Pasta Raiz (folder_embed_url)
+Arquivos TXT - Inscricoes de Atletas/   (folder_embed_url)
 ├── Entrada/          (arquivos a processar)
 ├── Processados/      (arquivos processados com sucesso)
 └── Falhas/           (arquivos que falharam)
 ```
+
+Essa pasta fica dentro de `AEUV - Automação` (veja
+[Organização do Drive](#organização-do-drive)). A pasta das súmulas segue a
+mesma divisão, configurada em `[sumulas] folder_embed_url`.
 
 ### Movimentação automática de arquivos
 

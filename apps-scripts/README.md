@@ -176,6 +176,35 @@ Pontos de manutenção:
 > publicar um formulário para acesso público não torna automaticamente seguros
 > ou públicos os arquivos associados.
 
+## Pastas no Drive
+
+Todas as pastas e planilhas usadas pelos três aplicativos ficam agrupadas sob a
+pasta raiz **`AEUV - Automação`**, no Drive da associação, junto com o material
+da automação em Python. A lista completa está em
+[Organização do Drive](../README.md#organização-do-drive), no README principal.
+
+| Nome da pasta | Usada por |
+| --- | --- |
+| `Arquivos TXT - Sumulas Digitais` | Súmula digital (TXT) e sistema interno (punições) |
+| `PDF - Sumulas Digitais` | Súmula digital |
+| `Anexos - Sumulas Digitais` | Súmula digital |
+| `Arquivos TXT - Inscricoes de Atletas` | Inscrição, remoção e portabilidade |
+| `Comprovantes PIX - Inscricoes de Atletas` | Inscrição, remoção e portabilidade |
+
+Os nomes são procurados **pelo nome exato**, gravado em `CONFIG` de cada
+projeto. Duas consequências práticas:
+
+- **Não renomeie nem mova o conteúdo entre pastas.** Mover a pasta inteira é
+  seguro (o nome e o ID não mudam); renomeá-la sem atualizar o `CONFIG` e
+  republicar não é.
+- **Não crie outra pasta com o mesmo nome.** A busca do `DriveApp` varre o Drive
+  inteiro, e o aplicativo fica com a primeira que encontrar.
+
+Quando não acha a pasta, o aplicativo **cria uma nova na raiz do Meu Drive** em
+vez de falhar — nenhum envio se perde, mas o arquivo vai parar fora do lugar
+sem aviso. Se surgir uma dessas pastas soltas na raiz, mova o conteúdo de volta
+para a pasta original e apague a duplicata.
+
 ## Inscrição, remoção e portabilidade
 
 ### O que o formulário recebe
