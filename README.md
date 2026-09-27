@@ -186,7 +186,7 @@ AEUV - Automação/
 ├── PDF - Sumulas Digitais/
 ├── Anexos - Sumulas Digitais/
 ├── Arquivos TXT - Inscricoes de Atletas/   ← [drive] folder_embed_url
-│   └── Entrada/  Processados/  Falhas/
+│   └── Entrada/  Processados/  Falhas/     ← a pasta é o status na tela de solicitações
 ├── Comprovantes PIX - Inscricoes de Atletas/
 ├── Documentos - Associados/                ← anexos do cadastro de associados
 │   └── <EQUIPE>/
@@ -389,6 +389,10 @@ Essa rotina:
 3. **Resultado**: Salva arquivo com resultado da execução
 4. **Sincronização**: Move arquivo processado (Processados/Falhas no Drive)
 5. **Planilha** (opcional): Atualiza planilha de controle com dados (não impede sucesso se falhar)
+
+Essa movimentação é o que alimenta a tela **Solicitações enviadas** do
+[sistema interno](apps-scripts/README.md#solicitações-enviadas): a pasta em que
+o arquivo está é o status exibido para a diretoria, sem nada a sincronizar.
 
 ## Observações
 

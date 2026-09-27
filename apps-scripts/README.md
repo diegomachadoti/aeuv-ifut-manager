@@ -188,7 +188,7 @@ da automação em Python. A lista completa está em
 | `Arquivos TXT - Sumulas Digitais` | Súmula digital (TXT) e sistema interno (punições) |
 | `PDF - Sumulas Digitais` | Súmula digital |
 | `Anexos - Sumulas Digitais` | Súmula digital |
-| `Arquivos TXT - Inscricoes de Atletas` | Inscrição, remoção e portabilidade |
+| `Arquivos TXT - Inscricoes de Atletas` | Inscrição, remoção e portabilidade e sistema interno (solicitações) |
 | `Comprovantes PIX - Inscricoes de Atletas` | Inscrição, remoção e portabilidade |
 | `Documentos - Associados` | Sistema interno (cadastro de associados) |
 
@@ -473,13 +473,14 @@ Cada módulo declara `id`, `nome`, `icone`, `tipo`, `descricao` e `perfis`.
 | `link` | Abre um endereço externo em nova aba (usado pelos dois formulários). |
 | `usuarios` | Tabela de autorizados; busca os dados com `listarUsuarios()`. |
 | `punicoes` | Controle de punições; busca os dados com `listarPunicoes()`. |
+| `solicitacoes` | Solicitações enviadas; busca os dados com `listarSolicitacoes()`. |
 | `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
 | `breve` | Funcionalidade já prevista, exibida com o aviso "em desenvolvimento". |
 
 Módulos publicados hoje: Início, Súmula digital, Inscrição e portabilidade,
-Notas oficiais, Controle de punições, Associados, Atletas e Usuários do sistema.
-Notas oficiais e Atletas ainda estão marcados como `breve`, aguardando a tela
-correspondente.
+Solicitações enviadas, Notas oficiais, Controle de punições, Associados,
+Atletas e Usuários do sistema. Notas oficiais e Atletas ainda estão marcados
+como `breve`, aguardando a tela correspondente.
 
 ### Controle de punições
 
@@ -576,11 +577,93 @@ Com `oauthScopes` declarado, o Apps Script deixa de acrescentar escopos sozinho.
 Por isso, ao usar um serviço novo no código, acrescente o escopo correspondente
 ao manifesto — e lembre que a mudança só vale após nova autorização.
 
+### Solicitações enviadas
+
+Consulta aos pedidos de inscrição, remoção e portabilidade que as equipes
+enviaram pelo formulário público. Evita abrir o Drive e ler os TXT um a um para
+saber o que chegou, o que já foi processado e o que falhou.
+Nada é gravado por esta tela: ela **só lê**. Quem escreve os arquivos é o
+[formulário de inscrição](#inscrição-remoção-e-portabilidade), que grava o TXT
+em `Entrada`; depois a automação em Python move o arquivo para `Processados` ou
+`Falhas`, conforme o resultado de cada registro no iFut.
+
+#### A pasta é o status
+
+Não existe banco de dados nem planilha guardando o andamento de uma solicitação:
+**a pasta em que o arquivo está é o próprio status**.
+
+| Pasta | Situação na tela | Significa |
+| --- | --- | --- |
+| `Entrada` | 🕒 Aguardando | O formulário recebeu o pedido; a automação ainda não rodou. |
+| `Processados` | 🟢 Processada | A automação executou os registros no iFut. |
+| `Falhas` | 🔴 Falha | A automação encontrou erro e separou o arquivo. |
+
+A vantagem é não haver nada para sincronizar: quem move o arquivo é a própria
+automação, e a tela apenas observa o resultado. As subpastas `Processados` e
+`Falhas` só passam a existir depois da primeira execução do Python; a ausência
+delas não é erro e a tela simplesmente não encontra nada nelas.
+
+#### Colunas escolhidas
+
+A lista mostra o que identifica a solicitação; o resto fica no detalhe, que abre
+ao clicar na linha. A separação é proposital: a tabela responde "o que chegou e
+em que pé está", e o detalhe responde "quem exatamente foi inscrito".
+
+| Coluna | Por que está ali |
+| --- | --- |
+| Situação | A pergunta mais frequente: já foi processada? |
+| Protocolo | Identificador informado à equipe no envio; é por ele que cobram. |
+| Enviada em | Data e hora do envio, com a competição abaixo. |
+| Equipe | Quem pediu. |
+| Responsável | Quem assinou, com o telefone abaixo, para contato direto. |
+| Registros | Quantas inclusões, remoções e portabilidades o pedido tem. |
+
+No detalhe aparecem os dados completos de cada pessoa — ação, tipo, nome
+completo, data de nascimento, CPF e, nas portabilidades, a competição anterior —
+além dos links para o comprovante PIX e para o arquivo TXT original. Campos que
+a ação dispensa são gravados como `NAO NECESSARIO` pelo formulário e viram um
+travessão na tela, em vez de repetir o aviso em toda linha.
+
+Ficaram de fora da tabela as confirmações de aceite (pagamento, termo médico,
+regulamento e declaração): o formulário só deixa enviar com todas marcadas, logo
+elas seriam sempre iguais e não ajudariam a distinguir uma solicitação de outra.
+
+#### Leitura e desempenho
+
+Ler todo o conteúdo de centenas de arquivos estouraria o tempo do Apps Script.
+A tela evita isso em duas etapas:
+
+1. **Listagem.** Percorre as três pastas recolhendo só os nomes. O formulário
+   nomeia cada arquivo como `<EQUIPE>-<data>-<milissegundos>.txt`, então dá para
+   ordenar do mais recente para o mais antigo sem abrir nenhum deles.
+2. **Leitura.** Abre apenas os primeiros `CONFIG.solicitacoes.maxLeitura`
+   arquivos (200 por padrão). Quando há mais que isso, a barra de ações avisa
+   quantos foram lidos do total.
+
+Arquivos que não terminam em `.txt` são ignorados, e nomes fora do padrão vão
+para o fim da lista em vez de quebrar a ordenação.
+
+O interpretador é tolerante de propósito: lê linhas no formato `CHAVE: valor`,
+trata `REGISTRO 01` como início de uma pessoa e descarta o que não tem `:`
+(títulos e separadores). Assim, acrescentar uma linha nova ao TXT do formulário
+não quebra a consulta.
+
+#### Permissão
+
+Liberada para **admin e diretoria**. Ficou fora do perfil `membro` porque a tela
+expõe nome, data de nascimento e CPF dos atletas, além do telefone do
+responsável. Como o aplicativo roda com a permissão de quem acessa, cada pessoa
+autorizada também precisa de acesso de leitura à pasta das inscrições no Drive.
+
+A pasta é a mesma usada pelo Python (`config.ini`, seção `[drive]`,
+`folder_embed_url`) e está declarada em `CONFIG.solicitacoes.pastaRaizId`.
+Quando a tela acusar erro, `diagnosticarSolicitacoes()` mostra quantos arquivos
+existem em cada subpasta e o que foi reconhecido no mais recente.
+
 ### Cadastro de associados
 
-Segunda funcionalidade com tela própria. Reúne num só lugar quem são as equipes
-associadas, quem responde legalmente por cada uma e qual documentação já foi
-entregue.
+Reúne num só lugar quem são as equipes associadas, quem responde legalmente por
+cada uma e qual documentação já foi entregue.
 
 **Um registro por equipe.** O associado é a equipe; a pessoa aparece como
 representante legal dela. Por isso a equipe funciona como chave: ao salvar, o
@@ -707,8 +790,8 @@ escolher uma opção.
 - Mantenha os aplicativos em projetos GAS separados. Os arquivos HTML devem
   continuar se chamando `Index` (no sistema interno também `Estilos`, `Negado` e
   `Ponte`); as funções chamadas pela interface são `salvarInscricao()`,
-  `salvarSumula()`, `listarUsuarios()`, `listarPunicoes()`, `listarAssociados()`
-  e `salvarAssociado()`.
+  `salvarSumula()`, `listarUsuarios()`, `listarPunicoes()`,
+  `listarSolicitacoes()`, `listarAssociados()` e `salvarAssociado()`.
 - Ao alterar equipes, competições ou outros dados de configuração, atualize as
   opções da interface e as validações do servidor em conjunto.
 - Mantenha a conta executora com acesso às planilhas, pastas e logo; verifique
@@ -718,5 +801,6 @@ escolher uma opção.
 - Para investigar falhas, confira as execuções do Apps Script e as permissões
   dos serviços Google. Erros do servidor são exibidos no formulário; no sistema
   interno, use `diagnosticarAcesso()` para problemas de acesso,
-  `diagnosticarPunicoes()` para a leitura do controle de punições e
+  `diagnosticarPunicoes()` para a leitura do controle de punições,
+  `diagnosticarSolicitacoes()` para a consulta das solicitações e
   `diagnosticarAssociados()` para o cadastro de associados.

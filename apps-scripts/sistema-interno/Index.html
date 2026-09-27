@@ -361,6 +361,58 @@
     .pilula.alerta { background: #fdecea; color: #922b21; font-weight: bold; }
     .pilula.definida { background: #e4f4e9; color: #1e8449; }
 
+    /* ----- Solicitações de inscrição ----- */
+
+    .solicitacoes { table-layout: fixed; font-size: 13px; }
+    .solicitacoes th, .solicitacoes td { padding: 9px 10px; }
+
+    .solicitacoes th:nth-child(1) { width: 13%; }
+    .solicitacoes th:nth-child(2) { width: 17%; }
+    .solicitacoes th:nth-child(3) { width: 16%; }
+    .solicitacoes th:nth-child(4) { width: 18%; }
+    .solicitacoes th:nth-child(5) { width: 22%; }
+    .solicitacoes th:nth-child(6) { width: 14%; }
+
+    .solicitacoes tbody tr.linha { cursor: pointer; }
+    .solicitacoes tbody tr.linha:hover { background: var(--fundo); }
+
+    .protocolo { font-weight: bold; color: var(--azul); font-family: monospace; }
+
+    .pilula.aguardando { background: #fff2d8; color: #8a5a00; font-weight: bold; }
+    .pilula.processada { background: #e4f4e9; color: #1e8449; font-weight: bold; }
+    .pilula.falha { background: #fdecea; color: #922b21; font-weight: bold; }
+
+    /* Contagem por ação, exibida na coluna de registros. */
+    .contagem { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; }
+    .contagem span { white-space: nowrap; color: var(--apoio); }
+    .contagem strong { color: var(--texto); }
+
+    .detalhe { background: var(--fundo); }
+    .detalhe > td { padding: 0 10px 14px; }
+
+    .detalhe-caixa {
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+      background: #fff;
+      padding: 14px 16px;
+    }
+
+    .detalhe-dados {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 22px;
+      font-size: 12px;
+      color: var(--apoio);
+      margin-bottom: 12px;
+    }
+
+    .detalhe-dados strong { color: var(--texto); font-weight: normal; }
+
+    table.pessoas { font-size: 12px; margin: 0; }
+    table.pessoas th, table.pessoas td { padding: 7px 8px; }
+    table.pessoas th { font-size: 11px; }
+    .pessoa-nome { font-weight: bold; color: var(--azul); }
+
     .vazio {
       margin-top: 16px;
       padding: 18px;
@@ -576,6 +628,67 @@
 
       /* Numa tela estreita cada campo ocupa a linha inteira. */
       .campo, .campo.largo, .campo.curto, .campo.mini, .documento { grid-column: span 12; }
+
+      .solicitacoes { min-width: 0; table-layout: auto; font-size: 14px; }
+
+      .solicitacoes tr.linha {
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        margin-bottom: 12px;
+        padding: 6px 4px;
+        background: #fff;
+      }
+
+      .solicitacoes tr.linha td {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px dashed var(--borda);
+        padding: 8px 10px;
+      }
+
+      .solicitacoes tr.linha td:last-child { border-bottom: 0; }
+
+      .solicitacoes tr.linha td::before {
+        content: attr(data-rotulo);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        color: var(--apoio);
+        flex: 0 0 38%;
+      }
+
+      /* O detalhe ja e uma ficha: fica colado na linha que o abriu. */
+      .detalhe > td { padding: 0 0 12px; }
+      .detalhe-caixa { padding: 12px; }
+
+      table.pessoas tr {
+        border: 1px solid var(--borda);
+        border-radius: 8px;
+        margin-bottom: 10px;
+        padding: 4px 2px;
+      }
+
+      table.pessoas tr:last-child { margin-bottom: 0; }
+
+      table.pessoas td {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px dashed var(--borda);
+        padding: 7px 9px;
+      }
+
+      table.pessoas tr td:last-child { border-bottom: 0; }
+
+      table.pessoas td::before {
+        content: attr(data-rotulo);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        color: var(--apoio);
+        flex: 0 0 38%;
+      }
     }
 
     .erro {
@@ -758,6 +871,13 @@
       if (modulo.tipo === 'punicoes') {
         conteudo.innerHTML = cabecalho + '<p class="carregando" id="statusPunicoes">Carregando o controle de puni&ccedil;&otilde;es...</p>';
         carregarPunicoes();
+        return;
+      }
+
+      if (modulo.tipo === 'solicitacoes') {
+        conteudo.innerHTML = cabecalho
+          + '<p class="carregando" id="statusSolicitacoes">Carregando as solicita&ccedil;&otilde;es enviadas...</p>';
+        carregarSolicitacoes();
         return;
       }
 
@@ -1085,6 +1205,297 @@
       }
 
       return situacao.indexOf('A CUMPRIR') === 0 ? 'pilula cumprir' : 'pilula';
+    }
+
+    /**
+     * Estado da tela de solicitacoes. A leitura do Drive e cara, entao
+     * acontece uma vez so e os filtros trabalham sobre essa copia.
+     */
+    let solicitacoes = { registros: [], situacoes: [], acoes: [], total: 0, limite: 0, pastaUrl: '' };
+
+    /** Protocolos com o detalhe aberto. */
+    let solicitacoesAbertas = {};
+
+    /**
+     * Busca no servidor as solicitacoes enviadas pelas equipes.
+     */
+    function carregarSolicitacoes() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'solicitacoes') {
+            return;
+          }
+
+          solicitacoes = dados;
+          solicitacoesAbertas = {};
+          montarTelaSolicitacoes();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'solicitacoes') {
+            return;
+          }
+
+          document.getElementById('statusSolicitacoes').outerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarSolicitacoes();
+    }
+
+    /**
+     * Monta os indicadores, os filtros e a tabela das solicitacoes.
+     */
+    function montarTelaSolicitacoes() {
+      const registros = solicitacoes.registros || [];
+
+      if (!registros.length) {
+        document.getElementById('statusSolicitacoes').outerHTML =
+          '<div class="vazio">Nenhuma solicita&ccedil;&atilde;o enviada at&eacute; o momento.</div>';
+        return;
+      }
+
+      const recorte = solicitacoes.total > registros.length
+        ? escapar(registros.length + ' mais recentes de ' + solicitacoes.total)
+        : '';
+
+      document.getElementById('statusSolicitacoes').outerHTML = ''
+        + '<div class="resumo" id="resumoSolicitacoes"></div>'
+        + '<div class="filtros">'
+        + '<input type="search" id="buscaSolicitacoes" placeholder="Buscar por protocolo, equipe, respons&aacute;vel ou atleta">'
+        + opcoesFiltro('situacao', 'Todas as situa&ccedil;&otilde;es', registros)
+        + opcoesFiltro('competicao', 'Todas as competi&ccedil;&otilde;es', registros)
+        + opcoesFiltro('equipe', 'Todas as equipes', registros)
+        + '</div>'
+        + '<div class="barra-acoes">'
+        + '<span id="contagemSolicitacoes"></span>'
+        + '<span class="espaco"></span>'
+        + (recorte ? '<span>' + recorte + '</span>' : '')
+        + '<button type="button" class="botao-apoio" id="recarregarSolicitacoes">Atualizar</button>'
+        + (solicitacoes.pastaUrl
+          ? '<a class="botao-apoio" href="' + escapar(solicitacoes.pastaUrl) + '" target="_blank" rel="noopener">Abrir pasta</a>'
+          : '')
+        + '</div>'
+        + '<div class="tabela-rolagem"><table class="solicitacoes"><thead><tr>'
+        + '<th>Situa&ccedil;&atilde;o</th><th>Protocolo</th><th>Enviada em</th><th>Equipe</th>'
+        + '<th>Respons&aacute;vel</th><th>Registros</th>'
+        + '</tr></thead><tbody id="linhasSolicitacoes"></tbody></table></div>';
+
+      document.getElementById('buscaSolicitacoes').addEventListener('input', filtrarSolicitacoes);
+      document.getElementById('recarregarSolicitacoes').addEventListener('click', function () {
+        abrirModulo('solicitacoes');
+      });
+
+      conteudo.querySelectorAll('[data-filtro]').forEach(function (campo) {
+        campo.addEventListener('change', filtrarSolicitacoes);
+      });
+
+      filtrarSolicitacoes();
+    }
+
+    /**
+     * Aplica a busca e os seletores e redesenha a tabela.
+     */
+    function filtrarSolicitacoes() {
+      const busca = simplificar(document.getElementById('buscaSolicitacoes').value.trim());
+      const selecionados = {};
+
+      conteudo.querySelectorAll('[data-filtro]').forEach(function (campo) {
+        selecionados[campo.dataset.filtro] = campo.value;
+      });
+
+      const filtrados = (solicitacoes.registros || []).filter(function (registro) {
+        const passaSelecao = Object.keys(selecionados).every(function (campo) {
+          return !selecionados[campo] || registro[campo] === selecionados[campo];
+        });
+
+        if (!passaSelecao) {
+          return false;
+        }
+
+        if (!busca) {
+          return true;
+        }
+
+        return simplificar(textoDaSolicitacao(registro)).indexOf(busca) !== -1;
+      });
+
+      desenharResumoSolicitacoes(filtrados);
+      desenharLinhasSolicitacoes(filtrados);
+    }
+
+    /**
+     * Junta o cabecalho e os nomes dos atletas para a busca livre
+     * encontrar a solicitacao tambem por quem foi inscrito nela.
+     */
+    function textoDaSolicitacao(registro) {
+      return [
+        registro.protocolo,
+        registro.dataHora,
+        registro.situacao,
+        registro.competicao,
+        registro.equipe,
+        registro.responsavel,
+        registro.telefone
+      ].concat((registro.pessoas || []).map(function (pessoa) {
+        return pessoa.nome + ' ' + pessoa.cpf + ' ' + pessoa.acao + ' ' + pessoa.tipo;
+      })).join(' ');
+    }
+
+    /**
+     * Indicadores do topo, sempre referentes ao que esta filtrado.
+     * Alem das solicitacoes, conta os atletas envolvidos nelas.
+     */
+    function desenharResumoSolicitacoes(registros) {
+      const pessoas = registros.reduce(function (total, registro) {
+        return total + registro.quantidade;
+      }, 0);
+
+      function porSituacao(situacao) {
+        return registros.filter(function (registro) {
+          return registro.situacao === situacao;
+        }).length;
+      }
+
+      const itens = [
+        ['', registros.length, 'Solicitações'],
+        ['cumprir', porSituacao('Aguardando'), 'Aguardando'],
+        ['cumprida', porSituacao('Processada'), 'Processadas'],
+        ['pendente', porSituacao('Falha'), 'Com falha'],
+        ['', pessoas, 'Registros']
+      ];
+
+      document.getElementById('resumoSolicitacoes').innerHTML = itens.map(function (item) {
+        return '<div class="indicador ' + item[0] + '">'
+          + '<div class="numero">' + item[1] + '</div>'
+          + '<div class="rotulo">' + item[2] + '</div>'
+          + '</div>';
+      }).join('');
+
+      const total = (solicitacoes.registros || []).length;
+
+      document.getElementById('contagemSolicitacoes').textContent = registros.length === total
+        ? registros.length + ' solicitação(ões)'
+        : registros.length + ' de ' + total + ' solicitação(ões)';
+    }
+
+    /**
+     * Desenha as linhas da tabela. Cada linha pode abrir uma segunda,
+     * com os dados completos e a lista de atletas da solicitacao.
+     */
+    function desenharLinhasSolicitacoes(registros) {
+      if (!registros.length) {
+        document.getElementById('linhasSolicitacoes').innerHTML =
+          '<tr><td colspan="6" style="text-align:center;color:var(--apoio);">'
+          + 'Nenhuma solicita&ccedil;&atilde;o encontrada com os filtros atuais.</td></tr>';
+        return;
+      }
+
+      document.getElementById('linhasSolicitacoes').innerHTML = registros.map(function (r) {
+        const aberta = !!solicitacoesAbertas[r.arquivoNome];
+
+        const linha = '<tr class="linha" data-arquivo="' + escapar(r.arquivoNome) + '">'
+          + celula('Situação', '<span class="' + classeSituacaoSolicitacao(r.situacao) + '">'
+            + escapar(r.icone + ' ' + r.situacao) + '</span>')
+          + celula('Protocolo', '<span class="protocolo">' + escapar(r.protocolo || '—') + '</span>')
+          + celula('Enviada em', escapar(r.dataHora || '—')
+            + '<div class="equipe-dado">' + escapar(r.competicao) + '</div>')
+          + celula('Equipe', '<span class="equipe-nome">' + escapar(r.equipe) + '</span>')
+          + celula('Responsável', escapar(r.responsavel)
+            + '<div class="equipe-dado">' + escapar(r.telefone) + '</div>')
+          + celula('Registros', contagemPorAcao(r))
+          + '</tr>';
+
+        return linha + (aberta ? detalheSolicitacao(r) : '');
+      }).join('');
+
+      conteudo.querySelectorAll('.solicitacoes tr.linha').forEach(function (linha) {
+        linha.addEventListener('click', function () {
+          const chave = linha.dataset.arquivo;
+
+          if (solicitacoesAbertas[chave]) {
+            delete solicitacoesAbertas[chave];
+          } else {
+            solicitacoesAbertas[chave] = true;
+          }
+
+          filtrarSolicitacoes();
+        });
+      });
+    }
+
+    /**
+     * Quantas pessoas de cada acao a solicitacao tem. Acoes zeradas
+     * ficam de fora para a coluna nao virar uma lista de zeros.
+     */
+    function contagemPorAcao(registro) {
+      const partes = (solicitacoes.acoes || []).filter(function (acao) {
+        return registro.resumo[acao];
+      }).map(function (acao) {
+        return '<span><strong>' + registro.resumo[acao] + '</strong> ' + escapar(nomeAcao(acao)) + '</span>';
+      });
+
+      if (!partes.length) {
+        return '<span class="equipe-dado">nenhum registro</span>';
+      }
+
+      return '<div class="contagem">' + partes.join('') + '</div>';
+    }
+
+    /**
+     * O formulario grava as acoes sem acento; aqui elas voltam acentuadas.
+     */
+    function nomeAcao(acao) {
+      const nomes = { Inclusao: 'inclusão', Remocao: 'remoção', Portabilidade: 'portabilidade' };
+
+      return nomes[acao] || acao;
+    }
+
+    /**
+     * Linha extra com os dados completos e a tabela de atletas.
+     */
+    function detalheSolicitacao(registro) {
+      const dados = [
+        ['Competição', registro.competicao],
+        ['Telefone', registro.telefone],
+        ['Arquivo', registro.arquivoNome]
+      ].filter(function (item) {
+        return item[1];
+      }).map(function (item) {
+        return '<span>' + escapar(item[0]) + ': <strong>' + escapar(item[1]) + '</strong></span>';
+      }).join('');
+
+      const links = '<div class="barra-acoes" style="margin-top:12px;">'
+        + (registro.comprovanteUrl
+          ? '<a class="botao-apoio" href="' + escapar(registro.comprovanteUrl) + '" target="_blank" rel="noopener">Comprovante PIX</a>'
+          : '<span class="equipe-dado">Sem comprovante anexado</span>')
+        + '<a class="botao-apoio" href="' + escapar(registro.arquivoUrl) + '" target="_blank" rel="noopener">Abrir arquivo</a>'
+        + '</div>';
+
+      const pessoas = (registro.pessoas || []).map(function (p) {
+        return '<tr>'
+          + celula('Ação', escapar(nomeAcao(p.acao)))
+          + celula('Tipo', escapar(p.tipo))
+          + celula('Nome', '<span class="pessoa-nome">' + escapar(p.nome) + '</span>')
+          + celula('Nascimento', escapar(p.nascimento || '—'))
+          + celula('CPF', escapar(formatarCpf(p.cpf) || '—'))
+          + celula('Competição anterior', escapar(p.competicaoAnterior || '—'))
+          + '</tr>';
+      }).join('');
+
+      const tabela = pessoas
+        ? '<table class="pessoas"><thead><tr><th>A&ccedil;&atilde;o</th><th>Tipo</th><th>Nome</th>'
+          + '<th>Nascimento</th><th>CPF</th><th>Competi&ccedil;&atilde;o anterior</th></tr></thead>'
+          + '<tbody>' + pessoas + '</tbody></table>'
+        : '<p class="equipe-dado">Esta solicita&ccedil;&atilde;o n&atilde;o tem registros.</p>';
+
+      return '<tr class="detalhe"><td colspan="6"><div class="detalhe-caixa">'
+        + (dados ? '<div class="detalhe-dados">' + dados + '</div>' : '')
+        + tabela
+        + links
+        + '</div></td></tr>';
+    }
+
+    function classeSituacaoSolicitacao(situacao) {
+      return 'pilula ' + simplificar(situacao);
     }
 
     /**

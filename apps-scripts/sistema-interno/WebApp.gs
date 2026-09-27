@@ -47,6 +47,19 @@ const CONFIG = {
   // Contato exibido para quem tenta entrar sem autorizacao.
   emailSuporte: 'associacaoaeuv@gmail.com',
 
+  // Solicitacoes de inscricao, remocao e portabilidade. A pasta e a mesma
+  // usada pelo formulario publico e pela automacao em Python (config.ini,
+  // secao [drive], folder_embed_url). Dentro dela ficam as subpastas
+  // Entrada, Processados e Falhas, que dao a situacao de cada solicitacao.
+  solicitacoes: {
+    pastaRaizId: '10hhnvDF_J7C0LE5JU9BrPST9D8Rf9qk1',
+
+    // Teto de arquivos abertos por consulta. A listagem le todos os nomes,
+    // mas so abre os mais recentes, para a tela nao estourar o tempo do
+    // Apps Script quando a temporada acumular centenas de envios.
+    maxLeitura: 200
+  },
+
   // Pasta raiz "AEUV - Automacao", que agrupa tudo o que o projeto usa no Drive.
   // A planilha e a pasta de documentos dos associados sao criadas dentro dela
   // por prepararAssociados().
@@ -93,6 +106,7 @@ const PERFIS = {
  *   link      - abre um endereco externo em nova aba
  *   usuarios  - tabela de autorizados (somente admin)
  *   punicoes  - controle de punicoes lido do arquivo no Drive
+ *   solicitacoes - consulta dos pedidos de inscricao, remocao e portabilidade
  *   associados- cadastro e consulta das equipes associadas
  *   breve     - funcionalidade planejada, ainda sem tela
  */
@@ -122,6 +136,14 @@ const MODULOS = [
     url: 'https://portal.aeuv.org/inscricao/',
     descricao: 'Solicitações de inscrição, remoção e portabilidade de atletas.',
     perfis: ['admin', 'diretoria', 'membro']
+  },
+  {
+    id: 'solicitacoes',
+    nome: 'Solicitações enviadas',
+    icone: '📥',
+    tipo: 'solicitacoes',
+    descricao: 'Consulta aos pedidos de inscrição, remoção e portabilidade e à situação de cada um.',
+    perfis: ['admin', 'diretoria']
   },
   {
     id: 'notas',
@@ -541,6 +563,220 @@ function moduloLiberado_(id, perfil) {
   return MODULOS.some(function (modulo) {
     return modulo.id === id && modulo.perfis.indexOf(perfil) !== -1;
   });
+}
+
+/******************************************************
+ * SOLICITACOES DE INSCRICAO, REMOCAO E PORTABILIDADE
+ *
+ * Somente leitura. Quem escreve os arquivos e o formulario publico
+ * (apps-scripts/inscricao-portabilidade), que grava o TXT em "Entrada";
+ * depois a automacao em Python move o arquivo para "Processados" ou
+ * "Falhas" conforme o resultado. Por isso a pasta onde o arquivo esta
+ * e o proprio status da solicitacao: nao existe outro lugar guardando
+ * esse estado, e nada precisa ser sincronizado.
+ ******************************************************/
+
+/**
+ * Pastas lidas, na ordem em que aparecem no filtro da tela.
+ * A ordem tambem define a prioridade quando o mesmo protocolo aparece
+ * em duas pastas (situacao rara, so acontece durante uma movimentacao).
+ */
+const SOLICITACOES_PASTAS = [
+  { pasta: 'Entrada', situacao: 'Aguardando', icone: '🕒' },
+  { pasta: 'Processados', situacao: 'Processada', icone: '🟢' },
+  { pasta: 'Falhas', situacao: 'Falha', icone: '🔴' }
+];
+
+/** Acoes possiveis em cada registro, como gravadas no TXT pelo formulario. */
+const SOLICITACOES_ACOES = ['Inclusao', 'Remocao', 'Portabilidade'];
+
+/**
+ * Devolve as solicitacoes para a tela de consulta.
+ * Chamada pelo cliente; refaz a verificacao de permissao no servidor.
+ * @return {{registros: Array<Object>, situacoes: Array<Object>, total: number,
+ *           limite: number, pastaUrl: string}}
+ */
+function listarSolicitacoes() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || !moduloLiberado_('solicitacoes', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar as solicitações de inscrição.');
+  }
+
+  const raiz = pastaSolicitacoes_();
+  const achados = [];
+
+  SOLICITACOES_PASTAS.forEach(function (origem) {
+    const pastas = raiz.getFoldersByName(origem.pasta);
+
+    // A pasta "Processados"/"Falhas" so existe depois que a automacao roda
+    // pela primeira vez; a ausencia dela nao e erro.
+    if (!pastas.hasNext()) {
+      return;
+    }
+
+    const iterador = pastas.next().getFiles();
+
+    while (iterador.hasNext()) {
+      const arquivo = iterador.next();
+
+      if (arquivo.getName().toLowerCase().slice(-4) !== '.txt') {
+        continue;
+      }
+
+      achados.push({
+        arquivo: arquivo,
+        situacao: origem.situacao,
+        icone: origem.icone,
+        ordem: carimboDoNome_(arquivo.getName())
+      });
+    }
+  });
+
+  // Mais recentes primeiro. O nome do arquivo termina com o horario do
+  // envio em milissegundos, entao da para ordenar sem abrir nenhum deles.
+  achados.sort(function (a, b) {
+    return b.ordem - a.ordem;
+  });
+
+  const limite = CONFIG.solicitacoes.maxLeitura;
+  const registros = achados.slice(0, limite).map(function (achado) {
+    return interpretarSolicitacao_(
+      achado.arquivo.getBlob().getDataAsString('UTF-8'),
+      achado
+    );
+  });
+
+  return {
+    registros: registros,
+    situacoes: SOLICITACOES_PASTAS,
+    acoes: SOLICITACOES_ACOES,
+    total: achados.length,
+    limite: limite,
+    pastaUrl: raiz.getUrl()
+  };
+}
+
+/**
+ * Pasta raiz das inscricoes, a mesma usada pelo formulario publico e
+ * pela automacao em Python (config.ini, secao [drive]).
+ * @return {DriveApp.Folder}
+ */
+function pastaSolicitacoes_() {
+  try {
+    return DriveApp.getFolderById(CONFIG.solicitacoes.pastaRaizId);
+  } catch (e) {
+    throw new Error('Não foi possível abrir a pasta das inscrições no Drive (id '
+      + CONFIG.solicitacoes.pastaRaizId + '). Verifique se o seu e-mail tem acesso a ela. '
+      + 'Detalhe: ' + (e && e.message ? e.message : e));
+  }
+}
+
+/**
+ * O formulario nomeia o arquivo como "<EQUIPE>-<data>-<milissegundos>.txt".
+ * Ler o carimbo do nome evita abrir o arquivo so para ordenar a lista.
+ * @param {string} nome
+ * @return {number} Milissegundos do envio, ou 0 quando o nome foge do padrao.
+ */
+function carimboDoNome_(nome) {
+  const achado = String(nome || '').match(/-(\d{10,})\.txt$/i);
+
+  return achado ? Number(achado[1]) : 0;
+}
+
+/**
+ * Transforma o TXT gerado pelo formulario em um objeto.
+ *
+ * O arquivo tem duas partes: um cabecalho de linhas "CHAVE: valor" e,
+ * depois de "ATLETAS E COMISSAO", um bloco por pessoa iniciado por
+ * "REGISTRO 01". Linhas sem ":" (titulos e separadores) sao ignoradas.
+ *
+ * @param {string} conteudo
+ * @param {{situacao: string, icone: string, arquivo: DriveApp.File}} achado
+ * @return {Object}
+ */
+function interpretarSolicitacao_(conteudo, achado) {
+  const cabecalho = {};
+  const pessoas = [];
+  let atual = null;
+
+  String(conteudo || '').split(/\r?\n/).forEach(function (linha) {
+    const texto = linha.trim();
+
+    if (!texto) {
+      return;
+    }
+
+    if (/^REGISTRO\s+\d+/i.test(texto)) {
+      atual = {};
+      pessoas.push(atual);
+      return;
+    }
+
+    const corte = texto.indexOf(':');
+
+    if (corte === -1) {
+      return;
+    }
+
+    const chave = texto.slice(0, corte).trim().toUpperCase();
+    const valor = texto.slice(corte + 1).trim();
+
+    if (atual) {
+      atual[chave] = valor;
+    } else {
+      cabecalho[chave] = valor;
+    }
+  });
+
+  const registros = pessoas.map(function (pessoa) {
+    return {
+      acao: pessoa['ACAO'] || '',
+      tipo: pessoa['TIPO'] || '',
+      nome: pessoa['NOME COMPLETO'] || '',
+      nascimento: valorInformado_(pessoa['DATA DE NASCIMENTO']),
+      cpf: valorInformado_(pessoa['CPF']),
+      competicaoAnterior: valorInformado_(pessoa['COMPETICAO ANTERIOR'])
+    };
+  });
+
+  const resumo = {};
+
+  SOLICITACOES_ACOES.forEach(function (acao) {
+    resumo[acao] = registros.filter(function (registro) {
+      return registro.acao === acao;
+    }).length;
+  });
+
+  return {
+    situacao: achado.situacao,
+    icone: achado.icone,
+    protocolo: cabecalho['PROTOCOLO'] || '',
+    dataHora: cabecalho['DATA/HORA'] || '',
+    ordem: achado.ordem,
+    competicao: cabecalho['COMPETICAO'] || '',
+    equipe: cabecalho['EQUIPE'] || '',
+    responsavel: cabecalho['RESPONSAVEL'] || '',
+    telefone: cabecalho['TELEFONE/WHATSAPP'] || '',
+    comprovanteUrl: cabecalho['COMPROVANTE PIX'] || '',
+    arquivoNome: achado.arquivo.getName(),
+    arquivoUrl: achado.arquivo.getUrl(),
+    quantidade: registros.length,
+    resumo: resumo,
+    pessoas: registros
+  };
+}
+
+/**
+ * O formulario grava "NAO NECESSARIO" nos campos que a acao dispensa.
+ * Na consulta isso vira vazio, para a tela mostrar um travessao.
+ * @param {string} valor
+ * @return {string}
+ */
+function valorInformado_(valor) {
+  const texto = String(valor == null ? '' : valor).trim();
+
+  return texto === 'NAO NECESSARIO' ? '' : texto;
 }
 
 /******************************************************
@@ -1267,6 +1503,57 @@ function diagnosticarPunicoes() {
   const registros = interpretarPunicoes_(arquivos.next().getBlob().getDataAsString('UTF-8'));
 
   Logger.log('Leitura concluida .: %s punicao(oes) reconhecida(s).', registros.length);
+}
+
+/**
+ * Confere a leitura das solicitacoes de inscricao.
+ *
+ * Execute pelo editor quando a tela acusar erro. Mostra quantos arquivos
+ * existem em cada subpasta e o conteudo reconhecido no mais recente.
+ */
+function diagnosticarSolicitacoes() {
+  Logger.log('Usuario ...........: %s', obterEmailAtivo_() || '(vazio)');
+
+  let raiz;
+
+  try {
+    raiz = pastaSolicitacoes_();
+    Logger.log('Pasta das inscricoes: %s', raiz.getName());
+  } catch (e) {
+    Logger.log('FALHOU: %s', e && e.message ? e.message : e);
+    return;
+  }
+
+  SOLICITACOES_PASTAS.forEach(function (origem) {
+    const pastas = raiz.getFoldersByName(origem.pasta);
+
+    if (!pastas.hasNext()) {
+      Logger.log('%s: subpasta nao encontrada (normal se a automacao ainda nao rodou).', origem.pasta);
+      return;
+    }
+
+    const arquivos = pastas.next().getFiles();
+    let total = 0;
+
+    while (arquivos.hasNext()) {
+      arquivos.next();
+      total++;
+    }
+
+    Logger.log('%s: %s arquivo(s).', origem.pasta, total);
+  });
+
+  const dados = listarSolicitacoes();
+
+  Logger.log('Leitura concluida .: %s solicitacao(oes) reconhecida(s) de %s arquivo(s).',
+    dados.registros.length, dados.total);
+
+  if (dados.registros.length) {
+    const primeira = dados.registros[0];
+
+    Logger.log('Mais recente ......: %s | %s | %s | %s pessoa(s)',
+      primeira.protocolo || '(sem protocolo)', primeira.equipe, primeira.situacao, primeira.quantidade);
+  }
 }
 
 /**
