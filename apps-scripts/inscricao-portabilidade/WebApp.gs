@@ -57,6 +57,9 @@ const WEBAPP_CONFIG = {
   maxArquivoBytes: 5 * 1024 * 1024,
   logoFileId: '1FZ5UyGPfciIp23D8d7XYJnY9vhFmSAhV',
   logoUrl: 'https://drive.google.com/thumbnail?id=1FZ5UyGPfciIp23D8d7XYJnY9vhFmSAhV&sz=w500',
+  // Icone da aba do navegador. Precisa ser uma URL publica terminada na extensao da imagem;
+  // links do Drive (thumbnail?id=...) nao funcionam aqui.
+  faviconUrl: 'https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png',
   regulamentoUrl: 'https://campeonato.ifut.com.br/c/7-super-liga-uniao-2026', // Cole aqui o link do regulamento da competicao.
 };
 
@@ -76,6 +79,7 @@ function doGet() {
   return template
     .evaluate()
     .setTitle('AEUV - Inscrição, Remoção e Portabilidade')
+    .setFaviconUrl(WEBAPP_CONFIG.faviconUrl)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }

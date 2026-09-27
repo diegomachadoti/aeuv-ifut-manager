@@ -25,6 +25,10 @@ const CONFIG = {
   // Arquivo do logo exibido no formulário e no PDF.
   logoFileId: '1FZ5UyGPfciIp23D8d7XYJnY9vhFmSAhV',
 
+  // Icone da aba do navegador. Precisa ser uma URL publica terminada na extensao da imagem;
+  // links do Drive (thumbnail?id=...) nao funcionam aqui.
+  faviconUrl: 'https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png',
+
   // Equipes disponíveis para seleção no formulário.
   equipes: [
     'AJAX',
@@ -69,6 +73,7 @@ function doGet() {
   return template
     .evaluate()
     .setTitle('AEUV - Relatório de Súmula')
+    .setFaviconUrl(CONFIG.faviconUrl)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }

@@ -11,6 +11,18 @@ arquivos no Google Drive.
 | **Inscrição, remoção e portabilidade** | `inscricao-portabilidade/` | Receber solicitações para atletas e comissão técnica, salvar comprovantes e gerar arquivos TXT. |
 | **Súmula digital** | `sumula-digital/` | Registrar relatórios de arbitragem e gerar arquivos TXT e PDF. |
 
+### Endereços publicados
+
+| Aplicativo | Link de divulgação | URL da implantação (Apps Script) |
+| --- | --- | --- |
+| Inscrição, remoção e portabilidade | https://formularios.aeuv.org/inscricao/ | `https://script.google.com/macros/s/AKfycbyP2WRKuyR9dbF4HVUFM14_p-exiNoPlQFyOlIx05_BBzcNkCR_fS7ruxXhtQ0rsnDBbg/exec` |
+| Súmula digital | https://formularios.aeuv.org/sumula/ | `https://script.google.com/macros/s/AKfycbyTkmXq4OU_aCO7uZazbnY2jM95pTRzAVbna8_4b2Cy2TSQfq76uUpXh46LQ47eSRtQsA/exec` |
+
+Divulgue sempre o link de `formularios.aeuv.org`, que exibe a logomarca e o nome
+da associação na prévia do compartilhamento e redireciona para a implantação
+correspondente. As URLs do Apps Script continuam válidas para acesso direto e
+para testes. Veja [Ícone da aba e prévia do link](#ícone-da-aba-e-prévia-do-link).
+
 Cada aplicativo é um projeto GAS independente composto por `WebApp.gs` e
 `Index.html`. **Não combine os arquivos das duas pastas em um único projeto:**
 ambos declaram `doGet()` e funções auxiliares com nomes iguais.
@@ -27,6 +39,7 @@ ambos declaram `doGet()` e funções auxiliares com nomes iguais.
 
 ## Conteúdo
 
+- [Endereços publicados](#endereços-publicados)
 - [Publicação e permissões](#publicação-e-permissões)
 - [Inscrição, remoção e portabilidade](#inscrição-remoção-e-portabilidade)
 - [Súmula digital](#súmula-digital)
@@ -50,6 +63,37 @@ Repita estes passos para cada aplicativo:
 Os dois formulários permitem incorporação em outras páginas
 (`XFrameOptionsMode.ALLOWALL`). A conta executora precisa manter acesso às
 planilhas, pastas e imagens utilizadas.
+
+### Ícone da aba e prévia do link
+
+Os dois projetos definem o ícone da aba do navegador pela chave `faviconUrl`,
+aplicada com `setFaviconUrl()` no `doGet()`. A URL precisa ser pública e
+terminar na extensão da imagem; links do Drive (`thumbnail?id=...`) não
+funcionam nesse campo. Por padrão a chave aponta para `assets/logo-aeuv.png`
+deste repositório. Uma tag `<link rel="icon">` escrita direto no `Index.html` é
+ignorada pelo Apps Script.
+
+Já a prévia exibida ao compartilhar o link (WhatsApp, Instagram e afins) vem das
+tags Open Graph da página, e o Apps Script não permite incluí-las: o formulário é
+servido dentro de uma página do Google e `addMetaTag()` só aceita tags como
+`viewport`. Para contornar isso, a pasta `docs/` deste repositório traz duas
+páginas de redirecionamento com as tags `og:image` e `og:title` da associação:
+
+- `docs/inscricao/index.html`
+- `docs/sumula/index.html`
+
+Essas páginas já estão publicadas no GitHub Pages (pasta `docs/` do branch
+`master`) e respondem no domínio da associação, conforme a tabela de
+[endereços publicados](#endereços-publicados).
+
+Pontos de manutenção:
+
+- A URL `/exec` de cada formulário fica na constante `URL_FORMULARIO` da página
+  correspondente. Publicar uma **nova versão** da mesma implantação mantém a
+  URL; criar uma **nova implantação** gera outra URL e exige atualizar a página.
+- O arquivo `docs/CNAME` fixa o domínio `formularios.aeuv.org`. Ele corresponde
+  a um registro CNAME no DNS do domínio apontando para `diegomachadoti.github.io`
+  e não interfere no site da associação, que continua no Wix.
 
 > **Privacidade:** os formulários coletam dados pessoais, incluindo CPF,
 > documento do árbitro e comprovantes de pagamento. Restrinja o acesso aos
