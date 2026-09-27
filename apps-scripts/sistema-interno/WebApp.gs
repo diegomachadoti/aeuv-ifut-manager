@@ -454,14 +454,18 @@ function pastaPunicoes_() {
   try {
     raiz = DriveApp.getFolderById(CONFIG.punicoes.pastaSumulasId);
   } catch (e) {
-    throw new Error('Sem acesso à pasta das súmulas no Drive. Peça ao administrador para compartilhar '
-      + 'a pasta com o seu e-mail.');
+    // A mensagem original entra no texto porque distingue os dois casos comuns:
+    // falta de acesso a pasta e falta de autorizacao do servico Drive.
+    throw new Error('Não foi possível abrir a pasta das súmulas no Drive (id '
+      + CONFIG.punicoes.pastaSumulasId + '). Verifique se o seu e-mail tem acesso a ela. '
+      + 'Detalhe: ' + (e && e.message ? e.message : e));
   }
 
   const pastas = raiz.getFoldersByName(CONFIG.punicoes.subpasta);
 
   if (!pastas.hasNext()) {
-    throw new Error('A pasta "' + CONFIG.punicoes.subpasta + '" não foi encontrada no Drive.');
+    throw new Error('A pasta "' + CONFIG.punicoes.subpasta + '" não foi encontrada dentro de "'
+      + raiz.getName() + '".');
   }
 
   return pastas.next();
@@ -552,4 +556,62 @@ function diagnosticarAcesso() {
   if (!sessao.email) {
     Logger.log('ATENCAO: implante como "Executar como: Usuario que acessa o app da web".');
   }
+}
+
+/**
+ * Confere passo a passo a leitura do controle de punicoes.
+ *
+ * Execute esta funcao pelo editor quando a tela acusar falta de acesso. Alem de
+ * mostrar onde a leitura parou, a execucao pelo editor pede o consentimento dos
+ * servicos usados pelo codigo: se o app tiver sido autorizado antes de passar a
+ * ler o Drive, e isso que restabelece a permissao.
+ */
+function diagnosticarPunicoes() {
+  Logger.log('Usuario ...........: %s', obterEmailAtivo_() || '(vazio)');
+
+  let raiz;
+
+  try {
+    raiz = DriveApp.getFolderById(CONFIG.punicoes.pastaSumulasId);
+    Logger.log('Pasta das sumulas .: %s', raiz.getName());
+  } catch (e) {
+    Logger.log('FALHOU ao abrir a pasta das sumulas: %s', e && e.message ? e.message : e);
+    Logger.log('Confira o id em CONFIG.punicoes.pastaSumulasId e o seu acesso a essa pasta.');
+    return;
+  }
+
+  const pastas = raiz.getFoldersByName(CONFIG.punicoes.subpasta);
+
+  if (!pastas.hasNext()) {
+    Logger.log('FALHOU: subpasta "%s" nao encontrada.', CONFIG.punicoes.subpasta);
+    Logger.log('Subpastas existentes:');
+
+    const todas = raiz.getFolders();
+
+    while (todas.hasNext()) {
+      Logger.log(' - %s', todas.next().getName());
+    }
+
+    return;
+  }
+
+  const pasta = pastas.next();
+  const arquivos = pasta.getFilesByName(CONFIG.punicoes.arquivo);
+
+  if (!arquivos.hasNext()) {
+    Logger.log('FALHOU: arquivo "%s" nao encontrado na subpasta.', CONFIG.punicoes.arquivo);
+    Logger.log('Arquivos existentes:');
+
+    const todos = pasta.getFiles();
+
+    while (todos.hasNext()) {
+      Logger.log(' - %s', todos.next().getName());
+    }
+
+    return;
+  }
+
+  const registros = interpretarPunicoes_(arquivos.next().getBlob().getDataAsString('UTF-8'));
+
+  Logger.log('Leitura concluida .: %s punicao(oes) reconhecida(s).', registros.length);
 }

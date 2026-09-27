@@ -61,10 +61,13 @@ Repita estes passos para cada aplicativo:
 
 1. Crie um projeto independente em [Google Apps Script](https://script.google.com/).
 2. Copie `WebApp.gs` para um arquivo de script e cada `.html` da pasta para um
-   arquivo HTML de mesmo nome (`Index`, e no sistema interno também `Estilos`
-   e `Negado`).
+   arquivo HTML de mesmo nome (`Index`, e no sistema interno também `Estilos`,
+   `Negado` e `Ponte`).
 3. Autorize os serviços solicitados. Os projetos usam Google Sheets e Drive;
-   a súmula também usa Google Docs para gerar o PDF.
+   a súmula também usa Google Docs para gerar o PDF. No sistema interno,
+   copie também o `appsscript.json`: ele declara os escopos OAuth, e sem o
+   escopo do Drive a leitura do controle de punições falha mesmo com as pastas
+   compartilhadas.
 4. Siga as instruções de preparação específicas do aplicativo.
 5. Publique como **Aplicativo da Web**, escolhendo a conta executora e o público
    autorizado de acordo com a tabela abaixo.
@@ -392,6 +395,7 @@ acesso por Conta Google.
 | `Negado.html` | Tela exibida a quem não está autorizado. |
 | `Estilos.html` | CSS da identidade visual, compartilhado pelas duas telas. |
 | `Ponte.html` | Script que conversa com `portal.aeuv.org/sistema/`: avisa que o sistema abriu ou devolve a navegação ao domínio da associação. |
+| `appsscript.json` | Manifesto: fuso horário, escopos OAuth e modo de implantação do app da web. |
 
 ### Como o acesso é controlado
 
@@ -477,7 +481,6 @@ Dois pontos de atenção:
 
 - **Permissão.** O aplicativo roda com a permissão de quem acessa, então cada
   pessoa autorizada precisa ter acesso de leitura à pasta das súmulas no Drive.
-  Sem isso a tela explica o que falta, em vez de mostrar um erro técnico.
 - **Primeira cópia.** A conta de serviço usada pelo Python não tem cota de
   armazenamento e só consegue atualizar arquivos já existentes. O TXT e o PDF
   precisam ser enviados uma única vez à subpasta por uma conta de pessoa; depois
@@ -486,6 +489,60 @@ Dois pontos de atenção:
 A configuração fica em `CONFIG.punicoes`, no `WebApp.gs`: id da pasta das
 súmulas, nome da subpasta e nome do arquivo. Os dois nomes precisam ser iguais
 aos usados no `controle_punicoes.py`.
+
+#### Quando a tela acusa falta de acesso
+
+Execute `diagnosticarPunicoes()` no editor do Apps Script. A função percorre os
+mesmos passos da tela — abrir a pasta, achar a subpasta, achar o arquivo, ler os
+registros — e registra no log exatamente onde parou, listando o que existe de
+fato no Drive quando um nome não confere.
+
+Se o log trouxer **"You do not have permission to call DriveApp.getFolderById"**,
+o problema não é a pasta: é o consentimento. O Google fixa os escopos no momento
+em que o aplicativo é autorizado, então um projeto autorizado **antes** de passar
+a ler o Drive continua sem essa permissão, mesmo com a pasta compartilhada
+corretamente.
+
+A correção é declarar os escopos no manifesto, que é o que o `appsscript.json`
+deste repositório faz:
+
+| Escopo | Para quê |
+| --- | --- |
+| `.../auth/userinfo.email` | `Session.getActiveUser().getEmail()`, base do controle de acesso. |
+| `.../auth/drive` | Ler a pasta, o arquivo de controle e a logomarca. |
+
+Para aplicar: no editor do Apps Script, abra **Configurações do projeto**, marque
+*"Mostrar o arquivo de manifesto appsscript.json no editor"*, abra o arquivo,
+substitua o conteúdo pelo deste repositório e salve.
+
+Corrigir o manifesto **não basta por si só**. A autorização já concedida fica
+guardada na conta, e o editor continua usando esse consentimento antigo sem
+exibir nova tela — o erro se repete igual. Duas formas de forçar o pedido:
+
+1. **Recarregar o editor.** O Apps Script calcula os escopos ao carregar a
+   página, então salvar o manifesto na mesma sessão não muda nada. Feche a aba,
+   reabra o projeto e execute `diagnosticarPunicoes()`.
+2. **Revogar o acesso.** Em
+   [permissões da Conta Google](https://myaccount.google.com/permissions),
+   procure o projeto pelo nome e clique em *Remover acesso*. Projetos dos quais
+   você é o dono podem não aparecer nessa lista; nesse caso vale o item 1.
+
+Se mesmo assim a tela não aparecer, troque o escopo por um **diferente** do que
+foi concedido antes (por exemplo, `.../auth/drive` no lugar de
+`.../auth/drive.readonly`). Escopo diferente é o que garante que o Google
+reconheça a mudança e refaça a pergunta. Por isso o manifesto deste repositório
+usa `.../auth/drive`.
+
+Quando a tela surgir, ela vem com o aviso de app não verificado: clique em
+**Avançado** e depois em *Acessar (não seguro)*. É esperado — o aplicativo é da
+própria associação e não passou pela verificação pública do Google.
+
+Cada pessoa autorizada passa por essa tela na primeira vez que abrir o sistema,
+porque o aplicativo roda com a permissão de quem acessa.
+
+Com `oauthScopes` declarado, o Apps Script deixa de acrescentar escopos sozinho.
+Por isso, ao usar um serviço novo no código, acrescente o escopo correspondente
+ao manifesto — e lembre que a mudança só vale após nova autorização.
 
 ### Como acrescentar uma funcionalidade
 
@@ -520,4 +577,5 @@ escolher uma opção.
   quem deixou a diretoria. Mantenha sempre pelo menos um `admin`.
 - Para investigar falhas, confira as execuções do Apps Script e as permissões
   dos serviços Google. Erros do servidor são exibidos no formulário; no sistema
-  interno, use `diagnosticarAcesso()` para problemas de acesso.
+  interno, use `diagnosticarAcesso()` para problemas de acesso e
+  `diagnosticarPunicoes()` para a leitura do controle de punições.
