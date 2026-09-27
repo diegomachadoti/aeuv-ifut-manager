@@ -371,6 +371,142 @@
       font-size: 14px;
     }
 
+    /* ----- Cadastro de associados ----- */
+
+    .associados { table-layout: fixed; font-size: 13px; }
+    .associados th, .associados td { padding: 9px 10px; }
+
+    .associados th:nth-child(1) { width: 22%; }
+    .associados th:nth-child(2) { width: 13%; }
+    .associados th:nth-child(3) { width: 23%; }
+    .associados th:nth-child(4) { width: 18%; }
+    .associados th:nth-child(5) { width: 15%; }
+    .associados th:nth-child(6) { width: 9%; }
+
+    .associados tbody tr { cursor: pointer; }
+    .associados tbody tr:hover { background: var(--fundo); }
+
+    .equipe-nome { font-weight: bold; color: var(--azul); }
+    .equipe-dado { font-size: 12px; color: var(--apoio); }
+
+    .pilula.ativo { background: #e4f4e9; color: #1e8449; font-weight: bold; }
+    .pilula.pendente { background: #fff2d8; color: #8a5a00; font-weight: bold; }
+    .pilula.inativo { background: #fdecea; color: #922b21; font-weight: bold; }
+    .pilula.suspenso { background: #e6e8ec; color: #3b4254; font-weight: bold; }
+
+    .formulario {
+      margin-top: 18px;
+      border: 1px solid var(--borda);
+      border-radius: 12px;
+      padding: 18px;
+      background: #fff;
+    }
+
+    .formulario h3 {
+      margin: 0 0 4px;
+      font-size: 16px;
+      color: var(--azul);
+    }
+
+    .grupo {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--borda);
+    }
+
+    .grupo:first-of-type { border-top: 0; padding-top: 0; }
+
+    .grupo h4 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--apoio);
+    }
+
+    .campos {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 12px;
+    }
+
+    .campo { grid-column: span 4; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .campo.largo { grid-column: span 6; }
+    .campo.cheio { grid-column: span 12; }
+    .campo.curto { grid-column: span 3; }
+    .campo.mini { grid-column: span 2; }
+
+    .campo label { font-size: 12px; font-weight: bold; color: var(--azul); }
+    .campo .dica { font-size: 11px; color: var(--apoio); }
+
+    .campo input, .campo select {
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      padding: 9px 10px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--texto);
+      background: #fff;
+      min-width: 0;
+    }
+
+    .campo input:focus, .campo select:focus {
+      outline: 2px solid var(--dourado);
+      outline-offset: 1px;
+    }
+
+    .campo input[type="file"] { padding: 7px; font-size: 12px; }
+    .campo input:disabled, .campo select:disabled { background: var(--fundo); color: var(--apoio); }
+
+    .documento {
+      grid-column: span 6;
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .documento .titulo { font-size: 13px; font-weight: bold; color: var(--azul); }
+    .documento .dica { font-size: 11px; color: var(--apoio); }
+
+    .documento .situacao { font-size: 12px; }
+    .documento .situacao.entregue { color: #1e8449; font-weight: bold; }
+    .documento .situacao.falta { color: #8a5a00; }
+
+    .acoes-formulario {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--borda);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .botao-principal {
+      background: var(--azul);
+      color: #fff;
+      border-radius: 8px;
+      padding: 11px 20px;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .botao-principal:hover { background: var(--azul-claro); }
+    .botao-principal:disabled { opacity: .6; cursor: default; }
+
+    .sucesso {
+      margin-top: 16px;
+      border-left: 4px solid #1e8449;
+      background: #e4f4e9;
+      color: #14683a;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 14px;
+    }
+
     @media (max-width: 760px) {
       /* A tabela vira uma lista de fichas, uma por punicao. */
       table, thead, tbody, tr, th, td { display: block; }
@@ -408,6 +544,38 @@
         color: var(--apoio);
         flex: 0 0 38%;
       }
+
+      .associados { min-width: 0; table-layout: auto; font-size: 14px; }
+
+      .associados tr {
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        margin-bottom: 12px;
+        padding: 6px 4px;
+        background: #fff;
+      }
+
+      .associados td {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px dashed var(--borda);
+        padding: 8px 10px;
+      }
+
+      .associados tr td:last-child { border-bottom: 0; }
+
+      .associados td::before {
+        content: attr(data-rotulo);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        color: var(--apoio);
+        flex: 0 0 38%;
+      }
+
+      /* Numa tela estreita cada campo ocupa a linha inteira. */
+      .campo, .campo.largo, .campo.curto, .campo.mini, .documento { grid-column: span 12; }
     }
 
     .erro {
@@ -590,6 +758,13 @@
       if (modulo.tipo === 'punicoes') {
         conteudo.innerHTML = cabecalho + '<p class="carregando" id="statusPunicoes">Carregando o controle de puni&ccedil;&otilde;es...</p>';
         carregarPunicoes();
+        return;
+      }
+
+      if (modulo.tipo === 'associados') {
+        conteudo.innerHTML = cabecalho
+          + '<div id="areaAssociados"><p class="carregando">Carregando o cadastro de associados...</p></div>';
+        carregarAssociados();
         return;
       }
 
@@ -910,6 +1085,520 @@
       }
 
       return situacao.indexOf('A CUMPRIR') === 0 ? 'pilula cumprir' : 'pilula';
+    }
+
+    /**
+     * Estado da tela de associados. A lista e lida uma vez e os filtros
+     * trabalham sobre essa copia, sem novas idas ao servidor.
+     */
+    let associados = {
+      registros: [],
+      equipes: [],
+      status: [],
+      documentos: [],
+      podeEditar: false,
+      planilhaUrl: ''
+    };
+
+    /**
+     * Busca no servidor o cadastro de associados.
+     */
+    function carregarAssociados() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'associados') {
+            return;
+          }
+
+          associados = dados;
+          montarTelaAssociados();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'associados') {
+            return;
+          }
+
+          document.getElementById('areaAssociados').innerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarAssociados();
+    }
+
+    /**
+     * Monta os indicadores, os filtros e a tabela dos associados.
+     */
+    function montarTelaAssociados() {
+      const registros = associados.registros || [];
+
+      const novo = associados.podeEditar
+        ? '<button type="button" class="botao-apoio" id="novoAssociado">+ Novo cadastro</button>'
+        : '';
+
+      const planilha = associados.planilhaUrl
+        ? '<a class="botao-apoio" href="' + escapar(associados.planilhaUrl) + '" target="_blank" rel="noopener">Abrir planilha</a>'
+        : '';
+
+      const painel = '<div id="painelAssociados">'
+        + '<div class="resumo" id="resumoAssociados"></div>'
+        + '<div class="filtros">'
+        + '<input type="search" id="buscaAssociados" placeholder="Buscar por equipe, representante, CPF ou e-mail">'
+        + opcoesFiltroAssociados()
+        + '</div>'
+        + '<div class="barra-acoes">'
+        + '<span class="espaco"></span>' + novo + planilha
+        + '</div>'
+        + '<div class="tabela-rolagem"><table class="associados">'
+        + '<thead><tr><th>Equipe</th><th>Situação</th><th>Representante</th>'
+        + '<th>Contato</th><th>Cidade</th><th>Docs.</th></tr></thead>'
+        + '<tbody id="linhasAssociados"></tbody></table></div>'
+        + '</div>';
+
+      const vazio = '<div id="painelAssociados">'
+        + '<div class="barra-acoes"><span class="espaco"></span>' + novo + planilha + '</div>'
+        + '<div class="vazio">Nenhuma equipe associada cadastrada at&eacute; o momento.'
+        + (associados.podeEditar ? ' Use o bot&atilde;o acima para come&ccedil;ar.' : '')
+        + '</div></div>';
+
+      document.getElementById('areaAssociados').innerHTML = registros.length ? painel : vazio;
+
+      if (registros.length) {
+        desenharResumoAssociados(registros);
+        desenharLinhasAssociados(registros);
+
+        document.getElementById('buscaAssociados').addEventListener('input', filtrarAssociados);
+        document.getElementById('filtroStatus').addEventListener('change', filtrarAssociados);
+      }
+
+      const botaoNovo = document.getElementById('novoAssociado');
+
+      if (botaoNovo) {
+        botaoNovo.addEventListener('click', function () {
+          abrirFormularioAssociado(null);
+        });
+      }
+    }
+
+    /**
+     * Filtro de situacao, montado a partir das opcoes do servidor.
+     */
+    function opcoesFiltroAssociados() {
+      const opcoes = (associados.status || []).map(function (item) {
+        return '<option value="' + escapar(item.id) + '">' + escapar(item.icone + ' ' + item.nome) + '</option>';
+      }).join('');
+
+      return '<select id="filtroStatus"><option value="">Todas as situa&ccedil;&otilde;es</option>' + opcoes + '</select>';
+    }
+
+    /**
+     * Aplica busca e filtro de situacao sobre a lista carregada.
+     */
+    function filtrarAssociados() {
+      const termo = simplificar(document.getElementById('buscaAssociados').value);
+      const status = document.getElementById('filtroStatus').value;
+
+      const filtrados = (associados.registros || []).filter(function (registro) {
+        if (status && registro.status !== status) {
+          return false;
+        }
+
+        if (!termo) {
+          return true;
+        }
+
+        return simplificar([
+          registro.equipe, registro.nome, registro.email, registro.cpf, registro.cidade
+        ].join(' ')).indexOf(termo) !== -1;
+      });
+
+      desenharResumoAssociados(filtrados);
+      desenharLinhasAssociados(filtrados);
+    }
+
+    /**
+     * Indicadores por situacao, mais a contagem de documentos pendentes.
+     */
+    function desenharResumoAssociados(registros) {
+      const itens = (associados.status || []).map(function (item) {
+        return {
+          numero: registros.filter(function (r) { return r.status === item.id; }).length,
+          rotulo: item.icone + ' ' + item.nome
+        };
+      });
+
+      itens.push({
+        numero: registros.filter(function (r) { return r.pendencias > 0; }).length,
+        rotulo: '📎 Com documento pendente'
+      });
+
+      document.getElementById('resumoAssociados').innerHTML = itens.map(function (item) {
+        return '<div class="indicador"><span class="numero">' + item.numero + '</span>'
+          + '<span class="rotulo">' + escapar(item.rotulo) + '</span></div>';
+      }).join('');
+    }
+
+    /**
+     * Desenha as linhas da tabela. Clicar numa linha abre o cadastro.
+     */
+    function desenharLinhasAssociados(registros) {
+      const corpo = document.getElementById('linhasAssociados');
+
+      if (!registros.length) {
+        corpo.innerHTML = '<tr><td colspan="6"><div class="vazio">'
+          + 'Nenhum associado encontrado com esses filtros.</div></td></tr>';
+        return;
+      }
+
+      corpo.innerHTML = registros.map(function (r) {
+        const situacao = nomeStatus(r.status);
+        const docs = r.pendencias
+          ? '<span class="pilula pendente">' + r.pendencias + ' pendente' + (r.pendencias > 1 ? 's' : '') + '</span>'
+          : '<span class="pilula ativo">Completo</span>';
+
+        return '<tr data-equipe="' + escapar(r.equipe) + '">'
+          + celula('Equipe', '<span class="equipe-nome">' + escapar(r.equipe) + '</span>')
+          + celula('Situação', '<span class="pilula ' + escapar(r.status) + '">'
+            + escapar(situacao.icone + ' ' + situacao.nome) + '</span>')
+          + celula('Representante', escapar(r.nome)
+            + '<div class="equipe-dado">' + escapar(formatarCpf(r.cpf)) + '</div>')
+          + celula('Contato', escapar(formatarTelefone(r.telefone))
+            + '<div class="equipe-dado">' + escapar(r.email) + '</div>')
+          + celula('Cidade', escapar(r.cidade + (r.uf ? '/' + r.uf : '')))
+          + celula('Documentos', docs)
+          + '</tr>';
+      }).join('');
+
+      corpo.querySelectorAll('tr[data-equipe]').forEach(function (linha) {
+        linha.addEventListener('click', function () {
+          abrirFormularioAssociado(linha.dataset.equipe);
+        });
+      });
+    }
+
+    /**
+     * Abre o cadastro de uma equipe. Sem equipe, abre em branco.
+     * Quem nao pode editar ve os mesmos dados, apenas para leitura.
+     */
+    function abrirFormularioAssociado(equipe) {
+      const registro = (associados.registros || []).filter(function (r) {
+        return r.equipe === equipe;
+      })[0] || null;
+
+      const somenteLeitura = !associados.podeEditar;
+      const trava = somenteLeitura ? ' disabled' : '';
+
+      const equipes = (associados.equipes || []).slice();
+
+      // Equipe ja cadastrada fora da lista padrao continua aparecendo.
+      if (registro && equipes.indexOf(registro.equipe) === -1) {
+        equipes.push(registro.equipe);
+      }
+
+      const opcoesEquipe = equipes.sort().map(function (nome) {
+        const jaTem = (associados.registros || []).some(function (r) { return r.equipe === nome; });
+        const selecionada = registro && registro.equipe === nome;
+
+        // Sem registro aberto, esconde as equipes que ja tem cadastro:
+        // cada equipe entra uma vez so.
+        if (!registro && jaTem) {
+          return '';
+        }
+
+        return '<option value="' + escapar(nome) + '"' + (selecionada ? ' selected' : '') + '>'
+          + escapar(nome) + '</option>';
+      }).join('');
+
+      const opcoesStatus = (associados.status || []).map(function (item) {
+        const selecionado = registro ? registro.status === item.id : item.id === 'pendente';
+
+        return '<option value="' + escapar(item.id) + '"' + (selecionado ? ' selected' : '') + '>'
+          + escapar(item.icone + ' ' + item.nome) + '</option>';
+      }).join('');
+
+      const documentos = (associados.documentos || []).map(function (documento) {
+        const url = registro ? registro[documento.id] : '';
+        const situacao = url
+          ? '<span class="situacao entregue">Entregue</span> '
+            + '<a href="' + escapar(url) + '" target="_blank" rel="noopener">abrir arquivo</a>'
+          : '<span class="situacao falta">Ainda n&atilde;o enviado</span>';
+
+        const envio = somenteLeitura
+          ? ''
+          : '<input type="file" data-documento="' + escapar(documento.id) + '" '
+            + 'accept=".pdf,.jpg,.jpeg,.png,.webp">';
+
+        return '<div class="documento">'
+          + '<span class="titulo">' + escapar(documento.nome) + '</span>'
+          + '<span class="dica">' + escapar(documento.apoio) + '</span>'
+          + '<span>' + situacao + '</span>'
+          + envio
+          + '</div>';
+      }).join('');
+
+      const titulo = registro
+        ? (somenteLeitura ? 'Cadastro de ' + registro.equipe : 'Editar ' + registro.equipe)
+        : 'Novo associado';
+
+      const historico = registro && registro.atualizadoEm
+        ? '<p class="apoio">&Uacute;ltima altera&ccedil;&atilde;o em ' + escapar(registro.atualizadoEm)
+          + (registro.atualizadoPor ? ' por ' + escapar(registro.atualizadoPor) : '') + '.</p>'
+        : '';
+
+      const gravar = somenteLeitura
+        ? '<p class="apoio">O seu perfil permite consultar, mas n&atilde;o alterar o cadastro.</p>'
+        : '<button type="button" class="botao-principal" id="gravarAssociado">Salvar cadastro</button>';
+
+      document.getElementById('areaAssociados').innerHTML = '<div class="formulario">'
+        + '<h3>' + escapar(titulo) + '</h3>'
+        + historico
+        + '<div class="grupo"><h4>Equipe</h4><div class="campos">'
+        + '<div class="campo largo"><label for="fEquipe">Equipe associada</label>'
+        + '<select id="fEquipe"' + (registro ? ' disabled' : trava) + '>'
+        + (registro ? '' : '<option value="">Selecione</option>') + opcoesEquipe + '</select>'
+        + (registro ? '<span class="dica">A equipe n&atilde;o muda depois de cadastrada.</span>' : '')
+        + '</div>'
+        + '<div class="campo largo"><label for="fStatus">Situa&ccedil;&atilde;o</label>'
+        + '<select id="fStatus"' + trava + '>' + opcoesStatus + '</select></div>'
+        + '</div></div>'
+        + '<div class="grupo"><h4>Representante legal</h4><div class="campos">'
+        + campoTexto('fNome', 'Nome completo', registro ? registro.nome : '', 'cheio', trava, 'text')
+        + campoTexto('fNascimento', 'Data de nascimento', paraDataInput(registro ? registro.nascimento : ''), '', trava, 'date')
+        + campoTexto('fCpf', 'CPF', formatarCpf(registro ? registro.cpf : ''), '', trava, 'text')
+        + campoTexto('fRg', 'RG', registro ? registro.rg : '', '', trava, 'text')
+        + campoTexto('fEmail', 'E-mail', registro ? registro.email : '', 'largo', trava, 'email')
+        + campoTexto('fTelefone', 'Telefone com DDD', formatarTelefone(registro ? registro.telefone : ''), 'largo', trava, 'tel')
+        + '</div></div>'
+        + '<div class="grupo"><h4>Endere&ccedil;o</h4><div class="campos">'
+        + campoTexto('fCep', 'CEP', formatarCep(registro ? registro.cep : ''), 'curto', trava, 'text')
+        + campoTexto('fLogradouro', 'Logradouro', registro ? registro.logradouro : '', 'largo', trava, 'text')
+        + campoTexto('fNumero', 'Número', registro ? registro.numero : '', 'curto', trava, 'text')
+        + campoTexto('fComplemento', 'Complemento', registro ? registro.complemento : '', '', trava, 'text')
+        + campoTexto('fBairro', 'Bairro', registro ? registro.bairro : '', '', trava, 'text')
+        + campoTexto('fCidade', 'Cidade', registro ? registro.cidade : '', 'curto', trava, 'text')
+        + campoTexto('fUf', 'UF', registro ? registro.uf : '', 'mini', trava, 'text')
+        + '</div></div>'
+        + '<div class="grupo"><h4>Documenta&ccedil;&atilde;o</h4>'
+        + '<p class="apoio">Arquivos PDF, JPG, PNG ou WEBP, de at&eacute; 5 MB cada. '
+        + 'Enviar um arquivo novo substitui o anterior.</p>'
+        + '<div class="campos">' + documentos + '</div></div>'
+        + '<div class="acoes-formulario">'
+        + gravar
+        + '<button type="button" class="botao-apoio" id="voltarAssociados">Voltar &agrave; lista</button>'
+        + '<span class="espaco"></span>'
+        + '<span class="apoio" id="avisoAssociado"></span>'
+        + '</div></div>';
+
+      document.getElementById('voltarAssociados').addEventListener('click', montarTelaAssociados);
+
+      const botaoGravar = document.getElementById('gravarAssociado');
+
+      if (botaoGravar) {
+        botaoGravar.addEventListener('click', function () {
+          gravarAssociado(registro);
+        });
+
+        ligarMascaras();
+      }
+    }
+
+    /**
+     * Monta um campo de texto do formulario.
+     */
+    function campoTexto(id, rotulo, valor, largura, trava, tipo) {
+      return '<div class="campo ' + largura + '">'
+        + '<label for="' + id + '">' + escapar(rotulo) + '</label>'
+        + '<input type="' + tipo + '" id="' + id + '" value="' + escapar(valor || '') + '"' + trava + '>'
+        + '</div>';
+    }
+
+    /**
+     * Formata CPF, telefone e CEP enquanto a pessoa digita.
+     */
+    function ligarMascaras() {
+      mascara('fCpf', 11, function (d) {
+        return d.replace(/^(\d{3})(\d{3})?(\d{3})?(\d{0,2})?$/, function (t, a, b, c, e) {
+          return a + (b ? '.' + b : '') + (c ? '.' + c : '') + (e ? '-' + e : '');
+        });
+      });
+
+      mascara('fCep', 8, function (d) {
+        return d.length > 5 ? d.slice(0, 5) + '-' + d.slice(5) : d;
+      });
+
+      mascara('fTelefone', 11, function (d) {
+        if (d.length <= 2) {
+          return d;
+        }
+
+        const corte = d.length > 10 ? 7 : 6;
+
+        return '(' + d.slice(0, 2) + ') ' + d.slice(2, corte)
+          + (d.length > corte ? '-' + d.slice(corte) : '');
+      });
+
+      const uf = document.getElementById('fUf');
+
+      uf.addEventListener('input', function () {
+        uf.value = uf.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 2);
+      });
+    }
+
+    /**
+     * Prende um campo a um formato, mantendo apenas digitos por baixo.
+     */
+    function mascara(id, digitos, formatar) {
+      const campo = document.getElementById(id);
+
+      campo.addEventListener('input', function () {
+        const limpo = campo.value.replace(/\D/g, '').slice(0, digitos);
+        campo.value = limpo ? formatar(limpo) : '';
+      });
+    }
+
+    /**
+     * Le o formulario, envia os anexos e grava no servidor.
+     */
+    function gravarAssociado(registro) {
+      const botao = document.getElementById('gravarAssociado');
+      const aviso = document.getElementById('avisoAssociado');
+
+      botao.disabled = true;
+      aviso.textContent = 'Enviando...';
+
+      const payload = {
+        equipe: registro ? registro.equipe : document.getElementById('fEquipe').value,
+        status: document.getElementById('fStatus').value,
+        nome: document.getElementById('fNome').value,
+        nascimento: document.getElementById('fNascimento').value,
+        email: document.getElementById('fEmail').value,
+        telefone: document.getElementById('fTelefone').value,
+        cep: document.getElementById('fCep').value,
+        logradouro: document.getElementById('fLogradouro').value,
+        numero: document.getElementById('fNumero').value,
+        complemento: document.getElementById('fComplemento').value,
+        bairro: document.getElementById('fBairro').value,
+        cidade: document.getElementById('fCidade').value,
+        uf: document.getElementById('fUf').value,
+        rg: document.getElementById('fRg').value,
+        cpf: document.getElementById('fCpf').value
+      };
+
+      lerAnexos().then(function (arquivos) {
+        payload.arquivos = arquivos;
+
+        google.script.run
+          .withSuccessHandler(function (resposta) {
+            carregarAssociados();
+
+            document.getElementById('areaAssociados').insertAdjacentHTML('beforebegin',
+              '<div class="sucesso" id="sucessoAssociado">' + escapar(resposta.equipe)
+              + (resposta.novo ? ' cadastrada' : ' atualizada') + ' com sucesso.</div>');
+
+            setTimeout(function () {
+              const recado = document.getElementById('sucessoAssociado');
+
+              if (recado) {
+                recado.remove();
+              }
+            }, 6000);
+          })
+          .withFailureHandler(function (erro) {
+            botao.disabled = false;
+            aviso.innerHTML = '<span style="color:#922b21;">'
+              + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+          })
+          .salvarAssociado(payload);
+      }).catch(function (erro) {
+        botao.disabled = false;
+        aviso.innerHTML = '<span style="color:#922b21;">'
+          + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+      });
+    }
+
+    /**
+     * Converte os arquivos escolhidos em base64 para envio ao servidor.
+     */
+    function lerAnexos() {
+      const campos = Array.prototype.slice.call(
+        document.querySelectorAll('[data-documento]')
+      ).filter(function (campo) {
+        return campo.files && campo.files.length;
+      });
+
+      return Promise.all(campos.map(function (campo) {
+        const arquivo = campo.files[0];
+
+        if (arquivo.size > 5 * 1024 * 1024) {
+          return Promise.reject(new Error('O arquivo "' + arquivo.name + '" passa de 5 MB.'));
+        }
+
+        return new Promise(function (resolve, reject) {
+          const leitor = new FileReader();
+
+          leitor.onload = function () {
+            resolve({
+              campo: campo.dataset.documento,
+              nome: arquivo.name,
+              tipo: arquivo.type,
+              tamanho: arquivo.size,
+              base64: String(leitor.result).split(',')[1]
+            });
+          };
+
+          leitor.onerror = function () {
+            reject(new Error('Não foi possível ler o arquivo "' + arquivo.name + '".'));
+          };
+
+          leitor.readAsDataURL(arquivo);
+        });
+      })).then(function (lidos) {
+        const arquivos = {};
+
+        lidos.forEach(function (item) {
+          arquivos[item.campo] = item;
+        });
+
+        return arquivos;
+      });
+    }
+
+    /**
+     * Situacao pelo id, com o circulo colorido.
+     */
+    function nomeStatus(id) {
+      return (associados.status || []).filter(function (item) {
+        return item.id === id;
+      })[0] || { icone: '', nome: id || '-' };
+    }
+
+    function formatarCpf(valor) {
+      const d = String(valor || '').replace(/\D/g, '');
+
+      return d.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : (valor || '');
+    }
+
+    function formatarTelefone(valor) {
+      const d = String(valor || '').replace(/\D/g, '');
+
+      if (d.length === 11) {
+        return d.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+      }
+
+      return d.length === 10 ? d.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3') : (valor || '');
+    }
+
+    function formatarCep(valor) {
+      const d = String(valor || '').replace(/\D/g, '');
+
+      return d.length === 8 ? d.replace(/(\d{5})(\d{3})/, '$1-$2') : (valor || '');
+    }
+
+    /**
+     * Converte dd/mm/aaaa da planilha para aaaa-mm-dd do campo de data.
+     */
+    function paraDataInput(valor) {
+      const partes = String(valor || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+
+      return partes ? partes[3] + '-' + partes[2] + '-' + partes[1] : '';
     }
 
     /**

@@ -188,6 +188,9 @@ AEUV - Automação/
 ├── Arquivos TXT - Inscricoes de Atletas/   ← [drive] folder_embed_url
 │   └── Entrada/  Processados/  Falhas/
 ├── Comprovantes PIX - Inscricoes de Atletas/
+├── Documentos - Associados/                ← anexos do cadastro de associados
+│   └── <EQUIPE>/
+├── AEUV - Associados                       (planilha do cadastro)
 ├── AEUV - Sumula Digital                   (planilha de respostas)
 ├── AEUV - Respostas - Inscricao, Remocao e Portabilidade
 ├── 7 SUPER LIGA UNIAO 2026 - CONTROLE FINANCEIRO...xlsx  ← [sheets] spreadsheet_id
@@ -205,9 +208,13 @@ dentro da pasta raiz é seguro e não exige nenhuma alteração de código nem n
 publicação dos WebApps.
 
 1. Crie a pasta `AEUV - Automação` na raiz do Meu Drive.
-2. Selecione os itens listados acima e arraste todos para dentro dela.
+2. Selecione os itens listados acima e arraste todos para dentro dela. As duas
+   últimas linhas (`Documentos - Associados` e `AEUV - Associados`) são criadas
+   pelo próprio sistema interno, já no lugar certo.
 3. Compartilhe a pasta raiz com quem precisa de acesso, em vez de compartilhar
-   pasta por pasta. O compartilhamento é herdado pelo conteúdo.
+   pasta por pasta. O compartilhamento é herdado pelo conteúdo. Quem cadastra
+   associados pelo sistema interno precisa de **Editor**; quem só consulta,
+   de **Leitor**.
 4. Compartilhe a pasta raiz também com a service account, como **Editor**. O
    endereço está no campo `client_email` do `google-service-account-*.json`.
    Assim a automação em Python enxerga tudo de uma vez, e um item novo dentro da

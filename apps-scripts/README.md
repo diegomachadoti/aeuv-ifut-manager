@@ -190,6 +190,7 @@ da automação em Python. A lista completa está em
 | `Anexos - Sumulas Digitais` | Súmula digital |
 | `Arquivos TXT - Inscricoes de Atletas` | Inscrição, remoção e portabilidade |
 | `Comprovantes PIX - Inscricoes de Atletas` | Inscrição, remoção e portabilidade |
+| `Documentos - Associados` | Sistema interno (cadastro de associados) |
 
 Os nomes são procurados **pelo nome exato**, gravado em `CONFIG` de cada
 projeto. Duas consequências práticas:
@@ -472,11 +473,12 @@ Cada módulo declara `id`, `nome`, `icone`, `tipo`, `descricao` e `perfis`.
 | `link` | Abre um endereço externo em nova aba (usado pelos dois formulários). |
 | `usuarios` | Tabela de autorizados; busca os dados com `listarUsuarios()`. |
 | `punicoes` | Controle de punições; busca os dados com `listarPunicoes()`. |
+| `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
 | `breve` | Funcionalidade já prevista, exibida com o aviso "em desenvolvimento". |
 
 Módulos publicados hoje: Início, Súmula digital, Inscrição e portabilidade,
-Notas oficiais, Controle de punições, Atletas e Usuários do sistema. Notas
-oficiais e Atletas ainda estão marcados como `breve`, aguardando a tela
+Notas oficiais, Controle de punições, Associados, Atletas e Usuários do sistema.
+Notas oficiais e Atletas ainda estão marcados como `breve`, aguardando a tela
 correspondente.
 
 ### Controle de punições
@@ -573,8 +575,115 @@ Com `oauthScopes` declarado, o Apps Script deixa de acrescentar escopos sozinho.
 Por isso, ao usar um serviço novo no código, acrescente o escopo correspondente
 ao manifesto — e lembre que a mudança só vale após nova autorização.
 
-### Como acrescentar uma funcionalidade
+### Cadastro de associados
 
+Segunda funcionalidade com tela própria. Reúne num só lugar quem são as equipes
+associadas, quem responde legalmente por cada uma e qual documentação já foi
+entregue.
+
+**Um registro por equipe.** O associado é a equipe; a pessoa aparece como
+representante legal dela. Por isso a equipe funciona como chave: ao salvar, o
+sistema procura a equipe na planilha e atualiza a linha existente em vez de
+criar outra. A comparação ignora acentos, maiúsculas e espaços repetidos
+(`chaveEquipe_`), então "Integração" e "INTEGRACAO" são a mesma equipe. No
+formulário de cadastro novo o combo só oferece equipes ainda sem registro, e na
+edição o campo fica travado.
+
+#### Por que planilha e não um arquivo TXT
+
+O controle de punições usa TXT porque só tem **um escritor**: a automação em
+Python regrava o arquivo inteiro e o sistema apenas lê. Aqui várias pessoas
+gravam e editam pela tela, uma de cada vez e sem ordem definida. Reescrever um
+TXT inteiro a cada alteração abriria espaço para perder dados quando dois
+cadastros acontecessem juntos.
+
+A planilha resolve isso com pouco esforço: é nativa do Apps Script, o
+`LockService` serializa as gravações, e a diretoria consegue abrir, filtrar,
+conferir e corrigir na mão quando precisar. Um banco de dados de verdade
+(Cloud SQL, Firestore) traria custo, credenciais e infraestrutura nova sem
+ganho perceptível na escala da associação — algumas dezenas de registros.
+
+#### Onde os dados ficam
+
+| O quê | Onde |
+| --- | --- |
+| Dados do cadastro | Planilha `AEUV - Associados`, aba `Associados` |
+| Documentos enviados | `Documentos - Associados/<EQUIPE>/` |
+
+As duas são criadas dentro da pasta raiz `AEUV - Automação` pela função
+`prepararAssociados()`, e os ids ficam nas propriedades de script
+`ASSOCIADOS_PLANILHA_ID` e `ASSOCIADOS_PASTA_ID`. Se a planilha ou a pasta for
+apagada, o sistema procura de novo pelo nome e recria se precisar.
+
+A ordem das colunas (`ASSOCIADOS_COLUNAS`) é o que liga cada célula ao seu
+campo. **Não reordene nem remova colunas** da planilha sem ajustar a constante:
+os dados passariam a ser lidos trocados.
+
+#### Campos
+
+| Bloco | Campos |
+| --- | --- |
+| Equipe | Equipe associada, Situação |
+| Representante legal | Nome completo, data de nascimento, CPF, RG, e-mail, telefone |
+| Endereço | CEP, logradouro, número, complemento, bairro, cidade, UF |
+| Documentação | Estatuto, ata de fundação, documento do responsável, comprovante de endereço, termo de associação, regulamento assinado |
+
+O endereço é separado em campos em vez de um único texto livre: assim dá para
+filtrar por cidade, conferir o CEP e aproveitar os dados depois, em mala direta
+ou relatórios.
+
+As quatro situações possíveis são 🟢 Ativo, 🟡 Pendente, 🔴 Inativo e ⚫ Suspenso.
+Todo cadastro novo começa como **Pendente**.
+
+Os documentos são **todos opcionais** — nem toda equipe tem estatuto registrado,
+e a documentação costuma chegar aos poucos. Em vez de travar o cadastro, a tela
+conta o que falta e mostra na coluna "Docs." e no indicador "Com documento
+pendente". Aceita PDF, JPG, PNG e WEBP, até 5 MB por arquivo. Enviar um arquivo
+novo **substitui** o anterior: a versão antiga vai para a lixeira, para a pasta
+da equipe não acumular cópias.
+
+#### Validações
+
+O servidor refaz todas as conferências, porque o que o navegador envia nunca é
+confiável:
+
+- **CPF** com os dígitos verificadores calculados, recusando também sequências
+  como `111.111.111-11`.
+- **Data de nascimento** precisa existir no calendário (não passa `31/02`) e o
+  representante precisa ser maior de 18 anos.
+- **Telefone** com 10 ou 11 dígitos, **CEP** com 8, **UF** com exatamente duas
+  letras, e-mail no formato esperado e nome completo com ao menos duas palavras.
+
+CPF, telefone e CEP são guardados **somente com dígitos** e formatados na
+exibição. Assim a busca funciona tanto por `52998224725` quanto pelo número
+pontuado.
+
+#### Permissões
+
+| Perfil | Pode |
+| --- | --- |
+| `admin`, `diretoria` | Consultar, cadastrar e editar |
+| `membro` | Apenas consultar |
+
+Quem só consulta vê a mesma tela, com os campos travados, sem botão de salvar e
+sem campo de envio — mas com os links dos documentos disponíveis. A regra está
+em `ASSOCIADOS_PERFIS_EDICAO` e é verificada de novo no servidor, dentro de
+`salvarAssociado()`.
+
+> **Atenção às permissões do Drive.** O sistema roda como *"Usuário que acessa"*,
+> então a gravação acontece com a conta de quem está usando a tela. Admins e
+> diretoria precisam de acesso de **Editor** à pasta `AEUV - Automação`; quem só
+> consulta precisa de **Leitor**. Sem isso a tela abre, mas falha ao salvar.
+
+#### Quando a tela acusa erro
+
+Execute **`diagnosticarAssociados()`** no editor do Apps Script. A função
+percorre pasta raiz → planilha → pasta de documentos → leitura e diz onde parou,
+terminando com a contagem de associados. Rodar pelo editor também renova o
+consentimento dos serviços usados pelo código, que é o que resolve a maior parte
+dos erros de permissão.
+
+### Como acrescentar uma funcionalidade
 1. Inclua um item em `MODULOS` no `WebApp.gs`, com um `id` único e a lista de
    `perfis` que podem vê-lo.
 2. Se for só um atalho para um endereço externo, use `tipo: 'link'` com a chave
@@ -597,7 +706,8 @@ escolher uma opção.
 - Mantenha os aplicativos em projetos GAS separados. Os arquivos HTML devem
   continuar se chamando `Index` (no sistema interno também `Estilos`, `Negado` e
   `Ponte`); as funções chamadas pela interface são `salvarInscricao()`,
-  `salvarSumula()`, `listarUsuarios()` e `listarPunicoes()`.
+  `salvarSumula()`, `listarUsuarios()`, `listarPunicoes()`, `listarAssociados()`
+  e `salvarAssociado()`.
 - Ao alterar equipes, competições ou outros dados de configuração, atualize as
   opções da interface e as validações do servidor em conjunto.
 - Mantenha a conta executora com acesso às planilhas, pastas e logo; verifique
@@ -606,5 +716,6 @@ escolher uma opção.
   quem deixou a diretoria. Mantenha sempre pelo menos um `admin`.
 - Para investigar falhas, confira as execuções do Apps Script e as permissões
   dos serviços Google. Erros do servidor são exibidos no formulário; no sistema
-  interno, use `diagnosticarAcesso()` para problemas de acesso e
-  `diagnosticarPunicoes()` para a leitura do controle de punições.
+  interno, use `diagnosticarAcesso()` para problemas de acesso,
+  `diagnosticarPunicoes()` para a leitura do controle de punições e
+  `diagnosticarAssociados()` para o cadastro de associados.
