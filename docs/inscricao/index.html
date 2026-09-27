@@ -62,9 +62,30 @@
       pointer-events: none;
     }
 
+    /* Anel giratorio ao redor da logomarca. */
+    .marca {
+      position: relative;
+      width: 150px;
+      height: 150px;
+      margin: 0 auto;
+      display: grid;
+      place-items: center;
+    }
+
+    .marca::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, .14);
+      border-top-color: var(--dourado);
+      border-right-color: var(--dourado);
+      animation: girar 1.1s linear infinite;
+    }
+
     .logo {
-      width: 110px;
-      height: 110px;
+      width: 104px;
+      height: 104px;
       object-fit: contain;
       animation: pulsar 1.8s ease-in-out infinite;
     }
@@ -72,22 +93,45 @@
     h1 { font-size: 19px; margin: 18px 0 4px; }
     p { margin: 0; opacity: .85; font-size: 14px; }
 
+    #reticencias::after {
+      content: '';
+      animation: reticencias 1.4s steps(4, end) infinite;
+    }
+
     .barra {
-      width: 190px;
-      height: 4px;
-      margin: 22px auto 0;
+      position: relative;
+      width: 210px;
+      height: 5px;
+      margin: 20px auto 0;
       border-radius: 4px;
-      background: rgba(255, 255, 255, .18);
+      background: rgba(255, 255, 255, .16);
       overflow: hidden;
     }
 
+    /* Avanca ate 90% conforme o tempo estimado e completa quando o formulario abre. */
     .barra span {
       display: block;
-      width: 40%;
+      width: 0;
       height: 100%;
       border-radius: 4px;
-      background: var(--dourado);
-      animation: correr 1.2s ease-in-out infinite;
+      background: linear-gradient(90deg, #ffc45c, var(--dourado));
+      transition: width .4s ease;
+    }
+
+    .barra::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 4px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent);
+      animation: brilho 1.4s ease-in-out infinite;
+    }
+
+    .etapa {
+      margin-top: 12px;
+      font-size: 13px;
+      opacity: .7;
+      min-height: 17px;
     }
 
     #alternativo {
@@ -105,18 +149,29 @@
       border-radius: 8px;
     }
 
-    @keyframes correr {
-      0% { transform: translateX(-110%); }
-      100% { transform: translateX(360%); }
+    @keyframes girar {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes brilho {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
     }
 
     @keyframes pulsar {
       0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.06); }
+      50% { transform: scale(1.05); }
+    }
+
+    @keyframes reticencias {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .logo, .barra span { animation: none; }
+      .logo, .marca::before, .barra::after, #reticencias::after { animation: none; }
     }
   </style>
 </head>
@@ -125,10 +180,13 @@
 
   <div id="carregando">
     <main>
-      <img class="logo" src="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png" alt="Logomarca da AEUV">
+      <div class="marca">
+        <img class="logo" src="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png" alt="Logomarca da AEUV">
+      </div>
       <h1>Inscri&ccedil;&atilde;o, Remo&ccedil;&atilde;o e Portabilidade</h1>
-      <p>Carregando o formul&aacute;rio da AEUV...</p>
-      <div class="barra"><span></span></div>
+      <p>Carregando o formul&aacute;rio da AEUV<span id="reticencias"></span></p>
+      <div class="barra"><span id="preenchimento"></span></div>
+      <p class="etapa" id="etapa">Conectando ao servidor...</p>
       <div id="alternativo">
         <p>Est&aacute; demorando mais que o normal.</p>
         <a id="destino" href="#" target="_blank" rel="noopener">Abrir formul&aacute;rio em nova aba</a>
@@ -145,14 +203,51 @@
     const alternativo = document.getElementById('alternativo');
     document.getElementById('destino').href = URL_FORMULARIO;
 
+    const preenchimento = document.getElementById('preenchimento');
+    const etapa = document.getElementById('etapa');
+
+    // Tempo tipico de carregamento do Apps Script, usado so para animar a barra.
+    const DURACAO_ESTIMADA = 20000;
+    const LIMITE_ALTERNATIVO = 35000;
+
+    const ETAPAS = [
+      [0, 'Conectando ao servidor...'],
+      [3000, 'Carregando o aplicativo...'],
+      [9000, 'Montando os campos do formul\u00e1rio...'],
+      [16000, 'Quase pronto...'],
+    ];
+
     let exibido = false;
+    const inicio = Date.now();
+
+    // A barra avanca desacelerando e para em 90%, reservando o fim para a abertura real.
+    const cronometro = setInterval(() => {
+      if (exibido) return;
+      const decorrido = Date.now() - inicio;
+      const progresso = 1 - Math.pow(1 - Math.min(decorrido / DURACAO_ESTIMADA, 1), 3);
+      preenchimento.style.width = (progresso * 90).toFixed(1) + '%';
+
+      for (let i = ETAPAS.length - 1; i >= 0; i--) {
+        if (decorrido >= ETAPAS[i][0]) {
+          if (etapa.textContent !== ETAPAS[i][1]) etapa.textContent = ETAPAS[i][1];
+          break;
+        }
+      }
+    }, 120);
 
     function exibirFormulario() {
       if (exibido) return;
       exibido = true;
-      quadro.classList.add('visivel');
-      carregando.classList.add('oculto');
-      setTimeout(() => { carregando.style.display = 'none'; }, 400);
+      clearInterval(cronometro);
+      preenchimento.style.width = '100%';
+      etapa.textContent = 'Pronto!';
+
+      // Deixa a barra completar antes da transicao, evitando corte brusco.
+      setTimeout(() => {
+        quadro.classList.add('visivel');
+        carregando.classList.add('oculto');
+        setTimeout(() => { carregando.style.display = 'none'; }, 400);
+      }, 300);
     }
 
     // O load do iframe sinaliza a pagina do Apps Script pronta; a folga cobre a
@@ -162,7 +257,7 @@
     // Se o navegador bloquear o iframe ou a resposta demorar, oferece o link direto.
     setTimeout(() => {
       if (!exibido) alternativo.style.display = 'block';
-    }, 12000);
+    }, LIMITE_ALTERNATIVO);
 
     quadro.src = URL_FORMULARIO;
   </script>
