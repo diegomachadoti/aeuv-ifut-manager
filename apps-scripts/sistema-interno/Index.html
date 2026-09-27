@@ -4,6 +4,7 @@
   <base target="_top">
   <meta charset="UTF-8">
   <?!= include_('Estilos') ?>
+  <?!= include_('Ponte') ?>
   <style>
     /* ---------- Identificacao do usuario no cabecalho ---------- */
 
@@ -243,6 +244,7 @@
       padding: 3px 10px;
       border-radius: 999px;
       font-size: 12px;
+      white-space: nowrap;
       background: #e9eef8;
       color: var(--azul);
     }
@@ -250,6 +252,163 @@
     .pilula.admin { background: var(--dourado); color: var(--azul); font-weight: bold; }
 
     .carregando { color: var(--apoio); font-size: 14px; margin-top: 16px; }
+
+    /* ---------- Controle de punicoes ---------- */
+
+    .resumo {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .indicador {
+      border: 1px solid var(--borda);
+      border-left: 4px solid var(--azul);
+      border-radius: 10px;
+      padding: 12px 14px;
+      background: #fff;
+    }
+
+    .indicador .numero {
+      font-size: 24px;
+      font-weight: bold;
+      color: var(--azul);
+      line-height: 1.1;
+    }
+
+    .indicador .rotulo {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      color: var(--apoio);
+      margin-top: 2px;
+    }
+
+    .indicador.cumprir { border-left-color: var(--dourado); }
+    .indicador.cumprida { border-left-color: #1e8449; }
+    .indicador.pendente { border-left-color: #c0392b; }
+
+    .filtros {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .filtros input, .filtros select {
+      flex: 1 1 170px;
+      min-width: 0;
+      padding: 10px 12px;
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      font-size: 14px;
+      background: #fff;
+      color: var(--texto);
+    }
+
+    .filtros input { flex: 2 1 240px; }
+
+    .barra-acoes {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--apoio);
+    }
+
+    .barra-acoes .espaco { flex: 1; }
+
+    .botao-apoio {
+      padding: 8px 14px;
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--azul);
+      font-size: 13px;
+      font-weight: bold;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .botao-apoio:hover { background: var(--fundo); }
+
+    .tabela-rolagem { overflow-x: auto; }
+
+    /* Larguras fixas: a tabela cabe na tela sem empurrar as colunas curtas. */
+    .punicoes { table-layout: fixed; font-size: 13px; }
+    .punicoes th, .punicoes td { padding: 9px 10px; }
+
+    .punicoes th:nth-child(1) { width: 9%; }
+    .punicoes th:nth-child(2) { width: 19%; }
+    .punicoes th:nth-child(3) { width: 11%; }
+    .punicoes th:nth-child(4) { width: 15%; }
+    .punicoes th:nth-child(5) { width: 10%; }
+    .punicoes th:nth-child(6) { width: 12%; }
+    .punicoes th:nth-child(7) { width: 11%; }
+    .punicoes th:nth-child(8) { width: 13%; }
+
+    .punicoes td:nth-child(1),
+    .punicoes td:nth-child(5) { white-space: nowrap; }
+
+    .punido-nome { font-weight: bold; color: var(--azul); }
+    .punido-dado { font-size: 12px; color: var(--apoio); }
+
+    .pilula.cumprir { background: #fff2d8; color: #8a5a00; font-weight: bold; }
+    .pilula.cumprida { background: #e4f4e9; color: #1e8449; font-weight: bold; }
+    .pilula.alerta { background: #fdecea; color: #922b21; font-weight: bold; }
+    .pilula.definida { background: #e4f4e9; color: #1e8449; }
+
+    .vazio {
+      margin-top: 16px;
+      padding: 18px;
+      border: 1px dashed var(--borda);
+      border-radius: 10px;
+      text-align: center;
+      color: var(--apoio);
+      font-size: 14px;
+    }
+
+    @media (max-width: 760px) {
+      /* A tabela vira uma lista de fichas, uma por punicao. */
+      table, thead, tbody, tr, th, td { display: block; }
+
+      thead { display: none; }
+
+      .punicoes { min-width: 0; table-layout: auto; font-size: 14px; }
+
+      .punicoes td:nth-child(1),
+      .punicoes td:nth-child(5) { white-space: normal; }
+
+      .punicoes tr {
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        margin-bottom: 12px;
+        padding: 6px 4px;
+        background: #fff;
+      }
+
+      .punicoes td {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px dashed var(--borda);
+        padding: 8px 10px;
+      }
+
+      .punicoes tr td:last-child { border-bottom: 0; }
+
+      .punicoes td::before {
+        content: attr(data-rotulo);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        color: var(--apoio);
+        flex: 0 0 38%;
+      }
+    }
 
     .erro {
       margin-top: 16px;
@@ -428,6 +587,12 @@
         return;
       }
 
+      if (modulo.tipo === 'punicoes') {
+        conteudo.innerHTML = cabecalho + '<p class="carregando" id="statusPunicoes">Carregando o controle de puni&ccedil;&otilde;es...</p>';
+        carregarPunicoes();
+        return;
+      }
+
       conteudo.innerHTML = cabecalho
         + '<div class="aviso"><strong>Em desenvolvimento.</strong> Esta funcionalidade j&aacute; est&aacute; '
         + 'prevista no sistema e ser&aacute; liberada em uma pr&oacute;xima vers&atilde;o.</div>';
@@ -505,6 +670,246 @@
             '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
         })
         .listarUsuarios();
+    }
+
+    /**
+     * Estado da tela de punicoes: o arquivo e lido uma vez e os filtros
+     * trabalham sobre essa copia, sem novas idas ao servidor.
+     */
+    let punicoes = { registros: [], atualizadoEm: '', arquivoUrl: '' };
+
+    /**
+     * Busca no servidor o controle de punicoes publicado no Drive.
+     */
+    function carregarPunicoes() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'punicoes') {
+            return;
+          }
+
+          punicoes = dados;
+          montarTelaPunicoes();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'punicoes') {
+            return;
+          }
+
+          document.getElementById('statusPunicoes').outerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarPunicoes();
+    }
+
+    /**
+     * Monta os indicadores, os filtros e a tabela do controle de punicoes.
+     */
+    function montarTelaPunicoes() {
+      const registros = punicoes.registros || [];
+
+      if (!registros.length) {
+        document.getElementById('statusPunicoes').outerHTML =
+          '<div class="vazio">Nenhuma puni&ccedil;&atilde;o registrada at&eacute; o momento.</div>';
+        return;
+      }
+
+      const atualizacao = punicoes.atualizadoEm
+        ? 'Atualizado em ' + escapar(punicoes.atualizadoEm)
+        : 'Dados lidos do arquivo de controle';
+
+      document.getElementById('statusPunicoes').outerHTML = ''
+        + '<div class="resumo" id="resumoPunicoes"></div>'
+        + '<div class="filtros">'
+        + '<input type="search" id="buscaPunicoes" placeholder="Buscar por atleta, equipe, nota ou artigo">'
+        + opcoesFiltro('competicao', 'Todas as competi&ccedil;&otilde;es', registros)
+        + opcoesFiltro('equipe', 'Todas as equipes', registros)
+        + opcoesFiltro('situacao', 'Todas as situa&ccedil;&otilde;es', registros)
+        + opcoesFiltro('status', 'Todos os status', registros)
+        + '</div>'
+        + '<div class="barra-acoes">'
+        + '<span id="contagemPunicoes"></span>'
+        + '<span class="espaco"></span>'
+        + '<span>' + atualizacao + '</span>'
+        + '<button type="button" class="botao-apoio" id="recarregarPunicoes">Atualizar</button>'
+        + (punicoes.arquivoUrl
+          ? '<a class="botao-apoio" href="' + escapar(punicoes.arquivoUrl) + '" target="_blank" rel="noopener">Abrir arquivo</a>'
+          : '')
+        + '</div>'
+        + '<div class="tabela-rolagem"><table class="punicoes"><thead><tr>'
+        + '<th>Nota</th><th>Punido</th><th>Equipe</th><th>Partida</th><th>Artigo</th>'
+        + '<th>Suspens&atilde;o</th><th>Status</th><th>Situa&ccedil;&atilde;o</th>'
+        + '</tr></thead><tbody id="linhasPunicoes"></tbody></table></div>';
+
+      document.getElementById('buscaPunicoes').addEventListener('input', filtrarPunicoes);
+      document.getElementById('recarregarPunicoes').addEventListener('click', function () {
+        abrirModulo('punicoes');
+      });
+
+      conteudo.querySelectorAll('[data-filtro]').forEach(function (campo) {
+        campo.addEventListener('change', filtrarPunicoes);
+      });
+
+      filtrarPunicoes();
+    }
+
+    /**
+     * Cria um seletor com os valores distintos de uma coluna.
+     */
+    function opcoesFiltro(campo, rotuloTodos, registros) {
+      const valores = [];
+
+      registros.forEach(function (registro) {
+        const valor = registro[campo];
+
+        if (valor && valor !== '-' && valores.indexOf(valor) === -1) {
+          valores.push(valor);
+        }
+      });
+
+      valores.sort();
+
+      return '<select data-filtro="' + campo + '"><option value="">' + rotuloTodos + '</option>'
+        + valores.map(function (valor) {
+          return '<option value="' + escapar(valor) + '">' + escapar(valor) + '</option>';
+        }).join('') + '</select>';
+    }
+
+    /**
+     * Tira acentos e maiusculas para a busca livre nao depender da digitacao.
+     */
+    function simplificar(texto) {
+      return String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    }
+
+    /**
+     * Aplica a busca e os seletores e redesenha a tabela.
+     */
+    function filtrarPunicoes() {
+      const busca = simplificar(document.getElementById('buscaPunicoes').value.trim());
+      const selecionados = {};
+
+      conteudo.querySelectorAll('[data-filtro]').forEach(function (campo) {
+        selecionados[campo.dataset.filtro] = campo.value;
+      });
+
+      const filtrados = (punicoes.registros || []).filter(function (registro) {
+        const passaSelecao = Object.keys(selecionados).every(function (campo) {
+          return !selecionados[campo] || registro[campo] === selecionados[campo];
+        });
+
+        if (!passaSelecao) {
+          return false;
+        }
+
+        if (!busca) {
+          return true;
+        }
+
+        return simplificar(Object.keys(registro).map(function (campo) {
+          return registro[campo];
+        }).join(' ')).indexOf(busca) !== -1;
+      });
+
+      desenharResumo(filtrados);
+      desenharLinhas(filtrados);
+    }
+
+    /**
+     * Indicadores do topo, sempre referentes ao que esta filtrado.
+     */
+    function desenharResumo(registros) {
+      const cumprir = registros.filter(function (r) { return r.situacao.indexOf('A CUMPRIR') === 0; }).length;
+      const cumpridas = registros.filter(function (r) { return r.situacao.indexOf('CUMPRIDA') === 0; }).length;
+      const pendentes = registros.filter(function (r) { return r.status !== 'DEFINIDA'; }).length;
+
+      const itens = [
+        ['', registros.length, 'Punições'],
+        ['cumprir', cumprir, 'A cumprir'],
+        ['cumprida', cumpridas, 'Cumpridas'],
+        ['pendente', pendentes, 'Pena a definir']
+      ];
+
+      document.getElementById('resumoPunicoes').innerHTML = itens.map(function (item) {
+        return '<div class="indicador ' + item[0] + '">'
+          + '<div class="numero">' + item[1] + '</div>'
+          + '<div class="rotulo">' + item[2] + '</div>'
+          + '</div>';
+      }).join('');
+
+      document.getElementById('contagemPunicoes').textContent = registros.length === (punicoes.registros || []).length
+        ? registros.length + ' registro(s)'
+        : registros.length + ' de ' + punicoes.registros.length + ' registro(s)';
+    }
+
+    /**
+     * Desenha as linhas da tabela (fichas empilhadas no celular).
+     */
+    function desenharLinhas(registros) {
+      if (!registros.length) {
+        document.getElementById('linhasPunicoes').innerHTML =
+          '<tr><td colspan="8" style="text-align:center;color:var(--apoio);">'
+          + 'Nenhuma puni&ccedil;&atilde;o encontrada com os filtros atuais.</td></tr>';
+        return;
+      }
+
+      document.getElementById('linhasPunicoes').innerHTML = registros.map(function (r) {
+        const detalhe = r.tipo + (r.camisa && r.camisa !== '-' ? ' · camisa ' + r.camisa : '')
+          + (r.cartaoVermelho === 'Sim' ? ' · cartão vermelho' : '');
+
+        return '<tr>'
+          + celula('Nota', escapar(r.nota) + '<div class="punido-dado">' + escapar(r.dataNota) + '</div>')
+          + celula('Punido', '<span class="punido-nome">' + escapar(r.punido) + '</span>'
+            + '<div class="punido-dado">' + escapar(detalhe) + '</div>')
+          + celula('Equipe', escapar(r.equipe))
+          + celula('Partida', escapar(r.partida) + '<div class="punido-dado">' + escapar(r.dataJogo) + '</div>')
+          + celula('Artigo', escapar(r.artigo))
+          + celula('Suspensão', escapar(suspensao(r)))
+          + celula('Status', '<span class="' + classeStatus(r.status) + '">' + escapar(r.status) + '</span>')
+          + celula('Situação', '<span class="' + classeSituacao(r.situacao) + '">' + escapar(r.situacao) + '</span>')
+          + '</tr>';
+      }).join('');
+    }
+
+    /**
+     * Celula com rotulo, usado no layout de ficha do celular.
+     */
+    function celula(rotulo, html) {
+      return '<td data-rotulo="' + escapar(rotulo) + '">' + html + '</td>';
+    }
+
+    /**
+     * Suspensao adicional aplicada na nota. Quando nao ha partidas nem prazo,
+     * mostra a decisao escrita na nota (por exemplo, pena ainda a definir).
+     */
+    function suspensao(registro) {
+      const partes = [];
+
+      if (registro.partidas && registro.partidas !== '-') {
+        partes.push(registro.partidas + (registro.partidas === '1' ? ' partida' : ' partidas'));
+      }
+
+      if (registro.tempo && registro.tempo !== '-') {
+        partes.push(registro.tempo);
+      }
+
+      if (partes.length) {
+        return partes.join(' + ');
+      }
+
+      return registro.decisao && registro.decisao !== '-' ? registro.decisao : '-';
+    }
+
+    function classeStatus(status) {
+      return 'pilula ' + (status === 'DEFINIDA' ? 'definida' : 'alerta');
+    }
+
+    function classeSituacao(situacao) {
+      if (situacao.indexOf('CUMPRIDA') === 0) {
+        return 'pilula cumprida';
+      }
+
+      return situacao.indexOf('A CUMPRIR') === 0 ? 'pilula cumprir' : 'pilula';
     }
 
     /**

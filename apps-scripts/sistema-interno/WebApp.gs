@@ -28,6 +28,22 @@ const CONFIG = {
   // Chave da propriedade de script que guarda a lista de autorizados.
   chaveUsuarios: 'USUARIOS_AUTORIZADOS',
 
+  // Endereco oficial de divulgacao, usado para manter o dominio da
+  // associacao na barra do navegador.
+  urlPortal: 'https://portal.aeuv.org/sistema/',
+
+  // Controle de punicoes: arquivo mantido pela automacao em Python
+  // (controle_punicoes.py), publicado numa subpasta da pasta das sumulas.
+  // Os nomes precisam ser iguais aos usados la.
+  punicoes: {
+    pastaSumulasId: '1OfcX-AFyeGEznieKfyqgQRiEjBDJockP',
+    subpasta: 'Controle de Punicoes',
+    arquivo: 'CONTROLE DE PUNIÇÕES - AEUV.txt',
+
+    // Guarda o id do arquivo encontrado para evitar nova busca a cada abertura.
+    chaveArquivo: 'PUNICOES_ARQUIVO_ID'
+  },
+
   // Contato exibido para quem tenta entrar sem autorizacao.
   emailSuporte: 'associacaoaeuv@gmail.com'
 };
@@ -57,10 +73,11 @@ const PERFIS = {
  * em renderizarModulo() no Index.html.
  *
  * tipo:
- *   painel   - tela inicial com os atalhos
- *   link     - abre um endereco externo em nova aba
- *   usuarios - tabela de autorizados (somente admin)
- *   breve    - funcionalidade planejada, ainda sem tela
+ *   painel    - tela inicial com os atalhos
+ *   link      - abre um endereco externo em nova aba
+ *   usuarios  - tabela de autorizados (somente admin)
+ *   punicoes  - controle de punicoes lido do arquivo no Drive
+ *   breve     - funcionalidade planejada, ainda sem tela
  */
 const MODULOS = [
   {
@@ -101,7 +118,7 @@ const MODULOS = [
     id: 'punicoes',
     nome: 'Controle de punições',
     icone: '⚖️',
-    tipo: 'breve',
+    tipo: 'punicoes',
     descricao: 'Acompanhamento das punições aplicadas e do cumprimento por atleta.',
     perfis: ['admin', 'diretoria']
   },
@@ -130,10 +147,18 @@ const MODULOS = [
 /**
  * Abre o sistema interno. Usuarios nao identificados ou fora da
  * lista recebem a tela de acesso negado.
+ *
+ * O parametro "origem" diz como a pagina foi aberta:
+ *   portal - dentro do quadro de portal.aeuv.org/sistema/
+ *   direto - o portal nao conseguiu embutir e mandou abrir aqui
+ *   (vazio) - acesso direto pela URL /exec
+ *
+ * @param {Object} e Evento do Apps Script com os parametros da URL.
  * @return {HtmlOutput}
  */
-function doGet() {
+function doGet(e) {
   const sessao = identificarUsuario_();
+  const origem = (e && e.parameter && e.parameter.origem) || '';
 
   const template = sessao.autorizado
     ? HtmlService.createTemplateFromFile('Index')
@@ -146,13 +171,19 @@ function doGet() {
     usuario: sessao.usuario,
     email: sessao.email,
     motivo: sessao.motivo,
-    modulos: sessao.autorizado ? modulosPermitidos_(sessao.usuario.perfil) : []
+    modulos: sessao.autorizado ? modulosPermitidos_(sessao.usuario.perfil) : [],
+    embutido: origem === 'portal',
+
+    // Só oferece a volta ao portal em acesso direto. Quando o proprio portal
+    // desistiu de embutir (origem=direto), voltar criaria um vaivem sem fim.
+    urlPortal: origem === '' ? CONFIG.urlPortal : ''
   };
 
   return template
     .evaluate()
     .setTitle('AEUV - Sistema Interno')
     .setFaviconUrl(CONFIG.faviconUrl)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
@@ -341,6 +372,145 @@ function listarUsuarios() {
       perfil: perfil,
       perfilNome: PERFIS[perfil]
     };
+  });
+}
+
+/******************************************************
+ * CONTROLE DE PUNICOES
+ ******************************************************/
+
+/**
+ * Colunas do arquivo de controle, na mesma ordem em que a automacao
+ * em Python as grava. A ordem e o que liga cada celula ao seu campo.
+ */
+const PUNICOES_COLUNAS = [
+  'nota', 'dataNota', 'competicao', 'dataJogo', 'partida', 'equipe', 'punido', 'tipo', 'camisa',
+  'artigo', 'partidas', 'tempo', 'decisao', 'cartaoVermelho', 'status', 'situacao', 'sumula', 'modo'
+];
+
+/**
+ * Devolve as punicoes registradas para a tela do sistema.
+ * Chamada pelo cliente; refaz a verificacao de permissao no servidor.
+ * @return {{atualizadoEm: string, arquivoUrl: string, registros: Array<Object>}}
+ */
+function listarPunicoes() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || !moduloLiberado_('punicoes', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar o controle de punições.');
+  }
+
+  const arquivo = arquivoPunicoes_();
+  const conteudo = arquivo.getBlob().getDataAsString('UTF-8');
+
+  return {
+    atualizadoEm: linhaAtualizacao_(conteudo),
+    arquivoUrl: arquivo.getUrl(),
+    registros: interpretarPunicoes_(conteudo)
+  };
+}
+
+/**
+ * Localiza o arquivo de controle no Drive. O id encontrado fica guardado
+ * nas propriedades do script para evitar nova busca a cada abertura.
+ * @return {DriveApp.File}
+ */
+function arquivoPunicoes_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const guardado = propriedades.getProperty(CONFIG.punicoes.chaveArquivo);
+
+  if (guardado) {
+    try {
+      const arquivo = DriveApp.getFileById(guardado);
+
+      if (!arquivo.isTrashed()) {
+        return arquivo;
+      }
+    } catch (e) {
+      // Arquivo removido, renomeado ou sem acesso: procura de novo.
+    }
+  }
+
+  const pastas = pastaPunicoes_().getFilesByName(CONFIG.punicoes.arquivo);
+
+  if (!pastas.hasNext()) {
+    throw new Error('O arquivo "' + CONFIG.punicoes.arquivo + '" ainda não está na pasta "'
+      + CONFIG.punicoes.subpasta + '" do Drive. Ele é publicado pela automação a cada nova punição.');
+  }
+
+  const arquivo = pastas.next();
+  propriedades.setProperty(CONFIG.punicoes.chaveArquivo, arquivo.getId());
+
+  return arquivo;
+}
+
+/**
+ * Subpasta do Drive onde a automacao publica o controle.
+ * @return {DriveApp.Folder}
+ */
+function pastaPunicoes_() {
+  let raiz;
+
+  try {
+    raiz = DriveApp.getFolderById(CONFIG.punicoes.pastaSumulasId);
+  } catch (e) {
+    throw new Error('Sem acesso à pasta das súmulas no Drive. Peça ao administrador para compartilhar '
+      + 'a pasta com o seu e-mail.');
+  }
+
+  const pastas = raiz.getFoldersByName(CONFIG.punicoes.subpasta);
+
+  if (!pastas.hasNext()) {
+    throw new Error('A pasta "' + CONFIG.punicoes.subpasta + '" não foi encontrada no Drive.');
+  }
+
+  return pastas.next();
+}
+
+/**
+ * Transforma a tabela separada por "|" do arquivo em objetos.
+ * @param {string} conteudo
+ * @return {Array<Object>}
+ */
+function interpretarPunicoes_(conteudo) {
+  return String(conteudo || '').split(/\r?\n/).map(function (linha) {
+    return linha.split('|').map(function (celula) {
+      return celula.trim();
+    });
+  }).filter(function (celulas) {
+    // Cabecalho, linha de tracos e textos de apoio nao tem o numero exato de colunas.
+    return celulas.length === PUNICOES_COLUNAS.length && celulas[0] && celulas[0].indexOf('NOTA') !== 0;
+  }).map(function (celulas) {
+    const registro = {};
+
+    PUNICOES_COLUNAS.forEach(function (campo, i) {
+      registro[campo] = celulas[i];
+    });
+
+    return registro;
+  });
+}
+
+/**
+ * Extrai do cabecalho do arquivo a data da ultima atualizacao.
+ * @param {string} conteudo
+ * @return {string}
+ */
+function linhaAtualizacao_(conteudo) {
+  const achado = String(conteudo || '').match(/Atualizado em ([^\n·]+)/);
+
+  return achado ? achado[1].trim() : '';
+}
+
+/**
+ * Diz se um modulo esta liberado para o perfil informado.
+ * @param {string} id
+ * @param {string} perfil
+ * @return {boolean}
+ */
+function moduloLiberado_(id, perfil) {
+  return MODULOS.some(function (modulo) {
+    return modulo.id === id && modulo.perfis.indexOf(perfil) !== -1;
   });
 }
 

@@ -33,10 +33,36 @@
       background: var(--azul);
       color: #fff;
       font-family: Arial, Helvetica, sans-serif;
+    }
+
+    /* O quadro carrega desde o inicio, escondido atras da tela de carregamento. */
+    #quadro {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #f4f6fb;
+      opacity: 0;
+      transition: opacity .35s ease;
+    }
+
+    #quadro.visivel { opacity: 1; }
+
+    #carregando {
+      position: fixed;
+      inset: 0;
       display: grid;
       place-items: center;
       text-align: center;
       padding: 24px;
+      background: var(--azul);
+      transition: opacity .35s ease;
+    }
+
+    #carregando.oculto {
+      opacity: 0;
+      pointer-events: none;
     }
 
     /* Anel giratorio ao redor da logomarca. */
@@ -75,7 +101,7 @@
       animation: reticencias 1.4s steps(4, end) infinite;
     }
 
-    /* Barra indeterminada: o tempo depende do login do Google, entao nao ha progresso real. */
+    /* Barra indeterminada: o tempo depende da sessao do Google. */
     .barra {
       position: relative;
       width: 210px;
@@ -111,21 +137,6 @@
       max-width: 340px;
     }
 
-    /* Só aparece se o navegador bloquear o redirecionamento automático. */
-    .manual {
-      display: none;
-      margin-top: 18px;
-      padding: 11px 18px;
-      background: var(--dourado);
-      color: var(--azul);
-      border-radius: 8px;
-      font-weight: bold;
-      font-size: 14px;
-      text-decoration: none;
-    }
-
-    .manual.visivel { display: inline-block; }
-
     @keyframes girar { to { transform: rotate(360deg); } }
 
     @keyframes correr {
@@ -152,40 +163,106 @@
   </style>
 </head>
 <body>
-  <main>
-    <div class="marca">
-      <img class="logo" src="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png" alt="Logomarca da AEUV">
-    </div>
-    <h1>Sistema Interno</h1>
-    <p>Abrindo a &aacute;rea restrita da AEUV<span id="reticencias"></span></p>
-    <div class="barra"><span></span></div>
-    <p class="etapa" id="etapa">Verificando sua Conta Google...</p>
-    <p class="cadeado">&#128274; O acesso exige login com uma Conta Google autorizada pela associa&ccedil;&atilde;o.</p>
-    <a class="manual" id="manual" href="#">Continuar para o sistema</a>
-  </main>
+  <iframe id="quadro" title="Sistema Interno da AEUV" allow="clipboard-write"></iframe>
+
+  <div id="carregando">
+    <main>
+      <div class="marca">
+        <img class="logo" src="https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png" alt="Logomarca da AEUV">
+      </div>
+      <h1>Sistema Interno</h1>
+      <p>Abrindo a &aacute;rea restrita da AEUV<span id="reticencias"></span></p>
+      <div class="barra"><span></span></div>
+      <p class="etapa" id="etapa">Verificando sua Conta Google...</p>
+      <p class="cadeado">&#128274; O acesso exige login com uma Conta Google autorizada pela associa&ccedil;&atilde;o.</p>
+    </main>
+  </div>
 
   <script>
     // URL /exec da implantacao do sistema interno no Apps Script.
     // Ao publicar uma NOVA implantacao, atualize aqui.
     const URL_SISTEMA = 'https://script.google.com/macros/s/AKfycbwKfTZWMkmv80XbwvmfNyRHltEUFGOYQ3srJz9TKODKvbL5nu5FTuB5YR7KJ_3jwF7weg/exec';
 
-    const manual = document.getElementById('manual');
+    const quadro = document.getElementById('quadro');
+    const carregando = document.getElementById('carregando');
     const etapa = document.getElementById('etapa');
 
-    manual.href = URL_SISTEMA;
+    // Quem ja tem sessao ativa no Google abre o sistema dentro do quadro e a
+    // barra do navegador continua mostrando portal.aeuv.org. Quem ainda nao
+    // entrou recebe a tela de login, que recusa ser exibida dentro de quadro;
+    // nesse caso a navegacao passa para a aba inteira depois deste tempo.
+    const LIMITE_QUADRO = 9000;
 
-    // Diferente das paginas dos formularios, aqui NAO se usa iframe: a tela de
-    // login do Google envia X-Frame-Options e ficaria em branco dentro do quadro.
-    // Por isso a navegacao acontece na propria aba.
-    setTimeout(function () {
-      window.location.replace(URL_SISTEMA);
-    }, 600);
+    const ETAPAS = [
+      [2500, 'Carregando o sistema...'],
+      [5500, 'Quase pronto...']
+    ];
 
-    // Se o navegador bloquear o redirecionamento, o usuario segue pelo botao.
-    setTimeout(function () {
-      etapa.textContent = 'Se a p\u00e1gina n\u00e3o abrir sozinha, use o bot\u00e3o abaixo.';
-      manual.classList.add('visivel');
-    }, 5000);
+    let exibido = false;
+    let desistiu = false;
+    const inicio = Date.now();
+
+    const cronometro = setInterval(function () {
+      if (exibido) {
+        return;
+      }
+
+      const decorrido = Date.now() - inicio;
+
+      for (let i = ETAPAS.length - 1; i >= 0; i--) {
+        if (decorrido >= ETAPAS[i][0]) {
+          if (etapa.textContent !== ETAPAS[i][1]) {
+            etapa.textContent = ETAPAS[i][1];
+          }
+
+          break;
+        }
+      }
+    }, 200);
+
+    /**
+     * Troca a tela de carregamento pelo sistema ja montado.
+     */
+    function exibirSistema() {
+      if (exibido || desistiu) {
+        return;
+      }
+
+      exibido = true;
+      clearInterval(cronometro);
+      clearTimeout(limite);
+
+      quadro.classList.add('visivel');
+      carregando.classList.add('oculto');
+      setTimeout(function () { carregando.style.display = 'none'; }, 400);
+    }
+
+    // O proprio sistema avisa que abriu, pelo script da Ponte. O evento load do
+    // quadro nao serve aqui: ele dispara tambem quando o Google devolve a tela
+    // de login recusada, o que deixaria a pagina presa em branco.
+    window.addEventListener('message', function (evento) {
+      const dados = evento.data;
+
+      if (dados && dados.aeuv === 'sistema-pronto') {
+        exibirSistema();
+      }
+    });
+
+    // Sem aviso dentro do prazo, o conteudo foi bloqueado: quase sempre por
+    // falta de sessao no Google. O parametro origem=direto impede que o sistema
+    // tente devolver a navegacao para ca, o que criaria um vaivem sem fim.
+    const limite = setTimeout(function () {
+      if (exibido) {
+        return;
+      }
+
+      desistiu = true;
+      clearInterval(cronometro);
+      etapa.textContent = 'Abrindo a tela de login do Google...';
+      window.location.replace(URL_SISTEMA + '?origem=direto');
+    }, LIMITE_QUADRO);
+
+    quadro.src = URL_SISTEMA + '?origem=portal';
   </script>
 </body>
 </html>

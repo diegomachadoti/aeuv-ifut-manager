@@ -1,0 +1,35 @@
+<script>
+  /**
+   * Conversa com a pagina portal.aeuv.org/sistema/.
+   *
+   * O codigo do Apps Script roda dentro de um quadro interno do proprio
+   * Google, entao "window.parent" e a pagina do GAS e nao o portal. Por
+   * isso as mensagens vao para "window.top".
+   */
+  (function () {
+    const ponte = <?!= JSON.stringify({ embutido: config.embutido, urlPortal: config.urlPortal }) ?>;
+
+    if (ponte.embutido) {
+      // Avisa o portal que o sistema abriu, para ele esconder a tela de carregamento.
+      try {
+        window.top.postMessage({ aeuv: 'sistema-pronto' }, '*');
+      } catch (e) {
+        // Sem comunicacao com o topo o portal segue pelo tempo limite.
+      }
+
+      return;
+    }
+
+    // Aberto direto na URL do Apps Script (por exemplo, ao voltar do login).
+    // Devolve a navegacao ao endereco oficial para a barra mostrar o dominio
+    // da associacao. So acontece quando "origem" vem vazio, o que descarta
+    // o caso em que o proprio portal desistiu de embutir.
+    if (ponte.urlPortal) {
+      try {
+        window.top.location.replace(ponte.urlPortal);
+      } catch (e) {
+        // Navegacao do topo bloqueada: a pagina continua funcionando aqui mesmo.
+      }
+    }
+  })();
+</script>

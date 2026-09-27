@@ -594,6 +594,26 @@ O PDF segue o layout dos demais, em A4 paisagem por causa das colunas:
 Depois de editar a SITUAÇÃO no TXT, rode `--atualizar-controle-punicoes` para
 atualizar o PDF.
 
+#### Publicação no Drive para o sistema interno
+
+A cada gravação, o TXT e o PDF do controle são enviados para a subpasta
+**`Controle de Punicoes`**, criada dentro da pasta das súmulas no Drive
+(`[sumulas] folder_embed_url`). É dessa cópia que a tela **Controle de
+punições** do [sistema interno](apps-scripts/README.md#sistema-interno) lê os
+dados, em `portal.aeuv.org/sistema/`.
+
+A conta de serviço não tem cota de armazenamento no Drive e, por isso, só
+consegue **atualizar** arquivos, nunca criar. Então a primeira cópia de cada
+arquivo precisa ser enviada uma única vez por uma conta de pessoa: abra a
+subpasta no Drive e arraste para lá o TXT e o PDF de `downloads\sumulas\`. Dali
+em diante a atualização é automática e o link do arquivo nunca muda. Enquanto
+isso não for feito, o log traz o aviso com o endereço da pasta e o fluxo segue
+normalmente — o controle local continua correto.
+
+Quem for consultar a tela no sistema interno precisa ter acesso de leitura à
+pasta das súmulas no Drive, porque o aplicativo é executado com a permissão de
+quem abriu a página.
+
 ### PDF do regulamento
 
 Gera o PDF do regulamento no mesmo layout da Nota Oficial (logomarca,

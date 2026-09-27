@@ -9,6 +9,9 @@ A leitura e feita no proprio TXT da nota, por isso funciona para regras fixas, I
 revisadas manualmente (basta regerar o PDF ou rodar --atualizar-controle-punicoes). Uma nova nota
 da mesma sumula substitui os registros da nota anterior. A coluna SITUAÇÃO pode ser editada
 (ex.: A CUMPRIR -> CUMPRIDA) e e preservada nas atualizacoes.
+
+A cada gravacao o TXT e o PDF sao publicados numa subpasta do Drive (ver publicar_no_drive), que e
+a fonte lida pela tela "Controle de punicoes" do sistema interno em portal.aeuv.org/sistema/.
 """
 
 from __future__ import annotations
@@ -23,6 +26,9 @@ from main import DEFAULT_CONFIG_PATH, normalize_text
 
 LOGGER = logging.getLogger("ifut_bot")
 CONTROLE_PADRAO = Path("downloads\\sumulas\\CONTROLE DE PUNIÇÕES - AEUV.txt")
+# Subpasta criada dentro da pasta das sumulas no Drive. E de la que o sistema interno
+# (apps-scripts/sistema-interno) le o controle, por isso o nome precisa ser igual nos dois lados.
+PASTA_DRIVE = "Controle de Punicoes"
 SITUACAO_PADRAO = "A CUMPRIR"
 MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro",
          "outubro", "novembro", "dezembro"]
@@ -230,6 +236,83 @@ def gravar_controle(caminho: Path, registros: list[Punicao], config_path: Path =
         gerar_pdf_controle(registros, caminho.with_suffix(".pdf"), config_pdf, logger)
     except Exception as exc:
         logger.exception("[CONTROLE] Falha ao gerar o PDF do controle de punicoes: %s", exc)
+    publicar_no_drive(caminho, config_path, logger)
+
+
+# ---------------------------------------------------------------------------
+# Publicacao no Drive (fonte do sistema interno)
+# ---------------------------------------------------------------------------
+
+def _pasta_drive(service, pasta_pai: str, nome: str, logger: logging.Logger) -> str:
+    """Devolve o id da subpasta de publicacao, criando-a na primeira vez."""
+    consulta = (f"name = '{nome}' and mimeType = 'application/vnd.google-apps.folder' "
+                f"and '{pasta_pai}' in parents and trashed = false")
+    achados = service.files().list(q=consulta, fields="files(id)", pageSize=1,
+                                   supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get("files", [])
+    if achados:
+        return achados[0]["id"]
+    criada = service.files().create(
+        body={"name": nome, "mimeType": "application/vnd.google-apps.folder", "parents": [pasta_pai]},
+        fields="id", supportsAllDrives=True).execute()
+    logger.info("[CONTROLE] Pasta '%s' criada no Drive", nome)
+    return criada["id"]
+
+
+def _enviar_arquivo(service, pasta_id: str, arquivo: Path, mimetype: str, logger: logging.Logger) -> None:
+    """Atualiza o arquivo ja existente na pasta do Drive, mantendo o mesmo id (o link nao muda).
+
+    A conta de servico nao tem cota de armazenamento e por isso nao consegue criar arquivos: a
+    primeira copia de cada arquivo precisa ser enviada uma unica vez por uma conta de pessoa.
+    """
+    from googleapiclient.http import MediaFileUpload
+
+    consulta = f"name = '{arquivo.name}' and '{pasta_id}' in parents and trashed = false"
+    achados = service.files().list(q=consulta, fields="files(id)", pageSize=1,
+                                   supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get("files", [])
+    if not achados:
+        logger.warning("[CONTROLE] %s ainda nao existe na pasta do Drive. Envie o arquivo uma vez pela conta da "
+                       "associacao em https://drive.google.com/drive/folders/%s; a partir dai a atualizacao e "
+                       "automatica.", arquivo.name, pasta_id)
+        return
+
+    midia = MediaFileUpload(str(arquivo), mimetype=mimetype, resumable=False)
+    service.files().update(fileId=achados[0]["id"], media_body=midia, supportsAllDrives=True).execute()
+    logger.info("[CONTROLE] %s atualizado no Drive", arquivo.name)
+
+
+def publicar_no_drive(caminho: Path, config_path: Path = DEFAULT_CONFIG_PATH,
+                      logger: logging.Logger = LOGGER) -> None:
+    """Publica o TXT e o PDF do controle numa subpasta do Drive.
+
+    E dessa copia que o sistema interno (apps-scripts/sistema-interno) le as punicoes, entao o
+    envio acontece a cada gravacao. Falhas sao apenas registradas: o controle local ja esta salvo.
+    """
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+        from sumula_disciplinar import ConfigSumulas
+
+        config = ConfigSumulas.carregar(Path(config_path))
+        pasta_pai = re.search(r"[?&]id=([^&#]+)", config.folder_embed_url or "")
+        if not pasta_pai:
+            logger.warning("[CONTROLE] Pasta das sumulas nao identificada; controle nao publicado no Drive")
+            return
+        if not Path(config.service_account_json).exists():
+            logger.warning("[CONTROLE] Credencial %s ausente; controle nao publicado no Drive",
+                           config.service_account_json)
+            return
+
+        credenciais = service_account.Credentials.from_service_account_file(
+            str(config.service_account_json), scopes=["https://www.googleapis.com/auth/drive"])
+        service = build("drive", "v3", credentials=credenciais)
+        pasta_id = _pasta_drive(service, pasta_pai.group(1), PASTA_DRIVE, logger)
+
+        _enviar_arquivo(service, pasta_id, caminho, "text/plain", logger)
+        pdf = caminho.with_suffix(".pdf")
+        if pdf.exists():
+            _enviar_arquivo(service, pasta_id, pdf, "application/pdf", logger)
+    except Exception as exc:
+        logger.warning("[CONTROLE] Falha ao publicar o controle no Drive (o arquivo local esta atualizado): %s", exc)
 
 
 def _chave(p: Punicao) -> tuple:

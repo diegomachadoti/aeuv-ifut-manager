@@ -82,10 +82,10 @@ entrega o e-mail de quem abriu a página, e é esse e-mail que o servidor compar
 com a lista de autorizados. Publicado como "Eu", o sistema não identifica
 ninguém e bloqueia todo mundo.
 
-Os dois formulários permitem incorporação em outras páginas
-(`XFrameOptionsMode.ALLOWALL`). O sistema interno **não** usa essa opção, porque
-a tela de login do Google recusa ser exibida dentro de um quadro. A conta
-executora precisa manter acesso às planilhas, pastas e imagens utilizadas.
+Os três aplicativos permitem incorporação em outras páginas
+(`XFrameOptionsMode.ALLOWALL`), recurso usado pelas páginas do domínio da
+associação. A conta executora precisa manter acesso às planilhas, pastas e
+imagens utilizadas.
 
 ### Ícone da aba e prévia do link
 
@@ -124,13 +124,20 @@ da associação. Não há limite de tempo nem atalho alternativo: a página agua
 carregamento terminar normalmente, mesmo que o Apps Script demore mais que o
 previsto.
 
-A página do **sistema interno** é diferente de propósito: ela exibe a mesma tela
-de carregamento, mas com barra indeterminada, e navega na própria aba
-(`window.location.replace`) em vez de usar `iframe`. O motivo é que a tela de
-login do Google envia `X-Frame-Options` e apareceria em branco dentro de um
-quadro. Ela também traz `robots: noindex, nofollow`, por ser área restrita, e um
-botão "Continuar para o sistema" que surge após 5 segundos caso o navegador
-bloqueie o redirecionamento automático.
+A página do **sistema interno** usa o mesmo `iframe`, mas com uma diferença: a
+tela de login do Google envia `X-Frame-Options` e se recusa a aparecer dentro de
+um quadro. Para contornar isso, a página embute o sistema com `?origem=portal` e
+espera um aviso de que ele realmente abriu — o próprio aplicativo envia
+`postMessage({ aeuv: 'sistema-pronto' })` ao topo da janela, pelo arquivo
+`Ponte.html`. Chegando o aviso, o quadro aparece e o endereço continua sendo o da
+associação. Se o aviso não chegar em 9 segundos, sinal de que o visitante ainda
+não entrou na Conta Google: aí a página navega na própria aba para
+`?origem=direto`, para que a tela de login apareça normalmente. Esse parâmetro
+também evita o vaivém, porque o sistema só devolve a navegação ao portal quando
+`origem` vem vazio, ou seja, quando alguém abriu a URL do Apps Script
+diretamente. A barra de progresso aqui é indeterminada, já que o tempo depende da
+sessão do Google, e a página traz `robots: noindex, nofollow` por ser área
+restrita.
 
 Pontos de manutenção:
 
@@ -141,9 +148,12 @@ Pontos de manutenção:
 - O tempo estimado usado pela barra de progresso fica na constante
   `DURACAO_ESTIMADA`, em milissegundos. Ele só controla a animação: a tela de
   carregamento some pelo evento `load` do `iframe`, não pelo relógio.
-- O `iframe` depende de `XFrameOptionsMode.ALLOWALL` no `doGet()` dos dois
-  formulários e de a implantação estar publicada para acesso sem login. Alterar
-  qualquer um dos dois quebra a exibição embutida.
+- No sistema interno o equivalente é `LIMITE_QUADRO`: o prazo de espera pelo
+  aviso antes de cair para a navegação na própria aba.
+- O `iframe` depende de `XFrameOptionsMode.ALLOWALL` no `doGet()` dos três
+  aplicativos. Nos formulários depende ainda de a implantação estar publicada
+  para acesso sem login; no sistema interno, do include `<?!= include_('Ponte')
+  ?>` nas telas `Index` e `Negado`, que é quem envia o aviso.
 - As animações são desligadas automaticamente para quem usa a preferência de
   redução de movimento do sistema.
 - O arquivo `docs/CNAME` fixa o domínio `portal.aeuv.org`. Ele corresponde
@@ -381,6 +391,7 @@ acesso por Conta Google.
 | `Index.html` | Tela do sistema: cabeçalho, menu e área de conteúdo. |
 | `Negado.html` | Tela exibida a quem não está autorizado. |
 | `Estilos.html` | CSS da identidade visual, compartilhado pelas duas telas. |
+| `Ponte.html` | Script que conversa com `portal.aeuv.org/sistema/`: avisa que o sistema abriu ou devolve a navegação ao domínio da associação. |
 
 ### Como o acesso é controlado
 
@@ -427,11 +438,54 @@ Cada módulo declara `id`, `nome`, `icone`, `tipo`, `descricao` e `perfis`.
 | `painel` | Tela inicial, com saudação e atalhos para os demais módulos. |
 | `link` | Abre um endereço externo em nova aba (usado pelos dois formulários). |
 | `usuarios` | Tabela de autorizados; busca os dados com `listarUsuarios()`. |
+| `punicoes` | Controle de punições; busca os dados com `listarPunicoes()`. |
 | `breve` | Funcionalidade já prevista, exibida com o aviso "em desenvolvimento". |
 
 Módulos publicados hoje: Início, Súmula digital, Inscrição e portabilidade,
-Notas oficiais, Controle de punições, Atletas e Usuários do sistema. Os três do
-meio estão marcados como `breve`, aguardando a tela correspondente.
+Notas oficiais, Controle de punições, Atletas e Usuários do sistema. Notas
+oficiais e Atletas ainda estão marcados como `breve`, aguardando a tela
+correspondente.
+
+### Controle de punições
+
+Primeira funcionalidade com tela própria. Mostra todas as punições aplicadas
+pelas notas oficiais, com indicadores, busca e filtros, e some com a necessidade
+de abrir o arquivo no Drive para consultar uma suspensão.
+
+A fonte é o arquivo **`CONTROLE DE PUNIÇÕES - AEUV.txt`**, mantido pela
+automação em Python (`controle_punicoes.py`) e publicado por ela na subpasta
+`Controle de Punicoes`, dentro da pasta das súmulas no Drive. A cada nova
+punição o arquivo é regravado e reenviado, então a tela sempre reflete a última
+nota — [veja o fluxo no README do projeto principal](../README.md#controle-de-punições-da-associação).
+
+O servidor faz o caminho inverso do Python: localiza o arquivo, lê o texto e
+transforma a tabela separada por `|` em registros, guiando-se pela ordem das
+colunas (`PUNICOES_COLUNAS`). Linhas de cabeçalho e de apoio são descartadas
+porque não têm o número exato de colunas. O id do arquivo encontrado fica
+guardado na propriedade de script `PUNICOES_ARQUIVO_ID` para evitar uma busca no
+Drive a cada abertura; se o arquivo for substituído, movido ou apagado, a busca
+é refeita sozinha.
+
+Na tela, os quatro indicadores (punições, a cumprir, cumpridas e pena a definir)
+acompanham os filtros aplicados. A busca livre ignora acentos e maiúsculas e
+varre todas as colunas; os seletores de competição, equipe, situação e status
+são montados a partir dos próprios dados. No computador os dados aparecem em
+tabela; no celular cada punição vira uma ficha com os rótulos à esquerda. O
+botão "Atualizar" relê o arquivo e "Abrir arquivo" leva ao TXT no Drive.
+
+Dois pontos de atenção:
+
+- **Permissão.** O aplicativo roda com a permissão de quem acessa, então cada
+  pessoa autorizada precisa ter acesso de leitura à pasta das súmulas no Drive.
+  Sem isso a tela explica o que falta, em vez de mostrar um erro técnico.
+- **Primeira cópia.** A conta de serviço usada pelo Python não tem cota de
+  armazenamento e só consegue atualizar arquivos já existentes. O TXT e o PDF
+  precisam ser enviados uma única vez à subpasta por uma conta de pessoa; depois
+  disso a atualização é automática.
+
+A configuração fica em `CONFIG.punicoes`, no `WebApp.gs`: id da pasta das
+súmulas, nome da subpasta e nome do arquivo. Os dois nomes precisam ser iguais
+aos usados no `controle_punicoes.py`.
 
 ### Como acrescentar uma funcionalidade
 
@@ -455,9 +509,9 @@ escolher uma opção.
 ## Operação e manutenção
 
 - Mantenha os aplicativos em projetos GAS separados. Os arquivos HTML devem
-  continuar se chamando `Index` (no sistema interno também `Estilos` e
-  `Negado`); as funções chamadas pela interface são `salvarInscricao()`,
-  `salvarSumula()` e `listarUsuarios()`.
+  continuar se chamando `Index` (no sistema interno também `Estilos`, `Negado` e
+  `Ponte`); as funções chamadas pela interface são `salvarInscricao()`,
+  `salvarSumula()`, `listarUsuarios()` e `listarPunicoes()`.
 - Ao alterar equipes, competições ou outros dados de configuração, atualize as
   opções da interface e as validações do servidor em conjunto.
 - Mantenha a conta executora com acesso às planilhas, pastas e logo; verifique
