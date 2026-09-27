@@ -182,16 +182,30 @@ class PortabilityMatch:
     matched: bool
 
 
+def _segredo_ifut(parser: configparser.ConfigParser, chave: str) -> str:
+    """Le uma credencial do iFut, que deve ficar apenas no config.local.ini."""
+    valor = parser.get("ifut", chave, fallback="").strip()
+    if not valor:
+        raise KeyError(
+            f"Credencial [ifut] {chave} nao configurada. Crie o arquivo config.local.ini "
+            "ao lado do config.ini com:\n\n[ifut]\nusername = seu-email\npassword = sua-senha\n\n"
+            "Esse arquivo esta no .gitignore e nunca e enviado ao repositorio."
+        )
+    return valor
+
+
 class AppConfig:
     def __init__(self, path: Path) -> None:
         parser = configparser.ConfigParser()
         if not parser.read(path, encoding="utf-8"):
             raise FileNotFoundError(f"Arquivo de configuracao nao encontrado: {path}")
+        # config.local.ini (no .gitignore) guarda os segredos e sobrepoe o config.ini.
+        parser.read(Path(path).with_name("config.local.ini"), encoding="utf-8")
 
         self.path = path
         self.parser = parser
-        self.username = parser.get("ifut", "username")
-        self.password = parser.get("ifut", "password")
+        self.username = _segredo_ifut(parser, "username")
+        self.password = _segredo_ifut(parser, "password")
         self.login_url = parser.get("ifut", "login_url")
         self.championship_url = parser.get("ifut", "championship_url")
         self.teams_url = parser.get("ifut", "teams_url")

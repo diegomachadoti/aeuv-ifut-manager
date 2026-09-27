@@ -33,18 +33,39 @@ Veja como os formulários geram e armazenam esses arquivos no
 
 ## Configuração
 
-1. Crie/edite `config.ini`.
-2. Preencha `username` e `password`.
+1. Crie o `config.local.ini` com as credenciais do iFut (veja
+   [Segredos](#segredos-e-o-configlocalini) logo abaixo).
+2. Crie/edite `config.ini` com os demais parâmetros.
 3. Ajuste os parâmetros de `[app]`.
 4. Revise o mapa de times em `[teams]`.
 5. Complete `selectors.ini` se o site mudar.
+
+### Segredos e o `config.local.ini`
+
+O `config.ini` é versionado no Git, então **não guarda segredo nenhum**. Senhas
+e chaves ficam no `config.local.ini`, que está no `.gitignore` e nunca sai da
+máquina. Os valores dele sobrepõem os do `config.ini`, seção por seção.
+
+```ini
+[ifut]
+username = seu-email
+password = sua-senha
+
+[ia]
+api_key = ...
+```
+
+Sem esse arquivo, a automação para logo no início com uma mensagem explicando o
+que criar — não há usuário ou senha padrão embutidos no código.
+
+A credencial da service account (`google-service-account-*.json`) segue a mesma
+regra: fica só na máquina, fora do repositório.
 
 ## Parâmetros do `config.ini`
 
 ### `[ifut]`
 
-- `username`
-- `password`
+- `username` e `password` — **apenas no `config.local.ini`**
 - `login_url`
 - `championship_url`
 - `teams_url`
@@ -172,6 +193,9 @@ AEUV - Automação/
 ├── 7 SUPER LIGA UNIAO 2026 - CONTROLE FINANCEIRO...xlsx  ← [sheets] spreadsheet_id
 └── AEUV Logo.png                           ← [pdf] logo_url
 ```
+
+A pasta `Google Meet`, criada pelo próprio Google para guardar gravações de
+reunião, não faz parte do projeto. Se ela aparecer aqui dentro, mova para fora.
 
 ### Como agrupar sem quebrar nada
 

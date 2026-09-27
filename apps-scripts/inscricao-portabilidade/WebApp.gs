@@ -7,7 +7,7 @@
 
 const WEBAPP_CONFIG = {
   associacao: 'AEUV (Associação Esportiva Uberlandense Varzeana)',
-  spreadsheetId: '1i0-gA6mfH4W_loy3ELqtn3uZg7dL2GzZeBLdrgPHBns',
+  spreadsheetId: '1iO-gA6mfH4W_loy3ELqtn3uZg7dL2GzZeBLdrgPHBns',
   spreadsheetName: 'AEUV - Respostas - Inscricao, Remocao e Portabilidade',
   sheetName: 'Inscricoes_Web',
   maxPessoas: 30,
