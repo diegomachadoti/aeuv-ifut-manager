@@ -540,7 +540,8 @@ deste repositório faz:
 | Escopo | Para quê |
 | --- | --- |
 | `.../auth/userinfo.email` | `Session.getActiveUser().getEmail()`, base do controle de acesso. |
-| `.../auth/drive` | Ler a pasta, o arquivo de controle e a logomarca. |
+| `.../auth/drive` | Ler a pasta, o arquivo de controle e a logomarca; guardar os documentos dos associados. |
+| `.../auth/spreadsheets` | Criar e manter a planilha do cadastro de associados. |
 
 Para aplicar: no editor do Apps Script, abra **Configurações do projeto**, marque
 *"Mostrar o arquivo de manifesto appsscript.json no editor"*, abra o arquivo,
