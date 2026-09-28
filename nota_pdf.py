@@ -480,6 +480,10 @@ def regerar_pdf(alvo: str, config_path: Path = DEFAULT_CONFIG_PATH, logger: logg
     import controle_punicoes
 
     controle_punicoes.registrar_nota(nota_txt, None, config_path, logger)
+    # Fechada a decisao, a nota vai para o Drive e aparece no sistema interno.
+    import publicacao_drive
+
+    publicacao_drive.publicar_nota(nota_txt, config_path, logger)
     return destino
 
 

@@ -1485,12 +1485,26 @@ def build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Refaz o TXT de controle de punicoes da associacao a partir de todas as notas oficiais",
     )
+    parser.add_argument(
+        "--publicar-drive",
+        action="store_true",
+        help="Publica no Drive os PDFs de regulamento e as notas oficiais ja finalizadas (TXT + PDF), "
+             "para que apareçam nas telas Regulamentos e Notas Oficiais do sistema interno",
+    )
     return parser
 
 
 def main() -> int:
     write_default_config()
     args = build_argument_parser().parse_args()
+    if args.publicar_drive:
+        import publicacao_drive
+
+        config = AppConfig(Path(args.config))
+        logger = configure_logging(config.log_path)
+        regulamentos, notas = publicacao_drive.publicar_tudo(Path(args.config), logger)
+        logger.info("Publicados no Drive: %s regulamento(s) e %s arquivo(s) de nota oficial", regulamentos, notas)
+        return 0
     if args.atualizar_controle_punicoes:
         from controle_punicoes import reconstruir_controle
 
@@ -1501,9 +1515,12 @@ def main() -> int:
         from nota_pdf import ConfigPdf
         from regulamento_pdf import gerar_pdf_regulamento
 
+        import publicacao_drive
+
         config = AppConfig(Path(args.config))
-        gerar_pdf_regulamento(args.gerar_pdf_regulamento, ConfigPdf.carregar(Path(args.config)),
-                              logger=configure_logging(config.log_path))
+        logger = configure_logging(config.log_path)
+        pdf = gerar_pdf_regulamento(args.gerar_pdf_regulamento, ConfigPdf.carregar(Path(args.config)), logger=logger)
+        publicacao_drive.publicar_regulamento(pdf, Path(args.config), logger)
         return 0
     if args.gerar_pdf_nota:
         from nota_pdf import regerar_pdf

@@ -476,13 +476,15 @@ pode declarar `grupo` para entrar num submenu.
 | `punicoes` | Controle de punições; busca os dados com `listarPunicoes()`. |
 | `solicitacoes` | Solicitações de Inscrições; busca os dados com `listarSolicitacoes()`. |
 | `sumulas` | Súmulas Enviadas; busca os dados com `listarSumulas()`. |
+| `notas` | Notas oficiais; busca os dados com `listarNotas()`. |
+| `regulamentos` | Regulamentos; busca os dados com `listarRegulamentos()`. |
 | `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
 | `breve` | Funcionalidade já prevista, exibida com o aviso "em desenvolvimento". |
 
 Módulos publicados hoje: Início, Formulários (Súmula digital e Inscrição e
 portabilidade), Solicitações de Inscrições, Súmulas Enviadas, Notas oficiais,
-Controle de punições, Associados, Atletas e Usuários do sistema. Notas oficiais
-e Atletas ainda estão marcados como `breve`, aguardando a tela correspondente.
+Regulamentos, Controle de punições, Associados, Atletas e Usuários do sistema.
+Só Atletas ainda está marcado como `breve`, aguardando a tela correspondente.
 
 #### Submenus
 
@@ -828,6 +830,98 @@ Cada pessoa autorizada também precisa de acesso de leitura à pasta das súmula
 no Drive. Quando a tela acusar erro, `diagnosticarSumulas()` mostra quantos
 arquivos existem em cada subpasta e o que foi reconhecido no mais recente.
 
+### Notas oficiais
+
+Consulta às notas oficiais disciplinares — o documento que fecha o ciclo
+iniciado pela [súmula](#súmulas-enviadas) e alimenta o
+[controle de punições](#controle-de-punições). Antes desta tela, ler uma nota
+significava abrir a pasta do Drive e caçar o PDF pelo nome do arquivo.
+
+#### Só nota final chega aqui
+
+A comissão trabalha em cima de um rascunho: a automação gera a nota com as
+decisões sugeridas e, quando falta decidir alguma coisa, deixa marcadores
+`[A DEFINIR PELA COMISSÃO]` no texto. **Esse rascunho não vai para o Drive.**
+Só é publicado o que já está fechado, pelo mesmo critério que decide se o PDF
+sai com a marca d'água RASCUNHO (`nota_pdf.tem_pendencias`).
+
+A consequência é a que importa: ninguém na diretoria abre a tela e lê uma
+decisão que ainda pode mudar. A publicação acontece quando a comissão regera o
+PDF final (`python main.py --gerar-pdf-nota <número>`), ou em lote com
+`--publicar-drive` — [veja o fluxo no README do projeto principal](../README.md#publicação-no-drive).
+
+#### Colunas escolhidas
+
+| Coluna | Por que está ali |
+| --- | --- |
+| Nota | O número (`008/2026`) é como a nota é citada em tudo. |
+| Publicada em | A data da decisão, que não é a data do jogo. |
+| Partida | O confronto, com a data do jogo abaixo. |
+| Súmula | O protocolo que originou a nota, com atalho para a súmula. |
+| Punidos | Quem foi punido e por qual equipe, até dois nomes. |
+
+O detalhe abre ao clicar na linha e traz a competição, o árbitro da partida, a
+tabela de punidos (artigo, decisão e situação de cada um), o **texto integral
+da nota** e os botões do PDF oficial, do arquivo TXT e do controle de punições
+filtrado por aquela nota.
+
+O texto fica na tela mesmo havendo o PDF ao lado: é o que permite a busca livre
+alcançar o enquadramento e a fundamentação, que não aparecem em nenhuma coluna.
+Quem precisa do documento para anexar ou imprimir usa o PDF.
+
+#### De onde vêm os punidos
+
+Da mesma fonte do vínculo súmula → nota: o controle de punições já grava a
+coluna `NOTA` em cada linha. A tela agrupa as linhas por esse número
+(`indicePunidosPorNota_()`) em vez de reinterpretar o texto de cada nota — uma
+leitura só, do arquivo que a tela de punições já usa. Sem o controle, a tela
+continua funcionando; apenas a coluna de punidos fica vazia.
+
+#### O que a leitura do TXT procura
+
+A nota é um documento corrido, não uma lista de campos. A leitura pega os
+poucos trechos de formato fixo e guarda o resto como corpo:
+
+```
+NOTA OFICIAL Nº 008/2026            número e ano
+(linha seguinte)                    competição
+"partida entre X x Y, realizada em" confronto e data do jogo
+"(súmula SUM-..., árbitro ...)"     protocolo que originou a nota
+"Uberlândia/MG, 26 de setembro..."  cidade e data da nota
+```
+
+O protocolo é **opcional**: as notas escritas com apoio de IA nem sempre o
+citam no texto. Quando falta, a linha simplesmente não oferece o atalho para a
+súmula.
+
+#### Permissão
+
+Liberada para **admin e diretoria**, pelo mesmo motivo das súmulas: a nota
+nomeia pessoas e descreve condutas. Cada pessoa autorizada também precisa de
+acesso de leitura à pasta das súmulas no Drive. Quando a tela acusar erro, a
+própria mensagem já distingue os dois casos: a pasta `Notas Oficiais` ainda não
+existe (nenhuma nota foi publicada) ou o usuário não tem acesso a ela.
+
+### Regulamentos
+
+Lista os regulamentos oficiais publicados. É a tela mais simples do sistema e a
+**única consulta liberada também para o perfil `membro`**: o regulamento é o
+documento que toda equipe precisa ter à mão, e não há nada nele que dependa de
+quem está olhando.
+
+Por isso não há tabela nem filtro. São poucos arquivos e o uso é sempre o
+mesmo — abrir o PDF —, então cada regulamento é um cartão com o título, a data
+da última atualização, o tamanho e dois botões: **Abrir PDF** e **Baixar**.
+
+O título vem do nome do arquivo, com os hifens virando espaços:
+`regulamento-7-super-liga-união-2026.pdf` aparece como "Regulamento 7 Super
+Liga União 2026". A ordenação usa a data de atualização no Drive, então um
+regulamento revisado no meio da temporada sobe para o topo.
+
+Só o **PDF** é publicado. O texto de trabalho continua no repositório, em
+`regulamento/`, onde a automação o lê para enquadrar as infrações — publicar os
+dois lado a lado só criaria dúvida sobre qual é o oficial.
+
 ### Cadastro de associados
 
 Reúne num só lugar quem são as equipes associadas, quem responde legalmente por
@@ -961,7 +1055,8 @@ escolher uma opção.
   continuar se chamando `Index` (no sistema interno também `Estilos`, `Negado` e
   `Ponte`); as funções chamadas pela interface são `salvarInscricao()`,
   `salvarSumula()`, `listarUsuarios()`, `listarPunicoes()`,
-  `listarSolicitacoes()`, `listarAssociados()` e `salvarAssociado()`.
+  `listarSolicitacoes()`, `listarSumulas()`, `listarNotas()`,
+  `listarRegulamentos()`, `listarAssociados()` e `salvarAssociado()`.
 - Ao alterar equipes, competições ou outros dados de configuração, atualize as
   opções da interface e as validações do servidor em conjunto.
 - Mantenha a conta executora com acesso às planilhas, pastas e logo; verifique

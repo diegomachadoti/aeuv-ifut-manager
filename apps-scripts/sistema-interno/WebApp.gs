@@ -72,6 +72,23 @@ const CONFIG = {
     maxLeitura: 200
   },
 
+  // Notas oficiais disciplinares. Ficam numa subpasta da pasta das
+  // sumulas, ao lado do controle de punicoes. Quem publica e a automacao
+  // em Python, e so as notas ja fechadas pela comissao (main.py
+  // --publicar-drive, ou --gerar-pdf-nota ao regerar o PDF final).
+  notas: {
+    subpasta: 'Notas Oficiais',
+    maxLeitura: 200
+  },
+
+  // Regulamentos publicados das competicoes. Ficam numa subpasta da
+  // pasta raiz do projeto, alimentada pela mesma automacao
+  // (main.py --gerar-pdf-regulamento ou --publicar-drive).
+  regulamentos: {
+    subpasta: 'Regulamentos',
+    maxLeitura: 100
+  },
+
   // Pasta raiz "AEUV - Automacao", que agrupa tudo o que o projeto usa no Drive.
   // A planilha e a pasta de documentos dos associados sao criadas dentro dela
   // por prepararAssociados().
@@ -185,9 +202,17 @@ const MODULOS = [
     id: 'notas',
     nome: 'Notas oficiais',
     icone: '📄',
-    tipo: 'breve',
+    tipo: 'notas',
     descricao: 'Consulta às notas oficiais disciplinares geradas a partir das súmulas.',
     perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'regulamentos',
+    nome: 'Regulamentos',
+    icone: '📕',
+    tipo: 'regulamentos',
+    descricao: 'Regulamentos oficiais publicados das competições da associação.',
+    perfis: ['admin', 'diretoria', 'membro']
   },
   {
     id: 'punicoes',
@@ -1266,6 +1291,413 @@ function aparar_(linhas) {
   }
 
   return copia;
+}
+
+/******************************************************
+ * NOTAS OFICIAIS
+ *
+ * Consulta as notas oficiais disciplinares ja fechadas pela comissao.
+ * O caminho e o mesmo das outras telas: a automacao em Python publica o
+ * arquivo no Drive e esta tela apenas le.
+ *
+ * So chega aqui nota final. Enquanto a nota tem [A DEFINIR] ou
+ * divergencias apontadas pela IA, ela fica so na maquina de quem gerou
+ * (publicacao_drive.nota_e_final). Assim a diretoria nunca ve na tela um
+ * texto que ainda pode mudar.
+ *
+ * Cada nota tem dois arquivos com o mesmo nome: o TXT, que esta tela le
+ * para montar o resumo, e o PDF assinado, que e o documento oficial.
+ ******************************************************/
+
+/**
+ * Devolve as notas oficiais publicadas para a tela de consulta.
+ * Chamada pelo cliente; refaz a verificacao de permissao no servidor.
+ * @return {{registros: Array<Object>, competicoes: Array<string>, equipes: Array<string>,
+ *           total: number, limite: number, pastaUrl: string}}
+ */
+function listarNotas() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || !moduloLiberado_('notas', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar as notas oficiais.');
+  }
+
+  const pasta = pastaNotas_();
+  const arquivos = [];
+  const pdfs = {};
+  const iterador = pasta.getFiles();
+
+  while (iterador.hasNext()) {
+    const arquivo = iterador.next();
+    const nome = arquivo.getName();
+
+    // O TXT e a fonte do resumo; o PDF entra so como link, casado pelo
+    // nome sem extensao (a automacao grava os dois com o mesmo nome).
+    if (/\.pdf$/i.test(nome)) {
+      pdfs[nome.replace(/\.pdf$/i, '')] = arquivo.getUrl();
+      continue;
+    }
+
+    if (/^NOTA OFICIAL.+\.txt$/i.test(nome)) {
+      arquivos.push(arquivo);
+    }
+  }
+
+  const limite = CONFIG.notas.maxLeitura;
+
+  const registros = arquivos.map(function (arquivo) {
+    return interpretarNota_(arquivo.getBlob().getDataAsString('UTF-8'), arquivo);
+  });
+
+  // A nota mais recente primeiro: o numero e sequencial e nunca se repete.
+  registros.sort(function (a, b) {
+    return b.ordem - a.ordem;
+  });
+
+  const punidos = indicePunidosPorNota_();
+
+  const recortados = registros.slice(0, limite);
+
+  recortados.forEach(function (registro) {
+    registro.pdfUrl = pdfs[registro.arquivoNome.replace(/\.txt$/i, '')] || '';
+    registro.punidos = punidos[chaveProtocolo_(registro.numero)] || [];
+    registro.equipes = equipesDaNota_(registro);
+  });
+
+  return {
+    registros: recortados,
+    competicoes: valoresUnicos_(recortados, 'competicao'),
+    equipes: equipesDasNotas_(recortados),
+    total: registros.length,
+    limite: limite,
+    pastaUrl: pasta.getUrl()
+  };
+}
+
+/**
+ * Subpasta do Drive com as notas oficiais publicadas.
+ * @return {DriveApp.Folder}
+ */
+function pastaNotas_() {
+  const raiz = pastaSumulas_();
+  const pastas = raiz.getFoldersByName(CONFIG.notas.subpasta);
+
+  if (!pastas.hasNext()) {
+    throw new Error('A pasta "' + CONFIG.notas.subpasta + '" ainda não existe dentro de "'
+      + raiz.getName() + '". Ela é criada pela automação quando a primeira nota oficial é publicada '
+      + '(main.py --publicar-drive).');
+  }
+
+  return pastas.next();
+}
+
+/**
+ * Punidos agrupados pelo numero da nota que aplicou a punicao.
+ *
+ * Mesma ideia de indiceNotas_(), so que a chave aqui e a coluna NOTA em
+ * vez da coluna SUMULA: evita abrir e reinterpretar o texto de cada nota
+ * para saber quem foi punido e qual pena recebeu.
+ * @return {Object<string, Array<Object>>}
+ */
+function indicePunidosPorNota_() {
+  let conteudo;
+
+  try {
+    conteudo = arquivoPunicoes_().getBlob().getDataAsString('UTF-8');
+  } catch (e) {
+    // Controle ausente ou sem acesso: a tela continua, apenas sem os punidos.
+    return {};
+  }
+
+  const indice = {};
+
+  interpretarPunicoes_(conteudo).forEach(function (registro) {
+    const chave = chaveProtocolo_(registro.nota);
+
+    if (!chave) {
+      return;
+    }
+
+    if (!indice[chave]) {
+      indice[chave] = [];
+    }
+
+    indice[chave].push({
+      nome: registro.punido,
+      equipe: registro.equipe,
+      tipo: registro.tipo,
+      camisa: registro.camisa,
+      artigo: registro.artigo,
+      decisao: registro.decisao,
+      status: registro.status,
+      situacao: registro.situacao
+    });
+  });
+
+  return indice;
+}
+
+/**
+ * Le o TXT da nota oficial gerado por sumula_disciplinar.py.
+ *
+ * O texto e um documento corrido, nao uma lista de campos: a leitura
+ * procura os poucos trechos com formato fixo e guarda o resto como corpo,
+ * que a tela mostra na integra.
+ *
+ * Trechos com formato fixo:
+ *   "NOTA OFICIAL Nº 008/2026"          numero e ano
+ *   linha seguinte                      competicao
+ *   "partida entre X x Y, realizada em" confronto e data do jogo
+ *   "(súmula SUM-..., árbitro ...)"     protocolo que originou a nota
+ *   "Uberlândia/MG, 26 de setembro..."  cidade e data da nota
+ *
+ * @param {string} conteudo
+ * @param {DriveApp.File} arquivo
+ * @return {Object}
+ */
+function interpretarNota_(conteudo, arquivo) {
+  const texto = String(conteudo || '').replace(/\r/g, '');
+  const linhas = texto.split('\n');
+
+  // O aviso de rascunho, quando existe, vem antes do titulo.
+  let inicio = 0;
+
+  for (let i = 0; i < linhas.length; i++) {
+    if (/^NOTA OFICIAL/i.test(linhas[i].trim())) {
+      inicio = i;
+      break;
+    }
+  }
+
+  const corpo = linhas.slice(inicio);
+  const numeroAchado = texto.match(/NOTA OFICIAL\s+N[ºo°]?\s*(\d+)\s*[\/-]\s*(\d{4})/i);
+  const numero = numeroAchado ? (numeroAchado[1] + '/' + numeroAchado[2]) : '';
+
+  // Competicao: primeira linha com conteudo depois do titulo.
+  let competicao = '';
+
+  for (let i = 1; i < corpo.length && !competicao; i++) {
+    if (corpo[i].trim()) {
+      competicao = corpo[i].trim();
+    }
+  }
+
+  const partidaAchada = texto.match(/partida entre\s+(.+?),\s*realizada em\s+([^,.]+)/i);
+  const protocoloAchado = texto.match(/\b(SUM-\d{6,}-[A-Z0-9]+)\b/i);
+  const arbitroAchado = texto.match(/árbitro\s+([^)\n]+)\)/i);
+  const dataNotaAchada = texto.match(/\n\s*([^,\n]+),\s*(\d{1,2}\s+de\s+[^\s]+\s+de\s+\d{4})\s*\.\s*\n/i);
+  const confronto = partidaAchada ? partidaAchada[1].trim() : '';
+
+  return {
+    numero: numero,
+
+    // Ordena pelo numero da nota, que e sequencial dentro do ano.
+    ordem: numeroAchado ? (Number(numeroAchado[2]) * 1000 + Number(numeroAchado[1])) : 0,
+    competicao: competicao,
+    confronto: confronto,
+    times: separarConfronto_(confronto),
+    dataJogo: partidaAchada ? partidaAchada[2].trim() : '',
+    protocolo: protocoloAchado ? protocoloAchado[1].toUpperCase() : '',
+    arbitro: arbitroAchado ? arbitroAchado[1].trim() : '',
+    cidade: dataNotaAchada ? dataNotaAchada[1].trim() : '',
+    dataNota: dataNotaAchada ? dataNotaAchada[2].trim() : '',
+
+    // Nota publicada deveria estar sempre fechada; o campo existe para a
+    // tela avisar caso um rascunho chegue ao Drive por engano. O aviso do
+    // topo cita "[A DEFINIR PELA COMISSÃO]" so como instrucao, por isso a
+    // busca e feita no corpo (mesmo criterio de nota_pdf.tem_pendencias).
+    pendente: corpo.join('\n').indexOf('[A DEFINIR') !== -1,
+    texto: aparar_(corpo).join('\n'),
+    arquivoNome: arquivo.getName(),
+    arquivoUrl: arquivo.getUrl(),
+    pdfUrl: '',
+    punidos: [],
+    equipes: []
+  };
+}
+
+/**
+ * Equipes citadas na nota: os times da partida mais a equipe de cada punido.
+ * @param {Object} registro
+ * @return {Array<string>}
+ */
+function equipesDaNota_(registro) {
+  const equipes = registro.times.slice();
+
+  registro.punidos.forEach(function (punido) {
+    if (punido.equipe && equipes.indexOf(punido.equipe) === -1) {
+      equipes.push(punido.equipe);
+    }
+  });
+
+  return equipes;
+}
+
+/**
+ * Todas as equipes citadas nas notas, em ordem alfabetica; alimenta o filtro.
+ * @param {Array<Object>} registros
+ * @return {Array<string>}
+ */
+function equipesDasNotas_(registros) {
+  const equipes = [];
+
+  registros.forEach(function (registro) {
+    registro.equipes.forEach(function (equipe) {
+      if (equipe && equipes.indexOf(equipe) === -1) {
+        equipes.push(equipe);
+      }
+    });
+  });
+
+  return equipes.sort();
+}
+
+/**
+ * Valores distintos de um campo, em ordem alfabetica; alimenta filtros.
+ * @param {Array<Object>} registros
+ * @param {string} campo
+ * @return {Array<string>}
+ */
+function valoresUnicos_(registros, campo) {
+  const valores = [];
+
+  registros.forEach(function (registro) {
+    const valor = registro[campo];
+
+    if (valor && valores.indexOf(valor) === -1) {
+      valores.push(valor);
+    }
+  });
+
+  return valores.sort();
+}
+
+/******************************************************
+ * REGULAMENTOS
+ *
+ * Lista os regulamentos oficiais publicados. E a unica tela de consulta
+ * liberada tambem para o perfil membro: o regulamento e o documento que
+ * todas as equipes precisam ter a mao.
+ *
+ * A pasta fica na raiz do projeto no Drive e recebe o PDF final gerado
+ * por main.py --gerar-pdf-regulamento. So o PDF e publicado: o texto de
+ * trabalho continua no repositorio.
+ ******************************************************/
+
+/**
+ * Devolve os regulamentos publicados para a tela de consulta.
+ * Chamada pelo cliente; refaz a verificacao de permissao no servidor.
+ * @return {{registros: Array<Object>, total: number, limite: number, pastaUrl: string}}
+ */
+function listarRegulamentos() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || !moduloLiberado_('regulamentos', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar os regulamentos.');
+  }
+
+  const pasta = pastaRegulamentos_();
+  const registros = [];
+  const iterador = pasta.getFiles();
+
+  while (iterador.hasNext()) {
+    const arquivo = iterador.next();
+    const nome = arquivo.getName();
+
+    if (!/\.pdf$/i.test(nome)) {
+      continue;
+    }
+
+    const atualizado = arquivo.getLastUpdated();
+
+    registros.push({
+      nome: nome,
+      titulo: tituloRegulamento_(nome),
+      url: arquivo.getUrl(),
+
+      // Link direto de download, util para quem quer guardar o arquivo.
+      downloadUrl: 'https://drive.google.com/uc?export=download&id=' + arquivo.getId(),
+      tamanho: tamanhoLegivel_(arquivo.getSize()),
+      atualizadoEm: Utilities.formatDate(atualizado, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm'),
+      ordem: atualizado.getTime()
+    });
+  }
+
+  // O regulamento revisado mais recentemente aparece primeiro.
+  registros.sort(function (a, b) {
+    return b.ordem - a.ordem;
+  });
+
+  return {
+    registros: registros.slice(0, CONFIG.regulamentos.maxLeitura),
+    total: registros.length,
+    limite: CONFIG.regulamentos.maxLeitura,
+    pastaUrl: pasta.getUrl()
+  };
+}
+
+/**
+ * Subpasta do Drive com os regulamentos publicados.
+ * @return {DriveApp.Folder}
+ */
+function pastaRegulamentos_() {
+  let raiz;
+
+  try {
+    raiz = DriveApp.getFolderById(CONFIG.pastaRaizId);
+  } catch (e) {
+    throw new Error('Não foi possível abrir a pasta raiz do projeto no Drive (id '
+      + CONFIG.pastaRaizId + '). Verifique se o seu e-mail tem acesso a ela. '
+      + 'Detalhe: ' + (e && e.message ? e.message : e));
+  }
+
+  const pastas = raiz.getFoldersByName(CONFIG.regulamentos.subpasta);
+
+  if (!pastas.hasNext()) {
+    throw new Error('A pasta "' + CONFIG.regulamentos.subpasta + '" ainda não existe dentro de "'
+      + raiz.getName() + '". Ela é criada pela automação quando o primeiro regulamento é publicado '
+      + '(main.py --publicar-drive).');
+  }
+
+  return pastas.next();
+}
+
+/**
+ * Titulo legivel a partir do nome do arquivo.
+ * "regulamento-7-super-liga-união-2026.pdf" -> "Regulamento 7 Super Liga União 2026".
+ * @param {string} nome
+ * @return {string}
+ */
+function tituloRegulamento_(nome) {
+  const limpo = String(nome || '').replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim();
+
+  return limpo.replace(/\S+/g, function (palavra) {
+    // Numeros e siglas curtas ficam como estao; o resto vai para Capitalizado.
+    if (/^\d/.test(palavra)) {
+      return palavra;
+    }
+
+    return palavra.charAt(0).toUpperCase() + palavra.slice(1);
+  });
+}
+
+/**
+ * Tamanho do arquivo em texto curto, para a tela.
+ * @param {number} bytes
+ * @return {string}
+ */
+function tamanhoLegivel_(bytes) {
+  const valor = Number(bytes) || 0;
+
+  if (valor < 1024) {
+    return valor + ' B';
+  }
+
+  if (valor < 1024 * 1024) {
+    return Math.round(valor / 1024) + ' KB';
+  }
+
+  return (valor / (1024 * 1024)).toFixed(1).replace('.', ',') + ' MB';
 }
 
 /******************************************************

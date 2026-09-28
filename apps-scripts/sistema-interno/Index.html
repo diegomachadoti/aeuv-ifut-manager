@@ -521,6 +521,45 @@
     .solicitacoes tbody tr.linha { cursor: pointer; }
     .solicitacoes tbody tr.linha:hover { background: var(--fundo); }
 
+    /* ----- Notas oficiais ----- */
+
+    /* Cinco colunas: número e data são curtos, a partida e os punidos
+       precisam de espaço para caber dois nomes. */
+    .notas th:nth-child(1) { width: 12%; }
+    .notas th:nth-child(2) { width: 18%; }
+    .notas th:nth-child(3) { width: 26%; }
+    .notas th:nth-child(4) { width: 14%; }
+    .notas th:nth-child(5) { width: 30%; }
+
+    /* A coluna de punidos traz nome e equipe: precisa quebrar linha, ao
+       contrário da contagem por ação das outras tabelas. */
+    .notas .contagem { flex-direction: column; gap: 2px; }
+    .notas .contagem span { white-space: normal; }
+
+    /* ----- Regulamentos ----- */
+
+    .regulamentos {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .regulamento {
+      border: 1px solid var(--borda);
+      border-radius: 12px;
+      background: #fff;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .regulamento-titulo { display: flex; align-items: flex-start; gap: 10px; }
+    .regulamento-titulo .icone { font-size: 22px; line-height: 1.2; }
+    .regulamento-titulo h3 { margin: 0; font-size: 15px; color: var(--azul); }
+    .regulamento .barra-acoes { margin-top: auto; }
+
     .protocolo { font-weight: bold; color: var(--azul); font-family: monospace; }
 
     .pilula.aguardando { background: #fff2d8; color: #8a5a00; font-weight: bold; }
@@ -1206,6 +1245,18 @@
       if (modulo.tipo === 'sumulas') {
         conteudo.innerHTML = cabecalho + blocoCarregando('statusSumulas');
         carregarSumulas();
+        return;
+      }
+
+      if (modulo.tipo === 'notas') {
+        conteudo.innerHTML = cabecalho + blocoCarregando('statusNotas');
+        carregarNotas();
+        return;
+      }
+
+      if (modulo.tipo === 'regulamentos') {
+        conteudo.innerHTML = cabecalho + blocoCarregando('statusRegulamentos');
+        carregarRegulamentos();
         return;
       }
 
@@ -2261,6 +2312,422 @@
         + '<th>Punido</th><th>Artigo</th><th>Decis&atilde;o</th><th>Situa&ccedil;&atilde;o</th>'
         + '</tr></thead><tbody>' + linhas + '</tbody></table>'
         + atalho;
+    }
+
+    /**
+     * Estado da tela de notas oficiais. Mesma ideia das demais consultas:
+     * o servidor devolve tudo de uma vez e os filtros trabalham sobre a copia.
+     */
+    let notas = { registros: [], competicoes: [], equipes: [], total: 0, limite: 0, pastaUrl: '' };
+
+    /** Notas com o texto aberto. */
+    let notasAbertas = {};
+
+    /**
+     * Busca no servidor as notas oficiais publicadas.
+     */
+    function carregarNotas() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'notas') {
+            return;
+          }
+
+          notas = dados;
+          notasAbertas = {};
+          montarTelaNotas();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'notas') {
+            return;
+          }
+
+          document.getElementById('statusNotas').outerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarNotas();
+    }
+
+    /**
+     * Monta os indicadores, os filtros e a tabela das notas oficiais.
+     */
+    function montarTelaNotas() {
+      const registros = notas.registros || [];
+      const termo = consumirBusca();
+
+      if (!registros.length) {
+        document.getElementById('statusNotas').outerHTML =
+          '<div class="vazio">Nenhuma nota oficial publicada at&eacute; o momento.</div>';
+        return;
+      }
+
+      const recorte = notas.total > registros.length
+        ? escapar(registros.length + ' mais recentes de ' + notas.total)
+        : '';
+
+      document.getElementById('statusNotas').outerHTML = ''
+        + '<div class="resumo" id="resumoNotas"></div>'
+        + '<div class="filtros">'
+        + '<input type="search" id="buscaNotas" placeholder="Buscar por n&uacute;mero, partida, punido, artigo ou pelo texto da nota">'
+        + opcoesFiltro('competicao', 'Todas as competi&ccedil;&otilde;es', registros)
+        + filtroEquipeNotas()
+        + '</div>'
+        + '<div class="barra-acoes">'
+        + '<span id="contagemNotas"></span>'
+        + '<span class="espaco"></span>'
+        + (recorte ? '<span>' + recorte + '</span>' : '')
+        + '<button type="button" class="botao-apoio" id="recarregarNotas">Atualizar</button>'
+        + (notas.pastaUrl
+          ? '<a class="botao-apoio" href="' + escapar(notas.pastaUrl) + '" target="_blank" rel="noopener">Abrir pasta</a>'
+          : '')
+        + '</div>'
+        + '<div class="tabela-rolagem"><table class="solicitacoes notas"><thead><tr>'
+        + '<th>Nota</th><th>Publicada em</th><th>Partida</th><th>S&uacute;mula</th><th>Punidos</th>'
+        + '</tr></thead><tbody id="linhasNotas"></tbody></table></div>';
+
+      document.getElementById('buscaNotas').addEventListener('input', filtrarNotas);
+      document.getElementById('recarregarNotas').addEventListener('click', function () {
+        abrirModulo('notas');
+      });
+
+      conteudo.querySelectorAll('[data-filtro], #filtroEquipeNotas').forEach(function (campo) {
+        campo.addEventListener('change', filtrarNotas);
+      });
+
+      if (termo) {
+        document.getElementById('buscaNotas').value = termo;
+      }
+
+      filtrarNotas();
+    }
+
+    /**
+     * A equipe da nota vem dos times da partida e da equipe de cada punido;
+     * o servidor ja devolve a lista pronta.
+     */
+    function filtroEquipeNotas() {
+      const opcoes = (notas.equipes || []).map(function (equipe) {
+        return '<option value="' + escapar(equipe) + '">' + escapar(equipe) + '</option>';
+      }).join('');
+
+      return '<select id="filtroEquipeNotas"><option value="">Todas as equipes</option>' + opcoes + '</select>';
+    }
+
+    /**
+     * Aplica a busca e os seletores e redesenha a tabela.
+     */
+    function filtrarNotas() {
+      const busca = simplificar(document.getElementById('buscaNotas').value.trim());
+      const equipe = document.getElementById('filtroEquipeNotas').value;
+      const selecionados = {};
+
+      conteudo.querySelectorAll('[data-filtro]').forEach(function (campo) {
+        selecionados[campo.dataset.filtro] = campo.value;
+      });
+
+      const filtrados = (notas.registros || []).filter(function (registro) {
+        const passaSelecao = Object.keys(selecionados).every(function (campo) {
+          return !selecionados[campo] || registro[campo] === selecionados[campo];
+        });
+
+        if (!passaSelecao) {
+          return false;
+        }
+
+        if (equipe && (registro.equipes || []).indexOf(equipe) === -1) {
+          return false;
+        }
+
+        if (!busca) {
+          return true;
+        }
+
+        return simplificar(textoDaNota(registro)).indexOf(busca) !== -1;
+      });
+
+      desenharResumoNotas(filtrados);
+      desenharLinhasNotas(filtrados);
+    }
+
+    /**
+     * Junta tudo o que identifica a nota, inclusive o texto inteiro: o
+     * enquadramento e a fundamentacao so existem la dentro.
+     */
+    function textoDaNota(registro) {
+      return [
+        registro.numero,
+        registro.competicao,
+        registro.confronto,
+        registro.dataJogo,
+        registro.dataNota,
+        registro.protocolo,
+        registro.arbitro,
+        registro.texto
+      ].concat((registro.punidos || []).map(function (p) {
+        return p.nome + ' ' + p.equipe + ' ' + p.artigo + ' ' + p.decisao;
+      })).join(' ');
+    }
+
+    /**
+     * Indicadores do topo, sempre referentes ao que esta filtrado.
+     */
+    function desenharResumoNotas(registros) {
+      const punidos = registros.reduce(function (total, registro) {
+        return total + (registro.punidos || []).length;
+      }, 0);
+
+      function contarPunidos(situacao) {
+        return registros.reduce(function (total, registro) {
+          return total + (registro.punidos || []).filter(function (p) {
+            return simplificar(p.situacao || '') === situacao;
+          }).length;
+        }, 0);
+      }
+
+      const itens = [
+        ['', registros.length, 'Notas'],
+        ['', punidos, 'Punidos'],
+        ['cumprir', contarPunidos('a cumprir'), 'A cumprir'],
+        ['cumprida', contarPunidos('cumprida'), 'Cumpridas']
+      ];
+
+      document.getElementById('resumoNotas').innerHTML = itens.map(function (item) {
+        return '<div class="indicador ' + item[0] + '">'
+          + '<div class="numero">' + item[1] + '</div>'
+          + '<div class="rotulo">' + item[2] + '</div>'
+          + '</div>';
+      }).join('');
+
+      const total = (notas.registros || []).length;
+
+      document.getElementById('contagemNotas').textContent = registros.length === total
+        ? registros.length + ' nota(s)'
+        : registros.length + ' de ' + total + ' nota(s)';
+    }
+
+    /**
+     * Desenha as linhas da tabela. Cada linha abre uma segunda, com o
+     * texto completo da nota e os atalhos para a súmula e para o controle.
+     */
+    function desenharLinhasNotas(registros) {
+      if (!registros.length) {
+        document.getElementById('linhasNotas').innerHTML =
+          '<tr><td colspan="5" style="text-align:center;color:var(--apoio);">'
+          + 'Nenhuma nota encontrada com os filtros atuais.</td></tr>';
+        return;
+      }
+
+      document.getElementById('linhasNotas').innerHTML = registros.map(function (r) {
+        const aberta = !!notasAbertas[r.arquivoNome];
+
+        const linha = '<tr class="linha" data-arquivo="' + escapar(r.arquivoNome) + '">'
+          + celula('Nota', '<span class="protocolo">' + escapar(r.numero || '—') + '</span>'
+            + (r.pendente ? '<div class="equipe-dado">⚠️ com campos a definir</div>' : ''))
+          + celula('Publicada em', escapar(r.dataNota || '—'))
+          + celula('Partida', '<span class="equipe-nome">' + escapar(r.confronto || '—') + '</span>'
+            + '<div class="equipe-dado">' + escapar(r.dataJogo || r.competicao || '—') + '</div>')
+          + celula('Súmula', atalhoSumulaDaNota(r))
+          + celula('Punidos', resumoPunidosDaNota(r))
+          + '</tr>';
+
+        return linha + (aberta ? detalheNota(r) : '');
+      }).join('');
+
+      conteudo.querySelectorAll('#linhasNotas tr.linha').forEach(function (linha) {
+        linha.addEventListener('click', function () {
+          const chave = linha.dataset.arquivo;
+
+          if (notasAbertas[chave]) {
+            delete notasAbertas[chave];
+          } else {
+            notasAbertas[chave] = true;
+          }
+
+          filtrarNotas();
+        });
+      });
+
+      // O clique nos atalhos nao deve abrir ou fechar a linha junto.
+      conteudo.querySelectorAll('#linhasNotas [data-ir-sumula]').forEach(function (botao) {
+        botao.addEventListener('click', function (evento) {
+          evento.stopPropagation();
+          abrirModulo('sumulas', botao.dataset.irSumula);
+        });
+      });
+
+      conteudo.querySelectorAll('#linhasNotas [data-ir-punicoes]').forEach(function (botao) {
+        botao.addEventListener('click', function (evento) {
+          evento.stopPropagation();
+          abrirModulo('punicoes', botao.dataset.irPunicoes);
+        });
+      });
+    }
+
+    /**
+     * Protocolo da sumula que originou a nota, com atalho para a tela de
+     * súmulas quando ela estiver liberada para o perfil.
+     */
+    function atalhoSumulaDaNota(registro) {
+      if (!registro.protocolo) {
+        return '<span class="equipe-dado">—</span>';
+      }
+
+      if (!moduloDisponivel('sumulas')) {
+        return '<span class="protocolo">' + escapar(registro.protocolo) + '</span>';
+      }
+
+      return '<button type="button" class="botao-apoio atalho-sumula" data-ir-sumula="'
+        + escapar(registro.protocolo) + '" title="' + escapar(registro.protocolo) + '">Ver súmula</button>';
+    }
+
+    /**
+     * Quem foi punido pela nota, resumido em uma célula.
+     */
+    function resumoPunidosDaNota(registro) {
+      const punidos = registro.punidos || [];
+
+      if (!punidos.length) {
+        return '<span class="equipe-dado">sem punição registrada</span>';
+      }
+
+      const nomes = punidos.slice(0, 2).map(function (p) {
+        return '<span><strong>' + escapar(p.nome || '—') + '</strong> ' + escapar(p.equipe || '') + '</span>';
+      });
+
+      if (punidos.length > nomes.length) {
+        nomes.push('<span>e mais ' + (punidos.length - nomes.length) + '</span>');
+      }
+
+      return '<div class="contagem">' + nomes.join('') + '</div>';
+    }
+
+    /**
+     * Linha extra com o texto integral da nota, a lista de punidos e os links.
+     */
+    function detalheNota(registro) {
+      const dados = [
+        ['Competição', registro.competicao],
+        ['Data do jogo', registro.dataJogo],
+        ['Árbitro da partida', registro.arbitro],
+        ['Arquivo', registro.arquivoNome]
+      ].filter(function (item) {
+        return item[1];
+      }).map(function (item) {
+        return '<span>' + escapar(item[0]) + ': <strong>' + escapar(item[1]) + '</strong></span>';
+      }).join('');
+
+      const linhas = (registro.punidos || []).map(function (p) {
+        return '<tr>'
+          + celula('Punido', '<span class="pessoa-nome">' + escapar(p.nome || '—') + '</span>'
+            + '<div class="equipe-dado">' + escapar(p.equipe || '—') + '</div>')
+          + celula('Artigo', escapar(p.artigo || '—'))
+          + celula('Decisão', escapar(p.decisao || '—'))
+          + celula('Situação', '<span class="' + classeSituacao(p.situacao || '') + '">'
+            + escapar(p.situacao || '—') + '</span>')
+          + '</tr>';
+      }).join('');
+
+      const tabela = linhas
+        ? '<table class="pessoas"><thead><tr>'
+          + '<th>Punido</th><th>Artigo</th><th>Decis&atilde;o</th><th>Situa&ccedil;&atilde;o</th>'
+          + '</tr></thead><tbody>' + linhas + '</tbody></table>'
+        : '<p class="equipe-dado">Esta nota n&atilde;o registrou punidos no controle.</p>';
+
+      // O PDF e o documento oficial; o texto aqui serve para ler e buscar
+      // sem sair da tela.
+      const corpo = registro.texto
+        ? '<div class="relato"><h4>Texto da nota</h4><p>' + escapar(registro.texto) + '</p></div>'
+        : '';
+
+      const links = '<div class="barra-acoes" style="margin-top:12px;">'
+        + (registro.pdfUrl
+          ? '<a class="botao-apoio destaque" href="' + escapar(registro.pdfUrl) + '" target="_blank" rel="noopener">Nota oficial (PDF)</a>'
+          : '<span class="equipe-dado">Sem PDF publicado</span>')
+        + '<a class="botao-apoio" href="' + escapar(registro.arquivoUrl) + '" target="_blank" rel="noopener">Abrir arquivo</a>'
+        + (registro.numero && moduloDisponivel('punicoes')
+          ? '<button type="button" class="botao-apoio" data-ir-punicoes="' + escapar(registro.numero)
+            + '">Ver no controle de punições</button>'
+          : '')
+        + '</div>';
+
+      return '<tr class="detalhe"><td colspan="5"><div class="detalhe-caixa">'
+        + (dados ? '<div class="detalhe-dados">' + dados + '</div>' : '')
+        + tabela
+        + corpo
+        + links
+        + '</div></td></tr>';
+    }
+
+    /**
+     * Estado da tela de regulamentos.
+     */
+    let regulamentos = { registros: [], total: 0, limite: 0, pastaUrl: '' };
+
+    /**
+     * Busca no servidor os regulamentos publicados.
+     */
+    function carregarRegulamentos() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'regulamentos') {
+            return;
+          }
+
+          regulamentos = dados;
+          montarTelaRegulamentos();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'regulamentos') {
+            return;
+          }
+
+          document.getElementById('statusRegulamentos').outerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarRegulamentos();
+    }
+
+    /**
+     * Lista os regulamentos em cartoes.
+     *
+     * Sao poucos arquivos e o uso e sempre o mesmo - abrir o PDF -, entao
+     * aqui nao ha tabela nem filtro: cada regulamento e um cartao com os
+     * dois botoes de acesso.
+     */
+    function montarTelaRegulamentos() {
+      const registros = regulamentos.registros || [];
+
+      if (!registros.length) {
+        document.getElementById('statusRegulamentos').outerHTML =
+          '<div class="vazio">Nenhum regulamento publicado at&eacute; o momento.</div>';
+        return;
+      }
+
+      const cartoes = registros.map(function (r) {
+        return '<div class="regulamento">'
+          + '<div class="regulamento-titulo"><span class="icone">📕</span>'
+          + '<h3>' + escapar(r.titulo) + '</h3></div>'
+          + '<p class="equipe-dado">Atualizado em ' + escapar(r.atualizadoEm) + ' · ' + escapar(r.tamanho) + '</p>'
+          + '<div class="barra-acoes">'
+          + '<a class="botao-apoio destaque" href="' + escapar(r.url) + '" target="_blank" rel="noopener">Abrir PDF</a>'
+          + '<a class="botao-apoio" href="' + escapar(r.downloadUrl) + '" target="_blank" rel="noopener">Baixar</a>'
+          + '</div></div>';
+      }).join('');
+
+      document.getElementById('statusRegulamentos').outerHTML = ''
+        + '<div class="barra-acoes">'
+        + '<span>' + registros.length + ' regulamento(s)</span>'
+        + '<span class="espaco"></span>'
+        + '<button type="button" class="botao-apoio" id="recarregarRegulamentos">Atualizar</button>'
+        + (regulamentos.pastaUrl
+          ? '<a class="botao-apoio" href="' + escapar(regulamentos.pastaUrl) + '" target="_blank" rel="noopener">Abrir pasta</a>'
+          : '')
+        + '</div>'
+        + '<div class="regulamentos">' + cartoes + '</div>';
+
+      document.getElementById('recarregarRegulamentos').addEventListener('click', function () {
+        abrirModulo('regulamentos');
+      });
     }
 
     /**

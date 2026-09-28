@@ -27,6 +27,7 @@ Veja como os formulários geram e armazenam esses arquivos no
 - `regulamento_pdf.py`: PDF do regulamento no mesmo layout, assinado pelo Presidente (`--gerar-pdf-regulamento`)
 - `controle_punicoes.py`: TXT e PDF de controle com todos os punidos pelas notas oficiais (`--atualizar-controle-punicoes`)
 - `resultado_pdf.py`: PDF do resultado de inscrição, remoção e portabilidade, com o status de cada registro em destaque
+- `publicacao_drive.py`: publica no Drive os regulamentos e as notas oficiais já fechadas (`--publicar-drive`)
 - `regulamento\`: texto do regulamento usado na análise disciplinar
 - `config.ini`: credenciais, delays e URLs
 - `selectors.ini`: seletores Selenium do iFut
@@ -215,7 +216,9 @@ fazer cópia de segurança de tudo de uma vez.
 AEUV - Automação/
 ├── Arquivos TXT - Sumulas Digitais/        ← [sumulas] folder_embed_url
 │   ├── Entrada/  Processados/  Falhas/     ← a pasta é o status na tela de súmulas
-│   └── Controle de Punicoes/               ← TXT + PDF lidos pelo sistema interno
+│   ├── Controle de Punicoes/               ← TXT + PDF lidos pelo sistema interno
+│   └── Notas Oficiais/                     ← TXT + PDF das notas finais, lidos pelo sistema interno
+├── Regulamentos/                           ← PDF dos regulamentos, lido pelo sistema interno
 ├── PDF - Sumulas Digitais/
 ├── Anexos - Sumulas Digitais/
 ├── Arquivos TXT - Inscricoes de Atletas/   ← [drive] folder_embed_url
@@ -802,3 +805,49 @@ A formatação é automática:
 
 Os emojis são removidos no PDF, pois a fonte não os desenha. Sempre que o
 regulamento mudar, basta rodar o comando de novo.
+
+## Publicação no Drive
+
+As telas **Regulamentos** e **Notas oficiais** do
+[sistema interno](apps-scripts/README.md#regulamentos) só enxergam o que está no
+Drive. Quem leva os arquivos para lá é `publicacao_drive.py`:
+
+| Artefato | Vai para | Quando |
+| --- | --- | --- |
+| PDF do regulamento | `AEUV - Automação/Regulamentos/` | ao rodar `--gerar-pdf-regulamento` |
+| Nota oficial (TXT + PDF) | `Arquivos TXT - Sumulas Digitais/Notas Oficiais/` | ao rodar `--gerar-pdf-nota` |
+
+Ou seja, a publicação acontece no momento em que o documento final é gerado, e
+não exige um passo a mais. Para reenviar tudo de uma vez — na primeira carga,
+ou depois de revisar várias notas — existe o comando em lote:
+
+```powershell
+.\.venv\Scripts\python.exe .\main.py --publicar-drive
+```
+
+**Só nota final é publicada.** Enquanto o texto tiver marcadores
+`[A DEFINIR PELA COMISSÃO]` ou divergências apontadas pela IA, ela fica apenas
+na máquina de quem gerou — o mesmo critério que faz o PDF sair com a marca
+d'água RASCUNHO. Assim a diretoria nunca abre a tela e lê uma decisão que ainda
+pode mudar.
+
+Nenhum ID novo entra no `config.ini`: as duas pastas são descobertas a partir do
+`[sumulas] folder_embed_url` (o ID da URL é a pasta das súmulas, e a pasta pai
+dela é a raiz `AEUV - Automação`). O Apps Script segue a mesma regra, então os
+dois lados continuam apontando para o mesmo lugar sozinhos. Arquivo que já
+existe é **atualizado**, não duplicado.
+
+### A primeira cópia é manual
+
+A service account **não tem cota de armazenamento própria**. Ela cria pastas e
+atualiza arquivos existentes, mas não consegue criar um arquivo novo dentro de
+uma pasta de terceiro — o Drive responde `storageQuotaExceeded`. É a mesma
+limitação que o controle de punições enfrentou.
+
+Na prática, uma vez por artefato:
+
+1. Rode `--publicar-drive`. Ele cria as pastas `Regulamentos` e `Notas Oficiais`
+   e avisa quais arquivos não conseguiu enviar.
+2. Arraste esses arquivos para as pastas pelo navegador, mantendo o nome.
+3. Das próximas vezes a automação encontra o arquivo pelo nome e o atualiza
+   sozinha — inclusive quando a comissão revisa uma nota e regera o PDF.
