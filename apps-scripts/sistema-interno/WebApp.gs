@@ -1384,8 +1384,8 @@ function pastaNotas_() {
 
   if (!pastas.hasNext()) {
     throw new Error('A pasta "' + CONFIG.notas.subpasta + '" ainda não existe dentro de "'
-      + raiz.getName() + '". Ela é criada pela automação quando a primeira nota oficial é publicada '
-      + '(main.py --publicar-drive).');
+      + raiz.getName() + '". Crie-a no Drive e publique as notas com '
+      + 'main.py --publicar-drive.');
   }
 
   return pastas.next();
@@ -1655,8 +1655,8 @@ function pastaRegulamentos_() {
 
   if (!pastas.hasNext()) {
     throw new Error('A pasta "' + CONFIG.regulamentos.subpasta + '" ainda não existe dentro de "'
-      + raiz.getName() + '". Ela é criada pela automação quando o primeiro regulamento é publicado '
-      + '(main.py --publicar-drive).');
+      + raiz.getName() + '". Crie-a no Drive e publique o regulamento com '
+      + 'main.py --publicar-drive.');
   }
 
   return pastas.next();

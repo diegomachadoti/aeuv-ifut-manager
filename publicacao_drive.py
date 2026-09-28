@@ -83,7 +83,14 @@ class PublicadorDrive:
         return self._raiz_id
 
     def subpasta_id(self, nome: str, pai_id: str) -> str:
-        """Acha a subpasta pelo nome dentro do pai; cria quando ainda nao existe."""
+        """Acha a subpasta pelo nome dentro do pai.
+
+        A pasta *nao* e criada aqui de proposito. A conta de servico nao tem
+        cota de armazenamento propria: tudo o que ela cria fica registrado com
+        ela como dona, e uma pasta assim some da visao de quem abre o Drive -
+        ela existe, mas ninguem alcanca. Criar pastas e trabalho de quem tem
+        Drive de verdade.
+        """
         achados = self.service.files().list(
             q=(f"'{pai_id}' in parents and trashed = false "
                f"and mimeType = 'application/vnd.google-apps.folder' and name = '{nome}'"),
@@ -92,12 +99,11 @@ class PublicadorDrive:
         ).execute().get("files", [])
         if achados:
             return achados[0]["id"]
-        criada = self.service.files().create(
-            body={"name": nome, "mimeType": "application/vnd.google-apps.folder", "parents": [pai_id]},
-            fields="id",
-        ).execute()
-        self.logger.info("[DRIVE] Pasta %s criada", nome)
-        return criada["id"]
+        pai = self.service.files().get(fileId=pai_id, fields="name").execute()
+        raise RuntimeError(
+            f'A pasta "{nome}" nao existe dentro de "{pai["name"]}" no Drive. '
+            f'Crie-a pelo navegador e rode o comando de novo.'
+        )
 
     # -- envio --------------------------------------------------------------
 
@@ -134,10 +140,10 @@ class PublicadorDrive:
                 enviados += 1
             except Exception as exc:
                 if "storageQuotaExceeded" in str(exc):
-                    # A conta de servico nao tem cota propria: consegue criar
-                    # pastas e atualizar arquivos existentes, mas nao criar um
-                    # arquivo novo numa pasta de terceiro. Mesma limitacao que
-                    # o controle de punicoes enfrentou.
+                    # A conta de servico nao tem cota propria: consegue
+                    # atualizar arquivos existentes, mas nao criar um arquivo
+                    # novo. Mesma limitacao que o controle de punicoes
+                    # enfrentou na primeira publicacao.
                     if not avisou:
                         self.logger.error(
                             "[DRIVE] A conta de servico nao pode criar arquivos novos no Drive. "
@@ -213,4 +219,7 @@ def publicar_tudo(config_path: Path, logger: logging.Logger = LOGGER) -> tuple[i
             logger.info("[DRIVE] %s ainda e rascunho; nao publicada", txt.name)
 
     publicador = PublicadorDrive.carregar(config_path, logger)
-    return publicador.publicar_regulamentos(pdfs), publicador.publicar_notas(notas)
+
+    # Uma pasta que falta nao pode impedir a outra de ser publicada.
+    return (_silenciar("Regulamentos", logger, lambda: publicador.publicar_regulamentos(pdfs)),
+            _silenciar("Notas oficiais", logger, lambda: publicador.publicar_notas(notas)))

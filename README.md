@@ -837,17 +837,24 @@ dela é a raiz `AEUV - Automação`). O Apps Script segue a mesma regra, então 
 dois lados continuam apontando para o mesmo lugar sozinhos. Arquivo que já
 existe é **atualizado**, não duplicado.
 
-### A primeira cópia é manual
+### As pastas e a primeira cópia são manuais
 
-A service account **não tem cota de armazenamento própria**. Ela cria pastas e
-atualiza arquivos existentes, mas não consegue criar um arquivo novo dentro de
-uma pasta de terceiro — o Drive responde `storageQuotaExceeded`. É a mesma
-limitação que o controle de punições enfrentou.
+A service account **não tem cota de armazenamento própria**. Ela atualiza
+arquivos existentes, mas não consegue criar nada novo — e o que ela cria fica
+registrado com ela como dona, o que é pior do que falhar: a pasta existe, mas
+some da visão de quem abre o Drive. Por isso a automação **não cria pastas**;
+ela avisa quando falta uma.
 
-Na prática, uma vez por artefato:
+Uma vez por artefato:
 
-1. Rode `--publicar-drive`. Ele cria as pastas `Regulamentos` e `Notas Oficiais`
-   e avisa quais arquivos não conseguiu enviar.
-2. Arraste esses arquivos para as pastas pelo navegador, mantendo o nome.
-3. Das próximas vezes a automação encontra o arquivo pelo nome e o atualiza
-   sozinha — inclusive quando a comissão revisa uma nota e regera o PDF.
+1. Crie no Drive, pelo navegador, as pastas `Regulamentos` (dentro de
+   `AEUV - Automação`) e `Notas Oficiais` (dentro de
+   `Arquivos TXT - Sumulas Digitais`).
+2. Copie para dentro delas o PDF do regulamento e os TXT + PDF das notas
+   finais, mantendo os nomes.
+3. Rode `--publicar-drive` para conferir. Das próximas vezes a automação
+   encontra cada arquivo pelo nome e o atualiza sozinha — inclusive quando a
+   comissão revisa uma nota e regera o PDF.
+
+Mesmo cuidado do resto do projeto: **não renomeie as pastas**, porque tanto o
+Python quanto o Apps Script as localizam pelo nome exato.
