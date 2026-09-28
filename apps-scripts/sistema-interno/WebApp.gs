@@ -962,6 +962,16 @@ function listarSumulas() {
     );
   });
 
+  const notas = indiceNotas_();
+
+  registros.forEach(function (registro) {
+    const achado = notas[chaveProtocolo_(registro.protocolo)];
+
+    registro.notas = achado ? achado.notas : [];
+    registro.dataNota = achado ? achado.dataNota : '';
+    registro.punidos = achado ? achado.punidos : [];
+  });
+
   return {
     registros: registros,
     situacoes: SUMULAS_PASTAS,
@@ -970,6 +980,73 @@ function listarSumulas() {
     limite: limite,
     pastaUrl: raiz.getUrl()
   };
+}
+
+/**
+ * Indice protocolo da sumula -> nota oficial que ela gerou.
+ *
+ * Nao e preciso abrir as notas uma a uma: o controle de punicoes que a
+ * automacao publica ja traz a coluna NOTA ao lado da coluna SUMULA. E
+ * uma leitura so, do mesmo arquivo que a tela de punicoes ja usa.
+ *
+ * O controle so existe depois da primeira nota publicada, e a sumula
+ * analisada sem infracao nao gera linha nenhuma nele. Nos dois casos a
+ * tela continua funcionando, apenas sem o vinculo.
+ * @return {Object<string, {notas: Array<string>, dataNota: string, punidos: Array<Object>}>}
+ */
+function indiceNotas_() {
+  let conteudo;
+
+  try {
+    conteudo = arquivoPunicoes_().getBlob().getDataAsString('UTF-8');
+  } catch (e) {
+    return {};
+  }
+
+  const indice = {};
+
+  interpretarPunicoes_(conteudo).forEach(function (registro) {
+    const chave = chaveProtocolo_(registro.sumula);
+
+    if (!chave) {
+      return;
+    }
+
+    if (!indice[chave]) {
+      indice[chave] = { notas: [], dataNota: registro.dataNota || '', punidos: [] };
+    }
+
+    const item = indice[chave];
+
+    // Uma sumula costuma gerar uma nota so, mas uma nota retificadora
+    // sobre a mesma partida entraria aqui tambem.
+    if (registro.nota && item.notas.indexOf(registro.nota) === -1) {
+      item.notas.push(registro.nota);
+    }
+
+    item.punidos.push({
+      nome: registro.punido,
+      equipe: registro.equipe,
+      tipo: registro.tipo,
+      artigo: registro.artigo,
+      decisao: registro.decisao,
+      status: registro.status,
+      situacao: registro.situacao
+    });
+  });
+
+  return indice;
+}
+
+/**
+ * Normaliza o protocolo para comparar a sumula com a coluna SUMULA do
+ * controle, que e preenchida a partir do mesmo campo mas pode chegar
+ * com espacos ou em caixa diferente.
+ * @param {string} valor
+ * @return {string}
+ */
+function chaveProtocolo_(valor) {
+  return String(valor == null ? '' : valor).trim().toUpperCase();
 }
 
 /**

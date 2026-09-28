@@ -717,6 +717,12 @@ nota e rodar `--gerar-pdf-nota`, o controle é atualizado junto: por exemplo, um
 Uma nova nota da mesma súmula substitui os registros da nota anterior. Punidos
 com "sem penalidade adicional" não entram.
 
+A coluna `SÚMULA` é o que liga a punição ao envio da arbitragem. O sistema
+interno usa esse par `NOTA` + `SÚMULA` para navegar de uma tela à outra —
+[Súmulas Enviadas](apps-scripts/README.md#súmulas-enviadas) mostra a decisão
+que a súmula gerou, e o [controle de punições](apps-scripts/README.md#controle-de-punições)
+leva de volta ao relato que a motivou.
+
 Para refazer o controle a partir de todas as notas da pasta, valendo a nota de
 maior número de cada súmula:
 

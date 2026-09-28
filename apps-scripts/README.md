@@ -531,6 +531,11 @@ são montados a partir dos próprios dados. No computador os dados aparecem em
 tabela; no celular cada punição vira uma ficha com os rótulos à esquerda. O
 botão "Atualizar" relê o arquivo e "Abrir arquivo" leva ao TXT no Drive.
 
+Cada linha traz ainda um **"Ver súmula"**, abaixo do número da nota, que abre a
+tela de [Súmulas Enviadas](#súmulas-enviadas) já filtrada pelo protocolo — o
+caminho para ler o relato do árbitro que motivou aquela punição. O atalho só
+aparece para quem tem a tela de súmulas no menu.
+
 Dois pontos de atenção:
 
 - **Permissão.** O aplicativo roda com a permissão de quem acessa, então cada
@@ -744,6 +749,28 @@ arquivo TXT. Quando o PDF não foi gerado, o lugar dele mostra um aviso.
 A busca livre cobre também o relato: é comum lembrar de uma palavra do texto e
 não do protocolo. O filtro por equipe considera tanto os dois times da partida
 quanto a equipe de cada envolvido, já que a súmula não tem uma equipe única.
+
+#### O que a comissão decidiu
+
+O detalhe fecha o ciclo mostrando a **nota oficial** que aquela súmula gerou:
+número, data, quem foi punido, o artigo, a decisão e a situação de cada
+punição. Um botão leva ao [controle de punições](#controle-de-punições) já
+filtrado por aquele protocolo, e o caminho inverso também existe — cada linha
+do controle traz um "Ver súmula" que abre esta tela no envio que originou a
+punição.
+
+Esse vínculo não custou nenhum arquivo novo: o controle de punições que a
+automação publica já grava a coluna `SÚMULA` ao lado da coluna `NOTA`, então a
+tela faz **uma leitura só**, do mesmo arquivo que a tela de punições usa.
+Quando o controle ainda não existe, ou o usuário não tem acesso a ele, a tela
+continua funcionando — apenas sem o vínculo.
+
+Dois casos aparecem com texto próprio, e nenhum deles é erro:
+
+| Caso | O que a tela diz |
+| --- | --- |
+| Súmula ainda em `Entrada` | "A análise disciplinar desta súmula ainda não foi feita." |
+| Súmula analisada sem infração | "Súmula analisada sem punição registrada no controle." |
 
 #### Um formato diferente do das inscrições
 
