@@ -438,11 +438,22 @@ A lista de autorizados fica nas **propriedades do script**, na chave
 `USUARIOS_AUTORIZADOS`, e cai para a constante `USUARIOS_PADRAO` do código
 enquanto a propriedade não existir. Cada item tem `email`, `nome` e `perfil`.
 
-Para incluir ou remover alguém, edite a lista dentro da função
-`definirUsuariosAutorizados()` no editor do Apps Script e execute-a. A alteração
-passa a valer na hora, **sem publicar nova versão**. A função recusa listas
-vazias e listas sem nenhum administrador. `restaurarUsuariosPadrao()` apaga a
-propriedade e devolve o controle à lista do código.
+Para conceder, alterar ou revogar um acesso, use a tela **Usuários do sistema**,
+visível apenas para o perfil `admin`. A mudança passa a valer na hora, **sem
+publicar nova versão** — quem estiver com o sistema aberto vê o novo perfil ao
+recarregar a página. O servidor recusa:
+
+- e-mail fora do formato `nome@dominio.com`;
+- e-mail que já está na lista;
+- perfil que não existe em `PERFIS`;
+- qualquer alteração que deixe o sistema sem nenhum administrador;
+- o administrador rebaixando ou removendo **a si mesmo** — sempre há outra
+  pessoa capaz de desfazer um engano.
+
+No editor do Apps Script ficam duas funções de socorro, para quando ninguém mais
+conseguir entrar: `definirUsuariosAutorizados()` regrava `USUARIOS_PADRAO` por
+cima da propriedade, e `restaurarUsuariosPadrao()` apaga a propriedade e devolve
+o controle à lista do código.
 
 As propriedades do script foram escolhidas de propósito no lugar de uma aba de
 planilha: como o aplicativo roda com a permissão de quem acessa, ler uma
@@ -453,13 +464,19 @@ Perfis disponíveis:
 
 | Perfil | Enxerga |
 | --- | --- |
-| `admin` | Todos os módulos, incluindo a lista de acessos. |
-| `diretoria` | Módulos operacionais e de consulta. |
-| `membro` | Início e os formulários. |
+| `admin` | Tudo, inclusive conceder e revogar acesso. |
+| `diretoria` | Tudo, menos a tela de acessos. |
+| `arbitragem` | Início, súmula digital e regulamentos. |
+| `associado` | Início, inscrição e portabilidade, regulamentos e associados. |
 
-Perfil desconhecido é tratado como `membro`. A função `diagnosticarAcesso()`
-registra no log o e-mail lido e o resultado da verificação; use-a quando a
-implantação parecer bloquear alguém indevidamente.
+A única diferença entre `admin` e `diretoria` é a tela de acessos: quem dirige a
+associação precisa operar o sistema inteiro, mas distribuir permissão é ato de
+outra natureza e fica com quem administra.
+
+Perfil desconhecido é tratado como `associado`, o de menor alcance: um perfil
+renomeado nunca vira acesso a mais. A função `diagnosticarAcesso()` registra no
+log o e-mail lido e o resultado da verificação; use-a quando a implantação
+parecer bloquear alguém indevidamente.
 
 ### Módulos
 
@@ -472,7 +489,7 @@ pode declarar `grupo` para entrar num submenu.
 | --- | --- |
 | `painel` | Tela inicial, com saudação e atalhos para os demais módulos. |
 | `link` | Abre um endereço externo em nova aba (usado pelos dois formulários). |
-| `usuarios` | Tabela de autorizados; busca os dados com `listarUsuarios()`. |
+| `usuarios` | Acessos do sistema: lista, concede, edita e revoga. `listarUsuarios()`, `salvarUsuario()` e `removerUsuario()`. |
 | `punicoes` | Controle de punições; busca os dados com `listarPunicoes()`. |
 | `solicitacoes` | Solicitações de Inscrições; busca os dados com `listarSolicitacoes()`. |
 | `sumulas` | Súmulas Enviadas; busca os dados com `listarSumulas()`. |
@@ -722,7 +739,8 @@ não quebra a consulta.
 
 #### Permissão
 
-Liberada para **admin e diretoria**. Ficou fora do perfil `membro` porque a tela
+Liberada para **admin e diretoria**. Ficou fora dos perfis `associado` e
+`arbitragem` porque a tela
 expõe nome, data de nascimento e CPF dos atletas, além do telefone do
 responsável. Como o aplicativo roda com a permissão de quem acessa, cada pessoa
 autorizada também precisa de acesso de leitura à pasta das inscrições no Drive.
@@ -823,7 +841,8 @@ no padrão `SUMULA_*.txt` entram — a pasta também recebe PDFs e anexos.
 
 #### Permissão
 
-Liberada para **admin e diretoria**. Ficou fora do perfil `membro` porque o
+Liberada para **admin e diretoria**. Ficou fora dos perfis `associado` e
+`arbitragem` porque o
 relato costuma trazer acusações e ofensas atribuídas a pessoas com nome e
 número da camisa — material da comissão disciplinar, não de consulta geral.
 Cada pessoa autorizada também precisa de acesso de leitura à pasta das súmulas
@@ -905,9 +924,9 @@ existe (nenhuma nota foi publicada) ou o usuário não tem acesso a ela.
 ### Regulamentos
 
 Lista os regulamentos oficiais publicados. É a tela mais simples do sistema e a
-**única consulta liberada também para o perfil `membro`**: o regulamento é o
-documento que toda equipe precisa ter à mão, e não há nada nele que dependa de
-quem está olhando.
+**única consulta aberta a todos os perfis**: o regulamento é o
+documento que toda equipe e a arbitragem precisam ter à mão, e não há nada nele
+que dependa de quem está olhando.
 
 Por isso não há tabela nem filtro. São poucos arquivos e o uso é sempre o
 mesmo — abrir o PDF —, então cada regulamento é um cartão com o título, a data
@@ -1009,7 +1028,8 @@ pontuado.
 | Perfil | Pode |
 | --- | --- |
 | `admin`, `diretoria` | Consultar, cadastrar e editar |
-| `membro` | Apenas consultar |
+| `associado` | Apenas consultar |
+| `arbitragem` | Sem acesso à tela |
 
 Quem só consulta vê a mesma tela, com os campos travados, sem botão de salvar e
 sem campo de envio — mas com os links dos documentos disponíveis. A regra está
@@ -1054,7 +1074,8 @@ escolher uma opção.
 - Mantenha os aplicativos em projetos GAS separados. Os arquivos HTML devem
   continuar se chamando `Index` (no sistema interno também `Estilos`, `Negado` e
   `Ponte`); as funções chamadas pela interface são `salvarInscricao()`,
-  `salvarSumula()`, `listarUsuarios()`, `listarPunicoes()`,
+  `salvarSumula()`, `listarUsuarios()`, `salvarUsuario()`, `removerUsuario()`,
+  `listarPunicoes()`,
   `listarSolicitacoes()`, `listarSumulas()`, `listarNotas()`,
   `listarRegulamentos()`, `listarAssociados()` e `salvarAssociado()`.
 - Ao alterar equipes, competições ou outros dados de configuração, atualize as

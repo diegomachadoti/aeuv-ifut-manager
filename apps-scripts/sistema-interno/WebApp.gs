@@ -108,23 +108,38 @@ const CONFIG = {
 
 /**
  * Lista usada enquanto a propriedade USUARIOS_AUTORIZADOS nao for definida.
- * Para alterar os autorizados sem mexer no codigo, use definirUsuariosAutorizados().
+ * O caminho normal para incluir ou remover alguem e a tela "Usuarios do
+ * sistema"; esta lista e a rede de seguranca para quando a propriedade for
+ * apagada ou o sistema entrar no ar num script novo.
  */
 const USUARIOS_PADRAO = [
   { email: 'deejaydiego@gmail.com', nome: 'Diego Machado', perfil: 'admin' },
-  { email: 'artetopudi@gmail.com', nome: 'Diretoria', perfil: 'admin' },
-  { email: 'associacaoaeuv@gmail.com', nome: 'AEUV', perfil: 'admin' },
-  { email: 'costtitiiure@gmail.com', nome: 'Iure Costtiti', perfil: 'admin' }
+  { email: 'associacaoaeuv@gmail.com', nome: 'AEUV', perfil: 'diretoria' },
+  { email: 'costtitiiure@gmail.com', nome: 'Iure Costtiti', perfil: 'diretoria' },
+  { email: 'xavierelegance68@gmail.com', nome: 'Iure Costtiti', perfil: 'diretoria' },
+  { email: 'artetopudi@gmail.com', nome: 'Diretoria', perfil: 'associado' }
 ];
 
 /**
- * Perfis aceitos pelo sistema.
+ * Perfis aceitos pelo sistema, na ordem em que aparecem na tela.
+ *
+ * admin      - tudo, inclusive conceder e revogar acesso.
+ * diretoria  - tudo, menos mexer em quem tem acesso.
+ * arbitragem - envia sumula e consulta o regulamento.
+ * associado  - a equipe: formularios, regulamentos e o proprio cadastro.
  */
 const PERFIS = {
   admin: 'Administrador',
   diretoria: 'Diretoria',
-  membro: 'Membro'
+  arbitragem: 'Arbitragem',
+  associado: 'Associado'
 };
+
+/**
+ * Perfil assumido quando o gravado nao existe mais em PERFIS. E o de
+ * menor alcance de proposito: um perfil renomeado nunca vira acesso a mais.
+ */
+const PERFIL_PADRAO = 'associado';
 
 /**
  * Grupos do menu lateral. Um modulo entra num grupo declarando
@@ -160,7 +175,7 @@ const MODULOS = [
     icone: '🏠',
     tipo: 'painel',
     descricao: 'Visão geral do sistema e atalhos para as funcionalidades liberadas.',
-    perfis: ['admin', 'diretoria', 'membro']
+    perfis: ['admin', 'diretoria', 'arbitragem', 'associado']
   },
   {
     id: 'sumula',
@@ -170,7 +185,7 @@ const MODULOS = [
     grupo: 'formularios',
     url: 'https://portal.aeuv.org/sumula/',
     descricao: 'Formulário oficial preenchido pela arbitragem após cada partida.',
-    perfis: ['admin', 'diretoria', 'membro']
+    perfis: ['admin', 'diretoria', 'arbitragem']
   },
   {
     id: 'inscricao',
@@ -180,7 +195,7 @@ const MODULOS = [
     grupo: 'formularios',
     url: 'https://portal.aeuv.org/inscricao/',
     descricao: 'Solicitações de inscrição, remoção e portabilidade de atletas.',
-    perfis: ['admin', 'diretoria', 'membro']
+    perfis: ['admin', 'diretoria', 'associado']
   },
   {
     id: 'solicitacoes',
@@ -212,7 +227,7 @@ const MODULOS = [
     icone: '📕',
     tipo: 'regulamentos',
     descricao: 'Regulamentos oficiais publicados das competições da associação.',
-    perfis: ['admin', 'diretoria', 'membro']
+    perfis: ['admin', 'diretoria', 'arbitragem', 'associado']
   },
   {
     id: 'punicoes',
@@ -228,7 +243,7 @@ const MODULOS = [
     icone: '🤝',
     tipo: 'associados',
     descricao: 'Cadastro das equipes associadas, com representante legal, documentação e situação.',
-    perfis: ['admin', 'diretoria', 'membro']
+    perfis: ['admin', 'diretoria', 'associado']
   },
   {
     id: 'atletas',
@@ -328,7 +343,7 @@ function identificarUsuario_() {
     return { autorizado: false, email: email, motivo: 'sem-permissao', usuario: null };
   }
 
-  const perfil = PERFIS[autorizado.perfil] ? autorizado.perfil : 'membro';
+  const perfil = PERFIS[autorizado.perfil] ? autorizado.perfil : PERFIL_PADRAO;
 
   return {
     autorizado: true,
@@ -417,36 +432,19 @@ function modulosPermitidos_(perfil) {
 
 /******************************************************
  * ADMINISTRACAO DOS AUTORIZADOS
+ *
+ * O caminho normal e a tela "Usuarios do sistema": o admin inclui,
+ * edita e remove ali mesmo, e vale na hora, sem publicar nova versao.
+ * As funcoes do editor abaixo ficam como socorro, para o caso de
+ * ninguem conseguir mais entrar.
  ******************************************************/
 
 /**
- * Grava a lista de autorizados nas propriedades do script.
- * Execute esta funcao pelo editor do Apps Script depois de ajustar
- * a lista abaixo. Nao exige nova implantacao.
+ * Regravar a lista padrao do codigo por cima da propriedade. Use pelo
+ * editor do Apps Script quando o acesso pela tela estiver perdido.
  */
 function definirUsuariosAutorizados() {
-  const lista = [
-    { email: 'deejaydiego@gmail.com', nome: 'Diego Machado', perfil: 'admin' },
-    { email: 'artetopudi@gmail.com', nome: 'Diretoria', perfil: 'admin' },
-    { email: 'associacaoaeuv@gmail.com', nome: 'AEUV', perfil: 'admin' },
-    { email: 'costtitiiure@gmail.com', nome: 'Iure Costtiti', perfil: 'admin' }
-  ];
-
-  const validos = lista.filter(function (usuario) {
-    return normalizarEmail_(usuario.email).indexOf('@') > 0;
-  });
-
-  if (!validos.length) {
-    throw new Error('Informe ao menos um e-mail valido antes de gravar a lista.');
-  }
-
-  const temAdmin = validos.some(function (usuario) {
-    return usuario.perfil === 'admin';
-  });
-
-  if (!temAdmin) {
-    throw new Error('Mantenha ao menos um usuario com perfil admin.');
-  }
+  const validos = higienizarUsuarios_(USUARIOS_PADRAO);
 
   PropertiesService.getScriptProperties()
     .setProperty(CONFIG.chaveUsuarios, JSON.stringify(validos));
@@ -463,27 +461,218 @@ function restaurarUsuariosPadrao() {
 }
 
 /**
- * Devolve a lista de autorizados para a tela de usuarios.
- * Chamada pelo cliente; refaz a verificacao de permissao no servidor.
+ * Normaliza a lista e recusa o que deixaria o sistema inacessivel.
+ * E o unico ponto que valida: tela e editor passam por aqui.
+ * @param {Array<Object>} lista
  * @return {Array<Object>}
  */
-function listarUsuarios() {
+function higienizarUsuarios_(lista) {
+  const vistos = {};
+
+  const validos = (lista || []).map(function (usuario) {
+    const email = normalizarEmail_(usuario.email);
+    const perfil = PERFIS[usuario.perfil] ? usuario.perfil : PERFIL_PADRAO;
+
+    return { email: email, nome: String(usuario.nome || '').trim(), perfil: perfil };
+  }).filter(function (usuario) {
+    if (!emailValido_(usuario.email) || vistos[usuario.email]) {
+      return false;
+    }
+
+    vistos[usuario.email] = true;
+
+    return true;
+  });
+
+  if (!validos.length) {
+    throw new Error('Informe ao menos um e-mail válido antes de gravar a lista.');
+  }
+
+  const temAdmin = validos.some(function (usuario) {
+    return usuario.perfil === 'admin';
+  });
+
+  if (!temAdmin) {
+    throw new Error('Mantenha ao menos um usuário com o perfil Administrador.');
+  }
+
+  return validos;
+}
+
+/**
+ * Formato de e-mail aceito. Proposital e frouxo: so impede erro de
+ * digitacao grosseiro, porque quem decide se o e-mail existe e o Google.
+ * @param {string} email
+ * @return {boolean}
+ */
+function emailValido_(email) {
+  return /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(String(email || ''));
+}
+
+/**
+ * Exige que quem chamou seja admin e devolve a sessao.
+ * @return {Object}
+ */
+function exigirAdmin_() {
   const sessao = identificarUsuario_();
 
   if (!sessao.autorizado || sessao.usuario.perfil !== 'admin') {
-    throw new Error('Apenas administradores podem consultar a lista de acessos.');
+    throw new Error('Apenas administradores podem gerenciar os acessos.');
   }
 
-  return obterUsuarios_().map(function (usuario) {
-    const perfil = PERFIS[usuario.perfil] ? usuario.perfil : 'membro';
+  return sessao;
+}
 
-    return {
-      email: normalizarEmail_(usuario.email),
-      nome: usuario.nome || '',
-      perfil: perfil,
-      perfilNome: PERFIS[perfil]
-    };
+/**
+ * Grava a lista e devolve a tela atualizada, para o cliente nao
+ * precisar de uma segunda chamada.
+ * @param {Array<Object>} lista
+ * @param {Object} sessao
+ * @return {Object}
+ */
+function gravarUsuarios_(lista, sessao) {
+  const validos = higienizarUsuarios_(lista);
+
+  PropertiesService.getScriptProperties()
+    .setProperty(CONFIG.chaveUsuarios, JSON.stringify(validos));
+
+  return montarTelaUsuarios_(validos, sessao);
+}
+
+/**
+ * Monta a resposta da tela de usuarios.
+ * @param {Array<Object>} lista
+ * @param {Object} sessao
+ * @return {Object}
+ */
+function montarTelaUsuarios_(lista, sessao) {
+  return {
+    registros: lista.map(function (usuario) {
+      const perfil = PERFIS[usuario.perfil] ? usuario.perfil : PERFIL_PADRAO;
+
+      return {
+        email: normalizarEmail_(usuario.email),
+        nome: usuario.nome || '',
+        perfil: perfil,
+        perfilNome: PERFIS[perfil]
+      };
+    }),
+    perfis: Object.keys(PERFIS).map(function (id) {
+      return { id: id, nome: PERFIS[id], modulos: modulosDoPerfil_(id) };
+    }),
+    emailAtual: sessao.usuario.email
+  };
+}
+
+/**
+ * Nome dos modulos que um perfil enxerga. Serve para a tela explicar,
+ * na hora de escolher, o que aquele perfil passa a ver.
+ * @param {string} perfil
+ * @return {Array<string>}
+ */
+function modulosDoPerfil_(perfil) {
+  return MODULOS.filter(function (modulo) {
+    return modulo.perfis.indexOf(perfil) !== -1;
+  }).map(function (modulo) {
+    return modulo.nome;
   });
+}
+
+/**
+ * Devolve a lista de autorizados para a tela de usuarios.
+ * Chamada pelo cliente; refaz a verificacao de permissao no servidor.
+ * @return {Object}
+ */
+function listarUsuarios() {
+  const sessao = exigirAdmin_();
+
+  return montarTelaUsuarios_(obterUsuarios_(), sessao);
+}
+
+/**
+ * Inclui um acesso novo ou atualiza o de um e-mail que ja esta na lista.
+ * @param {{email: string, nome: string, perfil: string, emailOriginal: string}} dados
+ * @return {Object}
+ */
+function salvarUsuario(dados) {
+  const sessao = exigirAdmin_();
+
+  const email = normalizarEmail_(dados && dados.email);
+  const original = normalizarEmail_(dados && dados.emailOriginal);
+  const perfil = dados && dados.perfil;
+
+  if (!emailValido_(email)) {
+    throw new Error('Informe um e-mail válido, no formato nome@dominio.com.');
+  }
+
+  if (!PERFIS[perfil]) {
+    throw new Error('Escolha um perfil da lista.');
+  }
+
+  // Tirar o proprio admin de si mesmo tranca a tela para quem esta mexendo.
+  if (original === sessao.usuario.email && perfil !== 'admin') {
+    throw new Error('Você não pode mudar o seu próprio perfil. Peça a outro administrador.');
+  }
+
+  const lista = obterUsuarios_().slice();
+
+  // Sem emailOriginal e inclusao: um e-mail que ja esta na lista tem que
+  // ser recusado, nunca sobrescrito em silencio.
+  const posicao = original
+    ? lista.reduce(function (achado, usuario, indice) {
+        return normalizarEmail_(usuario.email) === original ? indice : achado;
+      }, -1)
+    : -1;
+
+  if (original && posicao === -1) {
+    throw new Error('Este acesso não está mais na lista. Recarregue a página.');
+  }
+
+  const repetido = lista.some(function (usuario, indice) {
+    return indice !== posicao && normalizarEmail_(usuario.email) === email;
+  });
+
+  if (repetido) {
+    throw new Error('Este e-mail já tem acesso ao sistema.');
+  }
+
+  const registro = { email: email, nome: String((dados && dados.nome) || '').trim(), perfil: perfil };
+
+  if (posicao === -1) {
+    lista.push(registro);
+  } else {
+    lista[posicao] = registro;
+  }
+
+  const tela = gravarUsuarios_(lista, sessao);
+
+  tela.recado = (posicao === -1 ? 'Acesso concedido a ' : 'Acesso atualizado: ') + email;
+
+  return tela;
+}
+
+/**
+ * Revoga o acesso de um e-mail.
+ * @param {string} email
+ * @return {Object}
+ */
+function removerUsuario(email) {
+  const sessao = exigirAdmin_();
+  const alvo = normalizarEmail_(email);
+
+  if (alvo === sessao.usuario.email) {
+    throw new Error('Você não pode remover o seu próprio acesso.');
+  }
+
+  const lista = obterUsuarios_().filter(function (usuario) {
+    return normalizarEmail_(usuario.email) !== alvo;
+  });
+
+  const tela = gravarUsuarios_(lista, sessao);
+
+  tela.recado = 'Acesso removido: ' + alvo;
+
+  return tela;
 }
 
 /******************************************************
@@ -1576,8 +1765,8 @@ function valoresUnicos_(registros, campo) {
  * REGULAMENTOS
  *
  * Lista os regulamentos oficiais publicados. E a unica tela de consulta
- * liberada tambem para o perfil membro: o regulamento e o documento que
- * todas as equipes precisam ter a mao.
+ * aberta a todos os perfis: o regulamento e o documento que todas as
+ * equipes e a arbitragem precisam ter a mao.
  *
  * A pasta fica na raiz do projeto no Drive e recebe o PDF final gerado
  * por main.py --gerar-pdf-regulamento. So o PDF e publicado: o texto de

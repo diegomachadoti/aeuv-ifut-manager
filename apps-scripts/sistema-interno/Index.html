@@ -284,6 +284,40 @@
     }
 
     .pilula.admin { background: var(--dourado); color: var(--azul); font-weight: bold; }
+    .pilula.diretoria { background: #d6e4f7; color: #1b4f8a; font-weight: bold; }
+    .pilula.arbitragem { background: #e6e0f5; color: #4a3a86; }
+    .pilula.associado { background: #dff1e6; color: #1b6b45; }
+
+    /* Editar e remover ficam na propria linha: a lista de acessos e
+       curta e quase sempre se mexe num registro so. */
+    td.acoes-linha { white-space: nowrap; }
+    td.acoes-linha .botao-apoio { padding: 5px 12px; font-size: 12px; }
+
+    .botao-apoio.perigo { border-color: #e6b8b3; color: #922b21; }
+    .botao-apoio.perigo:hover { background: #fdecea; }
+
+    .titulo-secao {
+      margin: 24px 0 0;
+      font-size: 15px;
+      color: var(--azul);
+    }
+
+    .perfis-legenda {
+      margin-top: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .perfil-legenda {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      flex-wrap: wrap;
+    }
+
+    .perfil-legenda .apoio { font-size: 12px; }
+
+    .alerta { color: #922b21; }
 
     /* ---------- Carregamento ----------
        Mesma identidade da portaria (docs/sistema/index.html): anel girando
@@ -851,6 +885,33 @@
       /* Numa tela estreita cada campo ocupa a linha inteira. */
       .campo, .campo.largo, .campo.curto, .campo.mini, .documento { grid-column: span 12; }
 
+      .usuarios tr {
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        margin-bottom: 12px;
+        padding: 6px 4px;
+        background: #fff;
+      }
+
+      .usuarios td {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px dashed var(--borda);
+        padding: 8px 10px;
+      }
+
+      .usuarios tr td:last-child { border-bottom: 0; }
+
+      .usuarios td::before {
+        content: attr(data-rotulo);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        color: var(--apoio);
+        flex: 0 0 38%;
+      }
+
       .solicitacoes { min-width: 0; table-layout: auto; font-size: 14px; }
 
       .solicitacoes tr.linha {
@@ -1226,7 +1287,8 @@
       }
 
       if (modulo.tipo === 'usuarios') {
-        conteudo.innerHTML = cabecalho + blocoCarregando('statusUsuarios');
+        conteudo.innerHTML = cabecalho
+          + '<div id="areaUsuarios">' + blocoCarregando('statusUsuarios') + '</div>';
         carregarUsuarios();
         return;
       }
@@ -1310,31 +1372,23 @@
     }
 
     /**
+     * Quem tem acesso e com qual perfil. So o admin chega ate aqui, e o
+     * servidor refaz essa checagem a cada chamada.
+     */
+    let usuarios = { registros: [], perfis: [], emailAtual: '' };
+
+    /**
      * Busca no servidor a lista de autorizados (somente admin).
      */
     function carregarUsuarios() {
       google.script.run
-        .withSuccessHandler(function (lista) {
+        .withSuccessHandler(function (dados) {
           if (moduloAtual !== 'usuarios') {
             return;
           }
 
-          const linhas = lista.map(function (usuario) {
-            const classe = usuario.perfil === 'admin' ? 'pilula admin' : 'pilula';
-
-            return '<tr>'
-              + '<td>' + escapar(usuario.nome || '-') + '</td>'
-              + '<td class="email">' + escapar(usuario.email) + '</td>'
-              + '<td><span class="' + classe + '">' + escapar(usuario.perfilNome) + '</span></td>'
-              + '</tr>';
-          }).join('');
-
-          document.getElementById('statusUsuarios').outerHTML =
-            '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th></tr></thead>'
-            + '<tbody>' + linhas + '</tbody></table>'
-            + '<div class="aviso">Para incluir ou remover algu&eacute;m, ajuste a fun&ccedil;&atilde;o '
-            + '<strong>definirUsuariosAutorizados()</strong> no editor do Apps Script e execute-a. '
-            + 'A mudan&ccedil;a vale na hora, sem publicar nova vers&atilde;o.</div>';
+          usuarios = dados;
+          montarTelaUsuarios();
         })
         .withFailureHandler(function (erro) {
           if (moduloAtual !== 'usuarios') {
@@ -1345,6 +1399,185 @@
             '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
         })
         .listarUsuarios();
+    }
+
+    /**
+     * Lista dos acessos, com os botoes de conceder, editar e remover.
+     * @param {string} recado Mensagem de sucesso da ultima gravacao.
+     */
+    function montarTelaUsuarios(recado) {
+      const linhas = (usuarios.registros || []).map(function (usuario) {
+        const eu = usuario.email === usuarios.emailAtual;
+
+        const acoes = eu
+          ? '<span class="apoio">voc&ecirc;</span>'
+          : '<button type="button" class="botao-apoio" data-editar="' + escapar(usuario.email) + '">Editar</button>'
+            + ' <button type="button" class="botao-apoio perigo" data-remover="' + escapar(usuario.email) + '">Remover</button>';
+
+        return '<tr>'
+          + '<td data-rotulo="Nome">' + escapar(usuario.nome || '-') + '</td>'
+          + '<td class="email" data-rotulo="E-mail">' + escapar(usuario.email) + '</td>'
+          + '<td data-rotulo="Perfil"><span class="pilula ' + escapar(usuario.perfil) + '">'
+          + escapar(usuario.perfilNome) + '</span></td>'
+          + '<td class="acoes-linha" data-rotulo="Ações">' + acoes + '</td>'
+          + '</tr>';
+      }).join('');
+
+      const sucesso = recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '';
+
+      document.getElementById('areaUsuarios').innerHTML = sucesso
+        + '<div class="barra-acoes">'
+        + '<button type="button" class="botao-principal" id="novoUsuario">Conceder acesso</button>'
+        + '</div>'
+        + '<table class="usuarios"><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>A&ccedil;&otilde;es</th></tr></thead>'
+        + '<tbody>' + linhas + '</tbody></table>'
+        + legendaPerfis()
+        + '<div class="aviso">As mudan&ccedil;as valem na hora, sem publicar nova vers&atilde;o. '
+        + 'Quem estiver com o sistema aberto passa a ver o novo perfil ao recarregar a p&aacute;gina.</div>';
+
+      document.getElementById('novoUsuario').addEventListener('click', function () {
+        abrirFormularioUsuario('');
+      });
+
+      document.querySelectorAll('[data-editar]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          abrirFormularioUsuario(botao.dataset.editar);
+        });
+      });
+
+      document.querySelectorAll('[data-remover]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          removerUsuarioDoSistema(botao.dataset.remover);
+        });
+      });
+    }
+
+    /**
+     * O que cada perfil enxerga. Fica visivel na tela porque a escolha
+     * do perfil so faz sentido sabendo o que ela libera.
+     */
+    function legendaPerfis() {
+      const itens = (usuarios.perfis || []).map(function (perfil) {
+        return '<div class="perfil-legenda">'
+          + '<span class="pilula ' + escapar(perfil.id) + '">' + escapar(perfil.nome) + '</span>'
+          + '<span class="apoio">' + escapar((perfil.modulos || []).join(', ')) + '</span>'
+          + '</div>';
+      }).join('');
+
+      return '<h3 class="titulo-secao">O que cada perfil enxerga</h3>'
+        + '<div class="perfis-legenda">' + itens + '</div>';
+    }
+
+    /**
+     * Formulario de um acesso. Sem e-mail, abre em branco.
+     * @param {string} email
+     */
+    function abrirFormularioUsuario(email) {
+      const registro = (usuarios.registros || []).filter(function (u) {
+        return u.email === email;
+      })[0] || null;
+
+      const opcoes = (usuarios.perfis || []).map(function (perfil) {
+        const escolhido = registro && registro.perfil === perfil.id;
+
+        return '<option value="' + escapar(perfil.id) + '"' + (escolhido ? ' selected' : '') + '>'
+          + escapar(perfil.nome) + '</option>';
+      }).join('');
+
+      document.getElementById('areaUsuarios').innerHTML = '<div class="formulario">'
+        + '<h3>' + (registro ? 'Editar acesso' : 'Conceder acesso') + '</h3>'
+        + '<p class="apoio">O e-mail precisa ser a conta Google com que a pessoa vai entrar.</p>'
+        + '<div class="grupo"><div class="campos">'
+        + campoTexto('uNome', 'Nome', registro ? registro.nome : '', 'largo', '', 'text')
+        + campoTexto('uEmail', 'E-mail', registro ? registro.email : '', 'largo', '', 'email')
+        + '<div class="campo largo"><label for="uPerfil">Perfil</label>'
+        + '<select id="uPerfil">' + opcoes + '</select>'
+        + '<span class="dica" id="uDica"></span></div>'
+        + '</div></div>'
+        + '<div class="acoes-formulario">'
+        + '<button type="button" class="botao-principal" id="gravarUsuario">'
+        + (registro ? 'Salvar' : 'Conceder acesso') + '</button>'
+        + '<button type="button" class="botao-apoio" id="voltarUsuarios">Voltar &agrave; lista</button>'
+        + '<span class="espaco"></span>'
+        + '<span class="apoio" id="avisoUsuario"></span>'
+        + '</div></div>';
+
+      const seletor = document.getElementById('uPerfil');
+
+      function mostrarDica() {
+        const perfil = (usuarios.perfis || []).filter(function (p) {
+          return p.id === seletor.value;
+        })[0];
+
+        document.getElementById('uDica').textContent = perfil
+          ? 'Vai enxergar: ' + (perfil.modulos || []).join(', ')
+          : '';
+      }
+
+      seletor.addEventListener('change', mostrarDica);
+      mostrarDica();
+
+      document.getElementById('voltarUsuarios').addEventListener('click', function () {
+        montarTelaUsuarios();
+      });
+
+      document.getElementById('gravarUsuario').addEventListener('click', function () {
+        gravarUsuario(registro ? registro.email : '');
+      });
+    }
+
+    /**
+     * Envia o acesso ao servidor, que e quem valida de verdade.
+     * @param {string} emailOriginal Vazio quando e um acesso novo.
+     */
+    function gravarUsuario(emailOriginal) {
+      const botao = document.getElementById('gravarUsuario');
+      const aviso = document.getElementById('avisoUsuario');
+
+      botao.disabled = true;
+      aviso.textContent = 'Gravando...';
+
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          usuarios = dados;
+          montarTelaUsuarios(dados.recado);
+        })
+        .withFailureHandler(function (erro) {
+          botao.disabled = false;
+          aviso.innerHTML = '<span class="alerta">'
+            + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+        })
+        .salvarUsuario({
+          emailOriginal: emailOriginal,
+          email: document.getElementById('uEmail').value,
+          nome: document.getElementById('uNome').value,
+          perfil: document.getElementById('uPerfil').value
+        });
+    }
+
+    /**
+     * Revoga um acesso, confirmando antes.
+     * @param {string} email
+     */
+    function removerUsuarioDoSistema(email) {
+      if (!window.confirm('Remover o acesso de ' + email + '?')) {
+        return;
+      }
+
+      document.getElementById('areaUsuarios').innerHTML = blocoCarregando();
+
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          usuarios = dados;
+          montarTelaUsuarios(dados.recado);
+        })
+        .withFailureHandler(function (erro) {
+          montarTelaUsuarios();
+
+          document.getElementById('areaUsuarios').insertAdjacentHTML('afterbegin',
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>');
+        })
+        .removerUsuario(email);
     }
 
     /**
