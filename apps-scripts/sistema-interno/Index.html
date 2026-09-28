@@ -511,12 +511,13 @@
     .solicitacoes { table-layout: fixed; font-size: 13px; }
     .solicitacoes th, .solicitacoes td { padding: 9px 10px; }
 
-    .solicitacoes th:nth-child(1) { width: 13%; }
-    .solicitacoes th:nth-child(2) { width: 17%; }
-    .solicitacoes th:nth-child(3) { width: 16%; }
-    .solicitacoes th:nth-child(4) { width: 18%; }
-    .solicitacoes th:nth-child(5) { width: 22%; }
-    .solicitacoes th:nth-child(6) { width: 14%; }
+    .solicitacoes th:nth-child(1) { width: 15%; }
+    .solicitacoes th:nth-child(2) { width: 15%; }
+    .solicitacoes th:nth-child(3) { width: 14%; }
+    .solicitacoes th:nth-child(4) { width: 13%; }
+    .solicitacoes th:nth-child(5) { width: 17%; }
+    .solicitacoes th:nth-child(6) { width: 13%; }
+    .solicitacoes th:nth-child(7) { width: 13%; }
 
     .solicitacoes tbody tr.linha { cursor: pointer; }
     .solicitacoes tbody tr.linha:hover { background: var(--fundo); }
@@ -526,9 +527,9 @@
     /* Cinco colunas: número e data são curtos, a partida e os punidos
        precisam de espaço para caber dois nomes. */
     .notas th:nth-child(1) { width: 12%; }
-    .notas th:nth-child(2) { width: 18%; }
+    .notas th:nth-child(2) { width: 16%; }
     .notas th:nth-child(3) { width: 26%; }
-    .notas th:nth-child(4) { width: 14%; }
+    .notas th:nth-child(4) { width: 16%; }
     .notas th:nth-child(5) { width: 30%; }
 
     /* A coluna de punidos traz nome e equipe: precisa quebrar linha, ao
@@ -1675,7 +1676,7 @@
         + '</div>'
         + '<div class="tabela-rolagem"><table class="solicitacoes"><thead><tr>'
         + '<th>Situa&ccedil;&atilde;o</th><th>Protocolo</th><th>Enviada em</th><th>Equipe</th>'
-        + '<th>Respons&aacute;vel</th><th>Registros</th>'
+        + '<th>Respons&aacute;vel</th><th>Registros</th><th>Resultado</th>'
         + '</tr></thead><tbody id="linhasSolicitacoes"></tbody></table></div>';
 
       document.getElementById('buscaSolicitacoes').addEventListener('input', filtrarSolicitacoes);
@@ -1783,7 +1784,7 @@
     function desenharLinhasSolicitacoes(registros) {
       if (!registros.length) {
         document.getElementById('linhasSolicitacoes').innerHTML =
-          '<tr><td colspan="6" style="text-align:center;color:var(--apoio);">'
+          '<tr><td colspan="7" style="text-align:center;color:var(--apoio);">'
           + 'Nenhuma solicita&ccedil;&atilde;o encontrada com os filtros atuais.</td></tr>';
         return;
       }
@@ -1801,6 +1802,7 @@
           + celula('Responsável', escapar(r.responsavel)
             + '<div class="equipe-dado">' + escapar(r.telefone) + '</div>')
           + celula('Registros', contagemPorAcao(r))
+          + celula('Resultado', atalhoPdfDoResultado(r))
           + '</tr>';
 
         return linha + (aberta ? detalheSolicitacao(r) : '');
@@ -1817,6 +1819,13 @@
           }
 
           filtrarSolicitacoes();
+        });
+      });
+
+      // O clique no link do resultado nao deve abrir ou fechar a linha junto.
+      conteudo.querySelectorAll('#linhasSolicitacoes [data-nao-abre]').forEach(function (link) {
+        link.addEventListener('click', function (evento) {
+          evento.stopPropagation();
         });
       });
     }
@@ -1849,29 +1858,42 @@
     }
 
     /**
+     * O resultado em PDF, que e o documento de leitura. Fica na propria
+     * linha; o TXT continua no detalhe, para quem precisa do arquivo bruto.
+     */
+    function atalhoPdfDoResultado(registro) {
+      if (!registro.resultadoPdfUrl) {
+        return registro.situacao === 'Aguardando'
+          ? '<span class="equipe-dado">—</span>'
+          : '<span class="equipe-dado">não publicado</span>';
+      }
+
+      return '<a class="botao-apoio destaque" data-nao-abre="1" href="'
+        + escapar(registro.resultadoPdfUrl) + '" target="_blank" rel="noopener">Ver resultado</a>';
+    }
+
+    /**
      * Botoes do resultado da automacao, publicados pelo Python na pasta
      * "Resultados". Sao eles que mostram por que um registro falhou.
+     *
+     * O PDF fica na coluna "Resultado" da linha; aqui sobra o TXT, que e a
+     * origem do que a automacao leu.
      *
      * Enquanto a automacao nao roda o resultado nao existe, e a solicitacao
      * aparece sem esses botoes — por isso o aviso so surge quando ja houve
      * processamento (situacao diferente de "Aguardando").
      */
     function linksResultado(registro) {
-      const pdf = registro.resultadoPdfUrl;
       const txt = registro.resultadoTxtUrl;
 
-      if (!pdf && !txt) {
-        return registro.situacao === 'Aguardando'
+      if (!txt) {
+        return registro.situacao === 'Aguardando' || registro.resultadoPdfUrl
           ? ''
           : '<span class="equipe-dado">Resultado ainda não publicado</span>';
       }
 
-      return (pdf
-        ? '<a class="botao-apoio destaque" href="' + escapar(pdf) + '" target="_blank" rel="noopener">Resultado (PDF)</a>'
-        : '')
-        + (txt
-          ? '<a class="botao-apoio" href="' + escapar(txt) + '" target="_blank" rel="noopener">Resultado (TXT)</a>'
-          : '');
+      return '<a class="botao-apoio" href="' + escapar(txt)
+        + '" target="_blank" rel="noopener">Resultado (TXT)</a>';
     }
 
     /**
@@ -1913,7 +1935,7 @@
           + '<tbody>' + pessoas + '</tbody></table>'
         : '<p class="equipe-dado">Esta solicita&ccedil;&atilde;o n&atilde;o tem registros.</p>';
 
-      return '<tr class="detalhe"><td colspan="6"><div class="detalhe-caixa">'
+      return '<tr class="detalhe"><td colspan="7"><div class="detalhe-caixa">'
         + (dados ? '<div class="detalhe-dados">' + dados + '</div>' : '')
         + tabela
         + links
@@ -2382,7 +2404,7 @@
           : '')
         + '</div>'
         + '<div class="tabela-rolagem"><table class="solicitacoes notas"><thead><tr>'
-        + '<th>Nota</th><th>Publicada em</th><th>Partida</th><th>S&uacute;mula</th><th>Punidos</th>'
+        + '<th>Nota</th><th>Publicada em</th><th>Partida</th><th>Documento</th><th>Punidos</th>'
         + '</tr></thead><tbody id="linhasNotas"></tbody></table></div>';
 
       document.getElementById('buscaNotas').addEventListener('input', filtrarNotas);
@@ -2526,7 +2548,7 @@
           + celula('Publicada em', escapar(r.dataNota || '—'))
           + celula('Partida', '<span class="equipe-nome">' + escapar(r.confronto || '—') + '</span>'
             + '<div class="equipe-dado">' + escapar(r.dataJogo || r.competicao || '—') + '</div>')
-          + celula('Súmula', atalhoSumulaDaNota(r))
+          + celula('Documento', atalhoPdfDaNota(r))
           + celula('Punidos', resumoPunidosDaNota(r))
           + '</tr>';
 
@@ -2548,6 +2570,12 @@
       });
 
       // O clique nos atalhos nao deve abrir ou fechar a linha junto.
+      conteudo.querySelectorAll('#linhasNotas [data-nao-abre]').forEach(function (link) {
+        link.addEventListener('click', function (evento) {
+          evento.stopPropagation();
+        });
+      });
+
       conteudo.querySelectorAll('#linhasNotas [data-ir-sumula]').forEach(function (botao) {
         botao.addEventListener('click', function (evento) {
           evento.stopPropagation();
@@ -2564,19 +2592,33 @@
     }
 
     /**
+     * A nota em PDF, que e o documento oficial. O clique nao deve abrir a
+     * linha junto, por isso o stopPropagation no proprio link.
+     */
+    function atalhoPdfDaNota(registro) {
+      if (!registro.pdfUrl) {
+        return '<span class="equipe-dado">sem PDF</span>';
+      }
+
+      return '<a class="botao-apoio destaque" data-nao-abre="1" href="'
+        + escapar(registro.pdfUrl) + '" target="_blank" rel="noopener">Ver nota</a>';
+    }
+
+    /**
      * Protocolo da sumula que originou a nota, com atalho para a tela de
      * súmulas quando ela estiver liberada para o perfil.
      */
     function atalhoSumulaDaNota(registro) {
       if (!registro.protocolo) {
-        return '<span class="equipe-dado">—</span>';
+        return '';
       }
 
       if (!moduloDisponivel('sumulas')) {
-        return '<span class="protocolo">' + escapar(registro.protocolo) + '</span>';
+        return '<span class="equipe-dado">Súmula: <strong>'
+          + escapar(registro.protocolo) + '</strong></span>';
       }
 
-      return '<button type="button" class="botao-apoio atalho-sumula" data-ir-sumula="'
+      return '<button type="button" class="botao-apoio" data-ir-sumula="'
         + escapar(registro.protocolo) + '" title="' + escapar(registro.protocolo) + '">Ver súmula</button>';
     }
 
@@ -2639,10 +2681,10 @@
         ? '<div class="relato"><h4>Texto da nota</h4><p>' + escapar(registro.texto) + '</p></div>'
         : '';
 
+      // O PDF ja esta na coluna "Documento" da linha; aqui ficam os
+      // atalhos para o que veio antes (a sumula) e depois (o controle).
       const links = '<div class="barra-acoes" style="margin-top:12px;">'
-        + (registro.pdfUrl
-          ? '<a class="botao-apoio destaque" href="' + escapar(registro.pdfUrl) + '" target="_blank" rel="noopener">Nota oficial (PDF)</a>'
-          : '<span class="equipe-dado">Sem PDF publicado</span>')
+        + atalhoSumulaDaNota(registro)
         + '<a class="botao-apoio" href="' + escapar(registro.arquivoUrl) + '" target="_blank" rel="noopener">Abrir arquivo</a>'
         + (registro.numero && moduloDisponivel('punicoes')
           ? '<button type="button" class="botao-apoio" data-ir-punicoes="' + escapar(registro.numero)
