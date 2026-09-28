@@ -478,6 +478,25 @@ renomeado nunca vira acesso a mais. A função `diagnosticarAcesso()` registra n
 log o e-mail lido e o resultado da verificação; use-a quando a implantação
 parecer bloquear alguém indevidamente.
 
+#### O associado só enxerga a própria equipe
+
+O perfil `associado` é o único que **exige uma equipe** no momento de conceder o
+acesso — o formulário mostra o campo e o servidor recusa o registro sem ele ou
+com equipe fora de `ASSOCIADOS_EQUIPES`. A equipe fica gravada no próprio
+registro do usuário, e não é deduzida pelo e-mail do representante: o e-mail de
+login costuma ser outro.
+
+Com isso, `listarAssociados()` devolve a esse perfil **apenas o cadastro da
+equipe dele**. A tela abre direto no formulário da equipe, sem lista, busca nem
+filtro, e o endereço da planilha não é enviado a quem não pode editar.
+
+> **O filtro protege a tela, não o arquivo.** A implantação roda como
+> `USER_ACCESSING`, ou seja, a planilha é lida com a permissão de quem acessa.
+> Um associado que tenha leitura na planilha pode abri-la direto no Drive e ver
+> todas as equipes. Por isso **não compartilhe a planilha de associados com esse
+> perfil** — sem compartilhamento o módulo simplesmente não carrega para ele, e
+> os dados das outras equipes ficam de fato fora de alcance.
+
 ### Módulos
 
 O menu é montado a partir da constante `MODULOS` do `WebApp.gs`, e o servidor
@@ -1027,14 +1046,15 @@ pontuado.
 
 | Perfil | Pode |
 | --- | --- |
-| `admin`, `diretoria` | Consultar, cadastrar e editar |
-| `associado` | Apenas consultar |
+| `admin`, `diretoria` | Consultar, cadastrar e editar todas as equipes |
+| `associado` | Apenas consultar, e só a própria equipe |
 | `arbitragem` | Sem acesso à tela |
 
 Quem só consulta vê a mesma tela, com os campos travados, sem botão de salvar e
 sem campo de envio — mas com os links dos documentos disponíveis. A regra está
 em `ASSOCIADOS_PERFIS_EDICAO` e é verificada de novo no servidor, dentro de
-`salvarAssociado()`.
+`salvarAssociado()`. O recorte por equipe do perfil `associado` está descrito em
+[O associado só enxerga a própria equipe](#o-associado-só-enxerga-a-própria-equipe).
 
 > **Atenção às permissões do Drive.** O sistema roda como *"Usuário que acessa"*,
 > então a gravação acontece com a conta de quem está usando a tela. Admins e

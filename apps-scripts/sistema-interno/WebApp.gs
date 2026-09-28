@@ -116,8 +116,8 @@ const USUARIOS_PADRAO = [
   { email: 'deejaydiego@gmail.com', nome: 'Diego Machado', perfil: 'admin' },
   { email: 'associacaoaeuv@gmail.com', nome: 'AEUV', perfil: 'diretoria' },
   { email: 'costtitiiure@gmail.com', nome: 'Iure Costtiti', perfil: 'diretoria' },
-  { email: 'xavierelegance68@gmail.com', nome: 'Iure Costtiti', perfil: 'diretoria' },
-  { email: 'artetopudi@gmail.com', nome: 'Diretoria', perfil: 'associado' }
+  { email: 'xavierelegance68@gmail.com', nome: 'Xavier', perfil: 'diretoria' },
+  { email: 'artetopudi@gmail.com', nome: 'Diretoria', perfil: 'associado', equipe: 'TRK' }
 ];
 
 /**
@@ -127,6 +127,7 @@ const USUARIOS_PADRAO = [
  * diretoria  - tudo, menos mexer em quem tem acesso.
  * arbitragem - envia sumula e consulta o regulamento.
  * associado  - a equipe: formularios, regulamentos e o proprio cadastro.
+ *              Um acesso desse perfil e sempre amarrado a uma equipe.
  */
 const PERFIS = {
   admin: 'Administrador',
@@ -140,6 +141,9 @@ const PERFIS = {
  * menor alcance de proposito: um perfil renomeado nunca vira acesso a mais.
  */
 const PERFIL_PADRAO = 'associado';
+
+/** Perfis que enxergam apenas a propria equipe, nunca as demais. */
+const PERFIS_DA_EQUIPE = ['associado'];
 
 /**
  * Grupos do menu lateral. Um modulo entra num grupo declarando
@@ -353,9 +357,19 @@ function identificarUsuario_() {
       email: email,
       nome: autorizado.nome || email.split('@')[0],
       perfil: perfil,
-      perfilNome: PERFIS[perfil]
+      perfilNome: PERFIS[perfil],
+      equipe: perfilDaEquipe_(perfil) ? String(autorizado.equipe || '').trim() : ''
     }
   };
+}
+
+/**
+ * Diz se o perfil so enxerga a propria equipe.
+ * @param {string} perfil
+ * @return {boolean}
+ */
+function perfilDaEquipe_(perfil) {
+  return PERFIS_DA_EQUIPE.indexOf(perfil) !== -1;
 }
 
 /**
@@ -473,7 +487,15 @@ function higienizarUsuarios_(lista) {
     const email = normalizarEmail_(usuario.email);
     const perfil = PERFIS[usuario.perfil] ? usuario.perfil : PERFIL_PADRAO;
 
-    return { email: email, nome: String(usuario.nome || '').trim(), perfil: perfil };
+    const registro = { email: email, nome: String(usuario.nome || '').trim(), perfil: perfil };
+
+    // A equipe so faz sentido para quem enxerga apenas a propria:
+    // guardar em outro perfil deixaria lixo que confunde na proxima leitura.
+    if (perfilDaEquipe_(perfil)) {
+      registro.equipe = String(usuario.equipe || '').trim();
+    }
+
+    return registro;
   }).filter(function (usuario) {
     if (!emailValido_(usuario.email) || vistos[usuario.email]) {
       return false;
@@ -554,12 +576,19 @@ function montarTelaUsuarios_(lista, sessao) {
         email: normalizarEmail_(usuario.email),
         nome: usuario.nome || '',
         perfil: perfil,
-        perfilNome: PERFIS[perfil]
+        perfilNome: PERFIS[perfil],
+        equipe: perfilDaEquipe_(perfil) ? (usuario.equipe || '') : ''
       };
     }),
     perfis: Object.keys(PERFIS).map(function (id) {
-      return { id: id, nome: PERFIS[id], modulos: modulosDoPerfil_(id) };
+      return {
+        id: id,
+        nome: PERFIS[id],
+        modulos: modulosDoPerfil_(id),
+        exigeEquipe: perfilDaEquipe_(id)
+      };
     }),
+    equipes: ASSOCIADOS_EQUIPES,
     emailAtual: sessao.usuario.email
   };
 }
@@ -609,6 +638,24 @@ function salvarUsuario(dados) {
     throw new Error('Escolha um perfil da lista.');
   }
 
+  const equipe = String((dados && dados.equipe) || '').trim();
+
+  // Sem equipe, o acesso de associado nao enxergaria cadastro nenhum:
+  // melhor recusar aqui do que entregar uma tela vazia sem explicacao.
+  if (perfilDaEquipe_(perfil)) {
+    if (!equipe) {
+      throw new Error('Escolha a equipe deste associado.');
+    }
+
+    const conhecida = ASSOCIADOS_EQUIPES.some(function (nome) {
+      return chaveEquipe_(nome) === chaveEquipe_(equipe);
+    });
+
+    if (!conhecida) {
+      throw new Error('Equipe não reconhecida: ' + equipe);
+    }
+  }
+
   // Tirar o proprio admin de si mesmo tranca a tela para quem esta mexendo.
   if (original === sessao.usuario.email && perfil !== 'admin') {
     throw new Error('Você não pode mudar o seu próprio perfil. Peça a outro administrador.');
@@ -637,6 +684,10 @@ function salvarUsuario(dados) {
   }
 
   const registro = { email: email, nome: String((dados && dados.nome) || '').trim(), perfil: perfil };
+
+  if (perfilDaEquipe_(perfil)) {
+    registro.equipe = equipe;
+  }
 
   if (posicao === -1) {
     lista.push(registro);
@@ -2011,21 +2062,33 @@ function listarAssociados() {
   const aba = abaAssociados_();
   const valores = aba.getDataRange().getValues();
 
+  const daEquipe = perfilDaEquipe_(sessao.usuario.perfil);
+  const minhaEquipe = chaveEquipe_(sessao.usuario.equipe);
+
   const registros = valores.slice(1).map(function (linha) {
     return linhaParaAssociado_(linha);
   }).filter(function (registro) {
-    return registro.equipe;
+    if (!registro.equipe) {
+      return false;
+    }
+
+    // O associado ve apenas o cadastro da propria equipe: a tela expoe
+    // CPF, RG e endereco do representante, que nao sao de consulta geral.
+    // O corte e aqui, no servidor, antes de o dado sair daqui.
+    return !daEquipe || chaveEquipe_(registro.equipe) === minhaEquipe;
   }).sort(function (a, b) {
     return a.equipe.localeCompare(b.equipe, 'pt-BR');
   });
 
   return {
     registros: registros,
-    equipes: ASSOCIADOS_EQUIPES,
+    equipes: daEquipe ? [sessao.usuario.equipe].filter(String) : ASSOCIADOS_EQUIPES,
     status: ASSOCIADOS_STATUS,
     documentos: ASSOCIADOS_DOCUMENTOS,
     podeEditar: podeEditarAssociados_(sessao.usuario.perfil),
-    planilhaUrl: planilhaAssociados_().getUrl()
+    somenteMinhaEquipe: daEquipe,
+    minhaEquipe: daEquipe ? sessao.usuario.equipe : '',
+    planilhaUrl: podeEditarAssociados_(sessao.usuario.perfil) ? planilhaAssociados_().getUrl() : ''
   };
 }
 

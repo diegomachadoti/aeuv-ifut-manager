@@ -1375,7 +1375,7 @@
      * Quem tem acesso e com qual perfil. So o admin chega ate aqui, e o
      * servidor refaz essa checagem a cada chamada.
      */
-    let usuarios = { registros: [], perfis: [], emailAtual: '' };
+    let usuarios = { registros: [], perfis: [], equipes: [], emailAtual: '' };
 
     /**
      * Busca no servidor a lista de autorizados (somente admin).
@@ -1414,11 +1414,15 @@
           : '<button type="button" class="botao-apoio" data-editar="' + escapar(usuario.email) + '">Editar</button>'
             + ' <button type="button" class="botao-apoio perigo" data-remover="' + escapar(usuario.email) + '">Remover</button>';
 
+        const perfilTexto = usuario.equipe
+          ? escapar(usuario.perfilNome) + ' · ' + escapar(usuario.equipe)
+          : escapar(usuario.perfilNome);
+
         return '<tr>'
           + '<td data-rotulo="Nome">' + escapar(usuario.nome || '-') + '</td>'
           + '<td class="email" data-rotulo="E-mail">' + escapar(usuario.email) + '</td>'
           + '<td data-rotulo="Perfil"><span class="pilula ' + escapar(usuario.perfil) + '">'
-          + escapar(usuario.perfilNome) + '</span></td>'
+          + perfilTexto + '</span></td>'
           + '<td class="acoes-linha" data-rotulo="Ações">' + acoes + '</td>'
           + '</tr>';
       }).join('');
@@ -1484,6 +1488,13 @@
           + escapar(perfil.nome) + '</option>';
       }).join('');
 
+      const opcoesEquipe = (usuarios.equipes || []).map(function (nome) {
+        const escolhida = registro && registro.equipe === nome;
+
+        return '<option value="' + escapar(nome) + '"' + (escolhida ? ' selected' : '') + '>'
+          + escapar(nome) + '</option>';
+      }).join('');
+
       document.getElementById('areaUsuarios').innerHTML = '<div class="formulario">'
         + '<h3>' + (registro ? 'Editar acesso' : 'Conceder acesso') + '</h3>'
         + '<p class="apoio">O e-mail precisa ser a conta Google com que a pessoa vai entrar.</p>'
@@ -1493,6 +1504,9 @@
         + '<div class="campo largo"><label for="uPerfil">Perfil</label>'
         + '<select id="uPerfil">' + opcoes + '</select>'
         + '<span class="dica" id="uDica"></span></div>'
+        + '<div class="campo largo" id="campoEquipe"><label for="uEquipe">Equipe</label>'
+        + '<select id="uEquipe"><option value="">Selecione</option>' + opcoesEquipe + '</select>'
+        + '<span class="dica">Este acesso s&oacute; enxerga o cadastro da equipe escolhida.</span></div>'
         + '</div></div>'
         + '<div class="acoes-formulario">'
         + '<button type="button" class="botao-principal" id="gravarUsuario">'
@@ -1504,7 +1518,8 @@
 
       const seletor = document.getElementById('uPerfil');
 
-      function mostrarDica() {
+      /** A equipe so aparece para o perfil que enxerga uma equipe so. */
+      function ajustarPerfil() {
         const perfil = (usuarios.perfis || []).filter(function (p) {
           return p.id === seletor.value;
         })[0];
@@ -1512,10 +1527,13 @@
         document.getElementById('uDica').textContent = perfil
           ? 'Vai enxergar: ' + (perfil.modulos || []).join(', ')
           : '';
+
+        document.getElementById('campoEquipe').style.display =
+          perfil && perfil.exigeEquipe ? '' : 'none';
       }
 
-      seletor.addEventListener('change', mostrarDica);
-      mostrarDica();
+      seletor.addEventListener('change', ajustarPerfil);
+      ajustarPerfil();
 
       document.getElementById('voltarUsuarios').addEventListener('click', function () {
         montarTelaUsuarios();
@@ -1551,7 +1569,8 @@
           emailOriginal: emailOriginal,
           email: document.getElementById('uEmail').value,
           nome: document.getElementById('uNome').value,
-          perfil: document.getElementById('uPerfil').value
+          perfil: document.getElementById('uPerfil').value,
+          equipe: document.getElementById('uEquipe').value
         });
     }
 
@@ -3015,6 +3034,8 @@
       status: [],
       documentos: [],
       podeEditar: false,
+      somenteMinhaEquipe: false,
+      minhaEquipe: '',
       planilhaUrl: ''
     };
 
@@ -3047,6 +3068,20 @@
      */
     function montarTelaAssociados() {
       const registros = associados.registros || [];
+
+      // Quem enxerga uma equipe so vai direto ao cadastro dela: lista,
+      // busca e filtro de situacao nao servem para um registro unico.
+      if (associados.somenteMinhaEquipe) {
+        if (registros.length) {
+          abrirFormularioAssociado(registros[0].equipe);
+        } else {
+          document.getElementById('areaAssociados').innerHTML = '<div class="vazio">'
+            + 'A equipe <strong>' + escapar(associados.minhaEquipe || '') + '</strong> ainda n&atilde;o tem '
+            + 'cadastro. Procure a diretoria para fazer o cadastro inicial.</div>';
+        }
+
+        return;
+      }
 
       const novo = associados.podeEditar
         ? '<button type="button" class="botao-apoio" id="novoAssociado">+ Novo cadastro</button>'
@@ -3265,6 +3300,11 @@
         ? '<p class="apoio">O seu perfil permite consultar, mas n&atilde;o alterar o cadastro.</p>'
         : '<button type="button" class="botao-principal" id="gravarAssociado">Salvar cadastro</button>';
 
+      // Sem lista para onde voltar, o botao nao tem destino.
+      const voltar = associados.somenteMinhaEquipe
+        ? ''
+        : '<button type="button" class="botao-apoio" id="voltarAssociados">Voltar &agrave; lista</button>';
+
       document.getElementById('areaAssociados').innerHTML = '<div class="formulario">'
         + '<h3>' + escapar(titulo) + '</h3>'
         + historico
@@ -3300,12 +3340,16 @@
         + '<div class="campos">' + documentos + '</div></div>'
         + '<div class="acoes-formulario">'
         + gravar
-        + '<button type="button" class="botao-apoio" id="voltarAssociados">Voltar &agrave; lista</button>'
+        + voltar
         + '<span class="espaco"></span>'
         + '<span class="apoio" id="avisoAssociado"></span>'
         + '</div></div>';
 
-      document.getElementById('voltarAssociados').addEventListener('click', montarTelaAssociados);
+      const botaoVoltar = document.getElementById('voltarAssociados');
+
+      if (botaoVoltar) {
+        botaoVoltar.addEventListener('click', montarTelaAssociados);
+      }
 
       const botaoGravar = document.getElementById('gravarAssociado');
 
