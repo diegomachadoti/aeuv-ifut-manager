@@ -1,5 +1,7 @@
 downloads/
 google-service-account-arte-top-udi.json
+google-oauth-client.json
+google-oauth-token.json
 arte-top-udi-*.json
 logs/
 __pycache__/

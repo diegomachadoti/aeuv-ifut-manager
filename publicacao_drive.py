@@ -22,6 +22,8 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
+import drive_auth
+
 LOGGER = logging.getLogger(__name__)
 
 PASTA_REGULAMENTOS = "Regulamentos"
@@ -40,17 +42,13 @@ def _extrair_folder_id(url: str) -> str:
 class PublicadorDrive:
     """Envia arquivos para subpastas fixas do Drive, atualizando quando ja existem."""
 
-    def __init__(self, service_account_json: Path, folder_embed_url: str,
-                 logger: logging.Logger | None = None) -> None:
-        from google.oauth2 import service_account
+    def __init__(self, credenciais, folder_embed_url: str,
+                 oauth: bool = False, logger: logging.Logger | None = None) -> None:
         from googleapiclient.discovery import build
 
         self.logger = logger or LOGGER
-        credentials = service_account.Credentials.from_service_account_file(
-            str(service_account_json),
-            scopes=["https://www.googleapis.com/auth/drive"],
-        )
-        self.service = build("drive", "v3", credentials=credentials)
+        self.oauth = oauth
+        self.service = build("drive", "v3", credentials=credenciais)
         self.pasta_sumulas_id = _extrair_folder_id(folder_embed_url)
         if not self.pasta_sumulas_id:
             raise ValueError("Nao foi possivel descobrir a pasta das sumulas em [sumulas] folder_embed_url")
@@ -63,8 +61,9 @@ class PublicadorDrive:
             raise FileNotFoundError(f"Arquivo de configuracao nao encontrado: {config_path}")
         parser.read(Path(config_path).with_name("config.local.ini"), encoding="utf-8")
         return cls(
-            Path(parser.get("drive", "service_account_json", fallback="google-service-account.json")),
+            drive_auth.credenciais_drive(parser, logger),
             parser.get("sumulas", "folder_embed_url", fallback=""),
+            drive_auth.usando_oauth(parser),
             logger,
         )
 
@@ -83,13 +82,12 @@ class PublicadorDrive:
         return self._raiz_id
 
     def subpasta_id(self, nome: str, pai_id: str) -> str:
-        """Acha a subpasta pelo nome dentro do pai.
+        """Acha a subpasta pelo nome dentro do pai, criando quando possivel.
 
-        A pasta *nao* e criada aqui de proposito. A conta de servico nao tem
-        cota de armazenamento propria: tudo o que ela cria fica registrado com
-        ela como dona, e uma pasta assim some da visao de quem abre o Drive -
-        ela existe, mas ninguem alcanca. Criar pastas e trabalho de quem tem
-        Drive de verdade.
+        So criamos a pasta no modo OAuth, em que a automacao age como o dono da
+        conta. Pela conta de servico a pasta ate seria criada, mas ficaria
+        registrada com ela como dona, e uma pasta assim some da visao de quem
+        abre o Drive: existe, e ninguem alcanca.
         """
         achados = self.service.files().list(
             q=(f"'{pai_id}' in parents and trashed = false "
@@ -99,11 +97,19 @@ class PublicadorDrive:
         ).execute().get("files", [])
         if achados:
             return achados[0]["id"]
+
         pai = self.service.files().get(fileId=pai_id, fields="name").execute()
-        raise RuntimeError(
-            f'A pasta "{nome}" nao existe dentro de "{pai["name"]}" no Drive. '
-            f'Crie-a pelo navegador e rode o comando de novo.'
-        )
+        if not self.oauth:
+            raise RuntimeError(
+                f'A pasta "{nome}" nao existe dentro de "{pai["name"]}" no Drive. '
+                f'Crie-a pelo navegador e rode o comando de novo.'
+            )
+        criada = self.service.files().create(
+            body={"name": nome, "mimeType": "application/vnd.google-apps.folder", "parents": [pai_id]},
+            fields="id",
+        ).execute()
+        self.logger.info('[DRIVE] Pasta "%s" criada dentro de "%s".', nome, pai["name"])
+        return criada["id"]
 
     # -- envio --------------------------------------------------------------
 
@@ -140,15 +146,13 @@ class PublicadorDrive:
                 enviados += 1
             except Exception as exc:
                 if "storageQuotaExceeded" in str(exc):
-                    # A conta de servico nao tem cota propria: consegue
-                    # atualizar arquivos existentes, mas nao criar um arquivo
-                    # novo. Mesma limitacao que o controle de punicoes
-                    # enfrentou na primeira publicacao.
+                    # Acontece so pela conta de servico, que nao tem cota
+                    # propria: ela atualiza o que ja existe, mas nao cria nada.
                     if not avisou:
                         self.logger.error(
                             "[DRIVE] A conta de servico nao pode criar arquivos novos no Drive. "
-                            "Copie os arquivos para a pasta uma primeira vez pelo navegador; "
-                            "as proximas execucoes atualizam a copia que ja esta la."
+                            "Configure o acesso OAuth (ver 'Publicacao no Drive' no README) ou "
+                            "copie os arquivos para a pasta uma primeira vez pelo navegador."
                         )
                         avisou = True
                     self.logger.error("[DRIVE] Nao publicado (primeira copia manual): %s", arquivo.name)

@@ -837,24 +837,46 @@ dela é a raiz `AEUV - Automação`). O Apps Script segue a mesma regra, então 
 dois lados continuam apontando para o mesmo lugar sozinhos. Arquivo que já
 existe é **atualizado**, não duplicado.
 
-### As pastas e a primeira cópia são manuais
+### Quem a automação é quando fala com o Drive
 
-A service account **não tem cota de armazenamento própria**. Ela atualiza
-arquivos existentes, mas não consegue criar nada novo — e o que ela cria fica
+Há duas credenciais possíveis, e a diferença entre elas decide o que a
+automação consegue fazer:
+
+| | Conta de serviço | OAuth (recomendado) |
+| --- | --- | --- |
+| Atualizar arquivo que já existe | sim | sim |
+| Criar arquivo novo | **não** (`storageQuotaExceeded`) | sim |
+| Criar pasta | vira dona dela, e a pasta **some** do Drive de todos | sim, e você é o dono |
+
+A conta de serviço **não tem cota de armazenamento própria** — ela não é uma
+pessoa, não tem um Drive. Por isso não cria nada. E o que ela cria fica
 registrado com ela como dona, o que é pior do que falhar: a pasta existe, mas
-some da visão de quem abre o Drive. Por isso a automação **não cria pastas**;
-ela avisa quando falta uma.
+não aparece para ninguém.
 
-Uma vez por artefato:
+Com OAuth a automação age como **você**, usando a sua cota. Ela cria as pastas
+e envia os arquivos sozinha, sem nenhum passo manual.
 
-1. Crie no Drive, pelo navegador, as pastas `Regulamentos` (dentro de
-   `AEUV - Automação`) e `Notas Oficiais` (dentro de
-   `Arquivos TXT - Sumulas Digitais`).
-2. Copie para dentro delas o PDF do regulamento e os TXT + PDF das notas
-   finais, mantendo os nomes.
-3. Rode `--publicar-drive` para conferir. Das próximas vezes a automação
-   encontra cada arquivo pelo nome e o atualiza sozinha — inclusive quando a
-   comissão revisa uma nota e regera o PDF.
+#### Configurar o OAuth (uma vez)
 
-Mesmo cuidado do resto do projeto: **não renomeie as pastas**, porque tanto o
-Python quanto o Apps Script as localizam pelo nome exato.
+No [Google Cloud Console](https://console.cloud.google.com/), projeto
+`arte-top-udi`:
+
+1. **APIs e serviços → Tela de permissão OAuth**: tipo **Externo**. Preencha
+   nome do app, e-mail de suporte e de contato. Em **Público-alvo**, clique em
+   **Publicar app** (sem isso a autorização vence a cada 7 dias).
+2. **Credenciais → Criar credenciais → ID do cliente OAuth**, tipo
+   **App para computador**. Baixe o JSON.
+3. Salve o arquivo na raiz do projeto como **`google-oauth-client.json`**.
+
+Na primeira execução o navegador abre pedindo autorização. Como o app não passou
+pela verificação do Google, aparece o aviso *"O Google não verificou este app"* —
+é o seu próprio app: clique em **Avançado → Acessar (não seguro)**. Isso acontece
+uma única vez; o token fica em `google-oauth-token.json` e é renovado sozinho.
+
+Nenhum dos dois arquivos vai para o Git. Enquanto o `google-oauth-client.json`
+não existir, tudo continua funcionando pela conta de serviço — só com a
+limitação de não criar nada novo, caso em que a automação avisa quais arquivos
+você precisa copiar à mão.
+
+> **Não renomeie as pastas do Drive**: tanto o Python quanto o Apps Script as
+> localizam pelo nome exato.
