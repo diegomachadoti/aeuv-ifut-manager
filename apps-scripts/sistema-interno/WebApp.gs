@@ -94,6 +94,16 @@ const CONFIG = {
   // por prepararAssociados().
   pastaRaizId: '1uDUmgEjeISQ1W3Uc5hcUc25pgXDvVhs3',
 
+  // Equipes participantes. Fonte unica dos tres apps: a tela "Equipes"
+  // grava a lista nas propriedades e publica o arquivo abaixo na pasta
+  // raiz, que os formularios de sumula e de inscricao leem. Assim um time
+  // novo e cadastrado num lugar so e aparece em todos.
+  equipes: {
+    chaveLista: 'EQUIPES_LISTA',
+    arquivo: 'equipes.json',
+    chaveArquivo: 'EQUIPES_ARQUIVO_ID'
+  },
+
   // Cadastro de associados: uma planilha propria, criada e localizada por
   // prepararAssociados(). Os ids ficam nas propriedades do script.
   associados: {
@@ -117,7 +127,7 @@ const USUARIOS_PADRAO = [
   { email: 'associacaoaeuv@gmail.com', nome: 'AEUV', perfil: 'diretoria' },
   { email: 'costtitiiure@gmail.com', nome: 'Iure Costtiti', perfil: 'diretoria' },
   { email: 'xavierelegance68@gmail.com', nome: 'Xavier', perfil: 'diretoria' },
-  { email: 'artetopudi@gmail.com', nome: 'Diretoria', perfil: 'associado', equipe: 'TRK' }
+  { email: 'artetopudi@gmail.com', nome: 'Teste', perfil: 'associado', equipe: 'TESTE' }
 ];
 
 /**
@@ -166,6 +176,7 @@ const GRUPOS = [
  *   punicoes  - controle de punicoes lido do arquivo no Drive
  *   solicitacoes - consulta dos pedidos de inscricao, remocao e portabilidade
  *   sumulas   - consulta das sumulas enviadas pela arbitragem
+ *   equipes   - lista das equipes participantes, fonte dos tres apps
  *   associados- cadastro e consulta das equipes associadas
  *   breve     - funcionalidade planejada, ainda sem tela
  *
@@ -248,6 +259,14 @@ const MODULOS = [
     tipo: 'associados',
     descricao: 'Cadastro das equipes associadas, com representante legal, documentação e situação.',
     perfis: ['admin', 'diretoria', 'associado']
+  },
+  {
+    id: 'equipes',
+    nome: 'Equipes',
+    icone: '🏳️',
+    tipo: 'equipes',
+    descricao: 'Equipes participantes. A lista alimenta o cadastro, os acessos e os dois formulários.',
+    perfis: ['admin', 'diretoria']
   },
   {
     id: 'atletas',
@@ -588,7 +607,7 @@ function montarTelaUsuarios_(lista, sessao) {
         exigeEquipe: perfilDaEquipe_(id)
       };
     }),
-    equipes: ASSOCIADOS_EQUIPES,
+    equipes: obterEquipes_(),
     emailAtual: sessao.usuario.email
   };
 }
@@ -647,7 +666,7 @@ function salvarUsuario(dados) {
       throw new Error('Escolha a equipe deste associado.');
     }
 
-    const conhecida = ASSOCIADOS_EQUIPES.some(function (nome) {
+    const conhecida = obterEquipes_().some(function (nome) {
       return chaveEquipe_(nome) === chaveEquipe_(equipe);
     });
 
@@ -724,6 +743,361 @@ function removerUsuario(email) {
   tela.recado = 'Acesso removido: ' + alvo;
 
   return tela;
+}
+
+/******************************************************
+ * EQUIPES PARTICIPANTES
+ *
+ * Fonte unica dos tres apps. A lista fica nas propriedades do script,
+ * editada pela tela "Equipes", e e publicada num arquivo JSON na pasta
+ * raiz do Drive. Os formularios de sumula e de inscricao leem esse
+ * arquivo, entao um time novo entra num lugar so e aparece em todos,
+ * sem publicar versao nova de nenhum dos projetos.
+ ******************************************************/
+
+/**
+ * Lista usada enquanto a propriedade EQUIPES_LISTA nao for gravada.
+ * Serve de rede de seguranca; o caminho normal e a tela "Equipes".
+ */
+const EQUIPES_PADRAO = [
+  'AJAX',
+  'BEATS',
+  'BOCA JRS',
+  'CRUZMALTINO',
+  'INTEGRAÇÃO',
+  'KADOSH',
+  'LEÕES DO MORUMBI',
+  'OLHOS DÁGUA',
+  'ONZE GAROTOS',
+  'PEQUIS',
+  'REAL PREDADOR',
+  'RIVER',
+  'TRANSNANE/BRASILIENSE',
+  'TRK',
+  'UNIÃO',
+  'UNIAO SANTA MARIA',
+  'VENUS',
+  'FUT ART'
+];
+
+/** Perfis que podem incluir e remover equipes. */
+const EQUIPES_PERFIS_EDICAO = ['admin', 'diretoria'];
+
+/**
+ * Lista valendo agora: a gravada, ou a do codigo enquanto nao houver
+ * nenhuma. Todo lugar que oferece equipes passa por aqui.
+ * @return {Array<string>}
+ */
+function obterEquipes_() {
+  const guardado = PropertiesService.getScriptProperties()
+    .getProperty(CONFIG.equipes.chaveLista);
+
+  if (guardado) {
+    try {
+      const lista = JSON.parse(guardado);
+
+      if (Array.isArray(lista) && lista.length) {
+        return higienizarEquipes_(lista);
+      }
+    } catch (e) {
+      // Conteudo invalido: vale a lista do codigo, nunca uma lista vazia.
+    }
+  }
+
+  return higienizarEquipes_(EQUIPES_PADRAO);
+}
+
+/**
+ * Limpa espacos, descarta vazios e repetidos e ordena. A comparacao
+ * ignora acento e caixa, para "UNIAO" e "UNIÃO" nao entrarem as duas.
+ * @param {Array<string>} lista
+ * @return {Array<string>}
+ */
+function higienizarEquipes_(lista) {
+  const vistos = {};
+
+  const validos = (lista || []).map(function (nome) {
+    return String(nome || '').replace(/\s+/g, ' ').trim();
+  }).filter(function (nome) {
+    const chave = chaveEquipe_(nome);
+
+    if (!chave || vistos[chave]) {
+      return false;
+    }
+
+    vistos[chave] = true;
+
+    return true;
+  });
+
+  if (!validos.length) {
+    throw new Error('Mantenha ao menos uma equipe na lista.');
+  }
+
+  return validos.sort(function (a, b) {
+    return a.localeCompare(b, 'pt-BR');
+  });
+}
+
+/**
+ * Exige perfil que pode mexer nas equipes e devolve a sessao.
+ * @return {Object}
+ */
+function exigirEdicaoEquipes_() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || EQUIPES_PERFIS_EDICAO.indexOf(sessao.usuario.perfil) === -1) {
+    throw new Error('Você não tem permissão para gerenciar as equipes.');
+  }
+
+  return sessao;
+}
+
+/**
+ * Dados da tela de equipes.
+ * @param {Array<string>} lista
+ * @return {{equipes: Array<Object>, arquivoUrl: string, podeEditar: boolean}}
+ */
+function montarTelaEquipes_(lista, sessao) {
+  const emUso = equipesEmUso_();
+
+  return {
+    equipes: lista.map(function (nome) {
+      return { nome: nome, emUso: emUso[chaveEquipe_(nome)] || [] };
+    }),
+    arquivoUrl: arquivoEquipesUrl_(),
+    podeEditar: EQUIPES_PERFIS_EDICAO.indexOf(sessao.usuario.perfil) !== -1
+  };
+}
+
+/**
+ * Onde cada equipe ja aparece hoje. Serve para avisar antes de remover:
+ * tirar da lista um time com cadastro ou com acesso deixa orfao.
+ * @return {Object} Chave da equipe para a lista de lugares onde aparece.
+ */
+function equipesEmUso_() {
+  const uso = {};
+
+  const marcar = function (equipe, lugar) {
+    const chave = chaveEquipe_(equipe);
+
+    if (!chave) {
+      return;
+    }
+
+    uso[chave] = uso[chave] || [];
+
+    if (uso[chave].indexOf(lugar) === -1) {
+      uso[chave].push(lugar);
+    }
+  };
+
+  obterUsuarios_().forEach(function (usuario) {
+    marcar(usuario.equipe, 'acesso');
+  });
+
+  // O cadastro pode ainda nao existir; a tela de equipes nao depende dele.
+  try {
+    abaAssociados_().getDataRange().getValues().slice(1).forEach(function (linha) {
+      marcar(linha[0], 'cadastro');
+    });
+  } catch (e) {
+    // Sem planilha de associados ainda: so o uso nos acessos conta.
+  }
+
+  return uso;
+}
+
+/**
+ * Devolve a lista para a tela. Chamada pelo cliente; refaz a
+ * verificacao de permissao no servidor.
+ * @return {Object}
+ */
+function listarEquipes() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || !moduloLiberado_('equipes', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar as equipes.');
+  }
+
+  return montarTelaEquipes_(obterEquipes_(), sessao);
+}
+
+/**
+ * Inclui uma equipe, ou renomeia quando vier nomeOriginal.
+ * @param {{nome: string, nomeOriginal: string}} dados
+ * @return {Object}
+ */
+function salvarEquipe(dados) {
+  const sessao = exigirEdicaoEquipes_();
+
+  const nome = String((dados && dados.nome) || '').replace(/\s+/g, ' ').trim();
+  const original = String((dados && dados.nomeOriginal) || '').trim();
+
+  if (!nome) {
+    throw new Error('Informe o nome da equipe.');
+  }
+
+  const lista = obterEquipes_().slice();
+  const posicao = original
+    ? lista.reduce(function (achado, item, indice) {
+        return chaveEquipe_(item) === chaveEquipe_(original) ? indice : achado;
+      }, -1)
+    : -1;
+
+  if (original && posicao === -1) {
+    throw new Error('Esta equipe não está mais na lista. Recarregue a página.');
+  }
+
+  const repetida = lista.some(function (item, indice) {
+    return indice !== posicao && chaveEquipe_(item) === chaveEquipe_(nome);
+  });
+
+  if (repetida) {
+    throw new Error('Esta equipe já está na lista.');
+  }
+
+  if (posicao === -1) {
+    lista.push(nome);
+  } else {
+    lista[posicao] = nome;
+  }
+
+  const tela = gravarEquipes_(lista, sessao);
+
+  tela.recado = (posicao === -1 ? 'Equipe incluída: ' : 'Equipe renomeada: ') + nome;
+
+  return tela;
+}
+
+/**
+ * Remove uma equipe da lista.
+ * @param {string} nome
+ * @return {Object}
+ */
+function removerEquipe(nome) {
+  const sessao = exigirEdicaoEquipes_();
+  const alvo = chaveEquipe_(nome);
+
+  // Remover um time que tem cadastro ou acesso deixaria os dois orfaos:
+  // o cadastro sem opcao no combo e o associado sem equipe valida.
+  const usos = equipesEmUso_()[alvo] || [];
+
+  if (usos.length) {
+    throw new Error('Esta equipe ainda tem ' + usos.join(' e ')
+      + ' no sistema. Remova antes de tirá-la da lista.');
+  }
+
+  const lista = obterEquipes_().filter(function (item) {
+    return chaveEquipe_(item) !== alvo;
+  });
+
+  const tela = gravarEquipes_(lista, sessao);
+
+  tela.recado = 'Equipe removida: ' + String(nome || '').trim();
+
+  return tela;
+}
+
+/**
+ * Grava a lista, republica o arquivo do Drive e devolve a tela pronta.
+ * @param {Array<string>} lista
+ * @param {Object} sessao
+ * @return {Object}
+ */
+function gravarEquipes_(lista, sessao) {
+  const validas = higienizarEquipes_(lista);
+
+  PropertiesService.getScriptProperties()
+    .setProperty(CONFIG.equipes.chaveLista, JSON.stringify(validas));
+
+  publicarEquipes_(validas);
+
+  return montarTelaEquipes_(validas, sessao);
+}
+
+/**
+ * Escreve o arquivo que os formularios leem. Reaproveita sempre o mesmo
+ * arquivo para o id nao mudar a cada gravacao.
+ * @param {Array<string>} lista
+ * @return {DriveApp.File}
+ */
+function publicarEquipes_(lista) {
+  const conteudo = JSON.stringify({
+    atualizadoEm: new Date().toISOString(),
+    equipes: lista
+  }, null, 2);
+
+  const arquivo = arquivoEquipes_(true);
+
+  arquivo.setContent(conteudo);
+
+  return arquivo;
+}
+
+/**
+ * Arquivo equipes.json na pasta raiz do projeto.
+ * @param {boolean} criar Cria quando ainda nao existir.
+ * @return {DriveApp.File}
+ */
+function arquivoEquipes_(criar) {
+  const propriedades = PropertiesService.getScriptProperties();
+  const guardado = propriedades.getProperty(CONFIG.equipes.chaveArquivo);
+
+  if (guardado) {
+    try {
+      const arquivo = DriveApp.getFileById(guardado);
+
+      if (!arquivo.isTrashed()) {
+        return arquivo;
+      }
+    } catch (e) {
+      // Arquivo removido ou sem acesso: procura de novo pelo nome.
+    }
+  }
+
+  const raiz = pastaRaizProjeto_();
+  const existentes = raiz.getFilesByName(CONFIG.equipes.arquivo);
+  let arquivo;
+
+  if (existentes.hasNext()) {
+    arquivo = existentes.next();
+  } else if (criar) {
+    arquivo = raiz.createFile(CONFIG.equipes.arquivo, '', MimeType.PLAIN_TEXT);
+  } else {
+    return null;
+  }
+
+  propriedades.setProperty(CONFIG.equipes.chaveArquivo, arquivo.getId());
+
+  return arquivo;
+}
+
+/**
+ * Endereco do arquivo publicado, ou vazio enquanto ninguem gravou.
+ * @return {string}
+ */
+function arquivoEquipesUrl_() {
+  try {
+    const arquivo = arquivoEquipes_(false);
+
+    return arquivo ? arquivo.getUrl() : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Republica o arquivo do Drive com a lista que esta valendo. Use pelo
+ * editor quando o arquivo for apagado ou quando um formulario novo
+ * precisar dele antes da primeira edicao pela tela.
+ */
+function publicarEquipesAgora() {
+  const lista = obterEquipes_();
+  const arquivo = publicarEquipes_(lista);
+
+  Logger.log('Equipes publicadas: %s', lista.length);
+  Logger.log('ARQUIVO: %s', arquivo.getUrl());
 }
 
 /******************************************************
@@ -1956,31 +2330,6 @@ function tamanhoLegivel_(bytes) {
 /** Perfis que podem cadastrar e editar. Os demais apenas consultam. */
 const ASSOCIADOS_PERFIS_EDICAO = ['admin', 'diretoria'];
 
-/**
- * Equipes que podem ser escolhidas no cadastro. Mantenha igual a lista
- * usada nos formularios de inscricao e de sumula.
- */
-const ASSOCIADOS_EQUIPES = [
-  'AJAX',
-  'BEATS',
-  'BOCA JRS',
-  'CRUZMALTINO',
-  'INTEGRAÇÃO',
-  'KADOSH',
-  'LEÕES DO MORUMBI',
-  'OLHOS DÁGUA',
-  'ONZE GAROTOS',
-  'PEQUIS',
-  'REAL PREDADOR',
-  'RIVER',
-  'TRANSNANE/BRASILIENSE',
-  'TRK',
-  'UNIÃO',
-  'UNIAO SANTA MARIA',
-  'VENUS',
-  'FUT ART'
-];
-
 /** Situacoes possiveis de um associado. */
 const ASSOCIADOS_STATUS = [
   { id: 'ativo', nome: 'Ativo', icone: '🟢' },
@@ -2082,7 +2431,7 @@ function listarAssociados() {
 
   return {
     registros: registros,
-    equipes: daEquipe ? [sessao.usuario.equipe].filter(String) : ASSOCIADOS_EQUIPES,
+    equipes: daEquipe ? [sessao.usuario.equipe].filter(String) : obterEquipes_(),
     status: ASSOCIADOS_STATUS,
     documentos: ASSOCIADOS_DOCUMENTOS,
     podeEditar: podeEditarAssociados_(sessao.usuario.perfil),

@@ -1293,6 +1293,13 @@
         return;
       }
 
+      if (modulo.tipo === 'equipes') {
+        conteudo.innerHTML = cabecalho
+          + '<div id="areaEquipes">' + blocoCarregando('statusEquipes') + '</div>';
+        carregarEquipes();
+        return;
+      }
+
       if (modulo.tipo === 'punicoes') {
         conteudo.innerHTML = cabecalho + blocoCarregando('statusPunicoes');
         carregarPunicoes();
@@ -1597,6 +1604,179 @@
             '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>');
         })
         .removerUsuario(email);
+    }
+
+    /**
+     * Equipes participantes: fonte unica dos tres apps. Admin e
+     * diretoria incluem, renomeiam e removem; o servidor recusa a
+     * remocao de equipe que ainda tenha cadastro ou acesso.
+     */
+    let equipes = { equipes: [], arquivoUrl: '', podeEditar: false };
+
+    /**
+     * Busca no servidor a lista de equipes.
+     */
+    function carregarEquipes() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'equipes') {
+            return;
+          }
+
+          equipes = dados;
+          montarTelaEquipes();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'equipes') {
+            return;
+          }
+
+          document.getElementById('statusEquipes').outerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarEquipes();
+    }
+
+    /**
+     * Lista das equipes, com editar e remover para quem pode.
+     * @param {string} recado Mensagem de sucesso da ultima gravacao.
+     */
+    function montarTelaEquipes(recado) {
+      const linhas = (equipes.equipes || []).map(function (item) {
+        const uso = (item.emUso || []).join(', ');
+
+        const acoes = equipes.podeEditar
+          ? '<button type="button" class="botao-apoio" data-editar-equipe="' + escapar(item.nome) + '">Editar</button>'
+            + ' <button type="button" class="botao-apoio perigo" data-remover-equipe="' + escapar(item.nome) + '">Remover</button>'
+          : '<span class="apoio">-</span>';
+
+        return '<tr>'
+          + '<td data-rotulo="Equipe">' + escapar(item.nome) + '</td>'
+          + '<td data-rotulo="Em uso">' + (uso ? escapar(uso) : '<span class="apoio">nenhum cadastro ainda</span>') + '</td>'
+          + '<td class="acoes-linha" data-rotulo="Ações">' + acoes + '</td>'
+          + '</tr>';
+      }).join('');
+
+      const sucesso = recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '';
+
+      const barra = equipes.podeEditar
+        ? '<div class="barra-acoes">'
+          + '<button type="button" class="botao-principal" id="novaEquipe">Incluir equipe</button>'
+          + '</div>'
+        : '';
+
+      const linkArquivo = equipes.arquivoUrl
+        ? '<a href="' + escapar(equipes.arquivoUrl) + '" target="_blank" rel="noopener">arquivo publicado</a>'
+        : 'arquivo publicado';
+
+      document.getElementById('areaEquipes').innerHTML = sucesso
+        + barra
+        + '<table class="usuarios"><thead><tr><th>Equipe</th><th>Em uso</th><th>A&ccedil;&otilde;es</th></tr></thead>'
+        + '<tbody>' + linhas + '</tbody></table>'
+        + '<div class="aviso">Esta lista alimenta o cadastro de associados, os acessos do sistema e os '
+        + 'formul&aacute;rios de s&uacute;mula e de inscri&ccedil;&atilde;o e portabilidade, atrav&eacute;s do '
+        + linkArquivo + '. Vale na hora, sem publicar nova vers&atilde;o de nenhum dos tr&ecirc;s projetos.</div>';
+
+      if (equipes.podeEditar) {
+        document.getElementById('novaEquipe').addEventListener('click', function () {
+          abrirFormularioEquipe('');
+        });
+
+        document.querySelectorAll('[data-editar-equipe]').forEach(function (botao) {
+          botao.addEventListener('click', function () {
+            abrirFormularioEquipe(botao.dataset.editarEquipe);
+          });
+        });
+
+        document.querySelectorAll('[data-remover-equipe]').forEach(function (botao) {
+          botao.addEventListener('click', function () {
+            removerEquipeDoSistema(botao.dataset.removerEquipe);
+          });
+        });
+      }
+    }
+
+    /**
+     * Formulario de uma equipe. Sem nome, abre em branco.
+     * @param {string} nome
+     */
+    function abrirFormularioEquipe(nome) {
+      const registro = (equipes.equipes || []).filter(function (e) {
+        return e.nome === nome;
+      })[0] || null;
+
+      document.getElementById('areaEquipes').innerHTML = '<div class="formulario">'
+        + '<h3>' + (registro ? 'Renomear equipe' : 'Incluir equipe') + '</h3>'
+        + '<div class="grupo"><div class="campos">'
+        + campoTexto('eNome', 'Nome da equipe', registro ? registro.nome : '', 'largo', '', 'text')
+        + '</div></div>'
+        + '<div class="acoes-formulario">'
+        + '<button type="button" class="botao-principal" id="gravarEquipe">'
+        + (registro ? 'Salvar' : 'Incluir') + '</button>'
+        + '<button type="button" class="botao-apoio" id="voltarEquipes">Voltar &agrave; lista</button>'
+        + '<span class="espaco"></span>'
+        + '<span class="apoio" id="avisoEquipe"></span>'
+        + '</div></div>';
+
+      document.getElementById('voltarEquipes').addEventListener('click', function () {
+        montarTelaEquipes();
+      });
+
+      document.getElementById('gravarEquipe').addEventListener('click', function () {
+        gravarEquipe(registro ? registro.nome : '');
+      });
+    }
+
+    /**
+     * Envia a equipe ao servidor, que e quem valida de verdade.
+     * @param {string} nomeOriginal Vazio quando e uma equipe nova.
+     */
+    function gravarEquipe(nomeOriginal) {
+      const botao = document.getElementById('gravarEquipe');
+      const aviso = document.getElementById('avisoEquipe');
+
+      botao.disabled = true;
+      aviso.textContent = 'Gravando...';
+
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          equipes = dados;
+          montarTelaEquipes(dados.recado);
+        })
+        .withFailureHandler(function (erro) {
+          botao.disabled = false;
+          aviso.innerHTML = '<span class="alerta">'
+            + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+        })
+        .salvarEquipe({
+          nomeOriginal: nomeOriginal,
+          nome: document.getElementById('eNome').value
+        });
+    }
+
+    /**
+     * Remove uma equipe, confirmando antes.
+     * @param {string} nome
+     */
+    function removerEquipeDoSistema(nome) {
+      if (!window.confirm('Remover a equipe ' + nome + '?')) {
+        return;
+      }
+
+      document.getElementById('areaEquipes').innerHTML = blocoCarregando();
+
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          equipes = dados;
+          montarTelaEquipes(dados.recado);
+        })
+        .withFailureHandler(function (erro) {
+          montarTelaEquipes();
+
+          document.getElementById('areaEquipes').insertAdjacentHTML('afterbegin',
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>');
+        })
+        .removerEquipe(nome);
     }
 
     /**

@@ -71,7 +71,7 @@ function doGet() {
     cnpjPix: WEBAPP_CONFIG.cnpjPix,
     valorPorAtleta: WEBAPP_CONFIG.valorPorAtleta,
     competicoes: WEBAPP_CONFIG.competicoes,
-    equipes: WEBAPP_CONFIG.equipes,
+    equipes: equipesConfiguradas_(),
     logoUrl: obterLogoDataUrl_(),
     regulamentoUrl: WEBAPP_CONFIG.regulamentoUrl,
   };
@@ -82,6 +82,49 @@ function doGet() {
     .setFaviconUrl(WEBAPP_CONFIG.faviconUrl)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/**
+ * Equipes participantes. Fonte unica: le o arquivo "equipes.json" que o
+ * sistema interno publica na pasta "AEUV - Automacao" ao gravar a lista
+ * pela tela "Equipes". Assim um time novo entra num lugar so e aparece
+ * aqui sem publicar nova versao deste formulario.
+ *
+ * Guarda o resultado em cache por 6 horas para nao consultar o Drive a
+ * cada abertura, e cai na lista fixa de WEBAPP_CONFIG.equipes se o
+ * arquivo ainda nao existir ou estiver fora do ar.
+ * @return {Array<string>}
+ */
+function equipesConfiguradas_() {
+  const cache = CacheService.getScriptCache();
+  const guardado = cache.get('EQUIPES_CONFIGURADAS');
+
+  if (guardado) {
+    try {
+      return JSON.parse(guardado);
+    } catch (e) {
+      // Cache corrompido: segue para ler o arquivo de novo.
+    }
+  }
+
+  try {
+    const raiz = DriveApp.getFolderById('1uDUmgEjeISQ1W3Uc5hcUc25pgXDvVhs3');
+    const arquivos = raiz.getFilesByName('equipes.json');
+
+    if (arquivos.hasNext()) {
+      const dados = JSON.parse(arquivos.next().getBlob().getDataAsString('UTF-8'));
+
+      if (dados && Array.isArray(dados.equipes) && dados.equipes.length) {
+        cache.put('EQUIPES_CONFIGURADAS', JSON.stringify(dados.equipes), 6 * 60 * 60);
+
+        return dados.equipes;
+      }
+    }
+  } catch (erro) {
+    console.warn('equipes.json indisponivel, usando a lista fixa: ' + erro);
+  }
+
+  return WEBAPP_CONFIG.equipes;
 }
 
 /**

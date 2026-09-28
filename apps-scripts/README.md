@@ -515,6 +515,7 @@ pode declarar `grupo` para entrar num submenu.
 | `notas` | Notas oficiais; busca os dados com `listarNotas()`. |
 | `regulamentos` | Regulamentos; busca os dados com `listarRegulamentos()`. |
 | `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
+| `equipes` | Equipes participantes; usa `listarEquipes()`, `salvarEquipe()` e `removerEquipe()`. |
 | `breve` | Funcionalidade já prevista, exibida com o aviso "em desenvolvimento". |
 
 Módulos publicados hoje: Início, Formulários (Súmula digital e Inscrição e
@@ -960,6 +961,48 @@ Só o **PDF** é publicado. O texto de trabalho continua no repositório, em
 `regulamento/`, onde a automação o lê para enquadrar as infrações — publicar os
 dois lado a lado só criaria dúvida sobre qual é o oficial.
 
+### Equipes participantes
+
+Lista as equipes que podem aparecer em qualquer parte dos três projetos. É a
+**fonte única**: antes desta tela, o mesmo nome de equipe existia hardcoded em
+quatro lugares (`sistema-interno/WebApp.gs`, `sumula-digital/WebApp.gs`,
+`inscricao-portabilidade/WebApp.gs` e `config.ini` da automação em Python) —
+já haviam divergido entre si, e um time novo exigia editar e republicar até
+três projetos. Agora um time novo é cadastrado **num lugar só**.
+
+Liberada para **admin e diretoria** (`EQUIPES_PERFIS_EDICAO`); os demais
+perfis só recebem a lista pronta, onde ela for usada (acesso de associado,
+cadastro de associados, os dois formulários).
+
+**Como funciona:**
+
+1. A lista fica gravada nas propriedades do script (`EQUIPES_LISTA`) e vale na
+   hora, sem publicar nova versão — igual à tela de usuários.
+2. Toda gravação também **republica um arquivo `equipes.json`** na pasta raiz
+   `AEUV - Automação` (`publicarEquipes_`). O arquivo sempre tem o mesmo id
+   (guardado em `EQUIPES_ARQUIVO_ID`), então o link não muda a cada edição.
+3. Os formulários `sumula-digital` e `inscricao-portabilidade` leem esse
+   arquivo direto do Drive na abertura da página (`equipesConfiguradas_()`),
+   com cache de 6 horas para não consultar o Drive a cada acesso. Se o
+   arquivo ainda não existir ou o Drive estiver fora do ar, cada formulário
+   cai na sua lista fixa antiga — a fonte única nunca vira ponto único de
+   falha.
+4. **A automação em Python (`config.ini`) não foi ligada a este arquivo.**
+   Continua com a lista própria, usada para localizar o time no iFut e não
+   apenas para preencher um combo — um nome de equipe ali precisa bater com
+   o nome cadastrado no iFut, não com o nome usado nos formulários.
+
+**Remover uma equipe é recusado** enquanto ela ainda tiver acesso de associado
+vinculado (`USUARIOS_AUTORIZADOS`) ou cadastro na planilha de associados
+(`equipesEmUso_`) — a tela avisa qual dos dois antes de deixar remover, para
+não deixar acesso ou cadastro órfão. Renomear (editar mantendo a posição)
+não passa por essa checagem, porque não tira a equipe da lista.
+
+Depois de publicar o sistema interno pela primeira vez com esta tela, rode
+`publicarEquipesAgora()` uma vez pelo editor do Apps Script para os dois
+formulários já encontrarem o arquivo publicado — sem isso eles seguem com a
+lista fixa até a primeira gravação pela tela.
+
 ### Cadastro de associados
 
 Reúne num só lugar quem são as equipes associadas, quem responde legalmente por
@@ -969,9 +1012,9 @@ cada uma e qual documentação já foi entregue.
 representante legal dela. Por isso a equipe funciona como chave: ao salvar, o
 sistema procura a equipe na planilha e atualiza a linha existente em vez de
 criar outra. A comparação ignora acentos, maiúsculas e espaços repetidos
-(`chaveEquipe_`), então "Integração" e "INTEGRACAO" são a mesma equipe. No
-formulário de cadastro novo o combo só oferece equipes ainda sem registro, e na
-edição o campo fica travado.
+(`chaveEquipe_`), então "Integração" e "INTEGRACAO" são a mesma equipe. O combo
+de equipes vem da tela **Equipes**; no formulário de cadastro novo ele só
+oferece equipes ainda sem registro, e na edição o campo fica travado.
 
 #### Por que planilha e não um arquivo TXT
 
