@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <base target="_top">
@@ -285,7 +285,105 @@
 
     .pilula.admin { background: var(--dourado); color: var(--azul); font-weight: bold; }
 
-    .carregando { color: var(--apoio); font-size: 14px; margin-top: 16px; }
+    /* ---------- Carregamento ----------
+       Mesma identidade da portaria (docs/sistema/index.html): anel girando
+       ao redor da logomarca, reticências animadas e barra indeterminada.
+       Toda tela usa este bloco, com o mesmo texto: o tempo depende do
+       Drive, não da funcionalidade, então a mensagem não precisa variar. */
+    .carregando {
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 38px 24px 44px;
+      color: var(--apoio);
+    }
+
+    .carregando .marca {
+      position: relative;
+      width: 96px;
+      height: 96px;
+      display: grid;
+      place-items: center;
+    }
+
+    .carregando .marca::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 3px solid var(--borda);
+      border-top-color: var(--dourado);
+      border-right-color: var(--dourado);
+      animation: girar 1.1s linear infinite;
+    }
+
+    .carregando .marca img {
+      width: 66px;
+      height: 66px;
+      object-fit: contain;
+      animation: pulsar 1.8s ease-in-out infinite;
+    }
+
+    .carregando .rotulo {
+      margin: 16px 0 0;
+      font-size: 14px;
+      color: var(--texto);
+    }
+
+    .carregando .rotulo::after {
+      content: '';
+      animation: reticencias 1.4s steps(4, end) infinite;
+    }
+
+    .carregando .barra {
+      position: relative;
+      width: 190px;
+      height: 5px;
+      margin-top: 16px;
+      border-radius: 4px;
+      background: var(--borda);
+      overflow: hidden;
+    }
+
+    .carregando .barra span {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 45%;
+      height: 100%;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #ffc45c, var(--dourado));
+      animation: correr 1.3s ease-in-out infinite;
+    }
+
+    @keyframes girar { to { transform: rotate(360deg); } }
+
+    @keyframes correr {
+      0% { left: -45%; }
+      100% { left: 100%; }
+    }
+
+    @keyframes pulsar {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    @keyframes reticencias {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
+
+    /* Quem pediu menos movimento vê o mesmo bloco, parado. */
+    @media (prefers-reduced-motion: reduce) {
+      .carregando .marca::before,
+      .carregando .marca img,
+      .carregando .barra span,
+      .carregando .rotulo::after { animation: none; }
+
+      .carregando .barra span { width: 100%; left: 0; }
+    }
 
     /* ---------- Controle de punicoes ---------- */
 
@@ -848,6 +946,29 @@
     let moduloAtual = '';
 
     /**
+     * Bloco de carregamento, igual em todas as telas.
+     *
+     * A espera e sempre a mesma coisa - o servidor indo ao Drive - entao
+     * o texto nao varia por funcionalidade: o nome do modulo ja esta no
+     * cabecalho logo acima. Segue a identidade da portaria
+     * (docs/sistema/index.html), para a transicao nao mudar de cara.
+     *
+     * @param {string} [id] Id do elemento, quando a tela precisa
+     *   substitui-lo depois que os dados chegam.
+     */
+    function blocoCarregando(id) {
+      return '<div class="carregando"' + (id ? ' id="' + escapar(id) + '"' : '') + '>'
+        + '<div class="marca">'
+        + (CONFIG.logoUrl
+          ? '<img src="' + escapar(CONFIG.logoUrl) + '" alt="">'
+          : '')
+        + '</div>'
+        + '<p class="rotulo">Carregando</p>'
+        + '<div class="barra"><span></span></div>'
+        + '</div>';
+    }
+
+    /**
      * Escapa texto vindo do servidor antes de injetar no HTML.
      */
     function escapar(valor) {
@@ -1065,34 +1186,32 @@
       }
 
       if (modulo.tipo === 'usuarios') {
-        conteudo.innerHTML = cabecalho + '<p class="carregando" id="statusUsuarios">Carregando a lista de acessos...</p>';
+        conteudo.innerHTML = cabecalho + blocoCarregando('statusUsuarios');
         carregarUsuarios();
         return;
       }
 
       if (modulo.tipo === 'punicoes') {
-        conteudo.innerHTML = cabecalho + '<p class="carregando" id="statusPunicoes">Carregando o controle de puni&ccedil;&otilde;es...</p>';
+        conteudo.innerHTML = cabecalho + blocoCarregando('statusPunicoes');
         carregarPunicoes();
         return;
       }
 
       if (modulo.tipo === 'solicitacoes') {
-        conteudo.innerHTML = cabecalho
-          + '<p class="carregando" id="statusSolicitacoes">Carregando as solicita&ccedil;&otilde;es de inscri&ccedil;&atilde;o...</p>';
+        conteudo.innerHTML = cabecalho + blocoCarregando('statusSolicitacoes');
         carregarSolicitacoes();
         return;
       }
 
       if (modulo.tipo === 'sumulas') {
-        conteudo.innerHTML = cabecalho
-          + '<p class="carregando" id="statusSumulas">Carregando as s&uacute;mulas enviadas...</p>';
+        conteudo.innerHTML = cabecalho + blocoCarregando('statusSumulas');
         carregarSumulas();
         return;
       }
 
       if (modulo.tipo === 'associados') {
         conteudo.innerHTML = cabecalho
-          + '<div id="areaAssociados"><p class="carregando">Carregando o cadastro de associados...</p></div>';
+          + '<div id="areaAssociados">' + blocoCarregando() + '</div>';
         carregarAssociados();
         return;
       }

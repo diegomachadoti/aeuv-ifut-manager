@@ -504,6 +504,28 @@ Três regras valem a pena lembrar:
 No painel inicial cada módulo continua com seu próprio atalho, sem agrupamento:
 lá o objetivo é mostrar tudo o que a pessoa pode fazer.
 
+#### Carregamento
+
+Toda tela que busca dados no servidor mostra o **mesmo** bloco de carregamento,
+montado por `blocoCarregando()`: a logomarca da associação com um anel girando,
+a palavra "Carregando" com reticências animadas e uma barra indeterminada.
+
+É a mesma identidade da tela de entrada das
+[páginas de abertura](#ícone-da-aba-e-prévia-do-link)
+(`docs/sistema/index.html`), de propósito: quem entra no sistema vê o anel
+girando na abertura e reencontra o mesmo desenho a cada tela que abre, sem
+mudança de cara no meio do caminho.
+
+O texto é igual em todas elas. Antes cada tela escrevia o seu ("Carregando as
+solicitações de inscrição...", "Carregando o controle de punições..."), o que
+repetia uma informação que o cabeçalho logo acima já dá — e a espera é sempre a
+mesma coisa, o servidor indo ao Drive, não algo específico da funcionalidade.
+
+A barra é indeterminada porque não há como saber o tempo: depende de quantos
+arquivos a pasta tem e da resposta do Drive. Quem configurou o sistema para
+usar menos movimento (`prefers-reduced-motion`) vê o mesmo bloco, parado, com a
+barra cheia.
+
 ### Controle de punições
 
 Primeira funcionalidade com tela própria. Mostra todas as punições aplicadas
