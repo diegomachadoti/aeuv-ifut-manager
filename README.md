@@ -762,12 +762,12 @@ A cada gravação, o TXT e o PDF do controle são enviados para a subpasta
 punições** do [sistema interno](apps-scripts/README.md#sistema-interno) lê os
 dados, em `portal.aeuv.org/sistema/`.
 
-A conta de serviço não tem cota de armazenamento no Drive e, por isso, só
-consegue **atualizar** arquivos, nunca criar. Então a primeira cópia de cada
-arquivo precisa ser enviada uma única vez por uma conta de pessoa: abra a
-subpasta no Drive e arraste para lá o TXT e o PDF de `downloads\sumulas\`. Dali
-em diante a atualização é automática e o link do arquivo nunca muda. Enquanto
-isso não for feito, o log traz o aviso com o endereço da pasta e o fluxo segue
+Com o [acesso OAuth configurado](#quem-a-automação-é-quando-fala-com-o-drive),
+a subpasta e os arquivos são criados automaticamente. Sem ele, a automação
+depende da conta de serviço, que só consegue **atualizar** arquivos: nesse caso
+a primeira cópia de cada arquivo precisa ser enviada uma vez pelo navegador
+(arraste o TXT e o PDF de `downloads\sumulas\` para a subpasta). Enquanto isso
+não for feito, o log traz o aviso com o endereço da pasta e o fluxo segue
 normalmente — o controle local continua correto.
 
 Quem for consultar a tela no sistema interno precisa ter acesso de leitura à
@@ -855,6 +855,13 @@ não aparece para ninguém.
 
 Com OAuth a automação age como **você**, usando a sua cota. Ela cria as pastas
 e envia os arquivos sozinha, sem nenhum passo manual.
+
+A escolha da credencial é feita num lugar só — `drive_auth.py` — e vale para
+**todos** os fluxos que falam com o Drive: download de inscrições e súmulas,
+pastas `Entrada`/`Processados`/`Falhas`/`Resultados`, TXT e PDF de resultado,
+planilha financeira, controle de punições, notas oficiais e regulamentos. Basta
+o `google-oauth-client.json` existir para o OAuth entrar no lugar da conta de
+serviço em todos eles.
 
 #### Configurar o OAuth (uma vez)
 

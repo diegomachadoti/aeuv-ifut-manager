@@ -15,7 +15,6 @@ from typing import Iterable
 from urllib.parse import urlparse
 
 import requests
-from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from selenium import webdriver
@@ -27,6 +26,8 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
+
+import drive_auth
 
 
 DEFAULT_CONFIG_PATH = Path("config.ini")
@@ -257,10 +258,12 @@ class SelectorConfig:
 
 
 class DriveTxtDownloader:
-    def __init__(self, folder_embed_url: str, download_dir: Path, service_account_json: Path | None = None) -> None:
+    def __init__(self, folder_embed_url: str, download_dir: Path, service_account_json: Path | None = None,
+                 config_path: Path | None = None) -> None:
         self.folder_embed_url = folder_embed_url
         self.download_dir = download_dir
         self.service_account_json = service_account_json
+        self.config_path = config_path or DEFAULT_CONFIG_PATH
         self.remote_files_by_name: dict[str, str] = {}
         self._drive_service = None
         self._root_folder_id: str | None = None
@@ -271,8 +274,8 @@ class DriveTxtDownloader:
 
     def sync(self) -> list[Path]:
         self.download_dir.mkdir(parents=True, exist_ok=True)
-        if self.service_account_json and self.service_account_json.exists():
-            return self._sync_with_service_account()
+        if drive_auth.tem_credencial(self.config_path):
+            return self._sync_pela_api()
         html = self._fetch_html(self.folder_embed_url)
         entry_folder_url = self._find_entry_folder_url(html)
         if entry_folder_url:
@@ -297,12 +300,8 @@ class DriveTxtDownloader:
             files.append(destination)
         return files
 
-    def _sync_with_service_account(self) -> list[Path]:
-        credentials = service_account.Credentials.from_service_account_file(
-            str(self.service_account_json),
-            scopes=["https://www.googleapis.com/auth/drive"],
-        )
-        service = build("drive", "v3", credentials=credentials)
+    def _sync_pela_api(self) -> list[Path]:
+        service = build("drive", "v3", credentials=drive_auth.credenciais_por_arquivo(self.config_path))
         self._drive_service = service
         root_folder_id = self._extract_folder_id(self.folder_embed_url)
         self._root_folder_id = root_folder_id
@@ -1144,11 +1143,8 @@ class IfutBot:
            from openpyxl import load_workbook
 
            self.logger.info("[PLANILHA] Conectando ao Google Drive...")
-           credentials = service_account.Credentials.from_service_account_file(
-               str(self.config.service_account_json),
-               scopes=["https://www.googleapis.com/auth/drive"],
-           )
-           drive_service = build("drive", "v3", credentials=credentials)
+           drive_service = build("drive", "v3",
+                                 credentials=drive_auth.credenciais_por_arquivo(self.config.path, self.logger))
 
            self.logger.info("[PLANILHA] Baixando arquivo: %s", self.config.spreadsheet_id)
            file_id = self.config.spreadsheet_id
@@ -1537,7 +1533,8 @@ def main() -> int:
     selectors = SelectorConfig(Path(args.selectors))
     logger = configure_logging(config.log_path)
 
-    downloader = DriveTxtDownloader(config.folder_embed_url, config.download_dir, config.service_account_json)
+    downloader = DriveTxtDownloader(config.folder_embed_url, config.download_dir, config.service_account_json,
+                                    config.path)
     if not args.process_local_only:
         downloaded = downloader.sync()
         logger.info("Arquivos sincronizados do Drive: %s", len(downloaded))

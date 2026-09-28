@@ -66,7 +66,6 @@ class PublicadorDrive:
             drive_auth.usando_oauth(parser),
             logger,
         )
-
     # -- pastas -------------------------------------------------------------
 
     def raiz_id(self) -> str:

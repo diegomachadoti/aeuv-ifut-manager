@@ -801,7 +801,8 @@ def processar_sumulas(config_path: Path = DEFAULT_CONFIG_PATH, local_only: bool 
         chave_ia = sumula_ia.obter_chave(config_ia)
         logger.info("[SUMULAS] Modo IA ativo (modelo %s)", config_ia.modelo)
 
-    downloader = DriveTxtDownloader(config.folder_embed_url, config.download_dir, config.service_account_json)
+    downloader = DriveTxtDownloader(config.folder_embed_url, config.download_dir, config.service_account_json,
+                                    config.path)
     config.download_dir.mkdir(parents=True, exist_ok=True)
     if not local_only:
         baixados = downloader.sync()

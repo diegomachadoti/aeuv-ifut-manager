@@ -259,25 +259,29 @@ def _pasta_drive(service, pasta_pai: str, nome: str, logger: logging.Logger) -> 
 
 
 def _enviar_arquivo(service, pasta_id: str, arquivo: Path, mimetype: str, logger: logging.Logger) -> None:
-    """Atualiza o arquivo ja existente na pasta do Drive, mantendo o mesmo id (o link nao muda).
-
-    A conta de servico nao tem cota de armazenamento e por isso nao consegue criar arquivos: a
-    primeira copia de cada arquivo precisa ser enviada uma unica vez por uma conta de pessoa.
-    """
+    """Envia o arquivo para a pasta do Drive, atualizando quando ja existe (o link nao muda)."""
     from googleapiclient.http import MediaFileUpload
 
     consulta = f"name = '{arquivo.name}' and '{pasta_id}' in parents and trashed = false"
     achados = service.files().list(q=consulta, fields="files(id)", pageSize=1,
                                    supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get("files", [])
-    if not achados:
-        logger.warning("[CONTROLE] %s ainda nao existe na pasta do Drive. Envie o arquivo uma vez pela conta da "
-                       "associacao em https://drive.google.com/drive/folders/%s; a partir dai a atualizacao e "
-                       "automatica.", arquivo.name, pasta_id)
+    midia = MediaFileUpload(str(arquivo), mimetype=mimetype, resumable=False)
+    if achados:
+        service.files().update(fileId=achados[0]["id"], media_body=midia, supportsAllDrives=True).execute()
+        logger.info("[CONTROLE] %s atualizado no Drive", arquivo.name)
         return
 
-    midia = MediaFileUpload(str(arquivo), mimetype=mimetype, resumable=False)
-    service.files().update(fileId=achados[0]["id"], media_body=midia, supportsAllDrives=True).execute()
-    logger.info("[CONTROLE] %s atualizado no Drive", arquivo.name)
+    try:
+        service.files().create(body={"name": arquivo.name, "parents": [pasta_id]},
+                               media_body=midia, fields="id", supportsAllDrives=True).execute()
+        logger.info("[CONTROLE] %s publicado no Drive", arquivo.name)
+    except Exception as exc:
+        if "storageQuotaExceeded" not in str(exc):
+            raise
+        # Acontece so pela conta de servico, que nao tem cota propria.
+        logger.warning("[CONTROLE] %s ainda nao existe na pasta do Drive e a conta de servico nao pode cria-lo. "
+                       "Configure o acesso OAuth (ver 'Publicacao no Drive' no README) ou envie o arquivo uma vez "
+                       "em https://drive.google.com/drive/folders/%s.", arquivo.name, pasta_id)
 
 
 def publicar_no_drive(caminho: Path, config_path: Path = DEFAULT_CONFIG_PATH,
@@ -288,23 +292,18 @@ def publicar_no_drive(caminho: Path, config_path: Path = DEFAULT_CONFIG_PATH,
     envio acontece a cada gravacao. Falhas sao apenas registradas: o controle local ja esta salvo.
     """
     try:
-        from google.oauth2 import service_account
         from googleapiclient.discovery import build
         from sumula_disciplinar import ConfigSumulas
+
+        import drive_auth
 
         config = ConfigSumulas.carregar(Path(config_path))
         pasta_pai = re.search(r"[?&]id=([^&#]+)", config.folder_embed_url or "")
         if not pasta_pai:
             logger.warning("[CONTROLE] Pasta das sumulas nao identificada; controle nao publicado no Drive")
             return
-        if not Path(config.service_account_json).exists():
-            logger.warning("[CONTROLE] Credencial %s ausente; controle nao publicado no Drive",
-                           config.service_account_json)
-            return
 
-        credenciais = service_account.Credentials.from_service_account_file(
-            str(config.service_account_json), scopes=["https://www.googleapis.com/auth/drive"])
-        service = build("drive", "v3", credentials=credenciais)
+        service = build("drive", "v3", credentials=drive_auth.credenciais_por_arquivo(Path(config_path), logger))
         pasta_id = _pasta_drive(service, pasta_pai.group(1), PASTA_DRIVE, logger)
 
         _enviar_arquivo(service, pasta_id, caminho, "text/plain", logger)

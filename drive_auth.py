@@ -97,5 +97,35 @@ def credenciais_drive(parser: configparser.ConfigParser,
     )
 
 
+def _parser_de(config_path: Path) -> configparser.ConfigParser:
+    parser = configparser.ConfigParser()
+    if not parser.read(config_path, encoding="utf-8"):
+        raise FileNotFoundError(f"Arquivo de configuracao nao encontrado: {config_path}")
+    parser.read(Path(config_path).with_name("config.local.ini"), encoding="utf-8")
+    return parser
+
+
+def credenciais_por_arquivo(config_path: Path, logger: logging.Logger | None = None):
+    """Mesma escolha de credencial, partindo do caminho do config.ini."""
+    return credenciais_drive(_parser_de(config_path), logger)
+
+
 def usando_oauth(parser: configparser.ConfigParser) -> bool:
     return _caminho(parser, "oauth_client_json", CLIENT_JSON_PADRAO).exists()
+
+
+def usando_oauth_por_arquivo(config_path: Path) -> bool:
+    try:
+        return usando_oauth(_parser_de(config_path))
+    except FileNotFoundError:
+        return False
+
+
+def tem_credencial(config_path: Path) -> bool:
+    """Ha alguma credencial (OAuth ou conta de servico) para falar com a API do Drive?"""
+    try:
+        parser = _parser_de(config_path)
+    except FileNotFoundError:
+        return False
+    return (_caminho(parser, "oauth_client_json", CLIENT_JSON_PADRAO).exists()
+            or _caminho(parser, "service_account_json", "google-service-account.json").exists())
