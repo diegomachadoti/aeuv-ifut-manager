@@ -60,6 +60,18 @@ const CONFIG = {
     maxLeitura: 200
   },
 
+  // Sumulas digitais enviadas pela arbitragem. A pasta e a mesma do
+  // controle de punicoes (punicoes.pastaSumulasId) e a mesma configurada
+  // na automacao em Python (config.ini, secao [sumulas]). Dentro dela
+  // ficam Entrada, Processados e Falhas, que dao a situacao de cada envio.
+  sumulas: {
+    pastaRaizId: '1OfcX-AFyeGEznieKfyqgQRiEjBDJockP',
+
+    // Mesmo motivo do teto das solicitacoes: a listagem le todos os
+    // nomes, mas so abre os mais recentes.
+    maxLeitura: 200
+  },
+
   // Pasta raiz "AEUV - Automacao", que agrupa tudo o que o projeto usa no Drive.
   // A planilha e a pasta de documentos dos associados sao criadas dentro dela
   // por prepararAssociados().
@@ -117,6 +129,7 @@ const GRUPOS = [
  *   usuarios  - tabela de autorizados (somente admin)
  *   punicoes  - controle de punicoes lido do arquivo no Drive
  *   solicitacoes - consulta dos pedidos de inscricao, remocao e portabilidade
+ *   sumulas   - consulta das sumulas enviadas pela arbitragem
  *   associados- cadastro e consulta das equipes associadas
  *   breve     - funcionalidade planejada, ainda sem tela
  *
@@ -158,6 +171,14 @@ const MODULOS = [
     icone: '📥',
     tipo: 'solicitacoes',
     descricao: 'Consulta aos pedidos de inscrição, remoção e portabilidade e à situação de cada um.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'sumulas',
+    nome: 'Súmulas Enviadas',
+    icone: '📑',
+    tipo: 'sumulas',
+    descricao: 'Consulta às súmulas enviadas pela arbitragem, com o relato dos fatos e os envolvidos.',
     perfis: ['admin', 'diretoria']
   },
   {
@@ -858,6 +879,316 @@ function valorInformado_(valor) {
   const texto = String(valor == null ? '' : valor).trim();
 
   return texto === 'NAO NECESSARIO' ? '' : texto;
+}
+
+/******************************************************
+ * SUMULAS DIGITAIS
+ *
+ * Consulta as sumulas enviadas pela arbitragem. Segue a mesma ideia da
+ * tela de solicitacoes: a pasta em que o arquivo esta e o proprio status,
+ * e quem move os arquivos e a automacao em Python (sumula_disciplinar.py).
+ * Esta tela so le.
+ *
+ * A pasta e a mesma usada pelo controle de punicoes
+ * (CONFIG.punicoes.pastaSumulasId), so que aqui interessam as subpastas
+ * Entrada, Processados e Falhas, e nao a subpasta do controle.
+ ******************************************************/
+
+/** Pastas lidas, na ordem em que aparecem no filtro da tela. */
+const SUMULAS_PASTAS = [
+  { pasta: 'Entrada', situacao: 'Aguardando', icone: '🕒' },
+  { pasta: 'Processados', situacao: 'Analisada', icone: '🟢' },
+  { pasta: 'Falhas', situacao: 'Falha', icone: '🔴' }
+];
+
+/**
+ * Devolve as sumulas enviadas para a tela de consulta.
+ * Chamada pelo cliente; refaz a verificacao de permissao no servidor.
+ * @return {{registros: Array<Object>, situacoes: Array<Object>, equipes: Array<string>,
+ *           total: number, limite: number, pastaUrl: string}}
+ */
+function listarSumulas() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || !moduloLiberado_('sumulas', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar as súmulas digitais.');
+  }
+
+  const raiz = pastaSumulas_();
+  const achados = [];
+
+  SUMULAS_PASTAS.forEach(function (origem) {
+    const pastas = raiz.getFoldersByName(origem.pasta);
+
+    // "Processados" e "Falhas" so existem depois que a automacao roda
+    // pela primeira vez; a ausencia delas nao e erro.
+    if (!pastas.hasNext()) {
+      return;
+    }
+
+    const iterador = pastas.next().getFiles();
+
+    while (iterador.hasNext()) {
+      const arquivo = iterador.next();
+      const nome = arquivo.getName();
+
+      // A pasta tambem recebe PDFs e anexos; so os TXT da sumula interessam.
+      if (!/^SUMULA_.+\.txt$/i.test(nome)) {
+        continue;
+      }
+
+      achados.push({
+        arquivo: arquivo,
+        situacao: origem.situacao,
+        icone: origem.icone,
+
+        // O nome do arquivo tem a data, mas nao a hora, entao dois envios
+        // do mesmo dia ficariam empatados. A data de criacao no Drive e
+        // metadado: da para ordenar sem abrir o arquivo.
+        ordem: arquivo.getDateCreated().getTime()
+      });
+    }
+  });
+
+  achados.sort(function (a, b) {
+    return b.ordem - a.ordem;
+  });
+
+  const limite = CONFIG.sumulas.maxLeitura;
+  const registros = achados.slice(0, limite).map(function (achado) {
+    return interpretarSumula_(
+      achado.arquivo.getBlob().getDataAsString('UTF-8'),
+      achado
+    );
+  });
+
+  return {
+    registros: registros,
+    situacoes: SUMULAS_PASTAS,
+    equipes: equipesDasSumulas_(registros),
+    total: achados.length,
+    limite: limite,
+    pastaUrl: raiz.getUrl()
+  };
+}
+
+/**
+ * Pasta raiz das sumulas, a mesma usada pelo formulario da arbitragem e
+ * pela automacao em Python (config.ini, secao [sumulas]).
+ * @return {DriveApp.Folder}
+ */
+function pastaSumulas_() {
+  try {
+    return DriveApp.getFolderById(CONFIG.sumulas.pastaRaizId);
+  } catch (e) {
+    throw new Error('Não foi possível abrir a pasta das súmulas no Drive (id '
+      + CONFIG.sumulas.pastaRaizId + '). Verifique se o seu e-mail tem acesso a ela. '
+      + 'Detalhe: ' + (e && e.message ? e.message : e));
+  }
+}
+
+/**
+ * Todas as equipes citadas nas sumulas, em ordem alfabetica.
+ * Alimenta o filtro por equipe, que considera tanto os times da partida
+ * quanto a equipe de cada envolvido.
+ * @param {Array<Object>} registros
+ * @return {Array<string>}
+ */
+function equipesDasSumulas_(registros) {
+  const equipes = [];
+
+  registros.forEach(function (registro) {
+    registro.equipes.forEach(function (equipe) {
+      if (equipe && equipes.indexOf(equipe) === -1) {
+        equipes.push(equipe);
+      }
+    });
+  });
+
+  return equipes.sort();
+}
+
+/**
+ * Le o TXT da sumula gerado pelo formulario da arbitragem.
+ *
+ * O arquivo nao e uma lista de "CHAVE: valor" como o das inscricoes: ele
+ * tem secoes, e uma delas ("DOS FATOS") e texto corrido, onde qualquer
+ * linha pode ter ":" sem ser um campo. Por isso a leitura acompanha em
+ * que secao esta, em vez de olhar linha a linha isoladamente.
+ *
+ * Secoes, na ordem em que o formulario grava:
+ *   (topo)               PROTOCOLO, DATA ENVIO, ARBITRO, DOCUMENTO
+ *   PARTIDA              "<MANDANTE> x <VISITANTE>", DATA, HORA
+ *   DOS FATOS            relato da arbitragem, texto livre
+ *   ENVOLVIDOS           blocos "REGISTRO n" com EQUIPE, TIPO, NOME, CAMISA
+ *   SUMULA OFICIAL (PDF) link do PDF, presente so quando o PDF foi gerado
+ *
+ * @param {string} conteudo
+ * @param {{situacao: string, icone: string, ordem: number, arquivo: DriveApp.File}} achado
+ * @return {Object}
+ */
+function interpretarSumula_(conteudo, achado) {
+  const cabecalho = {};
+  const partida = {};
+  const pessoas = [];
+  const fatos = [];
+  let secao = 'topo';
+  let atual = null;
+  let confronto = '';
+  let pdfUrl = '';
+
+  String(conteudo || '').split(/\r?\n/).forEach(function (linha) {
+    const texto = linha.trim();
+
+    // Linha de tracos que separa o titulo do conteudo da secao.
+    if (/^-{3,}$/.test(texto)) {
+      return;
+    }
+
+    const titulo = texto.toUpperCase();
+
+    if (titulo === 'PARTIDA') {
+      secao = 'partida';
+      return;
+    }
+
+    if (titulo === 'DOS FATOS') {
+      secao = 'fatos';
+      return;
+    }
+
+    if (titulo === 'ENVOLVIDOS') {
+      secao = 'envolvidos';
+      return;
+    }
+
+    if (titulo.indexOf('SÚMULA OFICIAL') === 0 || titulo.indexOf('SUMULA OFICIAL') === 0) {
+      secao = 'pdf';
+      return;
+    }
+
+    // O relato e copiado como veio, inclusive as quebras de linha: e o
+    // texto que a comissao le para decidir a punicao.
+    if (secao === 'fatos') {
+      fatos.push(linha.replace(/\s+$/, ''));
+      return;
+    }
+
+    if (!texto) {
+      return;
+    }
+
+    if (secao === 'pdf') {
+      if (!pdfUrl && /^https?:\/\//i.test(texto)) {
+        pdfUrl = texto;
+      }
+      return;
+    }
+
+    if (/^REGISTRO\s+\d+/i.test(texto)) {
+      atual = {};
+      pessoas.push(atual);
+      return;
+    }
+
+    const corte = texto.indexOf(':');
+
+    if (corte === -1) {
+      // Na secao PARTIDA a linha sem ":" e o confronto "<time> x <time>".
+      if (secao === 'partida' && !confronto) {
+        confronto = texto;
+      }
+      return;
+    }
+
+    const chave = texto.slice(0, corte).trim().toUpperCase();
+    const valor = texto.slice(corte + 1).trim();
+
+    if (atual) {
+      atual[chave] = valor;
+    } else if (secao === 'partida') {
+      partida[chave] = valor;
+    } else {
+      cabecalho[chave] = valor;
+    }
+  });
+
+  const times = separarConfronto_(confronto);
+  const envolvidos = pessoas.map(function (pessoa) {
+    return {
+      equipe: pessoa['EQUIPE'] || '',
+      tipo: pessoa['TIPO'] || '',
+      nome: pessoa['NOME'] || '',
+      camisa: pessoa['CAMISA'] || ''
+    };
+  });
+
+  const equipes = times.slice();
+
+  envolvidos.forEach(function (envolvido) {
+    if (envolvido.equipe && equipes.indexOf(envolvido.equipe) === -1) {
+      equipes.push(envolvido.equipe);
+    }
+  });
+
+  return {
+    situacao: achado.situacao,
+    icone: achado.icone,
+    ordem: achado.ordem,
+    protocolo: cabecalho['PROTOCOLO'] || '',
+    dataEnvio: cabecalho['DATA ENVIO'] || '',
+    arbitro: cabecalho['ÁRBITRO'] || cabecalho['ARBITRO'] || '',
+    documento: cabecalho['DOCUMENTO'] || '',
+    confronto: confronto,
+    mandante: times[0] || '',
+    visitante: times[1] || '',
+    dataJogo: partida['DATA'] || '',
+    horaJogo: partida['HORA'] || '',
+    fatos: aparar_(fatos).join('\n'),
+    equipes: equipes,
+    quantidade: envolvidos.length,
+    envolvidos: envolvidos,
+    pdfUrl: pdfUrl,
+    arquivoNome: achado.arquivo.getName(),
+    arquivoUrl: achado.arquivo.getUrl()
+  };
+}
+
+/**
+ * Separa "<mandante> x <visitante>". O corte e feito no primeiro " x "
+ * isolado por espacos, para nao quebrar nomes que tenham a letra x.
+ * @param {string} confronto
+ * @return {Array<string>} Um ou dois nomes; vazio quando nao ha confronto.
+ */
+function separarConfronto_(confronto) {
+  const texto = String(confronto || '').trim();
+
+  if (!texto) {
+    return [];
+  }
+
+  const achado = texto.match(/^(.+?)\s+x\s+(.+)$/i);
+
+  return achado ? [achado[1].trim(), achado[2].trim()] : [texto];
+}
+
+/**
+ * Tira as linhas em branco do comeco e do fim de um bloco de texto.
+ * @param {Array<string>} linhas
+ * @return {Array<string>}
+ */
+function aparar_(linhas) {
+  const copia = linhas.slice();
+
+  while (copia.length && !copia[0].trim()) {
+    copia.shift();
+  }
+
+  while (copia.length && !copia[copia.length - 1].trim()) {
+    copia.pop();
+  }
+
+  return copia;
 }
 
 /******************************************************
@@ -1640,6 +1971,63 @@ function diagnosticarSolicitacoes() {
     Logger.log('Mais recente ......: %s | %s | %s | %s pessoa(s) | resultado: %s',
       primeira.protocolo || '(sem protocolo)', primeira.equipe, primeira.situacao, primeira.quantidade,
       primeira.resultadoPdfUrl || primeira.resultadoTxtUrl ? 'sim' : 'nao');
+  }
+}
+
+/**
+ * Confere a leitura das sumulas digitais.
+ *
+ * Execute pelo editor quando a tela acusar erro. Mostra quantos arquivos
+ * existem em cada subpasta e o que foi reconhecido no mais recente.
+ */
+function diagnosticarSumulas() {
+  Logger.log('Usuario ...........: %s', obterEmailAtivo_() || '(vazio)');
+
+  let raiz;
+
+  try {
+    raiz = pastaSumulas_();
+    Logger.log('Pasta das sumulas .: %s', raiz.getName());
+  } catch (e) {
+    Logger.log('FALHOU: %s', e && e.message ? e.message : e);
+    return;
+  }
+
+  SUMULAS_PASTAS.forEach(function (origem) {
+    const pastas = raiz.getFoldersByName(origem.pasta);
+
+    if (!pastas.hasNext()) {
+      Logger.log('%s: subpasta nao encontrada (normal se a automacao ainda nao rodou).', origem.pasta);
+      return;
+    }
+
+    const arquivos = pastas.next().getFiles();
+    let total = 0;
+    let sumulas = 0;
+
+    while (arquivos.hasNext()) {
+      total++;
+
+      if (/^SUMULA_.+\.txt$/i.test(arquivos.next().getName())) {
+        sumulas++;
+      }
+    }
+
+    Logger.log('%s: %s arquivo(s), sendo %s sumula(s).', origem.pasta, total, sumulas);
+  });
+
+  const dados = listarSumulas();
+
+  Logger.log('Leitura concluida .: %s sumula(s) reconhecida(s) de %s arquivo(s).',
+    dados.registros.length, dados.total);
+
+  if (dados.registros.length) {
+    const primeira = dados.registros[0];
+
+    Logger.log('Mais recente ......: %s | %s | %s | %s envolvido(s) | relato: %s caractere(s) | PDF: %s',
+      primeira.protocolo || '(sem protocolo)', primeira.confronto || '(sem partida)',
+      primeira.situacao, primeira.quantidade, primeira.fatos.length,
+      primeira.pdfUrl ? 'sim' : 'nao');
   }
 }
 

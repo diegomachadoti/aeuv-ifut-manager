@@ -423,6 +423,7 @@
 
     .pilula.aguardando { background: #fff2d8; color: #8a5a00; font-weight: bold; }
     .pilula.processada { background: #e4f4e9; color: #1e8449; font-weight: bold; }
+    .pilula.analisada { background: #e4f4e9; color: #1e8449; font-weight: bold; }
     .pilula.falha { background: #fdecea; color: #922b21; font-weight: bold; }
 
     /* Contagem por ação, exibida na coluna de registros. */
@@ -450,6 +451,33 @@
     }
 
     .detalhe-dados strong { color: var(--texto); font-weight: normal; }
+
+    /* Relato da arbitragem. Texto corrido, lido de ponta a ponta pela
+       comissão: fica numa caixa própria, com as quebras de linha que o
+       árbitro escreveu e largura de leitura confortável. */
+    .relato {
+      border-left: 3px solid var(--azul);
+      background: var(--fundo);
+      border-radius: 0 8px 8px 0;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+    }
+
+    .relato h4 {
+      margin: 0 0 6px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--apoio);
+    }
+
+    .relato p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      max-width: 78ch;
+    }
 
     table.pessoas { font-size: 12px; margin: 0; }
     table.pessoas th, table.pessoas td { padding: 7px 8px; }
@@ -1007,6 +1035,13 @@
         conteudo.innerHTML = cabecalho
           + '<p class="carregando" id="statusSolicitacoes">Carregando as solicita&ccedil;&otilde;es de inscri&ccedil;&atilde;o...</p>';
         carregarSolicitacoes();
+        return;
+      }
+
+      if (modulo.tipo === 'sumulas') {
+        conteudo.innerHTML = cabecalho
+          + '<p class="carregando" id="statusSumulas">Carregando as s&uacute;mulas enviadas...</p>';
+        carregarSumulas();
         return;
       }
 
@@ -1652,6 +1687,321 @@
 
     function classeSituacaoSolicitacao(situacao) {
       return 'pilula ' + simplificar(situacao);
+    }
+
+    /**
+     * Estado da tela de sumulas. Mesma ideia das solicitacoes: le do
+     * Drive uma vez e filtra sobre essa copia.
+     */
+    let sumulas = { registros: [], situacoes: [], equipes: [], total: 0, limite: 0, pastaUrl: '' };
+
+    /** Arquivos com o detalhe aberto. */
+    let sumulasAbertas = {};
+
+    /**
+     * Busca no servidor as sumulas enviadas pela arbitragem.
+     */
+    function carregarSumulas() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'sumulas') {
+            return;
+          }
+
+          sumulas = dados;
+          sumulasAbertas = {};
+          montarTelaSumulas();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'sumulas') {
+            return;
+          }
+
+          document.getElementById('statusSumulas').outerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarSumulas();
+    }
+
+    /**
+     * Monta os indicadores, os filtros e a tabela das sumulas.
+     */
+    function montarTelaSumulas() {
+      const registros = sumulas.registros || [];
+
+      if (!registros.length) {
+        document.getElementById('statusSumulas').outerHTML =
+          '<div class="vazio">Nenhuma s&uacute;mula enviada at&eacute; o momento.</div>';
+        return;
+      }
+
+      const recorte = sumulas.total > registros.length
+        ? escapar(registros.length + ' mais recentes de ' + sumulas.total)
+        : '';
+
+      document.getElementById('statusSumulas').outerHTML = ''
+        + '<div class="resumo" id="resumoSumulas"></div>'
+        + '<div class="filtros">'
+        + '<input type="search" id="buscaSumulas" placeholder="Buscar por protocolo, equipe, &aacute;rbitro, envolvido ou pelo relato">'
+        + opcoesFiltro('situacao', 'Todas as situa&ccedil;&otilde;es', registros)
+        + opcoesFiltro('arbitro', 'Todos os &aacute;rbitros', registros)
+        + filtroEquipeSumulas()
+        + '</div>'
+        + '<div class="barra-acoes">'
+        + '<span id="contagemSumulas"></span>'
+        + '<span class="espaco"></span>'
+        + (recorte ? '<span>' + recorte + '</span>' : '')
+        + '<button type="button" class="botao-apoio" id="recarregarSumulas">Atualizar</button>'
+        + (sumulas.pastaUrl
+          ? '<a class="botao-apoio" href="' + escapar(sumulas.pastaUrl) + '" target="_blank" rel="noopener">Abrir pasta</a>'
+          : '')
+        + '</div>'
+        + '<div class="tabela-rolagem"><table class="solicitacoes"><thead><tr>'
+        + '<th>Situa&ccedil;&atilde;o</th><th>Protocolo</th><th>Enviada em</th><th>Partida</th>'
+        + '<th>&Aacute;rbitro</th><th>Envolvidos</th>'
+        + '</tr></thead><tbody id="linhasSumulas"></tbody></table></div>';
+
+      document.getElementById('buscaSumulas').addEventListener('input', filtrarSumulas);
+      document.getElementById('recarregarSumulas').addEventListener('click', function () {
+        abrirModulo('sumulas');
+      });
+
+      conteudo.querySelectorAll('[data-filtro], #filtroEquipeSumulas').forEach(function (campo) {
+        campo.addEventListener('change', filtrarSumulas);
+      });
+
+      filtrarSumulas();
+    }
+
+    /**
+     * A equipe nao e um campo unico da sumula: uma partida tem dois times e
+     * os envolvidos podem ser de qualquer um deles. Por isso este filtro e
+     * montado a parte, com a lista que o servidor ja devolveu pronta.
+     */
+    function filtroEquipeSumulas() {
+      const opcoes = (sumulas.equipes || []).map(function (equipe) {
+        return '<option value="' + escapar(equipe) + '">' + escapar(equipe) + '</option>';
+      }).join('');
+
+      return '<select id="filtroEquipeSumulas"><option value="">Todas as equipes</option>' + opcoes + '</select>';
+    }
+
+    /**
+     * Aplica a busca e os seletores e redesenha a tabela.
+     */
+    function filtrarSumulas() {
+      const busca = simplificar(document.getElementById('buscaSumulas').value.trim());
+      const equipe = document.getElementById('filtroEquipeSumulas').value;
+      const selecionados = {};
+
+      conteudo.querySelectorAll('[data-filtro]').forEach(function (campo) {
+        selecionados[campo.dataset.filtro] = campo.value;
+      });
+
+      const filtrados = (sumulas.registros || []).filter(function (registro) {
+        const passaSelecao = Object.keys(selecionados).every(function (campo) {
+          return !selecionados[campo] || registro[campo] === selecionados[campo];
+        });
+
+        if (!passaSelecao) {
+          return false;
+        }
+
+        if (equipe && (registro.equipes || []).indexOf(equipe) === -1) {
+          return false;
+        }
+
+        if (!busca) {
+          return true;
+        }
+
+        return simplificar(textoDaSumula(registro)).indexOf(busca) !== -1;
+      });
+
+      desenharResumoSumulas(filtrados);
+      desenharLinhasSumulas(filtrados);
+    }
+
+    /**
+     * Junta tudo o que identifica a sumula, inclusive o relato: e comum
+     * procurar por uma palavra que se lembra do texto, nao pelo protocolo.
+     */
+    function textoDaSumula(registro) {
+      return [
+        registro.protocolo,
+        registro.dataEnvio,
+        registro.situacao,
+        registro.confronto,
+        registro.arbitro,
+        registro.documento,
+        registro.dataJogo,
+        registro.fatos
+      ].concat((registro.envolvidos || []).map(function (envolvido) {
+        return envolvido.nome + ' ' + envolvido.equipe + ' ' + envolvido.tipo + ' ' + envolvido.camisa;
+      })).join(' ');
+    }
+
+    /**
+     * Indicadores do topo, sempre referentes ao que esta filtrado.
+     */
+    function desenharResumoSumulas(registros) {
+      const envolvidos = registros.reduce(function (total, registro) {
+        return total + registro.quantidade;
+      }, 0);
+
+      function porSituacao(situacao) {
+        return registros.filter(function (registro) {
+          return registro.situacao === situacao;
+        }).length;
+      }
+
+      const itens = [
+        ['', registros.length, 'Súmulas'],
+        ['cumprir', porSituacao('Aguardando'), 'Aguardando'],
+        ['cumprida', porSituacao('Analisada'), 'Analisadas'],
+        ['pendente', porSituacao('Falha'), 'Com falha'],
+        ['', envolvidos, 'Envolvidos']
+      ];
+
+      document.getElementById('resumoSumulas').innerHTML = itens.map(function (item) {
+        return '<div class="indicador ' + item[0] + '">'
+          + '<div class="numero">' + item[1] + '</div>'
+          + '<div class="rotulo">' + item[2] + '</div>'
+          + '</div>';
+      }).join('');
+
+      const total = (sumulas.registros || []).length;
+
+      document.getElementById('contagemSumulas').textContent = registros.length === total
+        ? registros.length + ' súmula(s)'
+        : registros.length + ' de ' + total + ' súmula(s)';
+    }
+
+    /**
+     * Desenha as linhas da tabela. Cada linha abre uma segunda, com o
+     * relato dos fatos e a lista de envolvidos.
+     */
+    function desenharLinhasSumulas(registros) {
+      if (!registros.length) {
+        document.getElementById('linhasSumulas').innerHTML =
+          '<tr><td colspan="6" style="text-align:center;color:var(--apoio);">'
+          + 'Nenhuma s&uacute;mula encontrada com os filtros atuais.</td></tr>';
+        return;
+      }
+
+      document.getElementById('linhasSumulas').innerHTML = registros.map(function (r) {
+        const aberta = !!sumulasAbertas[r.arquivoNome];
+
+        const linha = '<tr class="linha" data-arquivo="' + escapar(r.arquivoNome) + '">'
+          + celula('Situação', '<span class="' + classeSituacaoSolicitacao(r.situacao) + '">'
+            + escapar(r.icone + ' ' + r.situacao) + '</span>')
+          + celula('Protocolo', '<span class="protocolo">' + escapar(r.protocolo || '—') + '</span>')
+          + celula('Enviada em', escapar(r.dataEnvio || '—'))
+          + celula('Partida', '<span class="equipe-nome">' + escapar(r.confronto || '—') + '</span>'
+            + '<div class="equipe-dado">' + escapar(dataHoraDoJogo(r)) + '</div>')
+          + celula('Árbitro', escapar(r.arbitro || '—'))
+          + celula('Envolvidos', contagemEnvolvidos(r))
+          + '</tr>';
+
+        return linha + (aberta ? detalheSumula(r) : '');
+      }).join('');
+
+      conteudo.querySelectorAll('#linhasSumulas tr.linha').forEach(function (linha) {
+        linha.addEventListener('click', function () {
+          const chave = linha.dataset.arquivo;
+
+          if (sumulasAbertas[chave]) {
+            delete sumulasAbertas[chave];
+          } else {
+            sumulasAbertas[chave] = true;
+          }
+
+          filtrarSumulas();
+        });
+      });
+    }
+
+    /**
+     * Data e hora do jogo, com a data no formato brasileiro.
+     * O formulario grava a data como o navegador devolve (AAAA-MM-DD).
+     */
+    function dataHoraDoJogo(registro) {
+      const partes = String(registro.dataJogo || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const data = partes ? partes[3] + '/' + partes[2] + '/' + partes[1] : registro.dataJogo;
+
+      return [data, registro.horaJogo].filter(Boolean).join(' às ') || '—';
+    }
+
+    /**
+     * Quantos envolvidos de cada tipo a sumula tem.
+     */
+    function contagemEnvolvidos(registro) {
+      const porTipo = {};
+
+      (registro.envolvidos || []).forEach(function (envolvido) {
+        const tipo = envolvido.tipo || 'Sem tipo';
+
+        porTipo[tipo] = (porTipo[tipo] || 0) + 1;
+      });
+
+      const partes = Object.keys(porTipo).sort().map(function (tipo) {
+        return '<span><strong>' + porTipo[tipo] + '</strong> ' + escapar(tipo.toLowerCase()) + '</span>';
+      });
+
+      if (!partes.length) {
+        return '<span class="equipe-dado">ninguém citado</span>';
+      }
+
+      return '<div class="contagem">' + partes.join('') + '</div>';
+    }
+
+    /**
+     * Linha extra com o relato da arbitragem e a lista de envolvidos.
+     */
+    function detalheSumula(registro) {
+      const dados = [
+        ['Partida', dataHoraDoJogo(registro)],
+        ['Documento do árbitro', registro.documento],
+        ['Arquivo', registro.arquivoNome]
+      ].filter(function (item) {
+        return item[1] && item[1] !== '—';
+      }).map(function (item) {
+        return '<span>' + escapar(item[0]) + ': <strong>' + escapar(item[1]) + '</strong></span>';
+      }).join('');
+
+      // O relato e o que a comissao de fato le. Fica em destaque, com as
+      // quebras de linha preservadas como o arbitro escreveu.
+      const fatos = registro.fatos
+        ? '<div class="relato"><h4>Dos fatos</h4><p>' + escapar(registro.fatos) + '</p></div>'
+        : '<p class="equipe-dado">Esta s&uacute;mula n&atilde;o traz relato.</p>';
+
+      const linhas = (registro.envolvidos || []).map(function (e) {
+        return '<tr>'
+          + celula('Equipe', '<span class="equipe-nome">' + escapar(e.equipe || '—') + '</span>')
+          + celula('Tipo', escapar(e.tipo || '—'))
+          + celula('Nome', '<span class="pessoa-nome">' + escapar(e.nome || '—') + '</span>')
+          + celula('Camisa', escapar(e.camisa || '—'))
+          + '</tr>';
+      }).join('');
+
+      const tabela = linhas
+        ? '<table class="pessoas"><thead><tr><th>Equipe</th><th>Tipo</th><th>Nome</th><th>Camisa</th></tr></thead>'
+          + '<tbody>' + linhas + '</tbody></table>'
+        : '<p class="equipe-dado">Nenhum atleta ou membro de comiss&atilde;o foi citado.</p>';
+
+      const links = '<div class="barra-acoes" style="margin-top:12px;">'
+        + (registro.pdfUrl
+          ? '<a class="botao-apoio destaque" href="' + escapar(registro.pdfUrl) + '" target="_blank" rel="noopener">Súmula oficial (PDF)</a>'
+          : '<span class="equipe-dado">Sem PDF oficial gerado</span>')
+        + '<a class="botao-apoio" href="' + escapar(registro.arquivoUrl) + '" target="_blank" rel="noopener">Abrir arquivo</a>'
+        + '</div>';
+
+      return '<tr class="detalhe"><td colspan="6"><div class="detalhe-caixa">'
+        + (dados ? '<div class="detalhe-dados">' + dados + '</div>' : '')
+        + fatos
+        + tabela
+        + links
+        + '</div></td></tr>';
     }
 
     /**

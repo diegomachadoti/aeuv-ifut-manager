@@ -214,7 +214,7 @@ fazer cópia de segurança de tudo de uma vez.
 ```
 AEUV - Automação/
 ├── Arquivos TXT - Sumulas Digitais/        ← [sumulas] folder_embed_url
-│   ├── Entrada/  Processados/  Falhas/
+│   ├── Entrada/  Processados/  Falhas/     ← a pasta é o status na tela de súmulas
 │   └── Controle de Punicoes/               ← TXT + PDF lidos pelo sistema interno
 ├── PDF - Sumulas Digitais/
 ├── Anexos - Sumulas Digitais/
@@ -443,6 +443,12 @@ Essa rotina:
 Essa movimentação é o que alimenta a tela **Solicitações de Inscrições** do
 [sistema interno](apps-scripts/README.md#solicitações-de-inscrições): a pasta em que
 o arquivo está é o status exibido para a diretoria, sem nada a sincronizar.
+
+O mesmo vale para as súmulas: a análise disciplinar move o TXT enviado pela
+arbitragem entre `Entrada`, `Processados` e `Falhas`, e é daí que a tela
+**Súmulas Enviadas** do
+[sistema interno](apps-scripts/README.md#súmulas-enviadas) tira a situação de
+cada envio.
 
 ## Observações
 

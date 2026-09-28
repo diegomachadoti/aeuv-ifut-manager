@@ -475,13 +475,14 @@ pode declarar `grupo` para entrar num submenu.
 | `usuarios` | Tabela de autorizados; busca os dados com `listarUsuarios()`. |
 | `punicoes` | Controle de punições; busca os dados com `listarPunicoes()`. |
 | `solicitacoes` | Solicitações de Inscrições; busca os dados com `listarSolicitacoes()`. |
+| `sumulas` | Súmulas Enviadas; busca os dados com `listarSumulas()`. |
 | `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
 | `breve` | Funcionalidade já prevista, exibida com o aviso "em desenvolvimento". |
 
 Módulos publicados hoje: Início, Formulários (Súmula digital e Inscrição e
-portabilidade), Solicitações de Inscrições, Notas oficiais, Controle de
-punições, Associados, Atletas e Usuários do sistema. Notas oficiais e Atletas
-ainda estão marcados como `breve`, aguardando a tela correspondente.
+portabilidade), Solicitações de Inscrições, Súmulas Enviadas, Notas oficiais,
+Controle de punições, Associados, Atletas e Usuários do sistema. Notas oficiais
+e Atletas ainda estão marcados como `breve`, aguardando a tela correspondente.
 
 #### Submenus
 
@@ -701,6 +702,82 @@ A pasta é a mesma usada pelo Python (`config.ini`, seção `[drive]`,
 `folder_embed_url`) e está declarada em `CONFIG.solicitacoes.pastaRaizId`.
 Quando a tela acusar erro, `diagnosticarSolicitacoes()` mostra quantos arquivos
 existem em cada subpasta e o que foi reconhecido no mais recente.
+
+### Súmulas Enviadas
+
+Consulta às súmulas que a arbitragem enviou pelo
+[formulário da súmula digital](#súmula-digital). Evita abrir o Drive e ler os
+TXT um a um para saber o que chegou de cada rodada, quem foi citado e o que o
+árbitro relatou. Como a tela de solicitações, ela **só lê**: quem escreve é o
+formulário e quem move os arquivos é a automação em Python.
+
+#### A pasta é o status
+
+Mesma ideia das solicitações — não há banco de dados nem planilha de andamento:
+
+| Pasta | Situação na tela | Significa |
+| --- | --- | --- |
+| `Entrada` | 🕒 Aguardando | A súmula chegou; a análise disciplinar ainda não rodou. |
+| `Processados` | 🟢 Analisada | A automação leu a súmula e gerou a nota oficial. |
+| `Falhas` | 🔴 Falha | A automação encontrou erro ao analisar o arquivo. |
+
+A pasta é a mesma do controle de punições (`CONFIG.sumulas.pastaRaizId` e
+`CONFIG.punicoes.pastaSumulasId` apontam para ela) e a mesma configurada no
+Python em `config.ini`, seção `[sumulas]`.
+
+#### Colunas escolhidas
+
+| Coluna | Por que está ali |
+| --- | --- |
+| Situação | Já foi analisada? É a primeira pergunta. |
+| Protocolo | Identificador do envio; é o que a nota oficial cita. |
+| Enviada em | Quando o árbitro enviou — diferente da data do jogo. |
+| Partida | O confronto, com a data e a hora do jogo abaixo. |
+| Árbitro | Quem assinou o relato. |
+| Envolvidos | Quantos atletas e quantos membros de comissão foram citados. |
+
+O detalhe abre ao clicar na linha e traz o **relato dos fatos** em destaque,
+com as quebras de linha como o árbitro escreveu, a tabela de envolvidos
+(equipe, tipo, nome e camisa) e os botões da **súmula oficial em PDF** e do
+arquivo TXT. Quando o PDF não foi gerado, o lugar dele mostra um aviso.
+
+A busca livre cobre também o relato: é comum lembrar de uma palavra do texto e
+não do protocolo. O filtro por equipe considera tanto os dois times da partida
+quanto a equipe de cada envolvido, já que a súmula não tem uma equipe única.
+
+#### Um formato diferente do das inscrições
+
+O TXT da súmula não é uma lista de `CHAVE: valor`. Ele tem seções, e uma delas
+— `DOS FATOS` — é texto corrido, onde qualquer linha pode ter `:` sem ser um
+campo. Por isso a leitura acompanha em que seção está, em vez de olhar cada
+linha isoladamente:
+
+```
+(topo)                PROTOCOLO, DATA ENVIO, ÁRBITRO, DOCUMENTO
+PARTIDA               "<mandante> x <visitante>", DATA, HORA
+DOS FATOS             relato da arbitragem, copiado como veio
+ENVOLVIDOS            blocos "REGISTRO n" com EQUIPE, TIPO, NOME, CAMISA
+SÚMULA OFICIAL (PDF)  link do PDF, só quando o PDF foi gerado
+```
+
+Duas consequências práticas: o relato nunca engole o título da seção seguinte,
+e uma linha do relato terminada em `:` não vira um campo fantasma.
+
+A ordenação usa a **data de criação do arquivo no Drive**, e não o nome. O
+formulário nomeia a súmula como `SUMULA_<protocolo>.txt`, e o protocolo só tem
+a data — duas súmulas do mesmo dia empatariam. A data de criação é metadado:
+dá para ordenar sem abrir nenhum arquivo. Vale o mesmo teto das solicitações,
+`CONFIG.sumulas.maxLeitura` (200 arquivos abertos por consulta), e só arquivos
+no padrão `SUMULA_*.txt` entram — a pasta também recebe PDFs e anexos.
+
+#### Permissão
+
+Liberada para **admin e diretoria**. Ficou fora do perfil `membro` porque o
+relato costuma trazer acusações e ofensas atribuídas a pessoas com nome e
+número da camisa — material da comissão disciplinar, não de consulta geral.
+Cada pessoa autorizada também precisa de acesso de leitura à pasta das súmulas
+no Drive. Quando a tela acusar erro, `diagnosticarSumulas()` mostra quantos
+arquivos existem em cada subpasta e o que foi reconhecido no mais recente.
 
 ### Cadastro de associados
 
