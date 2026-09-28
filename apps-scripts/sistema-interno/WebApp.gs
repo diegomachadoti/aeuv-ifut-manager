@@ -658,7 +658,9 @@ function listarSolicitacoes() {
   });
 
   const limite = CONFIG.solicitacoes.maxLeitura;
+  const resultados = indiceResultados_(raiz);
   const registros = achados.slice(0, limite).map(function (achado) {
+    achado.resultado = resultados[nomeBase_(achado.arquivo.getName())] || null;
     return interpretarSolicitacao_(
       achado.arquivo.getBlob().getDataAsString('UTF-8'),
       achado
@@ -688,6 +690,65 @@ function pastaSolicitacoes_() {
       + CONFIG.solicitacoes.pastaRaizId + '). Verifique se o seu e-mail tem acesso a ela. '
       + 'Detalhe: ' + (e && e.message ? e.message : e));
   }
+}
+
+/**
+ * Indexa a pasta "Resultados" pelo nome do arquivo de origem.
+ *
+ * A automacao em Python publica ali o TXT e o PDF de cada processamento,
+ * nomeados como "<arquivo de origem sem extensao>-resultado-<carimbo>".
+ * E por esse indice que a tela consegue mostrar o resultado — e o motivo
+ * de cada falha — ao lado da solicitacao correspondente.
+ *
+ * A pasta so existe depois da primeira execucao da automacao; a ausencia
+ * dela nao e erro, apenas deixa as solicitacoes sem resultado anexado.
+ *
+ * @param {DriveApp.Folder} raiz Pasta raiz das inscricoes.
+ * @return {Object<string, {txtUrl: string, pdfUrl: string}>}
+ */
+function indiceResultados_(raiz) {
+  const indice = {};
+  const pastas = raiz.getFoldersByName('Resultados');
+
+  if (!pastas.hasNext()) {
+    return indice;
+  }
+
+  const arquivos = pastas.next().getFiles();
+
+  while (arquivos.hasNext()) {
+    const arquivo = arquivos.next();
+    const achado = String(arquivo.getName()).match(/^(.+)-resultado-\d{8}-\d{6}\.(txt|pdf)$/i);
+
+    if (!achado) {
+      continue;
+    }
+
+    const chave = achado[1];
+    const campo = achado[2].toLowerCase() === 'pdf' ? 'pdfUrl' : 'txtUrl';
+
+    if (!indice[chave]) {
+      indice[chave] = { txtUrl: '', pdfUrl: '' };
+    }
+
+    // Se houver mais de um processamento do mesmo arquivo, fica o mais
+    // recente: o carimbo no nome cresce com o tempo.
+    if (!indice[chave][campo] || arquivo.getName() > indice[chave][campo + 'Nome']) {
+      indice[chave][campo] = arquivo.getUrl();
+      indice[chave][campo + 'Nome'] = arquivo.getName();
+    }
+  }
+
+  return indice;
+}
+
+/**
+ * Nome do arquivo sem a extensao, que e a chave usada pelo indice de resultados.
+ * @param {string} nome
+ * @return {string}
+ */
+function nomeBase_(nome) {
+  return String(nome || '').replace(/\.[^.]+$/, '');
 }
 
 /**
@@ -779,6 +840,8 @@ function interpretarSolicitacao_(conteudo, achado) {
     comprovanteUrl: cabecalho['COMPROVANTE PIX'] || '',
     arquivoNome: achado.arquivo.getName(),
     arquivoUrl: achado.arquivo.getUrl(),
+    resultadoTxtUrl: achado.resultado ? achado.resultado.txtUrl : '',
+    resultadoPdfUrl: achado.resultado ? achado.resultado.pdfUrl : '',
     quantidade: registros.length,
     resumo: resumo,
     pessoas: registros
@@ -1561,6 +1624,11 @@ function diagnosticarSolicitacoes() {
     Logger.log('%s: %s arquivo(s).', origem.pasta, total);
   });
 
+  const resultados = indiceResultados_(raiz);
+
+  Logger.log('Resultados ........: %s solicitacao(oes) com resultado publicado pela automacao.',
+    Object.keys(resultados).length);
+
   const dados = listarSolicitacoes();
 
   Logger.log('Leitura concluida .: %s solicitacao(oes) reconhecida(s) de %s arquivo(s).',
@@ -1569,8 +1637,9 @@ function diagnosticarSolicitacoes() {
   if (dados.registros.length) {
     const primeira = dados.registros[0];
 
-    Logger.log('Mais recente ......: %s | %s | %s | %s pessoa(s)',
-      primeira.protocolo || '(sem protocolo)', primeira.equipe, primeira.situacao, primeira.quantidade);
+    Logger.log('Mais recente ......: %s | %s | %s | %s pessoa(s) | resultado: %s',
+      primeira.protocolo || '(sem protocolo)', primeira.equipe, primeira.situacao, primeira.quantidade,
+      primeira.resultadoPdfUrl || primeira.resultadoTxtUrl ? 'sim' : 'nao');
   }
 }
 

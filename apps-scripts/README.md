@@ -624,6 +624,26 @@ automação, e a tela apenas observa o resultado. As subpastas `Processados` e
 `Falhas` só passam a existir depois da primeira execução do Python; a ausência
 delas não é erro e a tela simplesmente não encontra nada nelas.
 
+#### O resultado da automação
+
+Saber que uma solicitação falhou não basta: é preciso saber **por quê**. Ao
+terminar cada processamento, a automação em Python publica na pasta
+`Resultados` dois arquivos com o resultado — um TXT e um PDF — nomeados como
+`<arquivo de origem sem extensão>-resultado-<carimbo>`.
+
+A tela usa esse nome para ligar o resultado à solicitação correspondente e
+oferece os dois no detalhe: **Resultado (PDF)**, em destaque, e
+**Resultado (TXT)**. O PDF traz cada registro com o status colorido — `SUCESSO`
+em verde, `FALHA` em vermelho — e, quando há falhas, uma caixa no topo com o
+nome e o motivo de cada uma.
+
+Como a publicação só acontece depois que a automação roda, solicitações ainda
+em `Entrada` aparecem sem esses botões e sem aviso. Já uma solicitação que
+consta como processada ou com falha e mesmo assim não tem resultado anexado
+mostra "Resultado ainda não publicado" — sinal de que a automação rodou numa
+versão anterior, antes desta publicação existir, ou que o envio ao Drive
+falhou.
+
 #### Colunas escolhidas
 
 A lista mostra o que identifica a solicitação; o resto fica no detalhe, que abre
@@ -641,7 +661,8 @@ em que pé está", e o detalhe responde "quem exatamente foi inscrito".
 
 No detalhe aparecem os dados completos de cada pessoa — ação, tipo, nome
 completo, data de nascimento, CPF e, nas portabilidades, a competição anterior —
-além dos links para o comprovante PIX e para o arquivo TXT original. Campos que
+além dos links para o comprovante PIX, para o arquivo TXT original e para o
+resultado da automação em PDF e TXT. Campos que
 a ação dispensa são gravados como `NAO NECESSARIO` pelo formulário e viram um
 travessão na tela, em vez de repetir o aviso em toda linha.
 

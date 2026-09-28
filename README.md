@@ -219,7 +219,8 @@ AEUV - Automação/
 ├── PDF - Sumulas Digitais/
 ├── Anexos - Sumulas Digitais/
 ├── Arquivos TXT - Inscricoes de Atletas/   ← [drive] folder_embed_url
-│   └── Entrada/  Processados/  Falhas/     ← a pasta é o status na tela de solicitações
+│   ├── Entrada/  Processados/  Falhas/     ← a pasta é o status na tela de solicitações
+│   └── Resultados/                         ← TXT + PDF do resultado, lidos pelo sistema interno
 ├── Comprovantes PIX - Inscricoes de Atletas/
 ├── Documentos - Associados/                ← anexos do cadastro de associados
 │   └── <EQUIPE>/
@@ -278,8 +279,12 @@ dois itens com o mesmo nome deixam o resultado imprevisível.
 Arquivos TXT - Inscricoes de Atletas/   (folder_embed_url)
 ├── Entrada/          (arquivos a processar)
 ├── Processados/      (arquivos processados com sucesso)
-└── Falhas/           (arquivos que falharam)
+├── Falhas/           (arquivos que falharam)
+└── Resultados/       (TXT + PDF do resultado de cada processamento)
 ```
+
+As três últimas pastas são criadas pela automação na primeira execução, caso
+ainda não existam.
 
 Essa pasta fica dentro de `AEUV - Automação` (veja
 [Organização do Drive](#organização-do-drive)). A pasta das súmulas segue a
@@ -301,6 +306,17 @@ Local:   downloads/inscricoes/ARQUIVO.txt → downloads/inscricoes/falhas/ARQUIV
 Drive:   Entrada/ARQUIVO.txt → Falhas/ARQUIVO.txt
 ```
 
+**Nos dois casos**, o resultado é publicado no Drive:
+```
+Local:   downloads/inscricoes/resultados/ARQUIVO-resultado-<carimbo>.txt (e .pdf)
+Drive:   Resultados/ARQUIVO-resultado-<carimbo>.txt (e .pdf)
+```
+
+É essa publicação que permite à tela **Solicitações de Inscrições** do sistema
+interno abrir o resultado — e mostrar o motivo de cada falha — ao lado da
+solicitação. A publicação roda mesmo quando o processamento falha, e um erro
+no envio não invalida a execução: o arquivo local continua gravado.
+
 ### Sincronização e processamento
 
 1. **`main.py` (fluxo completo)**
@@ -308,6 +324,7 @@ Drive:   Entrada/ARQUIVO.txt → Falhas/ARQUIVO.txt
    - ✅ Processa cada arquivo
    - ✅ Move local para `processados/` ou `falhas/`
    - ✅ Move no Drive para `Processados/` ou `Falhas/`
+   - ✅ Publica o TXT e o PDF do resultado em `Resultados/` no Drive
 
 2. **`main.py --sync-drive-only`**
    - ✅ Apenas baixa de `Entrada/` do Drive

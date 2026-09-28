@@ -267,6 +267,7 @@ class DriveTxtDownloader:
         self._entry_folder_id: str | None = None
         self._processed_folder_id: str | None = None
         self._failed_folder_id: str | None = None
+        self._results_folder_id: str | None = None
 
     def sync(self) -> list[Path]:
         self.download_dir.mkdir(parents=True, exist_ok=True)
@@ -309,6 +310,7 @@ class DriveTxtDownloader:
         self._entry_folder_id = entry_folder_id or root_folder_id
         self._processed_folder_id = self._find_named_folder_id(service, root_folder_id, "Processados")
         self._failed_folder_id = self._find_named_folder_id(service, root_folder_id, "Falhas")
+        self._results_folder_id = self._find_named_folder_id(service, root_folder_id, "Resultados")
         folder_id = self._entry_folder_id
         query = f"'{folder_id}' in parents and trashed = false and (name contains '.txt' or mimeType = 'text/plain')"
         response = service.files().list(
@@ -370,10 +372,15 @@ class DriveTxtDownloader:
         return files[0]["id"] if files else None
 
     def ensure_status_folders(self, logger=None) -> None:
-        """Cria as pastas Processados/Falhas no Drive quando ainda nao existirem."""
+        """Cria as pastas Processados/Falhas/Resultados no Drive quando ainda nao existirem."""
         if not self._drive_service or not self._root_folder_id:
             return
-        for attribute, folder_name in (("_processed_folder_id", "Processados"), ("_failed_folder_id", "Falhas")):
+        for attribute, folder_name in (
+            ("_processed_folder_id", "Processados"),
+            ("_failed_folder_id", "Falhas"),
+            ("_results_folder_id", "Resultados"),
+        ):
+
             if getattr(self, attribute):
                 continue
             created = self._drive_service.files().create(
@@ -416,6 +423,54 @@ class DriveTxtDownloader:
         except Exception as exc:
             if logger:
                 logger.error("Erro ao mover arquivo no Drive %s: %s", file_name, exc)
+
+    MIMES_RESULTADO = {".txt": "text/plain", ".pdf": "application/pdf"}
+
+    def publish_results(self, paths, logger=None) -> None:
+        """Envia o TXT e o PDF de resultado para a pasta Resultados no Drive.
+
+        E o que permite a tela de solicitacoes do sistema interno mostrar por que
+        um registro falhou. Falhar aqui nao invalida o processamento: o arquivo
+        local ja esta gravado.
+        """
+        if not paths:
+            return
+        if not self._drive_service:
+            if logger:
+                logger.warning("Servico Google Drive nao inicializado; resultado nao publicado")
+            return
+        self.ensure_status_folders(logger)
+        if not self._results_folder_id:
+            if logger:
+                logger.error("Pasta Resultados nao configurada no Drive")
+            return
+        for path in paths:
+            if not path or not path.exists():
+                continue
+            try:
+                self._upload_result_file(path)
+                if logger:
+                    logger.info("Resultado publicado no Drive: %s", path.name)
+            except Exception as exc:
+                if logger:
+                    logger.error("Erro ao publicar %s no Drive: %s", path.name, exc)
+
+    def _upload_result_file(self, path: Path) -> None:
+        mimetype = self.MIMES_RESULTADO.get(path.suffix.lower(), "application/octet-stream")
+        media = MediaFileUpload(str(path), mimetype=mimetype, resumable=False)
+        existing = self._drive_service.files().list(
+            q=f"'{self._results_folder_id}' in parents and trashed = false and name = '{path.name}'",
+            fields="files(id)",
+            pageSize=1,
+        ).execute().get("files", [])
+        if existing:
+            self._drive_service.files().update(fileId=existing[0]["id"], media_body=media).execute()
+            return
+        self._drive_service.files().create(
+            body={"name": path.name, "parents": [self._results_folder_id]},
+            media_body=media,
+            fields="id",
+        ).execute()
 
 
 class TxtRequestParser:
@@ -471,6 +526,7 @@ class IfutBot:
         self.logger = logger
         self.driver = self._build_driver()
         self.wait = WebDriverWait(self.driver, self.config.timeout)
+        self.last_result_files: list[Path] = []
 
     def _build_driver(self) -> webdriver.Chrome:
         options = ChromeOptions()
@@ -1012,18 +1068,22 @@ class IfutBot:
         lines.append(f"Link do time para conferencia: {self._team_link_for_request(request)}")
         lines.append(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
         result_path.write_text("\n".join(lines), encoding="utf-8")
-        self._write_result_pdf(result_path)
+        self.last_result_files = [result_path]
+        pdf_path = self._write_result_pdf(result_path)
+        if pdf_path:
+            self.last_result_files.append(pdf_path)
 
-    def _write_result_pdf(self, result_path: Path) -> None:
+    def _write_result_pdf(self, result_path: Path) -> Path | None:
         """Gera o PDF do resultado. Falha aqui nao invalida o processamento:
         o TXT ja esta gravado e e ele que alimenta o restante do fluxo."""
         try:
             import resultado_pdf
 
-            resultado_pdf.gerar_pdf_resultado(result_path, logger=self.logger)
+            return resultado_pdf.gerar_pdf_resultado(result_path, logger=self.logger)
         except Exception as exc:
             self.logger.warning("[PDF] Nao foi possivel gerar o PDF do resultado (%s): %s",
                                 result_path.name, exc)
+            return None
 
     def _extract_total_athletes(self) -> int | None:
         """Extrai o total de atletas da página."""
@@ -1484,6 +1544,7 @@ def main() -> int:
         for txt_file in txt_files:
             try:
                 request = parser.parse(txt_file)
+                bot.last_result_files = []
                 bot.process_request(request)
                 move_file(txt_file, config.processed_dir)
                 downloader.move_remote_file(txt_file.name, "processed", logger)
@@ -1491,6 +1552,8 @@ def main() -> int:
                 logger.exception("Falha ao processar %s: %s", txt_file.name, exc)
                 move_file(txt_file, config.failed_dir)
                 downloader.move_remote_file(txt_file.name, "failed", logger)
+            finally:
+                downloader.publish_results(bot.last_result_files, logger)
     finally:
         bot.close()
     return 0

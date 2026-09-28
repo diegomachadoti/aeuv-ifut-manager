@@ -369,6 +369,15 @@
 
     .botao-apoio:hover { background: var(--fundo); }
 
+    /* O resultado da automacao e o que o usuario mais procura no detalhe. */
+    .botao-apoio.destaque {
+      background: var(--azul);
+      border-color: var(--azul);
+      color: #fff;
+    }
+
+    .botao-apoio.destaque:hover { background: #17325c; }
+
     .tabela-rolagem { overflow-x: auto; }
 
     /* Larguras fixas: a tabela cabe na tela sem empurrar as colunas curtas. */
@@ -1570,6 +1579,32 @@
     }
 
     /**
+     * Botoes do resultado da automacao, publicados pelo Python na pasta
+     * "Resultados". Sao eles que mostram por que um registro falhou.
+     *
+     * Enquanto a automacao nao roda o resultado nao existe, e a solicitacao
+     * aparece sem esses botoes — por isso o aviso so surge quando ja houve
+     * processamento (situacao diferente de "Aguardando").
+     */
+    function linksResultado(registro) {
+      const pdf = registro.resultadoPdfUrl;
+      const txt = registro.resultadoTxtUrl;
+
+      if (!pdf && !txt) {
+        return registro.situacao === 'Aguardando'
+          ? ''
+          : '<span class="equipe-dado">Resultado ainda não publicado</span>';
+      }
+
+      return (pdf
+        ? '<a class="botao-apoio destaque" href="' + escapar(pdf) + '" target="_blank" rel="noopener">Resultado (PDF)</a>'
+        : '')
+        + (txt
+          ? '<a class="botao-apoio" href="' + escapar(txt) + '" target="_blank" rel="noopener">Resultado (TXT)</a>'
+          : '');
+    }
+
+    /**
      * Linha extra com os dados completos e a tabela de atletas.
      */
     function detalheSolicitacao(registro) {
@@ -1588,6 +1623,7 @@
           ? '<a class="botao-apoio" href="' + escapar(registro.comprovanteUrl) + '" target="_blank" rel="noopener">Comprovante PIX</a>'
           : '<span class="equipe-dado">Sem comprovante anexado</span>')
         + '<a class="botao-apoio" href="' + escapar(registro.arquivoUrl) + '" target="_blank" rel="noopener">Abrir arquivo</a>'
+        + linksResultado(registro)
         + '</div>';
 
       const pessoas = (registro.pessoas || []).map(function (p) {
