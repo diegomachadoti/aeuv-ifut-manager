@@ -1012,6 +1012,18 @@ class IfutBot:
         lines.append(f"Link do time para conferencia: {self._team_link_for_request(request)}")
         lines.append(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
         result_path.write_text("\n".join(lines), encoding="utf-8")
+        self._write_result_pdf(result_path)
+
+    def _write_result_pdf(self, result_path: Path) -> None:
+        """Gera o PDF do resultado. Falha aqui nao invalida o processamento:
+        o TXT ja esta gravado e e ele que alimenta o restante do fluxo."""
+        try:
+            import resultado_pdf
+
+            resultado_pdf.gerar_pdf_resultado(result_path, logger=self.logger)
+        except Exception as exc:
+            self.logger.warning("[PDF] Nao foi possivel gerar o PDF do resultado (%s): %s",
+                                result_path.name, exc)
 
     def _extract_total_athletes(self) -> int | None:
         """Extrai o total de atletas da página."""

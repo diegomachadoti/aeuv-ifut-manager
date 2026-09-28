@@ -26,6 +26,7 @@ Veja como os formulários geram e armazenam esses arquivos no
 - `nota_pdf.py`: PDF da nota oficial com a identidade da AEUV (`--gerar-pdf-nota`)
 - `regulamento_pdf.py`: PDF do regulamento no mesmo layout, assinado pelo Presidente (`--gerar-pdf-regulamento`)
 - `controle_punicoes.py`: TXT e PDF de controle com todos os punidos pelas notas oficiais (`--atualizar-controle-punicoes`)
+- `resultado_pdf.py`: PDF do resultado de inscrição, remoção e portabilidade, com o status de cada registro em destaque
 - `regulamento\`: texto do regulamento usado na análise disciplinar
 - `config.ini`: credenciais, delays e URLs
 - `selectors.ini`: seletores Selenium do iFut
@@ -170,6 +171,38 @@ O arquivo de resultado traz:
 - quantidade de atletas inscritos
 - lista de inscritos por **inclusão** e **portabilidade**
 - bloco com todos os resultados por registro
+
+### PDF do resultado
+
+Junto do TXT a automação grava um **PDF com o mesmo nome**, no mesmo diretório.
+Ele usa o layout padrão dos demais documentos (cabeçalho com o escudo, rodapé
+com o protocolo e assinatura do presidente) e existe para ser enviado direto ao
+representante da equipe, sem precisar abrir um arquivo de texto.
+
+O que o PDF mostra:
+
+- **cabeçalho** com protocolo, equipe, total de registros e a contagem de
+  sucessos e falhas;
+- **caixa de atenção em vermelho**, logo no começo, listando nome e motivo de
+  cada registro que não foi concluído — ela só aparece quando existe falha;
+- **tabela de registros**, uma linha por pessoa, com o status em destaque:
+  `SUCESSO` em verde e `FALHA` em vermelho, com o fundo da linha acompanhando a
+  cor. O cabeçalho da tabela se repete quando ela passa de uma página;
+- **elenco atualizado**, apenas com quem entrou de fato (registros em falha
+  ficam de fora), seguido do link do time no iFut para conferência.
+
+A geração do PDF acontece depois que o TXT já está gravado e roda dentro de um
+`try/except`: se algo falhar ali, o processamento não é invalidado — fica só um
+aviso no log, e o PDF pode ser refeito depois pela linha de comando:
+
+```powershell
+# um arquivo específico (nome completo ou trecho do nome)
+python resultado_pdf.py CRUZMALTINO-2026-09-24-12-28-59-1790263739846-resultado-20260924-160911.txt
+python resultado_pdf.py CRUZMALTINO
+
+# todos os resultados já existentes
+python resultado_pdf.py --todos
+```
 
 ## Organização do Drive
 
@@ -386,7 +419,7 @@ Essa rotina:
    - Acessa o time no iFut
    - Executa a ação configurada
    - Registra o resultado
-3. **Resultado**: Salva arquivo com resultado da execução
+3. **Resultado**: Salva o TXT com o resultado da execução e gera o PDF correspondente
 4. **Sincronização**: Move arquivo processado (Processados/Falhas no Drive)
 5. **Planilha** (opcional): Atualiza planilha de controle com dados (não impede sucesso se falhar)
 
