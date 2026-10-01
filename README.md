@@ -25,6 +25,7 @@ Veja como os formulários geram e armazenam esses arquivos no
 - `sumula_ia.py`: geração da nota oficial por IA (`--ia`)
 - `nota_pdf.py`: PDF da nota oficial com a identidade da AEUV (`--gerar-pdf-nota`)
 - `regulamento_pdf.py`: PDF do regulamento no mesmo layout, assinado pelo Presidente (`--gerar-pdf-regulamento`)
+- `forma_disputa_pdf.py`: PDF da Forma de Disputa com tabelas de fases, rodadas e auditoria (`--gerar-pdf-forma-disputa`)
 - `controle_punicoes.py`: TXT e PDF de controle com todos os punidos pelas notas oficiais (`--atualizar-controle-punicoes`)
 - `resultado_pdf.py`: PDF do resultado de inscrição, remoção e portabilidade, com o status de cada registro em destaque
 - `publicacao_drive.py`: publica no Drive os regulamentos e as notas oficiais já fechadas (`--publicar-drive`)

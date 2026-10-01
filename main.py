@@ -1477,6 +1477,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
              "ex.: regulamento-7-super-liga-união-2026.txt (procurado tambem na pasta regulamento)",
     )
     parser.add_argument(
+        "--gerar-pdf-forma-disputa",
+        metavar="ARQUIVO",
+        help="Gera o PDF da Forma de Disputa (layout AEUV com tabelas formatadas e assinatura) a partir do arquivo "
+             "texto/markdown na pasta formadisputa (ex.: forma-disputa-7-super-liga-união-2026-3-rodadas)",
+    )
+    parser.add_argument(
         "--atualizar-controle-punicoes",
         action="store_true",
         help="Refaz o TXT de controle de punicoes da associacao a partir de todas as notas oficiais",
@@ -1517,6 +1523,14 @@ def main() -> int:
         logger = configure_logging(config.log_path)
         pdf = gerar_pdf_regulamento(args.gerar_pdf_regulamento, ConfigPdf.carregar(Path(args.config)), logger=logger)
         publicacao_drive.publicar_regulamento(pdf, Path(args.config), logger)
+        return 0
+    if args.gerar_pdf_forma_disputa:
+        from forma_disputa_pdf import gerar_pdf_forma_disputa
+        from nota_pdf import ConfigPdf
+
+        config = AppConfig(Path(args.config))
+        logger = configure_logging(config.log_path)
+        gerar_pdf_forma_disputa(args.gerar_pdf_forma_disputa, ConfigPdf.carregar(Path(args.config)), logger=logger)
         return 0
     if args.gerar_pdf_nota:
         from nota_pdf import regerar_pdf
