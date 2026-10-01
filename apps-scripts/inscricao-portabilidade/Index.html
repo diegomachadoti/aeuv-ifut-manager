@@ -189,6 +189,11 @@
       color: #3d4960;
     }
 
+    .cnpj-destaque{
+      color:#d32f2f;
+      font-weight:bold;
+    }
+
     .upload-area {
       display: block;
       padding: 25px 16px;
@@ -207,7 +212,108 @@
     .mensagem { display: none; padding: 14px; border-radius: 9px; margin-top: 14px; font-weight: 700; }
     .mensagem.sucesso { display: block; background: #dcfae6; color: var(--sucesso); }
     .mensagem.erro { display: block; background: #fee4e2; color: var(--perigo); }
+    .mensagem .botao-txt {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      background: var(--azul);
+      color: #fff;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .mensagem .botao-txt:hover { background: #0c1631; }
     .contador { margin-left: auto; align-self: center; font-size: 13px; color: #596579; }
+
+    /* Carregando: mesmo padrao visual usado nos demais projetos da AEUV
+       (anel dourado girando ao redor da marca + barra animada). */
+    .tela-carregando {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(20, 33, 61, .55);
+      place-items: center;
+    }
+    .tela-carregando.visivel { display: grid; }
+    .tela-carregando .caixa {
+      background: #fff;
+      border-radius: 14px;
+      padding: 32px 40px 38px;
+      text-align: center;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, .25);
+    }
+    .tela-carregando .circulo {
+      position: relative;
+      width: 84px;
+      height: 84px;
+      margin: 0 auto;
+      display: grid;
+      place-items: center;
+    }
+    .tela-carregando .circulo::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 3px solid var(--borda);
+      border-top-color: var(--dourado);
+      border-right-color: var(--dourado);
+      animation: girar 1.1s linear infinite;
+    }
+    .tela-carregando .circulo img {
+      width: 58px;
+      height: 58px;
+      object-fit: contain;
+      animation: pulsar 1.8s ease-in-out infinite;
+    }
+    .tela-carregando .rotulo {
+      margin: 16px 0 0;
+      font-size: 14px;
+      font-weight: bold;
+      color: var(--texto);
+    }
+    .tela-carregando .rotulo::after {
+      content: '';
+      animation: reticencias 1.4s steps(4, end) infinite;
+    }
+    .tela-carregando .barra {
+      position: relative;
+      width: 190px;
+      height: 5px;
+      margin: 14px auto 0;
+      border-radius: 4px;
+      background: var(--borda);
+      overflow: hidden;
+    }
+    .tela-carregando .barra span {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 45%;
+      height: 100%;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #ffc45c, var(--dourado));
+      animation: correr 1.3s ease-in-out infinite;
+    }
+
+    @keyframes girar { to { transform: rotate(360deg); } }
+    @keyframes correr { 0% { left: -45%; } 100% { left: 100%; } }
+    @keyframes pulsar { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    @keyframes reticencias {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .tela-carregando .circulo::before,
+      .tela-carregando .circulo img,
+      .tela-carregando .barra span,
+      .tela-carregando .rotulo::after { animation: none; }
+      .tela-carregando .barra span { width: 100%; left: 0; }
+    }
 
     @media (max-width: 720px) {
       .grade-principal { grid-template-columns: 1fr; }
@@ -220,6 +326,16 @@
   </style>
 </head>
 <body>
+  <div class="tela-carregando" id="telaCarregando">
+    <div class="caixa">
+      <div class="circulo">
+        <img src="<?!= config.logoUrl ?>" alt="">
+      </div>
+      <p class="rotulo">Enviando a inscrição</p>
+      <div class="barra"><span></span></div>
+    </div>
+  </div>
+
   <header class="topo">
     <div class="topo-conteudo">
       <div class="brasao">
@@ -233,9 +349,12 @@
   </header>
 
   <main class="container">
-    <div class="aviso">
-      <strong>IMPORTANTE</strong>
-      Realize o Pix para o CNPJ <?= config.cnpjPix ?> antes do envio. Após a conferência, os registros serão incluídos no sistema oficial da competição.
+     <div class="aviso">
+      <strong>IMPORTANTE</strong><br>
+
+      Realize o Pix para o CNPJ
+      <span class="cnpj-destaque"><?= config.cnpjPix ?></span>
+      antes do envio. Após a conferência, os registros serão incluídos no sistema oficial da competição.
     </div>
 
     <form id="formulario">
@@ -255,24 +374,9 @@
             <label for="equipe">Equipe *</label>
             <select id="equipe" required>
               <option value="">Selecione a equipe</option>
-              <option value="AJAX">AJAX</option>
-              <option value="BEATS">BEATS</option>
-              <option value="BOCA JRS">BOCA JRS</option>
-              <option value="CRUZMALTINO">CRUZMALTINO</option>
-              <option value="INTEGRAÇÃO">INTEGRAÇÃO</option>
-              <option value="KADOSH">KADOSH</option>
-              <option value="LEÕES DO MORUMBI">LEÕES DO MORUMBI</option>
-              <option value="ONZE GAROTOS">ONZE GAROTOS</option>
-              <option value="PEQUIS">PEQUIS</option>
-              <option value="RIVER">RIVER</option>
-              <option value="TRANSNANE/BRASILIENSE">TRANSNANE/BRASILIENSE</option>
-              <option value="TRK">TRK</option>
-              <option value="UNIÃO">UNIÃO</option>
-              <option value="UNIAO SANTA MARIA">UNIAO SANTA MARIA</option>
-              <option value="OLHOS DÁGUA">OLHOS DÁGUA</option>
-              <option value="FUT ART">FUT ART</option>
-              <option value="VENUS">VENUS</option>
-              <option value="REAL PREDADOR">REAL PREDADOR</option>
+              <? for (let i = 0; i < config.equipes.length; i++) { ?>
+                <option value="<?= config.equipes[i] ?>"><?= config.equipes[i] ?></option>
+              <? } ?>
             </select>
           </div>
           <div>
@@ -548,9 +652,20 @@
         tbody.children.length + ' de ' + MAX_PESSOAS + ' pessoas';
     }
 
-    function mostrarMensagem(texto, tipo) {
-      mensagem.textContent = texto;
+    function mostrarMensagem(texto, tipo, botao) {
+      mensagem.replaceChildren(document.createTextNode(texto));
       mensagem.className = 'mensagem ' + tipo;
+
+      if (botao) {
+        const acao = document.createElement('button');
+        acao.type = 'button';
+        acao.className = 'botao-txt';
+        acao.textContent = botao.rotulo;
+        acao.addEventListener('click', botao.aoClicar);
+        mensagem.appendChild(document.createElement('br'));
+        mensagem.appendChild(acao);
+      }
+
       mensagem.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
@@ -608,6 +723,14 @@
         leitor.onerror = () => reject(new Error('Não foi possível ler o comprovante.'));
         leitor.readAsDataURL(arquivo);
       });
+    }
+
+    /**
+     * Mostra ou esconde a tela de carregamento padrão da AEUV, exibida
+     * enquanto o servidor grava a inscrição e gera o arquivo TXT.
+     */
+    function alternarCarregando(visivel) {
+      document.getElementById('telaCarregando').classList.toggle('visivel', visivel);
     }
 
     document.getElementById('adicionar').addEventListener('click', adicionarLinha);
@@ -668,6 +791,7 @@
       mensagem.className = 'mensagem';
       botaoEnviar.disabled = true;
       botaoEnviar.textContent = 'Enviando...';
+      alternarCarregando(true);
 
       let comprovante;
       try {
@@ -676,16 +800,23 @@
         mostrarMensagem(erro.message, 'erro');
         botaoEnviar.disabled = false;
         botaoEnviar.textContent = 'Enviar inscrição';
+        alternarCarregando(false);
         return;
       }
 
       google.script.run
         .withSuccessHandler(resultado => {
-          baixarArquivoTxt(resultado.arquivoTxtNome, resultado.arquivoTxtConteudo);
+          alternarCarregando(false);
           mostrarMensagem(
             'Formulário enviado com sucesso! Guarde o protocolo ' + resultado.protocolo +
-            '. Total de pessoas registradas: ' + resultado.quantidade,
-            'sucesso'
+            '. Foram registradas ' + resultado.quantidade + ' pessoa(s). Baixe o arquivo TXT para seus registros.',
+            'sucesso',
+            {
+              rotulo: 'Baixar resultado em TXT',
+              aoClicar: function () {
+                baixarArquivoTxt(resultado.arquivoTxtNome, resultado.arquivoTxtConteudo);
+              }
+            }
           );
           formulario.reset();
           document.getElementById('arquivoNome').textContent = '';
@@ -698,6 +829,7 @@
           mostrarMensagem(erro.message || 'Não foi possível enviar o formulário. Tente novamente.', 'erro');
           botaoEnviar.disabled = false;
           botaoEnviar.textContent = 'Enviar inscrição';
+          alternarCarregando(false);
         })
         .salvarInscricao(obterPayload(comprovante));
     });

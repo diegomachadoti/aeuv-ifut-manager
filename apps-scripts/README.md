@@ -281,8 +281,10 @@ permissões resultantes antes de publicar.
 2. Gera um protocolo no formato `AAAAMMDD-XXXXXXXX`, salva o comprovante e
    cria o TXT no Drive.
 3. Acrescenta uma linha por pessoa à aba `Inscricoes_Web`.
-4. Retorna o protocolo e o conteúdo do TXT. O navegador baixa uma cópia local
-   e mostra o protocolo e a quantidade de pessoas registradas.
+4. Retorna o protocolo e o conteúdo do TXT. A confirmação mostra o protocolo,
+   a quantidade de pessoas registradas e o botão **Baixar resultado em TXT**.
+   O carregamento padrão da AEUV permanece visível enquanto o envio é
+   processado; o TXT é baixado quando a pessoa clica no botão.
 
 O comprovante recebe um nome iniciado pelo protocolo. O TXT inclui os dados
 gerais, as confirmações e um bloco `REGISTRO` por pessoa, com ação, tipo, nome,
@@ -367,7 +369,9 @@ Ao receber um envio válido, `salvarSumula()`:
 4. Gera `SUMULA_<protocolo>.txt`, com o link do PDF oficial na seção final
    `SÚMULA OFICIAL (PDF)`.
 5. Registra a súmula e os envolvidos nas abas da planilha.
-6. Retorna o protocolo, o TXT para download local e a URL do PDF.
+6. Retorna o protocolo, o TXT para download local e a URL do PDF. Na conclusão,
+   a tela oferece o botão **Abrir PDF da súmula**; durante a gravação e a geração
+   dos arquivos, exibe o carregamento padrão da AEUV.
 
 | Conteúdo | Destino |
 | --- | --- |

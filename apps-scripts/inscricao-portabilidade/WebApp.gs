@@ -11,7 +11,7 @@ const WEBAPP_CONFIG = {
   spreadsheetName: 'AEUV - Respostas - Inscricao, Remocao e Portabilidade',
   sheetName: 'Inscricoes_Web',
   maxPessoas: 30,
-  cnpjPix: '58.736.118/0001-62',
+  cnpjPix: '67.645.389/0001-01 ASSOCIACAO ESPORTIVA UBERLANDENSE VARZEANA - AEUV',
   valorPorAtleta: 50,
   competicoes: [
     'COPA AMERICA',
@@ -50,7 +50,8 @@ const WEBAPP_CONFIG = {
     'OLHOS DÁGUA',
     'VENUS',
     'FUT ART',
-    'REAL PREDADOR'
+    'REAL PREDADOR',
+    'TEST'
   ],
   pastaComprovantes: 'Comprovantes PIX - Inscricoes de Atletas',
   pastaArquivosTxt: 'Arquivos TXT - Inscricoes de Atletas',
@@ -346,7 +347,7 @@ function validarEnvio_(payload) {
   if (!WEBAPP_CONFIG.competicoes.includes(payload.competicao)) {
     throw new Error('Selecione uma competicao valida.');
   }
-  if (!WEBAPP_CONFIG.equipes.includes(payload.equipe)) {
+  if (!equipesConfiguradas_().includes(payload.equipe)) {
     throw new Error('Selecione uma equipe valida.');
   }
 

@@ -566,9 +566,11 @@ function validarDados_(p) {
     throw new Error('Informe um horário da partida válido (hh:mm, 24 horas).');
   }
 
+  const equipesPermitidas = equipesConfiguradas_();
+
   if (
-    !CONFIG.equipes.includes(p.time1) ||
-    !CONFIG.equipes.includes(p.time2)
+    !equipesPermitidas.includes(p.time1) ||
+    !equipesPermitidas.includes(p.time2)
   ) {
     throw new Error('Selecione corretamente os dois times da partida.');
   }
