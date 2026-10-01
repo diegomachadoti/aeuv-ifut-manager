@@ -1239,38 +1239,56 @@ class IfutBot:
         normalized_name = normalize_text(full_name)
         search_tokens = [token for token in normalized_name.split() if token]
         search_key = " ".join(search_tokens[:2]) if len(search_tokens) >= 2 else normalized_name
+        
+        # 1. Busca exata ou por chave (primeiros 2 nomes)
         for row in rows:
             row_text = normalize_text(row.text)
             if normalized_name in row_text:
                 return row
             if search_key and search_key in row_text:
                 return row
-            if self._row_matches_name(row_text, normalized_name):
-                return row
+
+        # 2. Busca por similaridade/fuzzy em cada card
+        best_row = None
+        best_score = 0.0
+        for row in rows:
+            row_text = normalize_text(row.text)
+            score = self._row_match_score(row_text, normalized_name)
+            if score > best_score:
+                best_score = score
+                best_row = row
+
+        if best_row and best_score >= 0.85:
+            self.logger.info("Atleta '%s' localizado na lista por similaridade (score=%.2f)", full_name, best_score)
+            return best_row
+
         raise LookupError(f"Pessoa nao encontrada na lista do time: {full_name}")
 
-    def _row_matches_name(self, row_text: str, normalized_name: str) -> bool:
+    def _row_match_score(self, row_text: str, normalized_name: str) -> float:
         from difflib import SequenceMatcher
 
-        row_tokens = text_tokens_all(row_text)
-        name_tokens = text_tokens_all(normalized_name)
-        if not row_tokens or not name_tokens:
-            return False
+        # O card do iFut contém nome, idade, data de nascimento, RG, botões ("sports", "delete", etc.)
+        # Extrai a linha principal ou tokens do card
+        row_first_line = normalize_text(row_text.split("\n")[0] if "\n" in row_text else row_text)
+        
+        # Similaridade direta com o início do texto do card
+        ratio_first = SequenceMatcher(None, normalized_name, row_first_line[:len(normalized_name) + 10]).ratio()
+        if ratio_first >= 0.85:
+            return ratio_first
 
-        row_core = [token for token in row_tokens if token not in {"da", "de", "do", "das", "dos", "e", "a", "o", "em"}]
-        name_core = [token for token in name_tokens if token not in {"da", "de", "do", "das", "dos", "e", "a", "o", "em"}]
+        # Similaridade por tokens do nome vs tokens do card
+        name_tokens = [t for t in normalized_name.split() if t not in {"da", "de", "do", "das", "dos", "e"}]
+        row_tokens = set(normalize_text(row_text).split())
+        if not name_tokens:
+            return 0.0
 
-        if len(row_core) != len(name_core):
-            return False
+        matches = sum(1 for t in name_tokens if t in row_tokens or any(SequenceMatcher(None, t, rt).ratio() >= 0.85 for rt in row_tokens))
+        token_ratio = matches / len(name_tokens)
 
-        score = 0
-        for expected, candidate in zip(name_core, row_core):
-            if expected == candidate:
-                score += 1
-            elif SequenceMatcher(None, expected, candidate).ratio() >= 0.85:
-                score += 1
+        return max(ratio_first, token_ratio if matches >= 2 else 0.0)
 
-        return score == len(name_core) and len(name_core) >= 2
+    def _row_matches_name(self, row_text: str, normalized_name: str) -> bool:
+        return self._row_match_score(row_text, normalized_name) >= 0.85
 
     def _fill(self, selector: str, value: str, clear: bool = True) -> None:
         element = self._wait_for_any_selector(selector)
