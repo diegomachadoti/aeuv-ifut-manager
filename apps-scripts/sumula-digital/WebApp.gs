@@ -58,14 +58,16 @@ const CONFIG = {
 
 /**
  * Renderiza a interface HTML da súmula.
+ * @param {Object=} e Parâmetros da requisição HTTP.
  * @return {HtmlOutput}
  */
-function doGet() {
+function doGet(e) {
   const template = HtmlService.createTemplateFromFile('Index');
+  const forcarRecache = !!(e && e.parameter && (e.parameter.recache === '1' || e.parameter.limparCache === '1' || e.parameter.t));
 
   template.config = {
     associacao: ASSOCIACAO_NOME,
-    equipes: equipesConfiguradas_(),
+    equipes: equipesConfiguradas_(forcarRecache),
     logoUrl: obterLogo_(),
     limite: CONFIG.maxEnvolvidos
   };
@@ -84,32 +86,58 @@ function doGet() {
  * pela tela "Equipes". Assim um time novo entra num lugar so e aparece
  * aqui sem publicar nova versao deste formulario.
  *
- * Guarda o resultado em cache por 6 horas para nao consultar o Drive a
- * cada abertura, e cai na lista fixa de CONFIG.equipes se o arquivo
- * ainda nao existir ou estiver fora do ar.
+ * Guarda o resultado em cache por 30 segundos para evitar excesso de
+ * chamadas ao Drive e refletir alteracoes quase em tempo real.
+ * Suporta parametro ?recache=1 para forcar recarregamento imediato.
+ * @param {boolean=} forcarRecache Quando true, limpa o cache e rele do Drive.
  * @return {Array<string>}
  */
-function equipesConfiguradas_() {
+function equipesConfiguradas_(forcarRecache) {
   const cache = CacheService.getScriptCache();
-  const guardado = cache.get('EQUIPES_CONFIGURADAS');
 
-  if (guardado) {
+  if (forcarRecache) {
     try {
-      return JSON.parse(guardado);
+      cache.remove('EQUIPES_CONFIGURADAS');
     } catch (e) {
-      // Cache corrompido: segue para ler o arquivo de novo.
+      // Ignora erro ao limpar cache.
+    }
+  } else {
+    const guardado = cache.get('EQUIPES_CONFIGURADAS');
+
+    if (guardado) {
+      try {
+        return JSON.parse(guardado);
+      } catch (e) {
+        // Cache corrompido: segue para ler o arquivo de novo.
+      }
     }
   }
 
   try {
     const raiz = DriveApp.getFolderById('1uDUmgEjeISQ1W3Uc5hcUc25pgXDvVhs3');
     const arquivos = raiz.getFilesByName('equipes.json');
+    let arquivoMaisRecente = null;
+    let dataMaisRecente = 0;
 
-    if (arquivos.hasNext()) {
-      const dados = JSON.parse(arquivos.next().getBlob().getDataAsString('UTF-8'));
+    while (arquivos.hasNext()) {
+      const arq = arquivos.next();
+      if (arq.isTrashed()) {
+        continue;
+      }
+      const dataAtualizacao = arq.getLastUpdated().getTime();
+      if (!arquivoMaisRecente || dataAtualizacao >= dataMaisRecente) {
+        arquivoMaisRecente = arq;
+        dataMaisRecente = dataAtualizacao;
+      }
+    }
+
+    if (arquivoMaisRecente) {
+      const dados = JSON.parse(arquivoMaisRecente.getBlob().getDataAsString('UTF-8'));
 
       if (dados && Array.isArray(dados.equipes) && dados.equipes.length) {
-        cache.put('EQUIPES_CONFIGURADAS', JSON.stringify(dados.equipes), 6 * 60 * 60);
+        // Cache reduzido para 30 segundos: reflete novos times quase
+        // imediatamente sem sobrecarregar a cota do Drive.
+        cache.put('EQUIPES_CONFIGURADAS', JSON.stringify(dados.equipes), 30);
 
         return dados.equipes;
       }
@@ -119,6 +147,17 @@ function equipesConfiguradas_() {
   }
 
   return CONFIG.equipes;
+}
+
+/**
+ * Utilitario para executar direto pelo editor do Apps Script: limpa o cache
+ * e exibe o conteudo atual lido do equipes.json no Drive.
+ */
+function testarLeituraEquipes() {
+  const equipes = equipesConfiguradas_(true);
+  Logger.log('Total de equipes lidas: ' + equipes.length);
+  Logger.log('Lista: ' + JSON.stringify(equipes));
+  return equipes;
 }
 
 /******************************************************
