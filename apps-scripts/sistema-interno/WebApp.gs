@@ -86,6 +86,7 @@ const CONFIG = {
   // (main.py --gerar-pdf-regulamento ou --publicar-drive).
   regulamentos: {
     subpasta: 'Regulamentos',
+    chavePasta: 'REGULAMENTOS_PASTA_ID',
     maxLeitura: 100
   },
 
@@ -112,6 +113,7 @@ const CONFIG = {
     pastaDocumentos: 'Documentos - Associados',
     chavePlanilha: 'ASSOCIADOS_PLANILHA_ID',
     chavePasta: 'ASSOCIADOS_PASTA_ID',
+    prefixoConsulta: 'ASSOCIADOS_CONSULTA_',
     maxArquivoBytes: 5 * 1024 * 1024
   },
 
@@ -323,6 +325,10 @@ const MODULOS = [
  */
 function doGet(e) {
   const sessao = identificarUsuario_();
+  if (sessao.autorizado) {
+    ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  }
+
   const origem = (e && e.parameter && e.parameter.origem) || '';
 
   const template = sessao.autorizado
@@ -337,6 +343,8 @@ function doGet(e) {
     email: sessao.email,
     motivo: sessao.motivo,
     modulos: sessao.autorizado ? modulosPermitidos_(sessao.usuario.perfil) : [],
+    regulamentosPastaUrl: sessao.autorizado && sessao.usuario.perfil === 'associado'
+      ? urlPastaRegulamentos_() : '',
     grupos: GRUPOS,
     embutido: origem === 'portal',
 
@@ -2313,18 +2321,47 @@ function listarRegulamentos() {
 }
 
 /**
+ * Link da subpasta para que o associado solicite acesso pelo proprio Drive.
+ * Nao compartilha a pasta nem expoe o id da pasta raiz.
+ * @return {string}
+ */
+function urlPastaRegulamentos_() {
+  const id = PropertiesService.getScriptProperties().getProperty(CONFIG.regulamentos.chavePasta);
+  return id ? 'https://drive.google.com/drive/folders/' + encodeURIComponent(id) : '';
+}
+
+/**
  * Subpasta do Drive com os regulamentos publicados.
  * @return {DriveApp.Folder}
  */
 function pastaRegulamentos_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const guardado = propriedades.getProperty(CONFIG.regulamentos.chavePasta);
+
+  // Abre a subpasta direto pelo id: quem so tem leitura em "Regulamentos"
+  // (caso dos associados) nao precisa de acesso a pasta raiz do projeto.
+  if (guardado) {
+    try {
+      const pasta = DriveApp.getFolderById(guardado);
+
+      if (!pasta.isTrashed()) {
+        return pasta;
+      }
+    } catch (e) {
+      // Sem acesso ou pasta removida: tenta pela raiz.
+    }
+  }
+
   let raiz;
 
   try {
     raiz = DriveApp.getFolderById(CONFIG.pastaRaizId);
   } catch (e) {
-    throw new Error('Não foi possível abrir a pasta raiz do projeto no Drive (id '
-      + CONFIG.pastaRaizId + '). Verifique se o seu e-mail tem acesso a ela. '
-      + 'Detalhe: ' + (e && e.message ? e.message : e));
+    throw new Error(guardado
+      ? 'Não foi possível abrir a pasta "' + CONFIG.regulamentos.subpasta + '" no Drive. '
+        + 'Peça à administração para compartilhá-la com o seu e-mail (Leitor).'
+      : 'A pasta de regulamentos ainda não foi registrada. Um administrador ou a '
+        + 'diretoria precisa abrir a tela de Regulamentos uma vez.');
   }
 
   const pastas = raiz.getFoldersByName(CONFIG.regulamentos.subpasta);
@@ -2335,7 +2372,10 @@ function pastaRegulamentos_() {
       + 'main.py --publicar-drive.');
   }
 
-  return pastas.next();
+  const pasta = pastas.next();
+  propriedades.setProperty(CONFIG.regulamentos.chavePasta, pasta.getId());
+
+  return pasta;
 }
 
 /**
@@ -2463,6 +2503,61 @@ function prepararAssociados() {
 }
 
 /**
+ * Publica as consultas individuais existentes sem compartilhar a planilha
+ * geral. Execute como administrador apos prepararAssociados() ou apos editar
+ * a planilha manualmente; novos cadastros pela tela sao publicados ao salvar.
+ */
+function publicarCadastrosAssociados() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || sessao.usuario.perfil !== 'admin') {
+    throw new Error('Apenas administradores podem publicar os cadastros de associados.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const propriedades = PropertiesService.getScriptProperties();
+    const prefixo = CONFIG.associados.prefixoConsulta;
+    const antigos = Object.keys(propriedades.getProperties()).filter(function (chave) {
+      return chave.indexOf(prefixo) === 0;
+    });
+    const linhas = abaAssociados_().getDataRange().getValues().slice(1);
+    const atuais = {};
+
+    linhas.forEach(function (linha) {
+      const registro = linhaParaAssociado_(linha);
+
+      if (registro.equipe) {
+        const chave = chaveConsultaAssociado_(registro.equipe);
+        propriedades.setProperty(chave, JSON.stringify(registro));
+        atuais[chave] = true;
+      }
+    });
+
+    antigos.forEach(function (chave) {
+      if (!atuais[chave]) {
+        propriedades.deleteProperty(chave);
+      }
+    });
+
+    Logger.log('Cadastros individuais publicados: %s', Object.keys(atuais).length);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Chave deterministica para o cadastro de uma equipe nas propriedades.
+ * @param {string} equipe
+ * @return {string}
+ */
+function chaveConsultaAssociado_(equipe) {
+  return CONFIG.associados.prefixoConsulta + chaveEquipe_(equipe);
+}
+
+/**
  * Devolve os dados necessarios para montar a tela de associados.
  * Chamada pelo cliente; refaz a verificacao de permissao no servidor.
  * @return {{registros: Array<Object>, equipes: Array<string>, status: Array<Object>,
@@ -2470,26 +2565,34 @@ function prepararAssociados() {
  */
 function listarAssociados() {
   const sessao = sessaoAssociados_();
-  const aba = abaAssociados_();
-  const valores = aba.getDataRange().getValues();
-
   const daEquipe = perfilDaEquipe_(sessao.usuario.perfil);
-  const minhaEquipe = chaveEquipe_(sessao.usuario.equipe);
+  let registros;
 
-  const registros = valores.slice(1).map(function (linha) {
-    return linhaParaAssociado_(linha);
-  }).filter(function (registro) {
-    if (!registro.equipe) {
-      return false;
+  if (daEquipe) {
+    if (!sessao.usuario.equipe) {
+      throw new Error('Sua conta não tem equipe vinculada. Solicite a correção ao administrador.');
     }
 
-    // O associado ve apenas o cadastro da propria equipe: a tela expoe
-    // CPF, RG e endereco do representante, que nao sao de consulta geral.
-    // O corte e aqui, no servidor, antes de o dado sair daqui.
-    return !daEquipe || chaveEquipe_(registro.equipe) === minhaEquipe;
-  }).sort(function (a, b) {
-    return a.equipe.localeCompare(b.equipe, 'pt-BR');
-  });
+    // O associado nao le a planilha geral nem recebe dados de outras
+    // equipes: so consulta a copia publicada para a propria equipe.
+    const bruto = PropertiesService.getScriptProperties()
+      .getProperty(chaveConsultaAssociado_(sessao.usuario.equipe));
+
+    if (!bruto) {
+      throw new Error('O cadastro da sua equipe ainda não foi publicado. '
+        + 'Peça à administração para cadastrar a equipe ou executar publicarCadastrosAssociados().');
+    }
+
+    registros = [JSON.parse(bruto)];
+  } else {
+    registros = abaAssociados_().getDataRange().getValues().slice(1).map(function (linha) {
+      return linhaParaAssociado_(linha);
+    }).filter(function (registro) {
+      return Boolean(registro.equipe);
+    }).sort(function (a, b) {
+      return a.equipe.localeCompare(b.equipe, 'pt-BR');
+    });
+  }
 
   return {
     registros: registros,
@@ -2499,7 +2602,8 @@ function listarAssociados() {
     podeEditar: podeEditarAssociados_(sessao.usuario.perfil),
     somenteMinhaEquipe: daEquipe,
     minhaEquipe: daEquipe ? sessao.usuario.equipe : '',
-    planilhaUrl: podeEditarAssociados_(sessao.usuario.perfil) ? planilhaAssociados_().getUrl() : ''
+    planilhaUrl: !daEquipe && podeEditarAssociados_(sessao.usuario.perfil)
+      ? planilhaAssociados_().getUrl() : ''
   };
 }
 
@@ -2566,6 +2670,9 @@ function salvarAssociado(payload) {
     } else {
       aba.appendRow(linha);
     }
+
+    PropertiesService.getScriptProperties()
+      .setProperty(chaveConsultaAssociado_(dados.equipe), JSON.stringify(linhaParaAssociado_(linha)));
 
     return { sucesso: true, equipe: dados.equipe, novo: !linhaExistente };
   } finally {

@@ -501,12 +501,17 @@ Com isso, `listarAssociados()` devolve a esse perfil **apenas o cadastro da
 equipe dele**. A tela abre direto no formulário da equipe, sem lista, busca nem
 filtro, e o endereço da planilha não é enviado a quem não pode editar.
 
-> **O filtro protege a tela, não o arquivo.** A implantação roda como
-> `USER_ACCESSING`, ou seja, a planilha é lida com a permissão de quem acessa.
-> Um associado que tenha leitura na planilha pode abri-la direto no Drive e ver
-> todas as equipes. Por isso **não compartilhe a planilha de associados com esse
-> perfil** — sem compartilhamento o módulo simplesmente não carrega para ele, e
-> os dados das outras equipes ficam de fato fora de alcance.
+> **Não compartilhe a planilha geral com associados.** A implantação roda como
+> `USER_ACCESSING`: quem recebe leitura da planilha pode abri-la direto no Drive
+> e ver todas as equipes. Para a consulta do associado, o servidor lê apenas a
+> cópia do cadastro da equipe vinculada à conta, publicada nas propriedades do
+> script, sem abrir a planilha geral. A administração deve executar
+> `publicarCadastrosAssociados()` uma vez pelo editor (depois de
+> `prepararAssociados()`) para publicar os cadastros já existentes. Ao salvar
+> pelo sistema, a cópia da equipe é atualizada automaticamente; após editar a
+> planilha diretamente, execute a publicação novamente. Não compartilhe
+> também a pasta raiz: para consultar anexos, compartilhe **somente a subpasta
+> de documentos da própria equipe**, como Leitor, com o e-mail associado.
 
 ### Módulos
 
@@ -672,6 +677,34 @@ própria associação e não passou pela verificação pública do Google.
 
 Cada pessoa autorizada passa por essa tela na primeira vez que abrir o sistema,
 porque o aplicativo roda com a permissão de quem acessa.
+
+**Consentimento parcial.** A tela do Google traz uma caixa para cada escopo, e é
+possível continuar deixando o Drive desmarcado. O sistema abriria, mas todo
+módulo falharia com *"Você não tem permissão para chamar DriveApp..."*. Para
+evitar isso, o `doGet()` chama `ScriptApp.requireAllScopes()`, que solicita a
+autorização completa na abertura do aplicativo. Na tela de consentimento,
+marque todas as caixas.
+
+> **"Você precisa ter acesso" (Leitor/Editor).** Essa tela pede acesso ao
+> **projeto** do Apps Script (código-fonte) e não deve ser solicitada nem
+> concedida a associados. Ela aparece ao abrir o link `/dev` (implantação de
+> teste, restrita a editores) ou o link do editor. Associados usam somente a URL
+> `/exec` da implantação ou `portal.aeuv.org/sistema/`.
+
+Concedido o escopo, a pessoa ainda precisa de **compartilhamento** nos arquivos
+que o módulo lê. Para os regulamentos basta compartilhar **somente a subpasta
+`Regulamentos`** como *Leitor* com os associados: o id dela fica
+guardado em `REGULAMENTOS_PASTA_ID` na primeira vez que um admin/diretoria abre a
+tela, e a partir daí o sistema abre a subpasta direto, sem passar pela pasta
+raiz. O cadastro de associados consulta a cópia individual nas propriedades,
+sem acesso à planilha geral (veja o alerta sobre o perfil `associado` acima).
+Se a subpasta não estiver compartilhada, **Solicitar acesso como Leitor no
+Drive** abre diretamente a subpasta `Regulamentos`. Na página do Google Drive,
+o associado solicita acesso como *Leitor*; o proprietário recebe o pedido e
+precisa aprová-lo. Se o cadastro ainda não estiver publicado, **Solicitar
+publicação do cadastro** abre um e-mail preenchido com conta e equipe: a
+administração deve cadastrar a equipe e publicar a consulta individual. Não
+conceda acesso à planilha geral nem ao projeto Apps Script.
 
 Com `oauthScopes` declarado, o Apps Script deixa de acrescentar escopos sozinho.
 Por isso, ao usar um serviço novo no código, acrescente o escopo correspondente

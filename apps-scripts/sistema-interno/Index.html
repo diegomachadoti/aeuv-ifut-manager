@@ -3800,6 +3800,36 @@
     let regulamentos = { registros: [], total: 0, limite: 0, pastaUrl: '' };
 
     /**
+     * Abre a solicitacao nativa do Drive ou prepara o pedido de publicacao.
+     */
+    function botaoSolicitarAcessoAssociado(modulo) {
+      if (CONFIG.usuario.perfil !== 'associado') {
+        return '';
+      }
+
+      if (modulo === 'Regulamentos') {
+        return CONFIG.regulamentosPastaUrl
+          ? '<div class="barra-acoes"><a class="botao-apoio destaque" href="'
+            + escapar(CONFIG.regulamentosPastaUrl)
+            + '" target="_blank" rel="noopener">Solicitar acesso como Leitor no Drive</a></div>'
+          : '';
+      }
+
+      const assunto = 'AEUV - Publicar cadastro da minha equipe';
+      const corpo = 'Olá, preciso consultar o cadastro da minha equipe no sistema interno da AEUV.\n'
+        + 'Conta Google: ' + CONFIG.usuario.email + '\n'
+        + 'Equipe: ' + (CONFIG.usuario.equipe || 'não vinculada') + '\n\n'
+        + 'Se a equipe já estiver cadastrada na planilha AEUV - Associados, '
+        + 'execute publicarCadastrosAssociados() no editor do Apps Script. '
+        + 'Caso contrário, cadastre a equipe antes de publicar a consulta.';
+      const url = 'mailto:' + encodeURIComponent(CONFIG.emailSuporte)
+        + '?subject=' + encodeURIComponent(assunto) + '&body=' + encodeURIComponent(corpo);
+
+      return '<div class="barra-acoes"><a class="botao-apoio destaque" href="'
+        + escapar(url) + '">Solicitar publicação do cadastro</a></div>';
+    }
+
+    /**
      * Busca no servidor os regulamentos publicados.
      */
     function carregarRegulamentos() {
@@ -3817,8 +3847,11 @@
             return;
           }
 
+          const mensagem = erro && erro.message ? erro.message : String(erro);
           document.getElementById('statusRegulamentos').outerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+            '<div class="erro">' + escapar(mensagem) + '</div>'
+            + (/Não foi possível abrir a pasta "Regulamentos"/.test(mensagem)
+              ? botaoSolicitarAcessoAssociado('Regulamentos') : '');
         })
         .listarRegulamentos();
     }
@@ -3899,8 +3932,11 @@
             return;
           }
 
+          const mensagem = erro && erro.message ? erro.message : String(erro);
           document.getElementById('areaAssociados').innerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+            '<div class="erro">' + escapar(mensagem) + '</div>'
+            + (/O cadastro da sua equipe ainda não foi publicado/.test(mensagem)
+              ? botaoSolicitarAcessoAssociado('Associados') : '');
         })
         .listarAssociados();
     }
