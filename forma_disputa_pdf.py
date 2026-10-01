@@ -117,12 +117,19 @@ def gerar_tabela_reportlab(bloco_linhas: list[str], layout: LayoutPdf) -> object
     celula_centro = ParagraphStyle("tab_cent", parent=celula_base, alignment=TA_CENTER)
     celula_dir = ParagraphStyle("tab_dir", parent=celula_base, alignment=TA_RIGHT)
 
-    cabecalho_esq = ParagraphStyle("tab_cab_esq", parent=celula_esq, fontName=layout.negrito, textColor=colors.white)
-    cabecalho_cent = ParagraphStyle("tab_cab_cent", parent=celula_centro, fontName=layout.negrito, textColor=colors.white)
-
     # Identificar se a tabela e a tabela consolidada de auditoria (times x rodadas x totais)
     cabecalho_texto = " ".join(linhas_dados[0]).upper()
     eh_auditoria = "TOTAL" in cabecalho_texto or "AUDITORIA" in cabecalho_texto
+
+    # Se for auditoria com 8 colunas, fonte um pouco mais compacta (7pt) para caber campo + horario com folga
+    if eh_auditoria and num_colunas == 8:
+        celula_base = ParagraphStyle("tab_cel8", parent=layout.base, fontSize=6.8, leading=8.5, spaceAfter=0)
+        celula_esq = ParagraphStyle("tab_esq8", parent=celula_base, alignment=TA_LEFT)
+        celula_centro = ParagraphStyle("tab_cent8", parent=celula_base, alignment=TA_CENTER)
+        celula_dir = ParagraphStyle("tab_dir8", parent=celula_base, alignment=TA_RIGHT)
+
+    cabecalho_esq = ParagraphStyle("tab_cab_esq", parent=celula_esq, fontName=layout.negrito, textColor=colors.white)
+    cabecalho_cent = ParagraphStyle("tab_cab_cent", parent=celula_centro, fontName=layout.negrito, textColor=colors.white)
 
     # Calculo de larguras de colunas
     largura_total = layout.largura_util
@@ -133,12 +140,12 @@ def gerar_tabela_reportlab(bloco_linhas: list[str], layout: LayoutPdf) -> object
         larguras = [p * (largura_total / soma) for p in proporcoes]
     elif eh_auditoria and num_colunas == 6:
         # Equipe | Rodada 1 | Rodada 2 | Rodada 3 | Total Poli | Total Particulares
-        proporcoes = [2.2, 1.8, 1.8, 1.8, 1.4, 2.0]
+        proporcoes = [1.8, 2.2, 2.2, 2.2, 1.3, 1.8]
         soma = sum(proporcoes)
         larguras = [p * (largura_total / soma) for p in proporcoes]
     elif eh_auditoria and num_colunas == 8:
         # Equipe | R1 | R2 | R3 | R4 | R5 | Poli | Part
-        proporcoes = [2.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.4, 1.4]
+        proporcoes = [1.5, 1.8, 1.8, 1.8, 1.8, 1.8, 1.1, 1.2]
         soma = sum(proporcoes)
         larguras = [p * (largura_total / soma) for p in proporcoes]
     else:
@@ -155,9 +162,9 @@ def gerar_tabela_reportlab(bloco_linhas: list[str], layout: LayoutPdf) -> object
                 alinhamento = cabecalho_cent if col_idx in (0, 2) or (eh_auditoria and col_idx >= 1) else cabecalho_esq
                 linha_p.append(Paragraph(texto_fmt, alinhamento))
             else:
-                if col_idx in (0, 2) or (eh_auditoria and col_idx >= 4):
+                if col_idx in (0, 2) or (eh_auditoria and col_idx >= (num_colunas - 2)):
                     estilo = celula_centro
-                elif eh_auditoria and col_idx in (1, 2, 3):
+                elif eh_auditoria and col_idx >= 1 and col_idx < (num_colunas - 2):
                     estilo = celula_centro
                 else:
                     estilo = celula_esq
