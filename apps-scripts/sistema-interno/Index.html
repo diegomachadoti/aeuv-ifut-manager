@@ -1482,8 +1482,163 @@
       .modal-fin-caixa { padding: 18px 14px; }
     }
   </style>
+  <style>
+    /* ---------- Botao discreto de tema (claro / escuro) ---------- */
+    .alternar-tema {
+      flex: 0 0 auto;
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, .22);
+      background: rgba(255, 255, 255, .08);
+      color: #fff;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0;
+      transition: background .2s, transform .2s;
+    }
+
+    .alternar-tema:hover { background: rgba(255, 255, 255, .2); transform: rotate(-12deg); }
+
+    /* ---------- Tema escuro ----------
+       --azul vira tom claro de destaque (textos/titulos); os fundos que usavam
+       --azul recebem azul-escuro explicito logo abaixo. */
+    body.tema-escuro {
+      --azul: #9db8f2;
+      --azul-claro: #22345c;
+      --fundo: #0b1220;
+      --borda: #263450;
+      --texto: #e2e8f3;
+      --apoio: #93a0b8;
+      --superficie: #131c2e;
+      --superficie-2: #0f1729;
+      --fundo-forte: #1b2a4a;
+      color-scheme: dark;
+    }
+
+    body.tema-escuro .topo { background: #070d1a; }
+    body.tema-escuro .inicial { color: #14213d; }
+    body.tema-escuro .brasao { box-shadow: 0 6px 18px rgba(0, 0, 0, .55); }
+
+    body.tema-escuro .card,
+    body.tema-escuro .menu,
+    body.tema-escuro .abrir-menu,
+    body.tema-escuro .cartao,
+    body.tema-escuro .indicador,
+    body.tema-escuro .regulamento,
+    body.tema-escuro .detalhe-caixa,
+    body.tema-escuro .formulario,
+    body.tema-escuro .modal-fin-caixa,
+    body.tema-escuro .punicoes tr,
+    body.tema-escuro .associados tr,
+    body.tema-escuro .usuarios tr,
+    body.tema-escuro .solicitacoes tr.linha {
+      background: var(--superficie);
+      border-color: var(--borda);
+      box-shadow: none;
+    }
+
+    body.tema-escuro input,
+    body.tema-escuro select,
+    body.tema-escuro textarea,
+    body.tema-escuro .botao-apoio,
+    body.tema-escuro .fin-grupo-data,
+    body.tema-escuro .fin-campo .fin-input-valor {
+      background: var(--superficie-2);
+      color: var(--texto);
+      border-color: #33425f;
+    }
+
+    body.tema-escuro .fin-grupo-data input[type="text"] { background: transparent; }
+    body.tema-escuro .fin-campo .fin-input-valor { color: #4ade80; }
+    body.tema-escuro input::placeholder,
+    body.tema-escuro textarea::placeholder { color: #6f7c95; }
+
+    body.tema-escuro th,
+    body.tema-escuro .tabela-financeiro th,
+    body.tema-escuro .menu button.ativo,
+    body.tema-escuro .botao-apoio.destaque,
+    body.tema-escuro .botao-principal,
+    body.tema-escuro .botao-novo-lancamento {
+      background: var(--fundo-forte);
+      border-color: var(--fundo-forte);
+      color: #fff;
+    }
+
+    body.tema-escuro .botao-principal:hover,
+    body.tema-escuro .botao-novo-lancamento:hover { background: #26386b; }
+
+    body.tema-escuro .saudacao { background: linear-gradient(120deg, #13203d, #22345c); }
+    body.tema-escuro .aviso { background: #2a2210; }
+
+    body.tema-escuro .etiqueta,
+    body.tema-escuro .pilula { background: #1f2a44; }
+    body.tema-escuro .pilula.cumprir,
+    body.tema-escuro .pilula.aguardando,
+    body.tema-escuro .pilula.pendente { background: #3a2c0c; color: #fbbf24; }
+    body.tema-escuro .pilula.cumprida,
+    body.tema-escuro .pilula.definida,
+    body.tema-escuro .pilula.processada,
+    body.tema-escuro .pilula.analisada,
+    body.tema-escuro .pilula.ativo { background: #10331f; color: #4ade80; }
+    body.tema-escuro .pilula.alerta,
+    body.tema-escuro .pilula.falha,
+    body.tema-escuro .pilula.inativo { background: #3b1a1d; color: #f87171; }
+    body.tema-escuro .pilula.suspenso { background: #262c38; color: #b8c1d1; }
+    body.tema-escuro .pilula.arbitragem { background: #2a2346; color: #c4b5fd; }
+
+    body.tema-escuro .alerta { color: #f87171; }
+    body.tema-escuro .documento .situacao.entregue { color: #4ade80; }
+    body.tema-escuro .documento .situacao.falta { color: #fbbf24; }
+
+    body.tema-escuro .sucesso { background: #10331f; color: #4ade80; }
+    body.tema-escuro .erro { background: #3b1a1d; color: #fca5a5; }
+    body.tema-escuro .botao-apoio.perigo:hover { background: #3b1a1d; }
+
+    body.tema-escuro .fin-upload-area,
+    body.tema-escuro .modal-pdf-guia,
+    body.tema-escuro .fin-linha-datas,
+    body.tema-escuro .fin-comprovante-atual {
+      background: var(--superficie-2);
+      border-color: var(--borda);
+    }
+
+    body.tema-escuro .fin-upload-area:hover,
+    body.tema-escuro .tabela-financeiro tbody tr:hover,
+    body.tema-escuro .btn-anexo-fin,
+    body.tema-escuro .btn-acao-editar:hover,
+    body.tema-escuro .fin-aviso-edicao {
+      background: #1a2540;
+      border-color: #33425f;
+    }
+
+    body.tema-escuro .fin-upload-ajuda { color: var(--apoio); }
+    body.tema-escuro .fin-upload-nome { background: #10331f; color: #4ade80; }
+    body.tema-escuro .fin-aviso-edicao,
+    body.tema-escuro .btn-acao-editar { color: var(--texto); }
+    body.tema-escuro .btn-acao-editar { border-color: #33425f; }
+    body.tema-escuro .btn-acao-excluir { border-color: #5b2a2e; color: #f87171; }
+    body.tema-escuro .btn-acao-excluir:hover { background: #3b1a1d; }
+    body.tema-escuro .fin-desc-id { color: #7d8aa3; }
+
+    /* Cores fixas aplicadas via style inline pelo JavaScript */
+    body.tema-escuro [style*="background:#eefbf0"] { background: #10331f !important; border-color: #1f5c38 !important; }
+    body.tema-escuro [style*="background:#fdf2f2"] { background: #3b1a1d !important; border-color: #6b2a30 !important; }
+    body.tema-escuro [style*="background:#eef4fd"] { background: #1a2540 !important; border-color: #33425f !important; }
+    body.tema-escuro [style*="color:#14213d"] { color: var(--texto) !important; }
+    body.tema-escuro [style*="color:#1e7b34"] { color: #4ade80 !important; }
+    body.tema-escuro [style*="color:#b3261e"],
+    body.tema-escuro [style*="color:#922b21"] { color: #f87171 !important; }
+    body.tema-escuro [style*="color:#555"] { color: var(--apoio) !important; }
+  </style>
 </head>
 <body>
+  <script>
+    // Aplica o tema salvo antes de desenhar a tela, evitando "piscar" o claro.
+    try { if (localStorage.getItem('aeuv-interno-tema') === 'escuro') document.body.classList.add('tema-escuro'); } catch (e) {}
+  </script>
   <header class="topo">
     <div class="topo-conteudo">
       <div class="brasao">
@@ -1493,6 +1648,7 @@
         <h1><?= config.associacao ?></h1>
         <p>Sistema Interno &middot; &Aacute;rea restrita da associa&ccedil;&atilde;o</p>
       </div>
+      <button type="button" class="alternar-tema" id="alternarTema" title="Ativar modo escuro" aria-label="Alternar tema claro/escuro">🌙</button>
       <div class="usuario">
         <div class="inicial" id="inicial"></div>
         <div class="usuario-dados">
@@ -1522,6 +1678,22 @@
   <script>
     const CONFIG = <?!= JSON.stringify(config) ?>;
     const MODULOS = CONFIG.modulos;
+
+    (function configurarAlternanciaTema() {
+      var botao = document.getElementById('alternarTema');
+      function sincronizar() {
+        var escuro = document.body.classList.contains('tema-escuro');
+        botao.textContent = escuro ? '☀️' : '🌙';
+        botao.title = escuro ? 'Voltar ao modo claro' : 'Ativar modo escuro';
+        botao.setAttribute('aria-pressed', escuro ? 'true' : 'false');
+      }
+      botao.addEventListener('click', function () {
+        var escuro = document.body.classList.toggle('tema-escuro');
+        try { localStorage.setItem('aeuv-interno-tema', escuro ? 'escuro' : 'claro'); } catch (e) {}
+        sincronizar();
+      });
+      sincronizar();
+    })();
 
     const menuItens = document.getElementById('menuItens');
     const menu = document.getElementById('menu');

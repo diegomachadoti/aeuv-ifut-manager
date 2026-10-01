@@ -18,7 +18,7 @@ import requests
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, TimeoutException
 from selenium.webdriver import ChromeOptions
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -174,6 +174,14 @@ class RemovalValidationError(ValueError):
     pass
 
 
+class SaveConfirmationTimeout(TimeoutError):
+    """O iFut nao confirmou a gravacao (pop-up continuou aberto) dentro do prazo."""
+    pass
+
+
+STATUS_PENDENTE = "PENDENTE"
+
+
 @dataclass
 class PortabilityMatch:
     checkbox: WebElement | None
@@ -230,6 +238,8 @@ class AppConfig:
         self.portability_cancel_delay_seconds = parser.getfloat("app", "portability_cancel_delay_seconds", fallback=1.0)
         self.removal_click_delay_seconds = parser.getfloat("app", "removal_click_delay_seconds", fallback=3.0)
         self.removal_confirm_delay_seconds = parser.getfloat("app", "removal_confirm_delay_seconds", fallback=3.0)
+        # Prazo maximo para o iFut confirmar a gravacao (pop-up fechar) apos Salvar/Remover/Inscrever.
+        self.save_confirm_timeout_seconds = parser.getfloat("app", "save_confirm_timeout_seconds", fallback=45.0)
         self.portability_source_championship = parser.get("app", "portability_source_championship", fallback="2º COPA AMERICA 2026")
         self.spreadsheet_id = parser.get("sheets", "spreadsheet_id", fallback="")
         self.sheets_range_times = parser.get("sheets", "range_times", fallback="A2:C")
@@ -586,9 +596,15 @@ class IfutBot:
             except DuplicateAthleteError as exc:
                 self.logger.error("Registro %s falhou: %s", record.index, exc)
                 results.append(self._build_record_result(record, "FALHA", str(exc)))
+            except SaveConfirmationTimeout as exc:
+                self.logger.warning("Registro %s sem confirmacao do iFut: %s", record.index, exc)
+                self._recover_team_page(request)
+                results.append(self._resolve_unconfirmed_record(record, str(exc)))
             except Exception as exc:
                 self.logger.exception("Registro %s falhou: %s", record.index, exc)
                 results.append(self._build_record_result(record, "FALHA", str(exc)))
+                # Garante que um pop-up preso nao contamine o proximo registro.
+                self._recover_team_page(request)
             time.sleep(self.config.wait_between_records_seconds)
         
         self.logger.info("Escrevendo arquivo de resultado...")
@@ -598,6 +614,77 @@ class IfutBot:
         self._update_spreadsheet(request)
         
         self.logger.info("Processamento do arquivo finalizado com sucesso")
+
+    def _recover_team_page(self, request: RequestFile) -> None:
+        """Recarrega a pagina do time do zero, descartando qualquer pop-up travado."""
+        try:
+            self.logger.info("[RECUPERACAO] Recarregando a pagina do time '%s' para seguir ao proximo registro",
+                             request.team_name)
+            self.open_team_page(request.team_name)
+            self._open_roster_section()
+        except Exception as exc:
+            self.logger.error("[RECUPERACAO] Nao foi possivel recarregar a pagina do time: %s", exc)
+
+    def _resolve_unconfirmed_record(self, record: Record, timeout_message: str) -> RecordResult:
+        """Apos recarregar a pagina, confere no elenco se a operacao lenta acabou sendo gravada."""
+        action = record.normalized_action
+        try:
+            if action == "remocao":
+                self._open_removal_context(record)
+                rows = self.driver.find_elements(*self._locator(self.selectors.get("team", "roster_row")))
+                try:
+                    self._find_person_row(record.full_name)
+                    encontrado = True
+                except LookupError:
+                    encontrado = False
+                if rows and not encontrado:
+                    self._restore_default_team_tab(record)
+                    return self._build_record_result(
+                        record, "SUCESSO", "Remocao confirmada apos recarregar a pagina (iFut demorou a responder)")
+            else:
+                if record.is_commission:
+                    self._open_removal_context(record)
+                self._find_person_row(record.full_name)
+                self._restore_default_team_tab(record)
+                verbo = "Portabilidade" if action == "portabilidade" else "Inclusao"
+                return self._build_record_result(
+                    record, "SUCESSO", f"{verbo} confirmada apos recarregar a pagina (iFut demorou a responder)")
+        except LookupError:
+            pass
+        except Exception as exc:
+            self.logger.warning("[RECUPERACAO] Falha ao conferir o elenco apos timeout: %s", exc)
+        try:
+            self._restore_default_team_tab(record)
+        except Exception:
+            pass
+        return self._build_record_result(
+            record,
+            STATUS_PENDENTE,
+            f"{timeout_message} Conferir manualmente no iFut se a operacao foi efetivada.",
+        )
+
+    def _has_visible(self, selector: str) -> bool:
+        for element in self.driver.find_elements(*self._locator(selector)):
+            try:
+                if element.is_displayed():
+                    return True
+            except StaleElementReferenceException:
+                continue
+        return False
+
+    def _wait_dialog_closed(self, selector: str | None, operacao: str) -> None:
+        """Aguarda o pop-up sumir; se continuar aberto apos o prazo, sinaliza timeout de gravacao."""
+        if not selector:
+            return
+        limite = time.time() + self.config.save_confirm_timeout_seconds
+        while time.time() < limite:
+            if not self._has_visible(selector):
+                return
+            time.sleep(0.5)
+        raise SaveConfirmationTimeout(
+            f"iFut nao confirmou a {operacao} em {self.config.save_confirm_timeout_seconds:.0f}s "
+            "(pop-up permaneceu aberto)."
+        )
 
     def update_all_teams_athlete_counts(self) -> None:
         self.logger.info("[PLANILHA] Iniciando rotina independente de atualizacao de quantidade de atletas")
@@ -689,6 +776,7 @@ class IfutBot:
             self._validate_removal_confirmation(record)
             self._click(confirm)
             time.sleep(self.config.removal_confirm_delay_seconds)
+            self._wait_dialog_closed(confirm, "remocao")
         self._restore_default_team_tab(record)
 
     def _port_person(self, record: Record) -> None:
@@ -716,6 +804,7 @@ class IfutBot:
             return
         self._click(self.selectors.get("actions", "portability_submit_button"))
         time.sleep(2)
+        self._wait_dialog_closed(self.selectors.get_optional("actions", "portability_submit_button"), "portabilidade")
 
     def _select_portability_source_championship(self, record: Record) -> None:
         championship_name = record.previous_competition or self.config.portability_source_championship
@@ -945,19 +1034,27 @@ class IfutBot:
         return None
 
     def _wait_for_include_outcome(self) -> str | None:
-        end_time = time.time() + self.config.timeout
+        dialog_selector = self.selectors.get_optional("messages", "include_dialog")
+        end_time = time.time() + max(self.config.timeout, self.config.save_confirm_timeout_seconds)
         while time.time() < end_time:
             duplicate_message = self._find_duplicate_message()
             if duplicate_message:
                 return duplicate_message
 
-            dialog_selector = self.selectors.get_optional("messages", "include_dialog")
             if dialog_selector:
-                dialogs = self.driver.find_elements(*self._locator(dialog_selector))
-                if not dialogs:
+                if not self._has_visible(dialog_selector):
                     return None
             time.sleep(0.3)
-        return self._find_duplicate_message()
+        duplicate_message = self._find_duplicate_message()
+        if duplicate_message:
+            return duplicate_message
+        if dialog_selector:
+            # Antes o timeout era tratado como sucesso mesmo com o pop-up aberto.
+            raise SaveConfirmationTimeout(
+                f"iFut nao confirmou a inclusao em {self.config.save_confirm_timeout_seconds:.0f}s "
+                "(pop-up de cadastro permaneceu aberto apos Salvar)."
+            )
+        return None
 
     def _close_include_popup(self) -> None:
         cancel_selector = self.selectors.get_optional("actions", "cancel_button")

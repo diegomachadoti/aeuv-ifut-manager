@@ -124,6 +124,34 @@
       border-left: 5px solid var(--dourado);
     }
 
+    .aviso-regulamento {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--borda);
+      font-size: 14px;
+      color: var(--azul);
+    }
+
+    .aviso-regulamento a {
+      display: inline-block;
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: var(--azul);
+      color: #fff;
+      font-weight: bold;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .aviso-regulamento a:hover {
+      opacity: .9;
+    }
+
     h2 {
       color: var(--azul);
       margin-top: 0;
@@ -532,6 +560,10 @@
   <main class="container">
     <div class="aviso">
       <strong>IMPORTANTE</strong> O árbitro terá até 24 (vinte e quatro) horas após o término da partida para enviar a súmula oficial devidamente preenchida.
+      <div class="aviso-regulamento">
+        <span>📘 Dúvida sobre alguma regra? Consulte o regulamento oficial da competição.</span>
+        <a href="https://drive.google.com/file/d/1Ky4OAvGJd9sJAudWPthKXnBUGLapU8Kk/view" target="_blank" rel="noopener">Abrir regulamento</a>
+      </div>
     </div>
 
     <form id="formSumula">

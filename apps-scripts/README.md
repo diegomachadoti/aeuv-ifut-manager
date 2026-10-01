@@ -713,8 +713,15 @@ terminar cada processamento, a automação em Python publica na pasta
 A tela usa esse nome para ligar o resultado à solicitação correspondente e
 oferece os dois no detalhe: **Resultado (PDF)**, em destaque, e
 **Resultado (TXT)**. O PDF traz cada registro com o status colorido — `SUCESSO`
-em verde, `FALHA` em vermelho — e, quando há falhas, uma caixa no topo com o
-nome e o motivo de cada uma.
+em verde, `FALHA` em vermelho, `PENDENTE` em laranja — e, quando há registros não
+concluídos, uma caixa no topo com o nome e o motivo de cada um.
+
+`PENDENTE` aparece quando o iFut não confirma a gravação dentro de
+`save_confirm_timeout_seconds` (`[app]` no `config.ini`, padrão 45s): o pop-up
+continua aberto após Salvar/Remover/Inscrever. A automação recarrega a página do
+time, confere no elenco se a operação acabou sendo gravada (nesse caso marca
+`SUCESSO`) e segue para o próximo registro. Se não conseguir confirmar, fica
+`PENDENTE` para conferência manual no iFut.
 
 Como a publicação só acontece depois que a automação roda, solicitações ainda
 em `Entrada` aparecem sem esses botões e sem aviso. Já uma solicitação que

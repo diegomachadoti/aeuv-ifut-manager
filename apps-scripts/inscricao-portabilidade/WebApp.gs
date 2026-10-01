@@ -61,7 +61,7 @@ const WEBAPP_CONFIG = {
   // Icone da aba do navegador. Precisa ser uma URL publica terminada na extensao da imagem;
   // links do Drive (thumbnail?id=...) nao funcionam aqui.
   faviconUrl: 'https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png',
-  regulamentoUrl: 'https://campeonato.ifut.com.br/c/7-super-liga-uniao-2026', // Cole aqui o link do regulamento da competicao.
+  regulamentoUrl: 'https://drive.google.com/file/d/1Ky4OAvGJd9sJAudWPthKXnBUGLapU8Kk/view', // Cole aqui o link do regulamento da competicao.
 };
 
 function doGet(e) {

@@ -24,8 +24,10 @@ LOGGER = logging.getLogger("ifut_bot")
 VERDE = "#1E7B34"
 VERDE_CLARO = "#E4F4E9"
 VERMELHO_CLARO = "#FDECEA"
-CORES_STATUS = {"SUCESSO": VERDE, "FALHA": "#B3261E"}
-FUNDOS_STATUS = {"SUCESSO": VERDE_CLARO, "FALHA": VERMELHO_CLARO}
+LARANJA = "#B26A00"
+LARANJA_CLARO = "#FFF2D8"
+CORES_STATUS = {"SUCESSO": VERDE, "FALHA": "#B3261E", "PENDENTE": LARANJA}
+FUNDOS_STATUS = {"SUCESSO": VERDE_CLARO, "FALHA": VERMELHO_CLARO, "PENDENTE": LARANJA_CLARO}
 
 # Campos que pertencem a uma pessoa. Qualquer outra chave encontrada no
 # arquivo e tratada como cabecalho, mesmo aparecendo depois dos registros
