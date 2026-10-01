@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>AEUV - Sistema Interno</title>
   <meta name="description" content="Área restrita da AEUV. O acesso exige login com Conta Google autorizada.">
 
@@ -259,10 +262,10 @@
       desistiu = true;
       clearInterval(cronometro);
       etapa.textContent = 'Abrindo a tela de login do Google...';
-      window.location.replace(URL_SISTEMA + '?origem=direto');
+      window.location.replace(URL_SISTEMA + '?origem=direto&_v=' + Date.now());
     }, LIMITE_QUADRO);
 
-    quadro.src = URL_SISTEMA + '?origem=portal';
+    quadro.src = URL_SISTEMA + '?origem=portal&_v=' + Date.now();
   </script>
 </body>
 </html>

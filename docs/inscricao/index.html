@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>AEUV - Inscrição, Remoção e Portabilidade</title>
   <meta name="description" content="Formulário oficial da AEUV para inscrição, remoção e portabilidade de atletas e comissão técnica.">
 
@@ -231,7 +234,7 @@
     // montagem do formulario dentro dela e evita a tela branca intermediaria.
     quadro.addEventListener('load', () => setTimeout(exibirFormulario, 700));
 
-    quadro.src = URL_FORMULARIO;
+    quadro.src = URL_FORMULARIO + '?_v=' + Date.now();
   </script>
 </body>
 </html>

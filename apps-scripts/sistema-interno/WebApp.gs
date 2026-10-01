@@ -113,6 +113,17 @@ const CONFIG = {
     chavePlanilha: 'ASSOCIADOS_PLANILHA_ID',
     chavePasta: 'ASSOCIADOS_PASTA_ID',
     maxArquivoBytes: 5 * 1024 * 1024
+  },
+
+  // Modulo Financeiro e Prestacao de Contas: planilha e pasta de comprovantes
+  // na pasta raiz do projeto.
+  financeiro: {
+    planilha: 'AEUV - Financeiro',
+    aba: 'Movimentacoes',
+    pastaComprovantes: 'Comprovantes - Financeiro',
+    chavePlanilha: 'FINANCEIRO_PLANILHA_ID',
+    chavePasta: 'FINANCEIRO_PASTA_ID',
+    maxArquivoBytes: 8 * 1024 * 1024
   }
 };
 
@@ -266,6 +277,14 @@ const MODULOS = [
     icone: '🏳️',
     tipo: 'equipes',
     descricao: 'Equipes participantes. A lista alimenta o cadastro, os acessos e os dois formulários.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'financeiro',
+    nome: 'Financeiro e Prestação de Contas',
+    icone: '💰',
+    tipo: 'financeiro',
+    descricao: 'Controle de entradas, saídas, anexos de comprovantes e geração de relatórios oficiais para assembleias e emendas impositivas.',
     perfis: ['admin', 'diretoria']
   },
   {
@@ -3242,4 +3261,271 @@ function diagnosticarAssociados() {
   const total = Math.max(0, aba.getLastRow() - 1);
 
   Logger.log('Leitura concluida .: %s associado(s) cadastrado(s).', total);
+}
+
+/******************************************************
+ * MODULO FINANCEIRO E PRESTACAO DE CONTAS
+ ******************************************************/
+
+const FINANCEIRO_COMPETICOES_ORIGEM = [
+  'Geral / Administrativo',
+  'COPA AMERICA',
+  'SUPER LIGA UNIÃO',
+  'COPA METROPOLITANA',
+  'COPA PREMIER',
+  'Outras Competições / Eventos'
+];
+
+const FINANCEIRO_CATEGORIAS_ENTRADA = [
+  'Taxa de Inscrição / Participação',
+  'Taxas de Portabilidade / Transferência',
+  'Mensalidades / Contribuição de Associados',
+  'Patrocínios e Apoios Comerciais',
+  'Multas Disciplinares / Recursos',
+  'Doações / Eventos Beneficentes',
+  'Outras Entradas'
+];
+
+const FINANCEIRO_CATEGORIAS_SAIDA = [
+  'Arbitragem e Mesários',
+  'Premiação e Troféus',
+  'Material Esportivo e Bolas',
+  'Locação e Manutenção de Campos / Sedes',
+  'Atendimento Médico e Primeiros Socorros',
+  'Segurança e Apoio Operacional',
+  'Marketing, Comunicação e Mídia',
+  'Despesas Administrativas, Jurídicas e Cartorárias',
+  'Outras Saídas'
+];
+
+const FINANCEIRO_COLUNAS = [
+  { id: 'idLancamento', titulo: 'ID / Protocolo' },
+  { id: 'dataMovimentacao', titulo: 'Data da Movimentação' },
+  { id: 'tipo', titulo: 'Tipo (Entrada/Saída)' },
+  { id: 'origem', titulo: 'Origem / Competição' },
+  { id: 'categoria', titulo: 'Categoria' },
+  { id: 'descricao', titulo: 'Descrição detalhada' },
+  { id: 'valor', titulo: 'Valor (R$)' },
+  { id: 'favorecidoPagador', titulo: 'Favorecido / Pagador' },
+  { id: 'documento', titulo: 'Documento Fiscal / Recibo' },
+  { id: 'idTransacaoBancaria', titulo: 'ID Transação / Extrato Bancário' },
+  { id: 'emenda', titulo: 'Emenda Impositiva / Fomento' },
+  { id: 'comprovanteUrl', titulo: 'Comprovante (Drive)' },
+  { id: 'criadoEm', titulo: 'Criado em' },
+  { id: 'criadoPor', titulo: 'Criado por' }
+];
+
+/**
+ * Retorna dados para abrir o modulo financeiro:
+ * lista de lancamentos, totais calculados, categorias e lista de competicoes.
+ */
+function listarFinanceiro() {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !moduloLiberado_('financeiro', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para acessar o módulo financeiro.');
+  }
+
+  const aba = abaFinanceiro_();
+  const valores = aba.getDataRange().getValues();
+
+  let totalEntradas = 0;
+  let totalSaidas = 0;
+
+  const lancamentos = valores.slice(1).map(function (linha) {
+    const valNum = parseFloat(String(linha[6] || 0).replace(',', '.')) || 0;
+    const ehEntrada = String(linha[2] || '').trim().toLowerCase() === 'entrada';
+
+    if (ehEntrada) {
+      totalEntradas += valNum;
+    } else {
+      totalSaidas += valNum;
+    }
+
+    return {
+      idLancamento: String(linha[0] || ''),
+      dataMovimentacao: String(linha[1] || ''),
+      tipo: String(linha[2] || ''),
+      origem: String(linha[3] || ''),
+      categoria: String(linha[4] || ''),
+      descricao: String(linha[5] || ''),
+      valor: valNum,
+      favorecidoPagador: String(linha[7] || ''),
+      documento: String(linha[8] || ''),
+      idTransacaoBancaria: String(linha[9] || ''),
+      emenda: String(linha[10] || ''),
+      comprovanteUrl: String(linha[11] || ''),
+      criadoEm: String(linha[12] || ''),
+      criadoPor: String(linha[13] || '')
+    };
+  }).reverse(); // Mais recentes primeiro
+
+  return {
+    lancamentos: lancamentos,
+    totalEntradas: totalEntradas,
+    totalSaidas: totalSaidas,
+    saldoAtual: totalEntradas - totalSaidas,
+    categoriasEntrada: FINANCEIRO_CATEGORIAS_ENTRADA,
+    categoriasSaida: FINANCEIRO_CATEGORIAS_SAIDA,
+    competicoes: FINANCEIRO_COMPETICOES_ORIGEM,
+    podeEditar: sessao.usuario.perfil === 'admin' || sessao.usuario.perfil === 'diretoria',
+    planilhaUrl: planilhaFinanceiro_().getUrl()
+  };
+}
+
+/**
+ * Salva um novo lancamento financeiro na planilha e anexa o comprovante no Drive.
+ */
+function salvarLancamentoFinanceiro(payload) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !moduloLiberado_('financeiro', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para gravar lançamentos financeiros.');
+  }
+
+  if (!payload.dataMovimentacao || !payload.tipo || !payload.categoria || !payload.valor || !payload.descricao) {
+    throw new Error('Preencha os campos obrigatórios (Data, Tipo, Categoria, Descrição e Valor).');
+  }
+
+  const valorFloat = Math.abs(parseFloat(String(payload.valor).replace(',', '.')));
+  if (isNaN(valorFloat) || valorFloat <= 0) {
+    throw new Error('Informe um valor numérico válido maior que zero.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    let comprovanteUrl = '';
+    if (payload.comprovante && payload.comprovante.base64) {
+      comprovanteUrl = salvarComprovanteFinanceiro_(payload.comprovante, payload.dataMovimentacao, payload.descricao);
+    }
+
+    const agora = new Date();
+    const idLancamento = 'FIN-' + Utilities.formatDate(agora, 'America/Sao_Paulo', 'yyyyMMdd-HHmmss');
+
+    const linha = [
+      idLancamento,
+      payload.dataMovimentacao,
+      payload.tipo,
+      payload.origem || 'Geral / Administrativo',
+      payload.categoria,
+      payload.descricao,
+      valorFloat,
+      payload.favorecidoPagador || '',
+      payload.documento || '',
+      payload.idTransacaoBancaria || '',
+      payload.emenda || '',
+      comprovanteUrl,
+      formatarDataHora_(agora),
+      sessao.email
+    ];
+
+    const aba = abaFinanceiro_();
+    aba.appendRow(linha);
+
+    return {
+      sucesso: true,
+      idLancamento: idLancamento,
+      mensagem: 'Lançamento financeiro registrado com sucesso!'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Grava o arquivo de comprovante (PDF ou imagem) na pasta Comprovantes - Financeiro do Drive.
+ */
+function salvarComprovanteFinanceiro_(arquivo, dataMov, descricao) {
+  const pasta = pastaComprovantesFinanceiro_();
+  const bytes = Utilities.base64Decode(arquivo.base64);
+
+  if (bytes.length > CONFIG.financeiro.maxArquivoBytes) {
+    throw new Error('O comprovante excede o tamanho máximo permitido de 8 MB.');
+  }
+
+  const dataLimpa = String(dataMov || '').replace(/[^\d]/g, '');
+  const descLimpa = String(descricao || 'comprovante').replace(/[\\/:*?"<>|]+/g, '-').substring(0, 30);
+  const ext = arquivo.nome && arquivo.nome.indexOf('.') !== -1 ? arquivo.nome.split('.').pop() : 'pdf';
+  const nomeArquivo = 'COMP-' + dataLimpa + '-' + descLimpa + '.' + ext;
+
+  const blob = Utilities.newBlob(bytes, arquivo.tipo || 'application/pdf', nomeArquivo);
+  const file = pasta.createFile(blob);
+  file.setDescription('Comprovante financeiro da movimentação de ' + dataMov + ' - ' + descricao);
+
+  return file.getUrl();
+}
+
+/**
+ * Localiza ou cria a pasta Comprovantes - Financeiro no Drive.
+ */
+function pastaComprovantesFinanceiro_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const guardado = propriedades.getProperty(CONFIG.financeiro.chavePasta);
+
+  if (guardado) {
+    try {
+      const pasta = DriveApp.getFolderById(guardado);
+      if (!pasta.isTrashed()) {
+        return pasta;
+      }
+    } catch (e) {}
+  }
+
+  const raiz = pastaRaizProjeto_();
+  const existentes = raiz.getFoldersByName(CONFIG.financeiro.pastaComprovantes);
+  const pasta = existentes.hasNext()
+    ? existentes.next()
+    : raiz.createFolder(CONFIG.financeiro.pastaComprovantes);
+
+  propriedades.setProperty(CONFIG.financeiro.chavePasta, pasta.getId());
+  return pasta;
+}
+
+/**
+ * Localiza ou cria a planilha AEUV - Financeiro na pasta raiz do projeto.
+ */
+function planilhaFinanceiro_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const guardado = propriedades.getProperty(CONFIG.financeiro.chavePlanilha);
+
+  if (guardado) {
+    try {
+      return SpreadsheetApp.openById(guardado);
+    } catch (e) {}
+  }
+
+  const raiz = pastaRaizProjeto_();
+  const existentes = raiz.getFilesByName(CONFIG.financeiro.planilha);
+  let planilha;
+
+  if (existentes.hasNext()) {
+    planilha = SpreadsheetApp.openById(existentes.next().getId());
+  } else {
+    planilha = SpreadsheetApp.create(CONFIG.financeiro.planilha);
+    DriveApp.getFileById(planilha.getId()).moveTo(raiz);
+  }
+
+  propriedades.setProperty(CONFIG.financeiro.chavePlanilha, planilha.getId());
+  return planilha;
+}
+
+/**
+ * Retorna a aba Movimentacoes com cabecalho garantido.
+ */
+function abaFinanceiro_() {
+  const planilha = planilhaFinanceiro_();
+  const aba = planilha.getSheetByName(CONFIG.financeiro.aba) || planilha.insertSheet(CONFIG.financeiro.aba);
+
+  const titulos = FINANCEIRO_COLUNAS.map(function (c) { return c.titulo; });
+  const primeira = aba.getRange(1, 1, 1, titulos.length).getValues()[0];
+  const precisaCabecalho = titulos.some(function (titulo, i) {
+    return String(primeira[i] || '') !== titulo;
+  });
+
+  if (precisaCabecalho) {
+    aba.getRange(1, 1, 1, titulos.length).setValues([titulos]).setFontWeight('bold');
+    aba.setFrozenRows(1);
+  }
+
+  return aba;
 }

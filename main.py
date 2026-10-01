@@ -1501,6 +1501,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
              "texto/markdown na pasta formadisputa (ex.: forma-disputa-7-super-liga-união-2026-3-rodadas)",
     )
     parser.add_argument(
+        "--gerar-pdf-financeiro",
+        metavar="JSON_OU_EXEMPLO",
+        help="Gera o PDF do Relatorio Financeiro e Prestacao de Contas no padrao AEUV a partir de um JSON "
+             "de lancamentos ou passe 'exemplo' para gerar demonstrativos modelo",
+    )
+    parser.add_argument(
         "--atualizar-controle-punicoes",
         action="store_true",
         help="Refaz o TXT de controle de punicoes da associacao a partir de todas as notas oficiais",
@@ -1549,6 +1555,35 @@ def main() -> int:
         config = AppConfig(Path(args.config))
         logger = configure_logging(config.log_path)
         gerar_pdf_forma_disputa(args.gerar_pdf_forma_disputa, ConfigPdf.carregar(Path(args.config)), logger=logger)
+        return 0
+    if args.gerar_pdf_financeiro:
+        from financeiro_pdf import (
+            gerar_pdf_financeiro,
+            carregar_dados_exemplo,
+            carregar_lancamentos_de_json,
+            FiltroRelatorio,
+        )
+        from nota_pdf import ConfigPdf
+
+        config = AppConfig(Path(args.config))
+        logger = configure_logging(config.log_path)
+        cfg_pdf = ConfigPdf.carregar(Path(args.config))
+        alvo = args.gerar_pdf_financeiro.strip()
+
+        if alvo.lower() == "exemplo":
+            dados = carregar_dados_exemplo()
+            gerar_pdf_financeiro(FiltroRelatorio("geral"), dados, cfg_pdf, logger=logger)
+            gerar_pdf_financeiro(FiltroRelatorio("emenda", numero_emenda="Emenda 042/2026"), dados, cfg_pdf, logger=logger)
+            gerar_pdf_financeiro(FiltroRelatorio("competicao", competicao="7ª Super Liga União 2026"), dados, cfg_pdf, logger=logger)
+            logger.info("3 demonstrativos de prestacao de contas gerados em downloads/financeiro/")
+        else:
+            caminho_json = Path(alvo)
+            if not caminho_json.exists():
+                logger.error("Arquivo JSON nao encontrado: %s", caminho_json)
+                return 1
+            filtro, lancamentos = carregar_lancamentos_de_json(caminho_json)
+            pdf_path = gerar_pdf_financeiro(filtro, lancamentos, cfg_pdf, logger=logger)
+            logger.info("PDF financeiro gerado com sucesso: %s", pdf_path)
         return 0
     if args.gerar_pdf_nota:
         from nota_pdf import regerar_pdf

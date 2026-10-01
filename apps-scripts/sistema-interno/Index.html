@@ -3,6 +3,9 @@
 <head>
   <base target="_top">
   <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <?!= include_('Estilos') ?>
   <?!= include_('Ponte') ?>
   <style>
@@ -998,6 +1001,150 @@
       .usuario { width: 100%; justify-content: flex-start; }
       .usuario-dados { flex: 1; }
     }
+
+    /* ---------- Modal Lançamento Financeiro ---------- */
+    .modal-fin-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      display: grid;
+      place-items: center;
+      z-index: 9999;
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .modal-fin-caixa {
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 24px;
+      max-width: 620px;
+      width: 100%;
+      max-height: 92vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 45px -10px rgba(20, 33, 61, 0.35);
+      border: 1px solid var(--borda);
+      animation: modalFinEntrar .2s ease-out;
+    }
+
+    @keyframes modalFinEntrar {
+      from { transform: scale(0.96); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-fin-cabecalho {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--borda);
+      padding-bottom: 12px;
+      margin-bottom: 18px;
+    }
+
+    .modal-fin-cabecalho h3 {
+      margin: 0;
+      color: var(--azul);
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .modal-fin-fechar {
+      background: transparent;
+      border: 0;
+      font-size: 20px;
+      color: var(--apoio);
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    .modal-fin-fechar:hover {
+      background: var(--fundo);
+      color: var(--texto);
+    }
+
+    .fin-grupo-campos {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .fin-linha-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .fin-campo {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .fin-campo label {
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--azul);
+    }
+
+    .fin-campo input,
+    .fin-campo select {
+      width: 100%;
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--texto);
+      background: #ffffff;
+      transition: border-color .15s, box-shadow .15s;
+    }
+
+    .fin-campo input:focus,
+    .fin-campo select:focus {
+      border-color: var(--azul);
+      box-shadow: 0 0 0 3px rgba(20, 33, 61, 0.12);
+      outline: none;
+    }
+
+    .fin-campo .fin-input-valor {
+      font-size: 16px;
+      font-weight: bold;
+      color: #1e7b34;
+      background: #fafdfa;
+      letter-spacing: .5px;
+    }
+
+    .fin-upload-box {
+      border: 1.5px dashed var(--borda);
+      border-radius: 8px;
+      padding: 10px 14px;
+      background: #fbfcfe;
+    }
+
+    .fin-upload-box input[type="file"] {
+      border: none;
+      padding: 4px 0;
+      font-size: 13px;
+      background: transparent;
+    }
+
+    .fin-upload-box .dica {
+      font-size: 11px;
+      color: var(--apoio);
+      display: block;
+      margin-top: 2px;
+    }
+
+    @media (max-width: 580px) {
+      .fin-linha-2 { grid-template-columns: 1fr; }
+      .modal-fin-caixa { padding: 18px 14px; }
+    }
   </style>
 </head>
 <body>
@@ -1334,6 +1481,13 @@
         conteudo.innerHTML = cabecalho
           + '<div id="areaAssociados">' + blocoCarregando() + '</div>';
         carregarAssociados();
+        return;
+      }
+
+      if (modulo.tipo === 'financeiro') {
+        conteudo.innerHTML = cabecalho
+          + '<div id="areaFinanceiro">' + blocoCarregando('statusFinanceiro') + '</div>';
+        carregarFinanceiro();
         return;
       }
 
@@ -3741,6 +3895,393 @@
       const partes = String(valor || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
 
       return partes ? partes[3] + '-' + partes[2] + '-' + partes[1] : '';
+    }
+
+    /******************************************************
+     * MODULO FINANCEIRO E PRESTACAO DE CONTAS (CLIENTE)
+     ******************************************************/
+
+    var financeiroDados = null;
+    var financeiroFiltros = { busca: '', tipo: '', categoria: '', origem: '' };
+
+    function carregarFinanceiro() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'financeiro') return;
+          financeiroDados = dados;
+          montarTelaFinanceiro();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'financeiro') return;
+          var el = document.getElementById('areaFinanceiro') || document.getElementById('statusFinanceiro');
+          if (el) el.innerHTML = '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarFinanceiro();
+    }
+
+    function formatarMoedaJs(num) {
+      return (Number(num) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function montarTelaFinanceiro() {
+      var d = financeiroDados;
+      var lancamentos = d.lancamentos || [];
+
+      var html = '<div id="painelFinanceiro">'
+        + '<div class="resumo" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;">'
+        + '  <div class="cartao" style="background:#eefbf0;border-color:#bbf2c2;">'
+        + '    <div style="font-size:12px;color:#1e7b34;font-weight:bold;text-transform:uppercase;">Total de Entradas</div>'
+        + '    <div style="font-size:20px;font-weight:bold;color:#1e7b34;margin-top:4px;">' + formatarMoedaJs(d.totalEntradas) + '</div>'
+        + '  </div>'
+        + '  <div class="cartao" style="background:#fdf2f2;border-color:#f8c8c8;">'
+        + '    <div style="font-size:12px;color:#b3261e;font-weight:bold;text-transform:uppercase;">Total de Saídas</div>'
+        + '    <div style="font-size:20px;font-weight:bold;color:#b3261e;margin-top:4px;">' + formatarMoedaJs(d.totalSaidas) + '</div>'
+        + '  </div>'
+        + '  <div class="cartao" style="background:#eef4fd;border-color:#c4d8fa;">'
+        + '    <div style="font-size:12px;color:#14213d;font-weight:bold;text-transform:uppercase;">Saldo em Caixa</div>'
+        + '    <div style="font-size:20px;font-weight:bold;color:#14213d;margin-top:4px;">' + formatarMoedaJs(d.saldoAtual) + '</div>'
+        + '  </div>'
+        + '</div>';
+
+      // Barra de Ações (Novo Lançamento, Gerar Relatórios PDF e Link da Planilha)
+      html += '<div class="barra-acoes" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">'
+        + (d.podeEditar ? '<button type="button" class="botao-link" style="margin:0;padding:8px 14px;background:#1e7b34;" id="btnNovoLancamento">+ Novo Lançamento</button>' : '')
+        + '<button type="button" class="botao-apoio" id="btnRelatorioGeral" title="Relatório Geral para Assembleias e Associados">📄 PDF Geral (Assembleia)</button>'
+        + '<button type="button" class="botao-apoio" id="btnRelatorioEmenda" title="Prestação de contas para Emendas Impositivas e Poder Público">🏛️ PDF Emenda Impositiva</button>'
+        + '<button type="button" class="botao-apoio" id="btnRelatorioCompeticao" title="Prestação de contas filtrada por Campeonato">🏆 PDF Competição</button>'
+        + '<span class="espaco" style="flex:1;"></span>'
+        + (d.planilhaUrl ? '<a class="botao-apoio" href="' + escapar(d.planilhaUrl) + '" target="_blank" rel="noopener">Abrir Planilha</a>' : '')
+        + '<button type="button" class="botao-apoio" id="btnRecarregarFinanceiro">Atualizar</button>'
+        + '</div>';
+
+      // Filtros
+      html += '<div class="filtros" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;">'
+        + '<input type="search" id="filtroFinBusca" placeholder="Buscar por descrição, favorecido, protocolo, NF ou emenda...">'
+        + '<select id="filtroFinTipo"><option value="">Todos os tipos</option><option value="Entrada">Entrada (Receita)</option><option value="Saída">Saída (Despesa)</option></select>'
+        + '<select id="filtroFinOrigem"><option value="">Todas as origens</option>'
+        + (d.competicoes || []).map(function(c) { return '<option value="' + escapar(c) + '">' + escapar(c) + '</option>'; }).join('')
+        + '</select>'
+        + '<select id="filtroFinCategoria"><option value="">Todas as categorias</option>'
+        + '<optgroup label="Entradas">' + (d.categoriasEntrada || []).map(function(c) { return '<option value="' + escapar(c) + '">' + escapar(c) + '</option>'; }).join('') + '</optgroup>'
+        + '<optgroup label="Saídas">' + (d.categoriasSaida || []).map(function(c) { return '<option value="' + escapar(c) + '">' + escapar(c) + '</option>'; }).join('') + '</optgroup>'
+        + '</select>'
+        + '</div>';
+
+      // Tabela de Lançamentos
+      html += '<div class="tabela-rolagem">'
+        + '<table class="solicitacoes" style="font-size:13px;width:100%;">'
+        + '<thead><tr>'
+        + '<th>Data</th><th>Tipo</th><th>Origem</th><th>Categoria</th><th>Descrição</th><th>Favorecido / Doc</th><th>Comprovante</th><th style="text-align:right;">Valor (R$)</th>'
+        + '</tr></thead>'
+        + '<tbody id="linhasFinanceiro"></tbody>'
+        + '</table>'
+        + '</div>'
+        + '</div>';
+
+      document.getElementById('areaFinanceiro').innerHTML = html;
+
+      // Eventos
+      document.getElementById('btnRecarregarFinanceiro').addEventListener('click', carregarFinanceiro);
+      if (document.getElementById('btnNovoLancamento')) {
+        document.getElementById('btnNovoLancamento').addEventListener('click', abrirModalNovoLancamento);
+      }
+      document.getElementById('btnRelatorioGeral').addEventListener('click', function() {
+        emitirRelatorioPrompt('geral');
+      });
+      document.getElementById('btnRelatorioEmenda').addEventListener('click', function() {
+        emitirRelatorioPrompt('emenda');
+      });
+      document.getElementById('btnRelatorioCompeticao').addEventListener('click', function() {
+        emitirRelatorioPrompt('competicao');
+      });
+
+      document.getElementById('filtroFinBusca').addEventListener('input', function() {
+        financeiroFiltros.busca = this.value;
+        renderizarLinhasFinanceiro();
+      });
+      document.getElementById('filtroFinTipo').addEventListener('change', function() {
+        financeiroFiltros.tipo = this.value;
+        renderizarLinhasFinanceiro();
+      });
+      document.getElementById('filtroFinOrigem').addEventListener('change', function() {
+        financeiroFiltros.origem = this.value;
+        renderizarLinhasFinanceiro();
+      });
+      document.getElementById('filtroFinCategoria').addEventListener('change', function() {
+        financeiroFiltros.categoria = this.value;
+        renderizarLinhasFinanceiro();
+      });
+
+      renderizarLinhasFinanceiro();
+    }
+
+    function renderizarLinhasFinanceiro() {
+      var tbody = document.getElementById('linhasFinanceiro');
+      if (!tbody) return;
+
+      var lista = (financeiroDados && financeiroDados.lancamentos) || [];
+      var filtrados = lista.filter(function (l) {
+        var busca = (financeiroFiltros.busca || '').toLowerCase();
+        if (busca) {
+          var textoGeral = (l.descricao + ' ' + l.favorecidoPagador + ' ' + l.documento + ' ' + l.emenda + ' ' + l.idLancamento).toLowerCase();
+          if (textoGeral.indexOf(busca) === -1) return false;
+        }
+        if (financeiroFiltros.tipo && l.tipo.toLowerCase() !== financeiroFiltros.tipo.toLowerCase()) return false;
+        if (financeiroFiltros.origem && l.origem.toLowerCase() !== financeiroFiltros.origem.toLowerCase()) return false;
+        if (financeiroFiltros.categoria && l.categoria.toLowerCase() !== financeiroFiltros.categoria.toLowerCase()) return false;
+        return true;
+      });
+
+      if (!filtrados.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--apoio);">Nenhuma movimentação encontrada com os filtros informados.</td></tr>';
+        return;
+      }
+
+      var linhasHtml = filtrados.map(function (item) {
+        var ehEntrada = item.tipo.toLowerCase() === 'entrada';
+        var corTipo = ehEntrada ? '#1e7b34' : '#b3261e';
+        var bgTipo = ehEntrada ? '#eefbf0' : '#fdf2f2';
+        var sinal = ehEntrada ? '+ ' : '- ';
+
+        var docInfo = [];
+        if (item.favorecidoPagador) docInfo.push('<strong>' + escapar(item.favorecidoPagador) + '</strong>');
+        if (item.documento) docInfo.push('Doc: ' + escapar(item.documento));
+        if (item.idTransacaoBancaria) docInfo.push('<span style="color:#555;font-size:11px;">🏦 Extrato: <strong>' + escapar(item.idTransacaoBancaria) + '</strong></span>');
+        if (item.emenda) docInfo.push('<span class="etiqueta" style="background:#eef4fd;color:#14213d;">' + escapar(item.emenda) + '</span>');
+
+        var compLink = item.comprovanteUrl
+          ? '<a class="botao-apoio destaque" style="padding:4px 8px;font-size:11px;" href="' + escapar(item.comprovanteUrl) + '" target="_blank" rel="noopener">Ver Anexo</a>'
+          : '<span style="color:#aaa;">—</span>';
+
+        return '<tr>'
+          + '<td style="white-space:nowrap;">' + escapar(item.dataMovimentacao) + '</td>'
+          + '<td><span style="background:' + bgTipo + ';color:' + corTipo + ';font-weight:bold;padding:3px 7px;border-radius:4px;font-size:11px;">' + escapar(item.tipo) + '</span></td>'
+          + '<td>' + escapar(item.origem || 'Geral') + '</td>'
+          + '<td>' + escapar(item.categoria) + '</td>'
+          + '<td>' + escapar(item.descricao) + '<br><small style="color:#888;">ID: ' + escapar(item.idLancamento) + '</small></td>'
+          + '<td>' + (docInfo.join('<br>') || '—') + '</td>'
+          + '<td style="text-align:center;">' + compLink + '</td>'
+          + '<td style="text-align:right;white-space:nowrap;font-weight:bold;color:' + corTipo + ';">' + sinal + formatarMoedaJs(item.valor) + '</td>'
+          + '</tr>';
+      }).join('');
+
+      tbody.innerHTML = linhasHtml;
+    }
+
+    function abrirModalNovoLancamento() {
+      var d = financeiroDados;
+      var hoje = new Date().toISOString().split('T')[0];
+
+      var modal = document.createElement('div');
+      modal.id = 'modalFin';
+      modal.className = 'modal-fin-overlay';
+
+      var formHtml = '<div class="modal-fin-caixa">'
+        + '  <div class="modal-fin-cabecalho">'
+        + '    <h3><span style="font-size:22px;">💰</span> Novo Lançamento Financeiro</h3>'
+        + '    <button type="button" class="modal-fin-fechar" id="btnFecharXFin" title="Fechar">&times;</button>'
+        + '  </div>'
+        + '  <form id="formNovoLancamento" class="fin-grupo-campos">'
+        + '    <div class="fin-linha-2">'
+        + '      <div class="fin-campo">'
+        + '        <label for="finData">Data da Movimentação *</label>'
+        + '        <input type="date" id="finData" value="' + hoje + '" required>'
+        + '      </div>'
+        + '      <div class="fin-campo">'
+        + '        <label for="finTipo">Tipo de Movimentação *</label>'
+        + '        <select id="finTipo" required>'
+        + '          <option value="Entrada">🟢 Entrada (Receita)</option>'
+        + '          <option value="Saída" selected>🔴 Saída (Despesa)</option>'
+        + '        </select>'
+        + '      </div>'
+        + '    </div>'
+        + '    <div class="fin-campo">'
+        + '      <label for="finOrigem">Origem / Competição *</label>'
+        + '      <select id="finOrigem" required>'
+        + (d.competicoes || []).map(function(c) { return '<option value="' + escapar(c) + '">' + escapar(c) + '</option>'; }).join('')
+        + '      </select>'
+        + '    </div>'
+        + '    <div class="fin-campo">'
+        + '      <label for="finCategoria">Categoria do Lançamento *</label>'
+        + '      <select id="finCategoria" required></select>'
+        + '    </div>'
+        + '    <div class="fin-campo">'
+        + '      <label for="finDesc">Descrição detalhada / Histórico *</label>'
+        + '      <input type="text" id="finDesc" placeholder="Ex: Pagamento da taxa de arbitragem da 2ª rodada" required>'
+        + '    </div>'
+        + '    <div class="fin-campo">'
+        + '      <label for="finValor">Valor (R$) *</label>'
+        + '      <input type="text" id="finValor" class="fin-input-valor" placeholder="R$ 0,00" inputmode="numeric" required autocomplete="off">'
+        + '    </div>'
+        + '    <div class="fin-linha-2">'
+        + '      <div class="fin-campo">'
+        + '        <label for="finFav">Favorecido / Fornecedor / Pagador</label>'
+        + '        <input type="text" id="finFav" placeholder="Ex: Associação dos Árbitros / Nome / Razão Social">'
+        + '      </div>'
+        + '      <div class="fin-campo">'
+        + '        <label for="finDoc">Documento / NF-e / Recibo</label>'
+        + '        <input type="text" id="finDoc" placeholder="Ex: NF-e 004.821 / Recibo 12">'
+        + '      </div>'
+        + '    </div>'
+        + '    <div class="fin-linha-2">'
+        + '      <div class="fin-campo">'
+        + '        <label for="finIdTransacao">ID Transação / Extrato Bancário</label>'
+        + '        <input type="text" id="finIdTransacao" placeholder="Ex: PIX E123... / Lote TED 489 / Linha 12">'
+        + '      </div>'
+        + '      <div class="fin-campo">'
+        + '        <label for="finEmenda">Emenda Impositiva / Termo Fomento</label>'
+        + '        <input type="text" id="finEmenda" placeholder="Ex: Emenda 042/2026 - Termo 008/2026">'
+        + '      </div>'
+        + '    </div>'
+        + '    <div class="fin-campo">'
+        + '      <label for="finArquivo">Anexar Comprovante de Pagamento / Recibo</label>'
+        + '      <div class="fin-upload-box">'
+        + '        <input type="file" id="finArquivo" accept="application/pdf,image/*">'
+        + '        <span class="dica">Formatos aceitos: PDF, JPG, PNG (tamanho máximo até 8 MB). O arquivo é salvo no Google Drive com link direto no relatório.</span>'
+        + '      </div>'
+        + '    </div>'
+        + '    <div id="finStatusEnvio" style="font-size:13px;min-height:18px;"></div>'
+        + '    <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:8px;padding-top:12px;border-top:1px solid var(--borda);">'
+        + '      <button type="button" class="botao-apoio" id="btnCancelaFin">Cancelar</button>'
+        + '      <button type="submit" class="botao-principal" id="btnSalvaFin" style="display:flex;align-items:center;gap:6px;">'
+        + '        <span>💾</span> Gravar Lançamento'
+        + '      </button>'
+        + '    </div>'
+        + '  </form>'
+        + '</div>';
+
+      modal.innerHTML = formHtml;
+      document.body.appendChild(modal);
+
+      var selTipo = document.getElementById('finTipo');
+      var selCat = document.getElementById('finCategoria');
+      var inputValor = document.getElementById('finValor');
+
+      // Mascara dinamica de moeda conforme digitacao (BRL)
+      inputValor.addEventListener('input', function (e) {
+        var v = inputValor.value.replace(/\D/g, '');
+        if (!v) {
+          inputValor.value = '';
+          return;
+        }
+        var num = (parseInt(v, 10) / 100);
+        inputValor.value = num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      });
+
+      function atualizarCategorias() {
+        var ehEntrada = selTipo.value === 'Entrada';
+        var cats = ehEntrada ? (d.categoriasEntrada || []) : (d.categoriasSaida || []);
+        selCat.innerHTML = cats.map(function(c) { return '<option value="' + escapar(c) + '">' + escapar(c) + '</option>'; }).join('');
+      }
+
+      selTipo.addEventListener('change', atualizarCategorias);
+      atualizarCategorias();
+
+      function fecharModal() {
+        modal.remove();
+      }
+
+      document.getElementById('btnCancelaFin').addEventListener('click', fecharModal);
+      document.getElementById('btnFecharXFin').addEventListener('click', fecharModal);
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) fecharModal();
+      });
+
+      document.getElementById('formNovoLancamento').addEventListener('submit', function(ev) {
+        ev.preventDefault();
+
+        // Extrai valor numerico da mascara de moeda
+        var valorLimpo = inputValor.value.replace(/[^\d]/g, '');
+        var valorNum = valorLimpo ? (parseInt(valorLimpo, 10) / 100) : 0;
+        if (!valorNum || valorNum <= 0) {
+          alert('Por favor, informe um valor monetário válido maior que zero.');
+          inputValor.focus();
+          return;
+        }
+
+        var statusDiv = document.getElementById('finStatusEnvio');
+        var btnSubmit = document.getElementById('btnSalvaFin');
+        btnSubmit.disabled = true;
+        statusDiv.innerHTML = '<span style="color:var(--azul);font-weight:bold;">⏳ Gravando lançamento e enviando comprovante para o Google Drive...</span>';
+
+        var arquivoInput = document.getElementById('finArquivo');
+        var processarEnvio = function(compObj) {
+          var payload = {
+            dataMovimentacao: formatarDataBr(document.getElementById('finData').value),
+            tipo: selTipo.value,
+            origem: document.getElementById('finOrigem').value,
+            categoria: selCat.value,
+            descricao: document.getElementById('finDesc').value,
+            valor: valorNum,
+            favorecidoPagador: document.getElementById('finFav').value,
+            documento: document.getElementById('finDoc').value,
+            idTransacaoBancaria: document.getElementById('finIdTransacao').value,
+            emenda: document.getElementById('finEmenda').value,
+            comprovante: compObj
+          };
+
+          google.script.run
+            .withSuccessHandler(function (res) {
+              modal.remove();
+              carregarFinanceiro();
+            })
+            .withFailureHandler(function (err) {
+              btnSubmit.disabled = false;
+              statusDiv.innerHTML = '<span style="color:#b3261e;font-weight:bold;">❌ ' + escapar(err && err.message ? err.message : err) + '</span>';
+            })
+            .salvarLancamentoFinanceiro(payload);
+        };
+
+        if (arquivoInput.files && arquivoInput.files.length) {
+          var file = arquivoInput.files[0];
+          if (file.size > 8 * 1024 * 1024) {
+            btnSubmit.disabled = false;
+            statusDiv.innerHTML = '<span style="color:#b3261e;font-weight:bold;">❌ O arquivo ultrapassa o limite máximo de 8 MB.</span>';
+            return;
+          }
+          var reader = new FileReader();
+          reader.onload = function() {
+            var b64 = String(reader.result).split(',')[1];
+            processarEnvio({ nome: file.name, tipo: file.type, base64: b64 });
+          };
+          reader.onerror = function() {
+            btnSubmit.disabled = false;
+            statusDiv.innerHTML = '<span style="color:#b3261e;">Erro ao ler o arquivo selecionado.</span>';
+          };
+          reader.readAsDataURL(file);
+        } else {
+          processarEnvio(null);
+        }
+      });
+    }
+
+    function formatarDataBr(isoDate) {
+      if (!isoDate) return '';
+      var p = isoDate.split('-');
+      return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : isoDate;
+    }
+
+    function emitirRelatorioPrompt(tipo) {
+      var d = financeiroDados;
+      var lista = (d && d.lancamentos) || [];
+      var msg = '';
+      var competicaoFiltro = '';
+      var emendaFiltro = '';
+
+      if (tipo === 'competicao') {
+        competicaoFiltro = prompt('Informe a Competição para filtrar a prestação de contas:', '7ª Super Liga União 2026');
+        if (!competicaoFiltro) return;
+      } else if (tipo === 'emenda') {
+        emendaFiltro = prompt('Informe o número da Emenda Impositiva ou Termo de Fomento:', 'Emenda 042/2026');
+        if (!emendaFiltro) return;
+      }
+
+      alert('Os relatórios em PDF com assinatura oficial do Presidente são gerados e consolidados pelo módulo em Python (financeiro_pdf.py). '
+          + 'Você pode visualizar os modelos já publicados na pasta de Relatórios ou acionar no terminal:\n'
+          + 'python main.py --gerar-pdf-financeiro exemplo\n\n'
+          + 'Tipo selecionado: ' + tipo.toUpperCase()
+          + (competicaoFiltro ? ' (' + competicaoFiltro + ')' : '')
+          + (emendaFiltro ? ' (' + emendaFiltro + ')' : ''));
     }
 
     /**

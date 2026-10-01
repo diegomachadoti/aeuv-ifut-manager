@@ -159,6 +159,13 @@ Pontos de manutenção:
   ?>` nas telas `Index` e `Negado`, que é quem envia o aviso.
 - As animações são desligadas automaticamente para quem usa a preferência de
   redução de movimento do sistema.
+- **Prevenção de cache em atualizações (TTL / Cache Busting):** as páginas de
+  entrada em `docs/` e os arquivos `Index.html` dos três aplicativos contêm
+  cabeçalhos meta anti-cache (`Cache-Control: no-cache, no-store, must-revalidate`,
+  `Pragma: no-cache` e `Expires: 0`). Adicionalmente, as páginas de entrada embutem
+  o `iframe` com o parâmetro de cache busting `?_v=` + timestamp atual, forçando o
+  navegador do usuário a sempre carregar a versão mais recente do Apps Script
+  imediatamente após a publicação de uma nova versão.
 - O arquivo `docs/CNAME` fixa o domínio `portal.aeuv.org`. Ele corresponde
   a um registro CNAME no DNS do domínio apontando para `diegomachadoti.github.io`
   e não interfere no site da associação, que continua no Wix.
@@ -518,14 +525,15 @@ pode declarar `grupo` para entrar num submenu.
 | `sumulas` | Súmulas Enviadas; busca os dados com `listarSumulas()`. |
 | `notas` | Notas oficiais; busca os dados com `listarNotas()`. |
 | `regulamentos` | Regulamentos; busca os dados com `listarRegulamentos()`. |
+| `financeiro` | Financeiro e Prestação de Contas; controle de entradas/saídas, anexos e relatórios oficiais em PDF com `listarFinanceiro()` e `salvarLancamentoFinanceiro()`. |
 | `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
 | `equipes` | Equipes participantes; usa `listarEquipes()`, `salvarEquipe()` e `removerEquipe()`. |
 | `breve` | Funcionalidade já prevista, exibida com o aviso "em desenvolvimento". |
 
 Módulos publicados hoje: Início, Formulários (Súmula digital e Inscrição e
 portabilidade), Solicitações de Inscrições, Súmulas Enviadas, Notas oficiais,
-Regulamentos, Controle de punições, Associados, Atletas e Usuários do sistema.
-Só Atletas ainda está marcado como `breve`, aguardando a tela correspondente.
+Regulamentos, Controle de punições, Financeiro e Prestação de Contas, Associados,
+Atletas e Usuários do sistema. Só Atletas ainda está marcado como `breve`.
 
 #### Submenus
 

@@ -26,6 +26,7 @@ Veja como os formulários geram e armazenam esses arquivos no
 - `nota_pdf.py`: PDF da nota oficial com a identidade da AEUV (`--gerar-pdf-nota`)
 - `regulamento_pdf.py`: PDF do regulamento no mesmo layout, assinado pelo Presidente (`--gerar-pdf-regulamento`)
 - `forma_disputa_pdf.py`: PDF da Forma de Disputa com tabelas de fases, rodadas e auditoria (`--gerar-pdf-forma-disputa`)
+- `financeiro_pdf.py`: PDF oficial de Prestação de Contas e Relatório Financeiro nos padrões AEUV e emendas impositivas (`--gerar-pdf-financeiro`)
 - `controle_punicoes.py`: TXT e PDF de controle com todos os punidos pelas notas oficiais (`--atualizar-controle-punicoes`)
 - `resultado_pdf.py`: PDF do resultado de inscrição, remoção e portabilidade, com o status de cada registro em destaque
 - `publicacao_drive.py`: publica no Drive os regulamentos e as notas oficiais já fechadas (`--publicar-drive`)
@@ -228,7 +229,9 @@ AEUV - Automação/
 ├── Comprovantes PIX - Inscricoes de Atletas/
 ├── Documentos - Associados/                ← anexos do cadastro de associados
 │   └── <EQUIPE>/
+├── Comprovantes - Financeiro/              ← comprovantes (NF, recibos, PIX) do módulo financeiro
 ├── AEUV - Associados                       (planilha do cadastro)
+├── AEUV - Financeiro                       (planilha de movimentações financeiras)
 ├── AEUV - Sumula Digital                   (planilha de respostas)
 ├── AEUV - Respostas - Inscricao, Remocao e Portabilidade
 ├── 7 SUPER LIGA UNIAO 2026 - CONTROLE FINANCEIRO...xlsx  ← [sheets] spreadsheet_id
