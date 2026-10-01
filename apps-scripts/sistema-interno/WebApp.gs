@@ -1283,6 +1283,7 @@ function listarSolicitacoes() {
 
   const raiz = pastaSolicitacoes_();
   const achados = [];
+  const nomesVistos = {};
 
   SOLICITACOES_PASTAS.forEach(function (origem) {
     const pastas = raiz.getFoldersByName(origem.pasta);
@@ -1297,19 +1298,40 @@ function listarSolicitacoes() {
 
     while (iterador.hasNext()) {
       const arquivo = iterador.next();
+      const nome = arquivo.getName();
 
-      if (arquivo.getName().toLowerCase().slice(-4) !== '.txt') {
+      if (nome.toLowerCase().slice(-4) !== '.txt') {
         continue;
       }
 
+      nomesVistos[nome] = true;
       achados.push({
         arquivo: arquivo,
         situacao: origem.situacao,
         icone: origem.icone,
-        ordem: carimboDoNome_(arquivo.getName())
+        ordem: carimboDoNome_(nome)
       });
     }
   });
+
+  // Arquivos na raiz da pasta que ainda aguardam processamento pela automacao.
+  const iteradorRaiz = raiz.getFiles();
+  while (iteradorRaiz.hasNext()) {
+    const arquivo = iteradorRaiz.next();
+    const nome = arquivo.getName();
+
+    if (nome.toLowerCase().slice(-4) !== '.txt' || nomesVistos[nome]) {
+      continue;
+    }
+
+    nomesVistos[nome] = true;
+    achados.push({
+      arquivo: arquivo,
+      situacao: 'Aguardando',
+      icone: '🕒',
+      ordem: carimboDoNome_(nome)
+    });
+  }
 
   // Mais recentes primeiro. O nome do arquivo termina com o horario do
   // envio em milissegundos, entao da para ordenar sem abrir nenhum deles.
@@ -1555,6 +1577,7 @@ function listarSumulas() {
 
   const raiz = pastaSumulas_();
   const achados = [];
+  const nomesVistos = {};
 
   SUMULAS_PASTAS.forEach(function (origem) {
     const pastas = raiz.getFoldersByName(origem.pasta);
@@ -1576,6 +1599,7 @@ function listarSumulas() {
         continue;
       }
 
+      nomesVistos[nome] = true;
       achados.push({
         arquivo: arquivo,
         situacao: origem.situacao,
@@ -1588,6 +1612,25 @@ function listarSumulas() {
       });
     }
   });
+
+  // Arquivos na raiz da pasta que ainda aguardam processamento pela automacao.
+  const iteradorRaiz = raiz.getFiles();
+  while (iteradorRaiz.hasNext()) {
+    const arquivo = iteradorRaiz.next();
+    const nome = arquivo.getName();
+
+    if (!/^SUMULA_.+\.txt$/i.test(nome) || nomesVistos[nome]) {
+      continue;
+    }
+
+    nomesVistos[nome] = true;
+    achados.push({
+      arquivo: arquivo,
+      situacao: 'Aguardando',
+      icone: '🕒',
+      ordem: arquivo.getDateCreated().getTime()
+    });
+  }
 
   achados.sort(function (a, b) {
     return b.ordem - a.ordem;
@@ -3065,6 +3108,15 @@ function diagnosticarSolicitacoes() {
     Logger.log('%s: %s arquivo(s).', origem.pasta, total);
   });
 
+  const arquivosRaizSol = raiz.getFiles();
+  let totalRaizSol = 0;
+  while (arquivosRaizSol.hasNext()) {
+    if (arquivosRaizSol.next().getName().toLowerCase().slice(-4) === '.txt') {
+      totalRaizSol++;
+    }
+  }
+  Logger.log('Raiz (Aguardando) .: %s TXT(s).', totalRaizSol);
+
   const resultados = indiceResultados_(raiz);
 
   Logger.log('Resultados ........: %s solicitacao(oes) com resultado publicado pela automacao.',
@@ -3116,15 +3168,25 @@ function diagnosticarSumulas() {
     let sumulas = 0;
 
     while (arquivos.hasNext()) {
+      const arq = arquivos.next();
       total++;
 
-      if (/^SUMULA_.+\.txt$/i.test(arquivos.next().getName())) {
+      if (/^SUMULA_.+\.txt$/i.test(arq.getName())) {
         sumulas++;
       }
     }
 
     Logger.log('%s: %s arquivo(s), sendo %s sumula(s).', origem.pasta, total, sumulas);
   });
+
+  const arquivosRaizSum = raiz.getFiles();
+  let totalRaizSum = 0;
+  while (arquivosRaizSum.hasNext()) {
+    if (/^SUMULA_.+\.txt$/i.test(arquivosRaizSum.next().getName())) {
+      totalRaizSum++;
+    }
+  }
+  Logger.log('Raiz (Aguardando) .: %s sumula(s).', totalRaizSum);
 
   const dados = listarSumulas();
 
