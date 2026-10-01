@@ -16,7 +16,7 @@ import unicodedata
 from datetime import date
 from pathlib import Path
 
-from nota_pdf import AZUL, AZUL_CLARO, CINZA, DEFAULT_CONFIG_PATH, LOGGER, ConfigPdf, LayoutPdf
+from nota_pdf import AZUL, AZUL_CLARO, CINZA, VERMELHO, DEFAULT_CONFIG_PATH, LOGGER, ConfigPdf, LayoutPdf
 
 PASTA_PADRAO = Path("formadisputa")
 RE_PARAGRAFO = re.compile(r"^(§\s*(?:\d+(?:º|o)?(?:-[A-Z])?)?\s*[–-]?\s*)(.*)$")
@@ -70,10 +70,16 @@ def _separar_celulas(linha: str) -> list[str]:
     return [p.strip() for p in partes]
 
 
-def _formatar_markdown_inline(texto: str) -> str:
-    """Converte marcadores simples do markdown para HTML suportado pelo ReportLab."""
-    # **negrito**
-    t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", texto)
+def _formatar_markdown_inline(texto: str, destaque_vermelho: bool = True) -> str:
+    """Converte marcadores simples do markdown para HTML suportado pelo ReportLab.
+    
+    Por padrao, converte **negrito** para vermelho (<font color="..."><b>...</b></font>),
+    mantendo o mesmo padrao visual das Notas Oficiais da AEUV.
+    """
+    if destaque_vermelho:
+        t = re.sub(r"\*\*(.+?)\*\*", rf'<font color="{VERMELHO}"><b>\1</b></font>', texto)
+    else:
+        t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", texto)
     # *italico*
     t = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<i>\1</i>", t)
     return t
@@ -143,7 +149,7 @@ def gerar_tabela_reportlab(bloco_linhas: list[str], layout: LayoutPdf) -> object
         linha_p = []
         is_header = (num_linha == 0 and tem_cabecalho)
         for col_idx, texto_raw in enumerate(row):
-            texto_fmt = _formatar_markdown_inline(texto_raw)
+            texto_fmt = _formatar_markdown_inline(texto_raw, destaque_vermelho=not is_header)
             # Escolher alinhamento
             if is_header:
                 alinhamento = cabecalho_cent if col_idx in (0, 2) or (eh_auditoria and col_idx >= 1) else cabecalho_esq
@@ -246,7 +252,7 @@ def gerar_pdf_forma_disputa(arquivo: str | Path, config: ConfigPdf | None = None
         # Subsecao / Rodada / Fase (### Rodada X, etc)
         if limpa.startswith("## ") or limpa.startswith("### "):
             historia.append(CondPageBreak(2.5 * cm))
-            rotulo = _formatar_markdown_inline(texto_sem_md)
+            rotulo = _formatar_markdown_inline(texto_sem_md, destaque_vermelho=False)
             historia.append(Paragraph(f"<b>{rotulo}</b>", estilos["item"]))
             historia.append(Spacer(1, 3))
             i += 1
