@@ -74,7 +74,7 @@ function doGet(e) {
     cnpjPix: WEBAPP_CONFIG.cnpjPix,
     valorPorAtleta: WEBAPP_CONFIG.valorPorAtleta,
     competicoes: WEBAPP_CONFIG.competicoes,
-    equipes: equipesConfiguradas_(forcarRecache),
+    equipes: equipesConfiguradas_(forcarRecache) || WEBAPP_CONFIG.equipes || [],
     logoUrl: obterLogoDataUrl_(),
     regulamentoUrl: WEBAPP_CONFIG.regulamentoUrl,
   };

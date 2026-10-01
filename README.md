@@ -27,6 +27,7 @@ Veja como os formulários geram e armazenam esses arquivos no
 - `regulamento_pdf.py`: PDF do regulamento no mesmo layout, assinado pelo Presidente (`--gerar-pdf-regulamento`)
 - `forma_disputa_pdf.py`: PDF da Forma de Disputa com tabelas de fases, rodadas e auditoria (`--gerar-pdf-forma-disputa`)
 - `financeiro_pdf.py`: PDF oficial de Prestação de Contas e Relatório Financeiro nos padrões AEUV e emendas impositivas (`--gerar-pdf-financeiro`)
+- `financeiro_planilha.py`: lê os lançamentos da planilha `AEUV - Financeiro` (aba `Movimentacoes`) no Drive, alimentada pelo módulo Financeiro do sistema interno. Exemplos: `python main.py --gerar-pdf-financeiro geral`, `... competicao --origem "SUPER LIGA UNIÃO"`, `... emenda --emenda "Emenda 042/2026"`, com `--periodo 3m|6m|anual` ou `--data-inicio/--data-fim` opcionais
 - `controle_punicoes.py`: TXT e PDF de controle com todos os punidos pelas notas oficiais (`--atualizar-controle-punicoes`)
 - `resultado_pdf.py`: PDF do resultado de inscrição, remoção e portabilidade, com o status de cada registro em destaque
 - `publicacao_drive.py`: publica no Drive os regulamentos e as notas oficiais já fechadas (`--publicar-drive`)

@@ -377,8 +377,9 @@
             <label for="equipe">Equipe *</label>
             <select id="equipe" required>
               <option value="">Selecione a equipe</option>
-              <? for (let i = 0; i < config.equipes.length; i++) { ?>
-                <option value="<?= config.equipes[i] ?>"><?= config.equipes[i] ?></option>
+              <? const equipesOpcoes = (typeof config !== 'undefined' && config && Array.isArray(config.equipes)) ? config.equipes : []; ?>
+              <? for (let i = 0; i < equipesOpcoes.length; i++) { ?>
+                <option value="<?= equipesOpcoes[i] ?>"><?= equipesOpcoes[i] ?></option>
               <? } ?>
             </select>
           </div>

@@ -1152,7 +1152,8 @@ escolher uma opção.
   `salvarSumula()`, `listarUsuarios()`, `salvarUsuario()`, `removerUsuario()`,
   `listarPunicoes()`,
   `listarSolicitacoes()`, `listarSumulas()`, `listarNotas()`,
-  `listarRegulamentos()`, `listarAssociados()` e `salvarAssociado()`.
+  `listarRegulamentos()`, `listarAssociados()`, `salvarAssociado()`,
+  `listarFinanceiro()`, `salvarLancamentoFinanceiro()` e `removerLancamentoFinanceiro()`.
 - Ao alterar equipes, competições ou outros dados de configuração, atualize as
   opções da interface e as validações do servidor em conjunto.
 - Mantenha a conta executora com acesso às planilhas, pastas e logo; verifique

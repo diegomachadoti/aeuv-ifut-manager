@@ -3277,6 +3277,7 @@ const FINANCEIRO_COMPETICOES_ORIGEM = [
 ];
 
 const FINANCEIRO_CATEGORIAS_ENTRADA = [
+  'Repasse Público / Emenda Impositiva',
   'Taxa de Inscrição / Participação',
   'Taxas de Portabilidade / Transferência',
   'Mensalidades / Contribuição de Associados',
@@ -3315,6 +3316,27 @@ const FINANCEIRO_COLUNAS = [
   { id: 'criadoPor', titulo: 'Criado por' }
 ];
 
+function normalizarDataFinanceiro_(valor) {
+  if (!valor) return '';
+  if (Object.prototype.toString.call(valor) === '[object Date]' && !isNaN(valor.getTime())) {
+    return Utilities.formatDate(valor, 'America/Sao_Paulo', 'dd/MM/yyyy');
+  }
+  const str = String(valor).trim();
+  // Se for ISO yyyy-mm-dd
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const partes = str.substring(0, 10).split('-');
+    return partes[2] + '/' + partes[1] + '/' + partes[0];
+  }
+  // Se for string de data do Sheets (ex: Thu Oct 01 2026 ...)
+  const timestamp = Date.parse(str);
+  if (!isNaN(timestamp) && (str.indexOf('GMT') !== -1 || str.indexOf('T') !== -1)) {
+    try {
+      return Utilities.formatDate(new Date(timestamp), 'America/Sao_Paulo', 'dd/MM/yyyy');
+    } catch (e) {}
+  }
+  return str;
+}
+
 /**
  * Retorna dados para abrir o modulo financeiro:
  * lista de lancamentos, totais calculados, categorias e lista de competicoes.
@@ -3343,7 +3365,7 @@ function listarFinanceiro() {
 
     return {
       idLancamento: String(linha[0] || ''),
-      dataMovimentacao: String(linha[1] || ''),
+      dataMovimentacao: normalizarDataFinanceiro_(linha[1]),
       tipo: String(linha[2] || ''),
       origem: String(linha[3] || ''),
       categoria: String(linha[4] || ''),
@@ -3390,6 +3412,11 @@ function salvarLancamentoFinanceiro(payload) {
     throw new Error('Informe um valor numérico válido maior que zero.');
   }
 
+  const idEdicao = String(payload.idLancamento || '').trim();
+  if (idEdicao && sessao.usuario.perfil !== 'admin' && sessao.usuario.perfil !== 'diretoria') {
+    throw new Error('Você não tem permissão para editar lançamentos financeiros.');
+  }
+
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
@@ -3399,12 +3426,18 @@ function salvarLancamentoFinanceiro(payload) {
       comprovanteUrl = salvarComprovanteFinanceiro_(payload.comprovante, payload.dataMovimentacao, payload.descricao);
     }
 
+    if (idEdicao) {
+      return atualizarLancamentoFinanceiro_(idEdicao, payload, valorFloat, comprovanteUrl, sessao);
+    }
+
     const agora = new Date();
     const idLancamento = 'FIN-' + Utilities.formatDate(agora, 'America/Sao_Paulo', 'yyyyMMdd-HHmmss');
 
+    const dataFormatada = normalizarDataFinanceiro_(payload.dataMovimentacao) || payload.dataMovimentacao;
+
     const linha = [
       idLancamento,
-      payload.dataMovimentacao,
+      dataFormatada,
       payload.tipo,
       payload.origem || 'Geral / Administrativo',
       payload.categoria,
@@ -3419,13 +3452,130 @@ function salvarLancamentoFinanceiro(payload) {
       sessao.email
     ];
 
+    // Grava a data como Date real: texto "01/10/2026" pode ser lido pelo
+    // Sheets no locale americano (10 de janeiro) e sumir dos filtros.
+    const mData = String(dataFormatada).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (mData) {
+      linha[1] = new Date(Number(mData[3]), Number(mData[2]) - 1, Number(mData[1]), 12, 0, 0);
+    }
+
     const aba = abaFinanceiro_();
     aba.appendRow(linha);
+    aba.getRange(aba.getLastRow(), 2).setNumberFormat('dd/MM/yyyy');
 
     return {
       sucesso: true,
       idLancamento: idLancamento,
       mensagem: 'Lançamento financeiro registrado com sucesso!'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Converte "dd/MM/yyyy" em Date (meio-dia, evita deslocamento de fuso).
+ * Retorna o valor original quando nao reconhece o formato.
+ */
+function dataFinanceiroParaCelula_(valor) {
+  const texto = normalizarDataFinanceiro_(valor) || String(valor || '');
+  const m = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), 12, 0, 0) : texto;
+}
+
+/**
+ * Atualiza um lancamento existente mantendo ID, criadoEm e criadoPor.
+ * O comprovante so e trocado quando um novo arquivo e enviado, ou
+ * removido quando payload.removerComprovante for verdadeiro.
+ */
+function atualizarLancamentoFinanceiro_(idLancamento, payload, valorFloat, novoComprovanteUrl, sessao) {
+  const aba = abaFinanceiro_();
+  const dados = aba.getDataRange().getValues();
+  let linhaPlanilha = -1;
+
+  for (let i = 1; i < dados.length; i++) {
+    if (String(dados[i][0] || '').trim() === idLancamento) {
+      linhaPlanilha = i + 1;
+      break;
+    }
+  }
+
+  if (linhaPlanilha === -1) {
+    throw new Error('Lançamento não encontrado na planilha: ' + idLancamento);
+  }
+
+  const atual = dados[linhaPlanilha - 1];
+  let comprovanteUrl = String(atual[11] || '');
+  if (novoComprovanteUrl) {
+    comprovanteUrl = novoComprovanteUrl;
+  } else if (payload.removerComprovante) {
+    comprovanteUrl = '';
+  }
+
+  const valores = [
+    dataFinanceiroParaCelula_(payload.dataMovimentacao),
+    payload.tipo,
+    payload.origem || 'Geral / Administrativo',
+    payload.categoria,
+    payload.descricao,
+    valorFloat,
+    payload.favorecidoPagador || '',
+    payload.documento || '',
+    payload.idTransacaoBancaria || '',
+    payload.emenda || '',
+    comprovanteUrl
+  ];
+
+  aba.getRange(linhaPlanilha, 2, 1, valores.length).setValues([valores]);
+  aba.getRange(linhaPlanilha, 2).setNumberFormat('dd/MM/yyyy');
+
+  return {
+    sucesso: true,
+    idLancamento: idLancamento,
+    mensagem: 'Lançamento atualizado com sucesso por ' + sessao.email + '.'
+  };
+}
+
+/**
+ * Remove um lancamento financeiro da planilha pelo seu ID de protocolo.
+ * Disponivel apenas para usuarios com perfil admin ou diretoria.
+ */
+function removerLancamentoFinanceiro(idLancamento) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || (sessao.usuario.perfil !== 'admin' && sessao.usuario.perfil !== 'diretoria')) {
+    throw new Error('Você não tem permissão para excluir lançamentos financeiros.');
+  }
+
+  const idAlvo = String(idLancamento || '').trim();
+  if (!idAlvo) {
+    throw new Error('ID do lançamento não informado.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const aba = abaFinanceiro_();
+    const dados = aba.getDataRange().getValues();
+    let linhaParaExcluir = -1;
+
+    for (let i = 1; i < dados.length; i++) {
+      if (String(dados[i][0] || '').trim() === idAlvo) {
+        linhaParaExcluir = i + 1; // 1-based index na planilha
+        break;
+      }
+    }
+
+    if (linhaParaExcluir === -1) {
+      throw new Error('Lançamento não encontrado na planilha: ' + idAlvo);
+    }
+
+    aba.deleteRow(linhaParaExcluir);
+
+    return {
+      sucesso: true,
+      idLancamento: idAlvo,
+      mensagem: 'Lançamento ' + idAlvo + ' excluído com sucesso!'
     };
   } finally {
     lock.releaseLock();

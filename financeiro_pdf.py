@@ -40,6 +40,19 @@ from nota_pdf import (
 PASTA_RELATORIOS = Path("downloads") / "financeiro"
 
 
+def parse_data_flexivel(data_str: str) -> date | None:
+    """Converte strings de datas em formatos variados para date."""
+    if not data_str:
+        return None
+    val = data_str.strip().split(" ")[0].split("T")[0]
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(val, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 @dataclass
 class LancamentoFinanceiro:
     id_lancamento: str
@@ -209,6 +222,23 @@ def gerar_pdf_financeiro(
         itens = [i for i in itens if filtro.competicao.lower() in i.origem.lower()]
     elif filtro.tipo_relatorio == "emenda" and filtro.numero_emenda:
         itens = [i for i in itens if filtro.numero_emenda.lower() in i.emenda.lower()]
+
+    # Filtro opcional por intervalo de data (periodo_inicio e periodo_fim)
+    dt_inicio = parse_data_flexivel(filtro.periodo_inicio) if filtro.periodo_inicio else None
+    dt_fim = parse_data_flexivel(filtro.periodo_fim) if filtro.periodo_fim else None
+
+    if dt_inicio or dt_fim:
+        def data_no_intervalo(l: LancamentoFinanceiro) -> bool:
+            d = parse_data_flexivel(l.data_movimentacao)
+            if not d:
+                return True
+            if dt_inicio and d < dt_inicio:
+                return False
+            if dt_fim and d > dt_fim:
+                return False
+            return True
+
+        itens = [i for i in itens if data_no_intervalo(i)]
 
     # Calculos totais
     total_entradas = sum(i.valor for i in itens if i.eh_entrada)
