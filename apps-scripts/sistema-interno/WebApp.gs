@@ -3507,7 +3507,7 @@ function listarAtas() {
   return {
     registros: registros,
     competicoes: FINANCEIRO_COMPETICOES_ORIGEM.slice(1),
-    podeEditar: sessao.usuario.perfil === 'diretoria',
+    podeEditar: sessao.usuario.perfil === 'admin' || sessao.usuario.perfil === 'diretoria',
     podeExcluir: sessao.usuario.perfil === 'admin'
   };
 }
@@ -3521,8 +3521,8 @@ function salvarAta(payload) {
   const sessao = exigirAcessoAtas_();
   const dados = payload || {};
   const id = String(dados.id || '').trim();
-  if (id && sessao.usuario.perfil !== 'diretoria') {
-    throw new Error('Somente a Diretoria pode editar atas existentes.');
+  if (id && sessao.usuario.perfil !== 'admin' && sessao.usuario.perfil !== 'diretoria') {
+    throw new Error('Somente Administrador e Diretoria podem editar atas existentes.');
   }
   const tipo = String(dados.tipo || '').trim();
   const competicao = tipo === 'campeonato' ? String(dados.competicao || '').trim() : '';

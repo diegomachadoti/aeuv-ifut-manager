@@ -550,7 +550,7 @@ competição, usando a mesma lista do módulo Financeiro; a escolha aparece na
 lista de atas e no cabeçalho e corpo do PDF. Atas antigas continuam legíveis,
 mesmo sem competição informada. O botão **Salvar ata** guarda o trabalho mesmo
 antes de exportar.
-Apenas a **Diretoria** pode editar atas existentes; apenas o **Admin** pode
+**Admin e Diretoria** podem editar atas existentes; apenas o **Admin** pode
 excluí-las. Alterações não salvas exigem confirmação antes de sair do editor.
 
 As atas ficam na planilha `AEUV - Atas`, dentro de `AEUV - Automação`. A
