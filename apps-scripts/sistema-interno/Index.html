@@ -4514,14 +4514,13 @@
       }
     });
 
-    function carregarAtas(editarId) {
+    function carregarAtas() {
       google.script.run
         .withSuccessHandler(function (dados) {
           if (moduloAtual !== 'atas') return;
           atasDados = dados;
           ataAlterada = false;
           montarListaAtas();
-          if (editarId && dados.podeEditar) abrirEditorAta(editarId);
         })
         .withFailureHandler(function (erro) {
           if (moduloAtual !== 'atas') return;
@@ -4727,12 +4726,12 @@
       document.querySelectorAll('#formAta input, #formAta textarea, #formAta select, #formAta button')
         .forEach(function (campo) { campo.disabled = true; });
       google.script.run
-        .withSuccessHandler(function (ata) {
+        .withSuccessHandler(function () {
           ataOcupada = false;
           ataAlterada = false;
           if (moduloAtual === 'atas') {
             document.getElementById('areaAtas').innerHTML = blocoCarregando();
-            carregarAtas(ata.id);
+            carregarAtas();
           }
         })
         .withFailureHandler(function (erro) {

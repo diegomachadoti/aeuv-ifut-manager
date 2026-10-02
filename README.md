@@ -36,6 +36,86 @@ Veja como os formulários geram e armazenam esses arquivos no
 - `selectors.ini`: seletores Selenium do iFut
 - `downloads\`: entrada, processados, falhas e resultados
 
+## Instalação em outra máquina (Windows)
+
+Depois de clonar o repositório, prepare o ambiente Python e configure os arquivos
+privados, que não acompanham o clone.
+
+### 1. Instalar Python e Google Chrome
+
+Recomenda-se **Python 3.13**, versão utilizada no ambiente atual, e **Google
+Chrome atualizado**. O projeto baixa o ChromeDriver automaticamente na primeira
+execução; mantenha acesso à internet.
+
+### 2. Criar o ambiente e instalar as dependências
+
+Abra o PowerShell na pasta do projeto clonado e execute:
+
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r .\requirements.txt
+```
+
+Não copie a `.venv` da máquina antiga: crie um ambiente novo. Os comandos deste
+guia usam diretamente o Python da `.venv`, sem precisar ativá-la.
+
+### 3. Configurar o acesso ao iFut
+
+Crie o arquivo **`config.local.ini`** na raiz do projeto:
+
+```ini
+[ifut]
+username = seu-email-do-ifut
+password = sua-senha-do-ifut
+```
+
+Também é possível transferir esse arquivo da máquina antiga por um meio seguro.
+Ele contém credenciais e **não deve ser enviado ao Git**. Se utilizar IA,
+configure também a chave na seção `[ia]`, conforme
+[Segredos e o `config.local.ini`](#segredos-e-o-configlocalini).
+
+O `config.ini` e o `selectors.ini` já acompanham o clone. Revise caminhos
+absolutos que possam apontar para a máquina antiga, além das URLs e parâmetros
+usados nas rotinas.
+
+### 4. Configurar o Google Drive
+
+Para usar **OAuth (recomendado)**, coloque o arquivo
+**`google-oauth-client.json`** na raiz do projeto. Pode ser o mesmo arquivo de
+cliente utilizado na máquina antiga.
+
+Na primeira execução que acessar o Drive, o navegador solicitará autorização
+e o sistema criará um novo `google-oauth-token.json`. Autorize uma conta Google
+com acesso às pastas e planilhas da associação. Não é necessário copiar o token
+da máquina antiga. Consulte [Configurar o OAuth](#configurar-o-oauth-uma-vez)
+para obter o arquivo de cliente caso ainda não o tenha.
+
+Se utilizar conta de serviço, transfira o JSON correspondente por um meio
+seguro e confira o caminho em `[drive] service_account_json`. Para publicação
+de novos arquivos no Drive, prefira OAuth.
+
+**Não envie os arquivos de credenciais ou tokens ao Git.**
+
+### 5. Executar
+
+Primeiro, execute apenas o login no iFut:
+
+```powershell
+.\.venv\Scripts\python.exe .\main.py --login-only
+```
+
+Depois, para executar o fluxo completo:
+
+```powershell
+.\.venv\Scripts\python.exe .\main.py
+```
+
+> **Atenção:** o `config.ini` atual utiliza `dry_run = false`. O fluxo completo
+> pode realizar alterações reais no iFut; revise essa opção antes de executar.
+
+Os aplicativos **Apps Script continuam rodando no Google**. Não é necessário
+reinstalá-los ou republicá-los apenas por mudar a máquina que executa o Python.
+
 ## Configuração
 
 1. Crie o `config.local.ini` com as credenciais do iFut (veja
