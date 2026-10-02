@@ -531,14 +531,40 @@ pode declarar `grupo` para entrar num submenu.
 | `notas` | Notas oficiais; busca os dados com `listarNotas()`. |
 | `regulamentos` | Regulamentos; busca os dados com `listarRegulamentos()`. |
 | `financeiro` | Financeiro e Prestação de Contas; controle de entradas/saídas, anexos e relatórios oficiais em PDF com `listarFinanceiro()` e `salvarLancamentoFinanceiro()`. |
+| `atas` | Atas de reuniões da associação ou campeonato; usa `listarAtas()`, `salvarAta()`, `exportarAtaPdf()` e `excluirAta()`. |
 | `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
 | `equipes` | Equipes participantes; usa `listarEquipes()`, `salvarEquipe()` e `removerEquipe()`. |
 | `breve` | Funcionalidade já prevista, exibida com o aviso "em desenvolvimento". |
 
 Módulos publicados hoje: Início, Formulários (Súmula digital e Inscrição e
 portabilidade), Solicitações de Inscrições, Súmulas Enviadas, Notas oficiais,
-Regulamentos, Controle de punições, Financeiro e Prestação de Contas, Associados,
+Regulamentos, Controle de punições, Financeiro e Prestação de Contas, Atas de reuniões, Associados,
 Atletas e Usuários do sistema. Só Atletas ainda está marcado como `breve`.
+
+#### Atas de reuniões
+
+**Admin e Diretoria** podem consultar, criar atas e exportar PDFs. O editor
+contém tipo (Associação ou Campeonato), título, data, local, participantes e
+texto livre; o botão **Salvar ata** guarda o trabalho mesmo antes de exportar.
+Apenas a **Diretoria** pode editar atas existentes; apenas o **Admin** pode
+excluí-las. Alterações não salvas exigem confirmação antes de sair do editor.
+
+As atas ficam na planilha `AEUV - Atas`, dentro de `AEUV - Automação`. A
+exportação pelo próprio Web App (Apps Script, sem Python) cria o PDF na subpasta
+`Atas` com logomarca, cabeçalho azul, margens e rodapé no padrão dos documentos
+da AEUV. Ao final da ata, a data da reunião aparece por extenso, seguida da
+assinatura do Presidente, nome e cargo (como nos PDFs gerados pelo Python).
+Antes da primeira exportação, envie `assets/assinatura-presidente.png` para a
+raiz da pasta `AEUV - Automação` no Drive. O script encontra a imagem pelo
+nome e guarda seu ID em `ATAS_ASSINATURA_FILE_ID`; admin e Diretoria precisam
+ter acesso de leitura a ela. Sem a imagem, a exportação exibe um erro em vez
+de publicar uma ata sem assinatura. Cada clique em **Exportar PDF** recria o documento, inclusive para
+atas já exportadas; o PDF anterior é substituído no Drive e o link muda. Após
+editar a ata, exporte novamente para refletir o texto atualizado. Excluir
+remove o registro e os PDFs da ata. Admin e Diretoria precisam de **edição** na pasta
+raiz, na planilha e na subpasta `Atas`. A implantação requer o novo escopo
+`.../auth/documents` do `appsscript.json`; publique uma nova versão do app e
+conclua a autorização solicitada pelo Google.
 
 #### Submenus
 
@@ -995,23 +1021,25 @@ existe (nenhuma nota foi publicada) ou o usuário não tem acesso a ela.
 
 ### Regulamentos
 
-Lista os regulamentos oficiais publicados. É a tela mais simples do sistema e a
-**única consulta aberta a todos os perfis**: o regulamento é o
-documento que toda equipe e a arbitragem precisam ter à mão, e não há nada nele
-que dependa de quem está olhando.
+Lista os regulamentos e as formas de disputa oficiais publicados na mesma
+subpasta `Regulamentos` do Drive. É a tela mais simples do sistema e a
+**única consulta aberta a todos os perfis**: são documentos que toda equipe e
+a arbitragem precisam ter à mão, sem depender de quem está olhando.
 
 Por isso não há tabela nem filtro. São poucos arquivos e o uso é sempre o
-mesmo — abrir o PDF —, então cada regulamento é um cartão com o título, a data
+mesmo — abrir o PDF —, então cada documento é um cartão com o título, a data
 da última atualização, o tamanho e dois botões: **Abrir PDF** e **Baixar**.
 
 O título vem do nome do arquivo, com os hifens virando espaços:
 `regulamento-7-super-liga-união-2026.pdf` aparece como "Regulamento 7 Super
 Liga União 2026". A ordenação usa a data de atualização no Drive, então um
-regulamento revisado no meio da temporada sobe para o topo.
+documento revisado no meio da temporada sobe para o topo. A forma de disputa
+entra nessa lista quando gerada com `main.py --gerar-pdf-forma-disputa` ou
+reenviada com `main.py --publicar-drive`.
 
-Só o **PDF** é publicado. O texto de trabalho continua no repositório, em
-`regulamento/`, onde a automação o lê para enquadrar as infrações — publicar os
-dois lado a lado só criaria dúvida sobre qual é o oficial.
+Só os **PDFs** são publicados. Os textos de trabalho continuam no repositório,
+em `regulamento/` e `formadisputa/` — publicar os dois formatos lado a lado
+criaria dúvida sobre qual versão é a oficial.
 
 ### Equipes participantes
 

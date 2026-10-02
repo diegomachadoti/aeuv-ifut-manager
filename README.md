@@ -30,7 +30,7 @@ Veja como os formulários geram e armazenam esses arquivos no
 - `financeiro_planilha.py`: lê os lançamentos da planilha `AEUV - Financeiro` (aba `Movimentacoes`) no Drive, alimentada pelo módulo Financeiro do sistema interno. Exemplos: `python main.py --gerar-pdf-financeiro geral`, `... competicao --origem "SUPER LIGA UNIÃO"`, `... emenda --emenda "Emenda 042/2026"`, com `--periodo 3m|6m|anual` ou `--data-inicio/--data-fim` opcionais
 - `controle_punicoes.py`: TXT e PDF de controle com todos os punidos pelas notas oficiais (`--atualizar-controle-punicoes`)
 - `resultado_pdf.py`: PDF do resultado de inscrição, remoção e portabilidade, com o status de cada registro em destaque
-- `publicacao_drive.py`: publica no Drive os regulamentos e as notas oficiais já fechadas (`--publicar-drive`)
+- `publicacao_drive.py`: publica no Drive regulamentos, formas de disputa e notas oficiais já fechadas (`--publicar-drive`)
 - `regulamento\`: texto do regulamento usado na análise disciplinar
 - `config.ini`: credenciais, delays e URLs
 - `selectors.ini`: seletores Selenium do iFut
@@ -221,7 +221,7 @@ AEUV - Automação/
 │   ├── Entrada/  Processados/  Falhas/     ← a pasta é o status na tela de súmulas
 │   ├── Controle de Punicoes/               ← TXT + PDF lidos pelo sistema interno
 │   └── Notas Oficiais/                     ← TXT + PDF das notas finais, lidos pelo sistema interno
-├── Regulamentos/                           ← PDF dos regulamentos, lido pelo sistema interno
+├── Regulamentos/                           ← PDFs dos regulamentos e formas de disputa, lidos pelo sistema interno
 ├── PDF - Sumulas Digitais/
 ├── Anexos - Sumulas Digitais/
 ├── Arquivos TXT - Inscricoes de Atletas/   ← [drive] folder_embed_url
@@ -231,8 +231,10 @@ AEUV - Automação/
 ├── Documentos - Associados/                ← anexos do cadastro de associados
 │   └── <EQUIPE>/
 ├── Comprovantes - Financeiro/              ← comprovantes (NF, recibos, PIX) do módulo financeiro
+├── Atas/                                   ← PDFs exportados das reuniões
 ├── AEUV - Associados                       (planilha do cadastro)
 ├── AEUV - Financeiro                       (planilha de movimentações financeiras)
+├── AEUV - Atas                             (planilha das atas de reuniões)
 ├── AEUV - Sumula Digital                   (planilha de respostas)
 ├── AEUV - Respostas - Inscricao, Remocao e Portabilidade
 ├── 7 SUPER LIGA UNIAO 2026 - CONTROLE FINANCEIRO...xlsx  ← [sheets] spreadsheet_id
@@ -811,6 +813,16 @@ A formatação é automática:
 Os emojis são removidos no PDF, pois a fonte não os desenha. Sempre que o
 regulamento mudar, basta rodar o comando de novo.
 
+Para gerar e publicar a forma de disputa, informe o nome do arquivo (procurado
+automaticamente na pasta `formadisputa\`):
+
+```powershell
+.\.venv\Scripts\python.exe .\main.py --gerar-pdf-forma-disputa "forma-disputa-7-super-liga-união-2026-3-rodadas"
+```
+
+O PDF gerado ao lado do texto também é publicado na subpasta `Regulamentos`,
+onde aparece na tela de consulta do sistema interno.
+
 ## Publicação no Drive
 
 As telas **Regulamentos** e **Notas oficiais** do
@@ -820,6 +832,7 @@ Drive. Quem leva os arquivos para lá é `publicacao_drive.py`:
 | Artefato | Vai para | Quando |
 | --- | --- | --- |
 | PDF do regulamento | `AEUV - Automação/Regulamentos/` | ao rodar `--gerar-pdf-regulamento` |
+| PDF da forma de disputa | `AEUV - Automação/Regulamentos/` | ao rodar `--gerar-pdf-forma-disputa` |
 | Nota oficial (TXT + PDF) | `Arquivos TXT - Sumulas Digitais/Notas Oficiais/` | ao rodar `--gerar-pdf-nota` |
 
 Ou seja, a publicação acontece no momento em que o documento final é gerado, e

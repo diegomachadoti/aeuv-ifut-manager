@@ -126,6 +126,15 @@ const CONFIG = {
     chavePlanilha: 'FINANCEIRO_PLANILHA_ID',
     chavePasta: 'FINANCEIRO_PASTA_ID',
     maxArquivoBytes: 8 * 1024 * 1024
+  },
+  atas: {
+    planilha: 'AEUV - Atas',
+    aba: 'Atas',
+    pasta: 'Atas',
+    chavePlanilha: 'ATAS_PLANILHA_ID',
+    chavePasta: 'ATAS_PASTA_ID',
+    assinatura: 'assinatura-presidente.png',
+    chaveAssinatura: 'ATAS_ASSINATURA_FILE_ID'
   }
 };
 
@@ -287,6 +296,14 @@ const MODULOS = [
     icone: '💰',
     tipo: 'financeiro',
     descricao: 'Controle de entradas, saídas, anexos de comprovantes e geração de relatórios oficiais para assembleias e emendas impositivas.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'atas',
+    nome: 'Atas de reuniões',
+    icone: '🗒️',
+    tipo: 'atas',
+    descricao: 'Redação, consulta e exportação das atas da associação e dos campeonatos.',
     perfis: ['admin', 'diretoria']
   },
   {
@@ -3368,6 +3385,342 @@ function diagnosticarAssociados() {
   const total = Math.max(0, aba.getLastRow() - 1);
 
   Logger.log('Leitura concluida .: %s associado(s) cadastrado(s).', total);
+}
+
+/******************************************************
+ * ATAS DE REUNIOES
+ ******************************************************/
+
+const ATAS_COLUNAS = [
+  'ID', 'Tipo', 'Título', 'Data', 'Local', 'Participantes', 'Texto',
+  'Criado em', 'Criado por', 'Atualizado em', 'Atualizado por', 'Revisão', 'PDF'
+];
+
+function exigirAcessoAtas_() {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !moduloLiberado_('atas', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para acessar as atas.');
+  }
+  return sessao;
+}
+
+function planilhaAtas_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const id = propriedades.getProperty(CONFIG.atas.chavePlanilha);
+  if (id) {
+    return SpreadsheetApp.openById(id);
+  }
+
+  const raiz = pastaRaizProjeto_();
+  const arquivos = raiz.getFilesByName(CONFIG.atas.planilha);
+  let planilha;
+  if (arquivos.hasNext()) {
+    planilha = SpreadsheetApp.openById(arquivos.next().getId());
+  } else {
+    planilha = SpreadsheetApp.create(CONFIG.atas.planilha);
+    DriveApp.getFileById(planilha.getId()).moveTo(raiz);
+  }
+  propriedades.setProperty(CONFIG.atas.chavePlanilha, planilha.getId());
+  return planilha;
+}
+
+function abaAtas_() {
+  const planilha = planilhaAtas_();
+  let aba = planilha.getSheetByName(CONFIG.atas.aba);
+  if (!aba) {
+    aba = planilha.insertSheet(CONFIG.atas.aba);
+    aba.getRange(1, 1, 1, ATAS_COLUNAS.length).setValues([ATAS_COLUNAS]).setFontWeight('bold');
+    aba.setFrozenRows(1);
+    aba.getRange('D:D').setNumberFormat('@');
+  }
+  return aba;
+}
+
+function pastaAtas_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const id = propriedades.getProperty(CONFIG.atas.chavePasta);
+  if (id) {
+    return DriveApp.getFolderById(id);
+  }
+
+  const raiz = pastaRaizProjeto_();
+  const pastas = raiz.getFoldersByName(CONFIG.atas.pasta);
+  const pasta = pastas.hasNext() ? pastas.next() : raiz.createFolder(CONFIG.atas.pasta);
+  propriedades.setProperty(CONFIG.atas.chavePasta, pasta.getId());
+  return pasta;
+}
+
+function ataDaLinha_(linha) {
+  const data = Object.prototype.toString.call(linha[3]) === '[object Date]'
+    ? Utilities.formatDate(linha[3], Session.getScriptTimeZone(), 'yyyy-MM-dd')
+    : String(linha[3] || '');
+  return {
+    id: String(linha[0] || ''),
+    tipo: String(linha[1] || ''),
+    titulo: String(linha[2] || ''),
+    data: data,
+    local: String(linha[4] || ''),
+    participantes: String(linha[5] || ''),
+    texto: String(linha[6] || ''),
+    criadoEm: String(linha[7] || ''),
+    criadoPor: String(linha[8] || ''),
+    atualizadoEm: String(linha[9] || ''),
+    atualizadoPor: String(linha[10] || ''),
+    revisao: String(linha[11] || ''),
+    pdfUrl: String(linha[12] || '')
+  };
+}
+
+function linhaAta_(ata) {
+  return [
+    ata.id, ata.tipo, ata.titulo, ata.data, ata.local, ata.participantes, ata.texto,
+    ata.criadoEm, ata.criadoPor, ata.atualizadoEm, ata.atualizadoPor, ata.revisao, ata.pdfUrl
+  ];
+}
+
+function localizarAta_(aba, id) {
+  const valores = aba.getDataRange().getValues();
+  for (let i = 1; i < valores.length; i++) {
+    if (String(valores[i][0]) === id) {
+      return { numero: i + 1, ata: ataDaLinha_(valores[i]) };
+    }
+  }
+  throw new Error('Ata não encontrada. Atualize a lista e tente novamente.');
+}
+
+function listarAtas() {
+  const sessao = exigirAcessoAtas_();
+  const registros = abaAtas_().getDataRange().getValues().slice(1)
+    .filter(function (linha) { return Boolean(linha[0]); })
+    .map(function (linha) {
+      const ata = ataDaLinha_(linha);
+      return {
+        id: ata.id, tipo: ata.tipo, titulo: ata.titulo, data: ata.data,
+        criadoEm: ata.criadoEm, atualizadoEm: ata.atualizadoEm, pdfUrl: ata.pdfUrl
+      };
+    })
+    .sort(function (a, b) { return b.data.localeCompare(a.data) || b.criadoEm.localeCompare(a.criadoEm); });
+  return {
+    registros: registros,
+    podeEditar: sessao.usuario.perfil === 'diretoria',
+    podeExcluir: sessao.usuario.perfil === 'admin'
+  };
+}
+
+function obterAta(id) {
+  exigirAcessoAtas_();
+  return localizarAta_(abaAtas_(), String(id || '')).ata;
+}
+
+function salvarAta(payload) {
+  const sessao = exigirAcessoAtas_();
+  const dados = payload || {};
+  const id = String(dados.id || '').trim();
+  if (id && sessao.usuario.perfil !== 'diretoria') {
+    throw new Error('Somente a Diretoria pode editar atas existentes.');
+  }
+  const tipo = String(dados.tipo || '').trim();
+  const titulo = String(dados.titulo || '').trim();
+  const data = String(dados.data || '').trim();
+  const local = String(dados.local || '').trim();
+  const participantes = String(dados.participantes || '').trim();
+  const texto = String(dados.texto || '').trim();
+  const partes = data.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const dia = partes && new Date(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3]));
+  if (['associacao', 'campeonato'].indexOf(tipo) === -1 || !titulo || !partes || !dia
+      || dia.getFullYear() !== Number(partes[1]) || dia.getMonth() !== Number(partes[2]) - 1
+      || dia.getDate() !== Number(partes[3]) || !texto) {
+    throw new Error('Preencha tipo, título, data válida e texto da ata.');
+  }
+  if (titulo.length > 160 || local.length > 200 || participantes.length > 5000 || texto.length > 40000) {
+    throw new Error('Texto muito longo: título até 160, local até 200, participantes até 5.000 e ata até 40.000 caracteres.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const aba = abaAtas_();
+    const anterior = id ? localizarAta_(aba, id) : null;
+    if (anterior && anterior.ata.revisao !== String(dados.revisao || '')) {
+      throw new Error('Esta ata foi alterada por outra pessoa. Recarregue antes de salvar.');
+    }
+    const agora = formatarDataHora_(new Date());
+    const ata = {
+      id: id || Utilities.getUuid(),
+      tipo: tipo, titulo: titulo, data: data, local: local,
+      participantes: participantes, texto: texto,
+      criadoEm: anterior ? anterior.ata.criadoEm : agora,
+      criadoPor: anterior ? anterior.ata.criadoPor : sessao.email,
+      atualizadoEm: agora, atualizadoPor: sessao.email,
+      revisao: Utilities.getUuid(), pdfUrl: ''
+    };
+    if (anterior) {
+      aba.getRange(anterior.numero, 1, 1, ATAS_COLUNAS.length).setValues([linhaAta_(ata)]);
+    } else {
+      aba.appendRow(linhaAta_(ata));
+    }
+    return ata;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function excluirAta(id) {
+  const sessao = exigirAcessoAtas_();
+  if (sessao.usuario.perfil !== 'admin') {
+    throw new Error('Somente o Administrador pode excluir atas.');
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const aba = abaAtas_();
+    const encontrada = localizarAta_(aba, String(id || ''));
+    const pastaId = PropertiesService.getScriptProperties().getProperty(CONFIG.atas.chavePasta);
+    if (pastaId) {
+      const arquivos = DriveApp.getFolderById(pastaId).getFiles();
+      while (arquivos.hasNext()) {
+        const arquivo = arquivos.next();
+        if (arquivo.getName().indexOf('Ata ' + encontrada.ata.id + ' - ') === 0) {
+          arquivo.setTrashed(true);
+        }
+      }
+    }
+    aba.deleteRow(encontrada.numero);
+    return true;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function assinaturaAtas_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const id = propriedades.getProperty(CONFIG.atas.chaveAssinatura);
+  if (id) {
+    return DriveApp.getFileById(id).getBlob();
+  }
+
+  const arquivos = pastaRaizProjeto_().getFilesByName(CONFIG.atas.assinatura);
+  if (!arquivos.hasNext()) {
+    throw new Error('Assinatura do Presidente não encontrada. Envie assets/assinatura-presidente.png '
+      + 'para a pasta AEUV - Automação no Drive antes de exportar a ata.');
+  }
+  const arquivo = arquivos.next();
+  propriedades.setProperty(CONFIG.atas.chaveAssinatura, arquivo.getId());
+  return arquivo.getBlob();
+}
+
+function formatarDocumentoAta_(documento, ata) {
+  const azul = '#1F3A68';
+  const cinza = '#5A6270';
+  const corpo = documento.getBody();
+  corpo.setMarginTop(95).setMarginBottom(68).setMarginLeft(57).setMarginRight(57);
+
+  const cabecalho = documento.addHeader();
+  const marca = cabecalho.appendParagraph('');
+  const logo = marca.appendInlineImage(DriveApp.getFileById(CONFIG.logoFileId).getBlob());
+  const escala = Math.min(48 / logo.getWidth(), 48 / logo.getHeight());
+  logo.setWidth(Math.round(logo.getWidth() * escala));
+  logo.setHeight(Math.round(logo.getHeight() * escala));
+  marca.appendText('   ' + ASSOCIACAO_NOME)
+    .setBold(true).setFontSize(12).setForegroundColor(azul);
+  marca.setSpacingAfter(0);
+  const subtitulo = cabecalho.appendParagraph('Comissão Organizadora · '
+    + (ata.tipo === 'campeonato' ? 'Campeonato' : 'Associação'));
+  subtitulo.editAsText().setFontSize(9).setForegroundColor(cinza);
+  subtitulo.setSpacingAfter(4);
+
+  const rodape = documento.addFooter();
+  const linhaRodape = rodape.appendParagraph(ASSOCIACAO_NOME + ' · Ata de reunião');
+  linhaRodape.editAsText().setFontSize(8).setForegroundColor(cinza);
+
+  const faixa = corpo.appendParagraph('ATA DE REUNIÃO · '
+    + (ata.tipo === 'campeonato' ? 'CAMPEONATO' : 'ASSOCIAÇÃO'))
+    .setHeading(DocumentApp.ParagraphHeading.HEADING1)
+    .setSpacingAfter(8);
+  faixa.editAsText().setForegroundColor(azul).setFontSize(15);
+  const titulo = corpo.appendParagraph(ata.titulo)
+    .setHeading(DocumentApp.ParagraphHeading.HEADING2)
+    .setSpacingAfter(14);
+  titulo.editAsText().setForegroundColor(azul).setFontSize(13);
+
+  const data = ata.data.slice(8, 10) + '/' + ata.data.slice(5, 7) + '/' + ata.data.slice(0, 4);
+  const metadados = ['Data: ' + data];
+  if (ata.local) metadados.push('Local: ' + ata.local);
+  if (ata.participantes) metadados.push('Participantes: ' + ata.participantes);
+  metadados.forEach(function (linha) {
+    const paragrafo = corpo.appendParagraph(linha).setSpacingAfter(5);
+    paragrafo.editAsText().setFontSize(10).setForegroundColor(cinza);
+  });
+
+  corpo.appendHorizontalRule();
+  ata.texto.split(/\r?\n/).forEach(function (linha) {
+    const paragrafo = corpo.appendParagraph(linha)
+      .setLineSpacing(1.25).setSpacingAfter(linha ? 6 : 2);
+    paragrafo.editAsText().setFontSize(11);
+  });
+
+  const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+    'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const dataExtenso = Number(ata.data.slice(8, 10)) + ' de '
+    + meses[Number(ata.data.slice(5, 7)) - 1] + ' de ' + ata.data.slice(0, 4);
+  corpo.appendParagraph('Uberlândia/MG, ' + dataExtenso + '.')
+    .setAlignment(DocumentApp.HorizontalAlignment.CENTER).setSpacingBefore(26).setSpacingAfter(18);
+  const assinatura = corpo.appendParagraph('').setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  const imagem = assinatura.appendInlineImage(assinaturaAtas_());
+  const escalaAssinatura = Math.min(128 / imagem.getWidth(), 54 / imagem.getHeight());
+  imagem.setWidth(Math.round(imagem.getWidth() * escalaAssinatura));
+  imagem.setHeight(Math.round(imagem.getHeight() * escalaAssinatura));
+  const linhaAssinatura = corpo.appendParagraph('________________________________');
+  linhaAssinatura.setAlignment(DocumentApp.HorizontalAlignment.CENTER).setSpacingAfter(2);
+  const nomePresidente = corpo.appendParagraph('Iure Costtiti');
+  nomePresidente.setAlignment(DocumentApp.HorizontalAlignment.CENTER).setSpacingAfter(0);
+  nomePresidente.editAsText().setBold(true).setFontSize(10).setForegroundColor(azul);
+  corpo.appendParagraph('Presidente')
+    .setAlignment(DocumentApp.HorizontalAlignment.CENTER).setSpacingAfter(0);
+  corpo.appendParagraph(ASSOCIACAO_NOME)
+    .setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+}
+
+function exportarAtaPdf(id) {
+  exigirAcessoAtas_();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const aba = abaAtas_();
+    const encontrada = localizarAta_(aba, String(id || ''));
+    const ata = encontrada.ata;
+    const pasta = pastaAtas_();
+    const documento = DocumentApp.create('Ata - ' + ata.titulo);
+    const arquivoDocumento = DriveApp.getFileById(documento.getId());
+    try {
+      formatarDocumentoAta_(documento, ata);
+      documento.saveAndClose();
+      const nome = ('Ata ' + ata.id + ' - ' + ata.data + ' - ' + ata.titulo)
+        .replace(/[\\/:*?"<>|]/g, '-').slice(0, 160) + '.pdf';
+      const pdf = pasta.createFile(arquivoDocumento.getAs(MimeType.PDF).setName(nome));
+      try {
+        aba.getRange(encontrada.numero, 13).setValue(pdf.getUrl());
+      } catch (e) {
+        pdf.setTrashed(true);
+        throw e;
+      }
+      if (ata.pdfUrl) {
+        const antigoId = String(ata.pdfUrl).match(/\/file\/d\/([^/]+)/);
+        if (antigoId) {
+          try {
+            DriveApp.getFileById(antigoId[1]).setTrashed(true);
+          } catch (e) {
+            Logger.log('[ATAS] PDF anterior não removido (%s): %s', antigoId[1], e);
+          }
+        }
+      }
+      return pdf.getUrl();
+    } finally {
+      arquivoDocumento.setTrashed(true);
+    }
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /******************************************************

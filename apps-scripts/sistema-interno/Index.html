@@ -1481,6 +1481,42 @@
       .fin-linha-2 { grid-template-columns: 1fr; }
       .modal-fin-caixa { padding: 18px 14px; }
     }
+    .atas-lista { display: grid; gap: 12px; margin-top: 16px; }
+    .ata-item { border: 1px solid var(--borda); border-radius: 10px; padding: 16px; background: var(--fundo); }
+    .ata-item h3 { margin: 0 0 6px; font-size: 16px; }
+    .ata-item .barra-acoes { margin: 12px 0 0; }
+    .ata-progresso {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      padding: 11px 14px;
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      background: var(--superficie-2, #fff);
+      color: var(--texto);
+      font-size: 13px;
+    }
+    .ata-progresso::before {
+      content: '';
+      flex: 0 0 16px;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--borda);
+      border-top-color: var(--dourado);
+      border-radius: 50%;
+      animation: girar .9s linear infinite;
+    }
+    .ata-item button:disabled, .ata-editor button:disabled { opacity: .55; cursor: wait; }
+    @media (prefers-reduced-motion: reduce) {
+      .ata-progresso::before { animation: none; }
+    }
+    .ata-editor { margin-top: 16px; }
+    .ata-editor .campo textarea { width: 100%; box-sizing: border-box; min-height: 260px; resize: vertical;
+      border: 1px solid var(--borda); border-radius: 8px; padding: 10px; font: inherit;
+      background: #fff; color: var(--texto); }
+    .ata-editor .campo textarea:focus { outline: 2px solid var(--dourado); }
+    .ata-editor .campo input { width: 100%; box-sizing: border-box; }
   </style>
   <style>
     /* ---------- Botao discreto de tema (claro / escuro) ---------- */
@@ -1902,6 +1938,11 @@
         return abrirModulo(MODULOS[0].id);
       }
 
+      if (moduloAtual === 'atas' && !podeSairDaAta()) {
+        if (window.location.hash !== '#atas') window.location.hash = 'atas';
+        return;
+      }
+
       moduloAtual = id;
 
       // Sempre reatribuido: abrir a tela sem termo tem de limpar o que
@@ -1996,6 +2037,13 @@
         conteudo.innerHTML = cabecalho
           + '<div id="areaFinanceiro">' + blocoCarregando('statusFinanceiro') + '</div>';
         carregarFinanceiro();
+        return;
+      }
+
+      if (modulo.tipo === 'atas') {
+        conteudo.innerHTML = cabecalho
+          + '<div id="areaAtas">' + blocoCarregando() + '</div>';
+        carregarAtas();
         return;
       }
 
@@ -4439,6 +4487,292 @@
       const partes = String(valor || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
 
       return partes ? partes[3] + '-' + partes[2] + '-' + partes[1] : '';
+    }
+
+    /******************************************************
+     * ATAS DE REUNIOES (CLIENTE)
+     ******************************************************/
+
+    let atasDados = null;
+    let ataEmEdicao = null;
+    let ataAlterada = false;
+    let ataOcupada = false;
+
+    function podeSairDaAta() {
+      if (ataOcupada) return false;
+      if (!ataAlterada) return true;
+      const sair = window.confirm('Existem alterações não salvas na ata. Deseja descartá-las?');
+      if (sair) ataAlterada = false;
+      return sair;
+    }
+
+    window.addEventListener('beforeunload', function (evento) {
+      if (moduloAtual === 'atas' && ataAlterada) {
+        evento.preventDefault();
+        evento.returnValue = '';
+      }
+    });
+
+    function carregarAtas(editarId) {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'atas') return;
+          atasDados = dados;
+          ataAlterada = false;
+          montarListaAtas();
+          if (editarId && dados.podeEditar) abrirEditorAta(editarId);
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'atas') return;
+          document.getElementById('areaAtas').innerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarAtas();
+    }
+
+    function montarListaAtas() {
+      ataEmEdicao = null;
+      const area = document.getElementById('areaAtas');
+      const registros = atasDados.registros || [];
+      area.innerHTML = '<div class="barra-acoes">'
+        + '<button type="button" class="botao-principal" id="novaAta">+ Nova ata</button>'
+        + '<button type="button" class="botao-apoio" id="atualizarAtas">Atualizar lista</button>'
+        + '</div><div id="avisoAtas"></div>'
+        + (registros.length
+          ? '<div class="atas-lista">' + registros.map(function (ata) {
+              return '<div class="ata-item">'
+                + '<h3>' + escapar(ata.titulo) + '</h3>'
+                + '<span class="apoio">' + escapar(ata.data.split('-').reverse().join('/'))
+                + ' · ' + (ata.tipo === 'campeonato' ? 'Campeonato' : 'Associação')
+                + ' · Atualizada em ' + escapar(ata.atualizadoEm) + '</span>'
+                + '<div class="barra-acoes">'
+                + '<button type="button" class="botao-apoio" data-ver-ata="'
+                + escapar(ata.id) + '">Visualizar</button>'
+                + (atasDados.podeEditar ? '<button type="button" class="botao-apoio" data-editar-ata="'
+                  + escapar(ata.id) + '">Editar</button>' : '')
+                + '<button type="button" class="botao-apoio" data-exportar-ata="'
+                + escapar(ata.id) + '">Exportar PDF</button>'
+                + (ata.pdfUrl ? '<a class="botao-apoio" data-pdf-ata="' + escapar(ata.id)
+                  + '" href="' + escapar(ata.pdfUrl)
+                  + '" target="_blank" rel="noopener">Abrir PDF</a>' : '')
+                + (atasDados.podeExcluir ? '<button type="button" class="botao-apoio" data-excluir-ata="'
+                  + escapar(ata.id) + '">Excluir</button>' : '')
+                + '</div></div>';
+            }).join('') + '</div>'
+          : '<div class="vazio">Nenhuma ata salva ainda.</div>');
+
+      document.getElementById('novaAta').addEventListener('click', function () { abrirEditorAta(); });
+      document.getElementById('atualizarAtas').addEventListener('click', function () {
+        if (!ataOcupada) carregarAtas();
+      });
+      area.querySelectorAll('[data-editar-ata]').forEach(function (botao) {
+        botao.addEventListener('click', function () { abrirEditorAta(botao.dataset.editarAta); });
+      });
+      area.querySelectorAll('[data-ver-ata]').forEach(function (botao) {
+        botao.addEventListener('click', function () { abrirEditorAta(botao.dataset.verAta, true); });
+      });
+      area.querySelectorAll('[data-exportar-ata]').forEach(function (botao) {
+        botao.addEventListener('click', function () { exportarAta(botao.dataset.exportarAta); });
+      });
+      area.querySelectorAll('[data-excluir-ata]').forEach(function (botao) {
+        botao.addEventListener('click', function () { excluirAtaDaLista(botao.dataset.excluirAta); });
+      });
+    }
+
+    function progressoAta(rotulo, botao) {
+      const cartao = botao && botao.closest('.ata-item');
+      const destino = cartao || document.getElementById('statusAta');
+      if (!destino) return null;
+      if (cartao) {
+        cartao.querySelectorAll('button').forEach(function (acao) { acao.disabled = true; });
+        destino.insertAdjacentHTML('beforeend', '<div class="ata-progresso" role="status" aria-live="polite">'
+          + escapar(rotulo) + '</div>');
+        return destino.querySelector('.ata-progresso');
+      }
+      destino.innerHTML = '<div class="ata-progresso" role="status" aria-live="polite">'
+        + escapar(rotulo) + '</div>';
+      if (botao) botao.disabled = true;
+      return destino.querySelector('.ata-progresso');
+    }
+
+    function concluirProgressoAta(progresso, mensagem, falhou) {
+      if (!progresso) return;
+      const cartao = progresso.closest('.ata-item');
+      if (cartao) {
+        cartao.querySelectorAll('button').forEach(function (acao) { acao.disabled = false; });
+      }
+      progresso.outerHTML = mensagem
+        ? '<div class="' + (falhou ? 'erro' : 'sucesso') + '" role="status">' + mensagem + '</div>'
+        : '';
+    }
+
+    function abrirEditorAta(id, visualizar) {
+      if (!podeSairDaAta()) return;
+      const ata = id && (atasDados.registros || []).filter(function (item) { return item.id === id; })[0];
+      if (id && !ata) {
+        document.getElementById('avisoAtas').innerHTML = '<div class="erro">Ata não encontrada. Atualize a lista.</div>';
+        return;
+      }
+      if (id && !visualizar && !atasDados.podeEditar) return;
+      if (ata && ata.texto === undefined) {
+        ataOcupada = true;
+        const botao = document.querySelector('[data-' + (visualizar ? 'ver' : 'editar') + '-ata="' + id + '"]');
+        const progresso = progressoAta('Carregando ata...', botao);
+        google.script.run
+          .withSuccessHandler(function (completa) {
+            ataOcupada = false;
+            if (moduloAtual !== 'atas') return;
+            const indice = atasDados.registros.findIndex(function (item) { return item.id === id; });
+            if (indice < 0) return;
+            atasDados.registros[indice] = completa;
+            concluirProgressoAta(progresso);
+            abrirEditorAta(id, visualizar);
+          })
+          .withFailureHandler(function (erro) {
+            ataOcupada = false;
+            if (moduloAtual !== 'atas') return;
+            concluirProgressoAta(progresso, escapar(erro && erro.message ? erro.message : erro), true);
+          })
+          .obterAta(id);
+        return;
+      }
+      const somenteLeitura = !!id && (visualizar || !atasDados.podeEditar);
+      ataAlterada = false;
+      ataEmEdicao = ata || null;
+      const area = document.getElementById('areaAtas');
+      area.innerHTML = '<div class="barra-acoes"><button type="button" class="botao-apoio" id="voltarAtas">← Voltar à lista</button></div>'
+        + '<form class="ata-editor" id="formAta">'
+        + '<h3>' + (somenteLeitura ? 'Consultar ata' : ata ? 'Editar ata' : 'Nova ata') + '</h3>'
+        + '<div class="campos">'
+        + '<div class="campo largo"><label for="ataTitulo">Título *</label><input id="ataTitulo" maxlength="160" required value="'
+        + escapar(ata ? ata.titulo : '') + '"></div>'
+        + '<div class="campo curto"><label for="ataTipo">Reunião *</label><select id="ataTipo">'
+        + '<option value="associacao"' + (ata && ata.tipo === 'campeonato' ? '' : ' selected') + '>Associação</option>'
+        + '<option value="campeonato"' + (ata && ata.tipo === 'campeonato' ? ' selected' : '') + '>Campeonato</option></select></div>'
+        + '<div class="campo curto"><label for="ataData">Data *</label><input type="date" id="ataData" required value="'
+        + escapar(ata ? ata.data : new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+          .toISOString().slice(0, 10)) + '"></div>'
+        + '<div class="campo largo"><label for="ataLocal">Local</label><input id="ataLocal" maxlength="200" value="'
+        + escapar(ata ? ata.local : '') + '"></div>'
+        + '<div class="campo cheio"><label for="ataParticipantes">Participantes</label><textarea id="ataParticipantes" maxlength="5000" style="min-height:70px;">'
+        + escapar(ata ? ata.participantes : '') + '</textarea></div>'
+        + '<div class="campo cheio"><label for="ataTexto">Texto da ata *</label><textarea id="ataTexto" maxlength="40000" required>'
+        + escapar(ata ? ata.texto : '') + '</textarea></div>'
+        + '</div><div class="acoes-formulario">'
+        + (somenteLeitura ? '' : '<button type="submit" class="botao-principal" id="salvarAta">Salvar ata</button>')
+        + (ata ? '<button type="button" class="botao-apoio" id="exportarAtaEditor">Exportar PDF</button>' : '')
+        + (somenteLeitura ? '' : '<span class="apoio">Salve sempre que quiser guardar o andamento da redação.</span>')
+        + '</div>'
+        + '<div id="statusAta" role="status"></div></form>';
+      document.getElementById('voltarAtas').addEventListener('click', function () {
+        if (podeSairDaAta()) montarListaAtas();
+      });
+      document.getElementById('formAta').addEventListener('input', function () { ataAlterada = true; });
+      document.getElementById('formAta').addEventListener('change', function () { ataAlterada = true; });
+      if (somenteLeitura) {
+        document.querySelectorAll('#formAta input, #formAta select, #formAta textarea')
+          .forEach(function (campo) { campo.disabled = true; });
+      } else {
+        document.getElementById('formAta').addEventListener('submit', salvarAtaDaTela);
+      }
+      if (ata) {
+        document.getElementById('exportarAtaEditor').addEventListener('click', function () {
+          if (ataAlterada) {
+            document.getElementById('statusAta').innerHTML = '<div class="erro">Salve as alterações antes de exportar o PDF.</div>';
+          } else {
+            exportarAta(ata.id);
+          }
+        });
+      }
+    }
+
+    function salvarAtaDaTela(evento) {
+      evento.preventDefault();
+      if (ataOcupada) return;
+      const payload = {
+        id: ataEmEdicao ? ataEmEdicao.id : '',
+        revisao: ataEmEdicao ? ataEmEdicao.revisao : '',
+        tipo: document.getElementById('ataTipo').value,
+        titulo: document.getElementById('ataTitulo').value,
+        data: document.getElementById('ataData').value,
+        local: document.getElementById('ataLocal').value,
+        participantes: document.getElementById('ataParticipantes').value,
+        texto: document.getElementById('ataTexto').value
+      };
+      ataOcupada = true;
+      const progresso = progressoAta('Salvando ata...', document.getElementById('salvarAta'));
+      document.querySelectorAll('#formAta input, #formAta textarea, #formAta select, #formAta button')
+        .forEach(function (campo) { campo.disabled = true; });
+      google.script.run
+        .withSuccessHandler(function (ata) {
+          ataOcupada = false;
+          ataAlterada = false;
+          if (moduloAtual === 'atas') {
+            document.getElementById('areaAtas').innerHTML = blocoCarregando();
+            carregarAtas(ata.id);
+          }
+        })
+        .withFailureHandler(function (erro) {
+          ataOcupada = false;
+          if (moduloAtual !== 'atas') return;
+          document.querySelectorAll('#formAta input, #formAta textarea, #formAta select, #formAta button')
+            .forEach(function (campo) { campo.disabled = false; });
+          concluirProgressoAta(progresso, escapar(erro && erro.message ? erro.message : erro), true);
+        })
+        .salvarAta(payload);
+    }
+
+    function exportarAta(id) {
+      if (ataOcupada) return;
+      ataOcupada = true;
+      const botao = document.querySelector('[data-exportar-ata="' + id + '"]')
+        || document.getElementById('exportarAtaEditor');
+      const progresso = progressoAta('Gerando PDF no Drive...', botao);
+      google.script.run
+        .withSuccessHandler(function (url) {
+          ataOcupada = false;
+          if (moduloAtual !== 'atas') return;
+          (atasDados.registros || []).forEach(function (ata) {
+            if (ata.id === id) ata.pdfUrl = url;
+          });
+          if (ataEmEdicao && ataEmEdicao.id === id) ataEmEdicao.pdfUrl = url;
+          const link = document.querySelector('[data-pdf-ata="' + id + '"]');
+          if (link) {
+            link.href = url;
+          } else {
+            const botao = document.querySelector('[data-exportar-ata="' + id + '"]');
+            if (botao) {
+              botao.insertAdjacentHTML('afterend', '<a class="botao-apoio" data-pdf-ata="'
+                + escapar(id) + '" href="' + escapar(url)
+                + '" target="_blank" rel="noopener">Abrir PDF</a>');
+            }
+          }
+          concluirProgressoAta(progresso, 'PDF salvo no Drive. <a href="'
+            + escapar(url) + '" target="_blank" rel="noopener">Abrir PDF</a>', false);
+        })
+        .withFailureHandler(function (erro) {
+          ataOcupada = false;
+          if (moduloAtual !== 'atas') return;
+          concluirProgressoAta(progresso, escapar(erro && erro.message ? erro.message : erro), true);
+        })
+        .exportarAtaPdf(id);
+    }
+
+    function excluirAtaDaLista(id) {
+      if (ataOcupada || !window.confirm('Excluir esta ata? Esta ação não pode ser desfeita.')) return;
+      ataOcupada = true;
+      const progresso = progressoAta('Excluindo ata...', document.querySelector('[data-excluir-ata="' + id + '"]'));
+      google.script.run
+        .withSuccessHandler(function () {
+          ataOcupada = false;
+          if (moduloAtual === 'atas') carregarAtas();
+        })
+        .withFailureHandler(function (erro) {
+          ataOcupada = false;
+          if (moduloAtual !== 'atas') return;
+          concluirProgressoAta(progresso, escapar(erro && erro.message ? erro.message : erro), true);
+        })
+        .excluirAta(id);
     }
 
     /******************************************************

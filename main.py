@@ -1639,8 +1639,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--publicar-drive",
         action="store_true",
-        help="Publica no Drive os PDFs de regulamento e as notas oficiais ja finalizadas (TXT + PDF), "
-             "para que apareçam nas telas Regulamentos e Notas Oficiais do sistema interno",
+        help="Publica no Drive os PDFs de regulamento e forma de disputa e as notas oficiais "
+             "ja finalizadas (TXT + PDF), para consulta no sistema interno",
     )
     return parser
 
@@ -1653,8 +1653,9 @@ def main() -> int:
 
         config = AppConfig(Path(args.config))
         logger = configure_logging(config.log_path)
-        regulamentos, notas = publicacao_drive.publicar_tudo(Path(args.config), logger)
-        logger.info("Publicados no Drive: %s regulamento(s) e %s arquivo(s) de nota oficial", regulamentos, notas)
+        regulamentos, formas, notas = publicacao_drive.publicar_tudo(Path(args.config), logger)
+        logger.info("Publicados no Drive: %s regulamento(s), %s forma(s) de disputa e %s arquivo(s) "
+                    "de nota oficial", regulamentos, formas, notas)
         return 0
     if args.atualizar_controle_punicoes:
         from controle_punicoes import reconstruir_controle
@@ -1677,9 +1678,12 @@ def main() -> int:
         from forma_disputa_pdf import gerar_pdf_forma_disputa
         from nota_pdf import ConfigPdf
 
+        import publicacao_drive
+
         config = AppConfig(Path(args.config))
         logger = configure_logging(config.log_path)
-        gerar_pdf_forma_disputa(args.gerar_pdf_forma_disputa, ConfigPdf.carregar(Path(args.config)), logger=logger)
+        pdf = gerar_pdf_forma_disputa(args.gerar_pdf_forma_disputa, ConfigPdf.carregar(Path(args.config)), logger=logger)
+        publicacao_drive.publicar_forma_disputa(pdf, Path(args.config), logger)
         return 0
     if args.gerar_pdf_financeiro:
         from datetime import date, timedelta

@@ -1,9 +1,10 @@
-"""Publicacao de regulamentos e notas oficiais no Google Drive.
+"""Publicacao de regulamentos, formas de disputa e notas oficiais no Google Drive.
 
 O sistema interno (Apps Script) so enxerga o que esta no Drive. Este modulo leva
 para la os dois artefatos finais gerados localmente:
 
 * regulamento (PDF)  -> "AEUV - Automacao/Regulamentos"
+* forma de disputa (PDF) -> "AEUV - Automacao/Regulamentos"
 * nota oficial (TXT + PDF) -> "<pasta das sumulas>/Notas Oficiais"
 
 Ambas as pastas sao descobertas a partir de [sumulas] folder_embed_url: o ID da
@@ -184,6 +185,11 @@ def publicar_regulamento(pdf: Path, config_path: Path, logger: logging.Logger = 
                       lambda: PublicadorDrive.carregar(config_path, logger).publicar_regulamentos([pdf]))
 
 
+def publicar_forma_disputa(pdf: Path, config_path: Path, logger: logging.Logger = LOGGER) -> int:
+    return _silenciar("Forma de disputa", logger,
+                      lambda: PublicadorDrive.carregar(config_path, logger).publicar_regulamentos([pdf]))
+
+
 def nota_e_final(nota_txt: Path) -> bool:
     """Nota final = sem marcadores [A DEFINIR] e sem divergencias apontadas pela IA."""
     import nota_pdf
@@ -201,8 +207,8 @@ def publicar_nota(nota_txt: Path, config_path: Path, logger: logging.Logger = LO
                       lambda: PublicadorDrive.carregar(config_path, logger).publicar_notas(arquivos))
 
 
-def publicar_tudo(config_path: Path, logger: logging.Logger = LOGGER) -> tuple[int, int]:
-    """Reenvia todos os regulamentos em PDF e todas as notas finais (TXT + PDF).
+def publicar_tudo(config_path: Path, logger: logging.Logger = LOGGER) -> tuple[int, int, int]:
+    """Reenvia regulamentos, formas de disputa e notas finais (TXT + PDF).
 
     Util na primeira carga e depois de revisar varias notas de uma vez.
     """
@@ -211,9 +217,11 @@ def publicar_tudo(config_path: Path, logger: logging.Logger = LOGGER) -> tuple[i
         raise FileNotFoundError(f"Arquivo de configuracao nao encontrado: {config_path}")
     parser.read(Path(config_path).with_name("config.local.ini"), encoding="utf-8")
     regulamento = Path(parser.get("sumulas", "regulamento", fallback="regulamento\\regulamento"))
+    formas_dir = Path("formadisputa")
     notas_dir = Path(parser.get("sumulas", "notas_dir", fallback="downloads\\sumulas\\notas-oficiais"))
 
     pdfs = sorted(p for p in regulamento.parent.glob("*.pdf") if p.is_file())
+    formas = sorted(p for p in formas_dir.glob("*.pdf") if p.is_file())
     notas: list[Path] = []
     for txt in sorted(notas_dir.glob("NOTA OFICIAL*.txt")):
         if nota_e_final(txt):
@@ -223,6 +231,7 @@ def publicar_tudo(config_path: Path, logger: logging.Logger = LOGGER) -> tuple[i
 
     publicador = PublicadorDrive.carregar(config_path, logger)
 
-    # Uma pasta que falta nao pode impedir a outra de ser publicada.
+    # Uma publicacao que falha nao pode impedir as demais.
     return (_silenciar("Regulamentos", logger, lambda: publicador.publicar_regulamentos(pdfs)),
+            _silenciar("Formas de disputa", logger, lambda: publicador.publicar_regulamentos(formas)),
             _silenciar("Notas oficiais", logger, lambda: publicador.publicar_notas(notas)))
