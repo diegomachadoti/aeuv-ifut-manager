@@ -3393,7 +3393,7 @@ function diagnosticarAssociados() {
 
 const ATAS_COLUNAS = [
   'ID', 'Tipo', 'Título', 'Data', 'Local', 'Participantes', 'Texto',
-  'Criado em', 'Criado por', 'Atualizado em', 'Atualizado por', 'Revisão', 'PDF'
+  'Criado em', 'Criado por', 'Atualizado em', 'Atualizado por', 'Revisão', 'PDF', 'Competição'
 ];
 
 function exigirAcessoAtas_() {
@@ -3432,6 +3432,8 @@ function abaAtas_() {
     aba.getRange(1, 1, 1, ATAS_COLUNAS.length).setValues([ATAS_COLUNAS]).setFontWeight('bold');
     aba.setFrozenRows(1);
     aba.getRange('D:D').setNumberFormat('@');
+  } else if (aba.getRange(1, 14).getValue() !== ATAS_COLUNAS[13]) {
+    aba.getRange(1, 14).setValue(ATAS_COLUNAS[13]).setFontWeight('bold');
   }
   return aba;
 }
@@ -3467,14 +3469,16 @@ function ataDaLinha_(linha) {
     atualizadoEm: String(linha[9] || ''),
     atualizadoPor: String(linha[10] || ''),
     revisao: String(linha[11] || ''),
-    pdfUrl: String(linha[12] || '')
+    pdfUrl: String(linha[12] || ''),
+    competicao: String(linha[13] || '')
   };
 }
 
 function linhaAta_(ata) {
   return [
     ata.id, ata.tipo, ata.titulo, ata.data, ata.local, ata.participantes, ata.texto,
-    ata.criadoEm, ata.criadoPor, ata.atualizadoEm, ata.atualizadoPor, ata.revisao, ata.pdfUrl
+    ata.criadoEm, ata.criadoPor, ata.atualizadoEm, ata.atualizadoPor, ata.revisao, ata.pdfUrl,
+    ata.competicao
   ];
 }
 
@@ -3495,13 +3499,14 @@ function listarAtas() {
     .map(function (linha) {
       const ata = ataDaLinha_(linha);
       return {
-        id: ata.id, tipo: ata.tipo, titulo: ata.titulo, data: ata.data,
+        id: ata.id, tipo: ata.tipo, titulo: ata.titulo, data: ata.data, competicao: ata.competicao,
         criadoEm: ata.criadoEm, atualizadoEm: ata.atualizadoEm, pdfUrl: ata.pdfUrl
       };
     })
     .sort(function (a, b) { return b.data.localeCompare(a.data) || b.criadoEm.localeCompare(a.criadoEm); });
   return {
     registros: registros,
+    competicoes: FINANCEIRO_COMPETICOES_ORIGEM.slice(1),
     podeEditar: sessao.usuario.perfil === 'diretoria',
     podeExcluir: sessao.usuario.perfil === 'admin'
   };
@@ -3520,6 +3525,10 @@ function salvarAta(payload) {
     throw new Error('Somente a Diretoria pode editar atas existentes.');
   }
   const tipo = String(dados.tipo || '').trim();
+  const competicao = tipo === 'campeonato' ? String(dados.competicao || '').trim() : '';
+  if (tipo === 'campeonato' && FINANCEIRO_COMPETICOES_ORIGEM.slice(1).indexOf(competicao) === -1) {
+    throw new Error('Selecione uma competição da lista para a ata do campeonato.');
+  }
   const titulo = String(dados.titulo || '').trim();
   const data = String(dados.data || '').trim();
   const local = String(dados.local || '').trim();
@@ -3547,7 +3556,7 @@ function salvarAta(payload) {
     const agora = formatarDataHora_(new Date());
     const ata = {
       id: id || Utilities.getUuid(),
-      tipo: tipo, titulo: titulo, data: data, local: local,
+      tipo: tipo, titulo: titulo, data: data, local: local, competicao: competicao,
       participantes: participantes, texto: texto,
       criadoEm: anterior ? anterior.ata.criadoEm : agora,
       criadoPor: anterior ? anterior.ata.criadoPor : sessao.email,
@@ -3625,7 +3634,7 @@ function formatarDocumentoAta_(documento, ata) {
     .setBold(true).setFontSize(12).setForegroundColor(azul);
   marca.setSpacingAfter(0);
   const subtitulo = cabecalho.appendParagraph('Comissão Organizadora · '
-    + (ata.tipo === 'campeonato' ? 'Campeonato' : 'Associação'));
+    + (ata.tipo === 'campeonato' ? (ata.competicao || 'Campeonato') : 'Associação'));
   subtitulo.editAsText().setFontSize(9).setForegroundColor(cinza);
   subtitulo.setSpacingAfter(4);
 
@@ -3645,6 +3654,7 @@ function formatarDocumentoAta_(documento, ata) {
 
   const data = ata.data.slice(8, 10) + '/' + ata.data.slice(5, 7) + '/' + ata.data.slice(0, 4);
   const metadados = ['Data: ' + data];
+  if (ata.tipo === 'campeonato' && ata.competicao) metadados.push('Competição: ' + ata.competicao);
   if (ata.local) metadados.push('Local: ' + ata.local);
   if (ata.participantes) metadados.push('Participantes: ' + ata.participantes);
   metadados.forEach(function (linha) {

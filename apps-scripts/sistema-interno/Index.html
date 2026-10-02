@@ -1508,6 +1508,7 @@
       animation: girar .9s linear infinite;
     }
     .ata-item button:disabled, .ata-editor button:disabled { opacity: .55; cursor: wait; }
+    .ata-editor #ataCampoCompeticao[hidden] { display: none; }
     @media (prefers-reduced-motion: reduce) {
       .ata-progresso::before { animation: none; }
     }
@@ -4544,6 +4545,7 @@
                 + '<h3>' + escapar(ata.titulo) + '</h3>'
                 + '<span class="apoio">' + escapar(ata.data.split('-').reverse().join('/'))
                 + ' · ' + (ata.tipo === 'campeonato' ? 'Campeonato' : 'Associação')
+                + (ata.competicao ? ' · ' + escapar(ata.competicao) : '')
                 + ' · Atualizada em ' + escapar(ata.atualizadoEm) + '</span>'
                 + '<div class="barra-acoes">'
                 + '<button type="button" class="botao-apoio" data-ver-ata="'
@@ -4637,6 +4639,10 @@
         return;
       }
       const somenteLeitura = !!id && (visualizar || !atasDados.podeEditar);
+      const competicoes = (atasDados.competicoes || []).slice();
+      if (ata && ata.competicao && competicoes.indexOf(ata.competicao) === -1) {
+        competicoes.push(ata.competicao);
+      }
       ataAlterada = false;
       ataEmEdicao = ata || null;
       const area = document.getElementById('areaAtas');
@@ -4652,6 +4658,14 @@
         + '<div class="campo curto"><label for="ataData">Data *</label><input type="date" id="ataData" required value="'
         + escapar(ata ? ata.data : new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
           .toISOString().slice(0, 10)) + '"></div>'
+        + '<div class="campo largo" id="ataCampoCompeticao"'
+        + (ata && ata.tipo === 'campeonato' ? '' : ' hidden')
+        + '><label for="ataCompeticao">Competição *</label><select id="ataCompeticao">'
+        + '<option value="">Selecione a competição</option>'
+        + competicoes.map(function (nome) {
+          return '<option value="' + escapar(nome) + '"'
+            + (ata && ata.competicao === nome ? ' selected' : '') + '>' + escapar(nome) + '</option>';
+        }).join('') + '</select></div>'
         + '<div class="campo largo"><label for="ataLocal">Local</label><input id="ataLocal" maxlength="200" value="'
         + escapar(ata ? ata.local : '') + '"></div>'
         + '<div class="campo cheio"><label for="ataParticipantes">Participantes</label><textarea id="ataParticipantes" maxlength="5000" style="min-height:70px;">'
@@ -4669,6 +4683,14 @@
       });
       document.getElementById('formAta').addEventListener('input', function () { ataAlterada = true; });
       document.getElementById('formAta').addEventListener('change', function () { ataAlterada = true; });
+      document.getElementById('ataTipo').addEventListener('change', function () {
+        const campeonato = this.value === 'campeonato';
+        document.getElementById('ataCampoCompeticao').hidden = !campeonato;
+        const seletor = document.getElementById('ataCompeticao');
+        seletor.required = campeonato;
+        if (!campeonato) seletor.value = '';
+      });
+      document.getElementById('ataCompeticao').required = !!(ata && ata.tipo === 'campeonato');
       if (somenteLeitura) {
         document.querySelectorAll('#formAta input, #formAta select, #formAta textarea')
           .forEach(function (campo) { campo.disabled = true; });
@@ -4693,6 +4715,7 @@
         id: ataEmEdicao ? ataEmEdicao.id : '',
         revisao: ataEmEdicao ? ataEmEdicao.revisao : '',
         tipo: document.getElementById('ataTipo').value,
+        competicao: document.getElementById('ataCompeticao').value,
         titulo: document.getElementById('ataTitulo').value,
         data: document.getElementById('ataData').value,
         local: document.getElementById('ataLocal').value,

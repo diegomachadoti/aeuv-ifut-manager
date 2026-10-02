@@ -545,7 +545,11 @@ Atletas e Usuários do sistema. Só Atletas ainda está marcado como `breve`.
 
 **Admin e Diretoria** podem consultar, criar atas e exportar PDFs. O editor
 contém tipo (Associação ou Campeonato), título, data, local, participantes e
-texto livre; o botão **Salvar ata** guarda o trabalho mesmo antes de exportar.
+texto livre. Ao escolher **Campeonato**, aparece o campo obrigatório de
+competição, usando a mesma lista do módulo Financeiro; a escolha aparece na
+lista de atas e no cabeçalho e corpo do PDF. Atas antigas continuam legíveis,
+mesmo sem competição informada. O botão **Salvar ata** guarda o trabalho mesmo
+antes de exportar.
 Apenas a **Diretoria** pode editar atas existentes; apenas o **Admin** pode
 excluí-las. Alterações não salvas exigem confirmação antes de sair do editor.
 
