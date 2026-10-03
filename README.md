@@ -36,28 +36,81 @@ Veja como os formulários geram e armazenam esses arquivos no
 - `selectors.ini`: seletores Selenium do iFut
 - `downloads\`: entrada, processados, falhas e resultados
 
-## Instalação em outra máquina (Windows)
+## Instalação inicial após clonar (Linux e Windows)
 
-Depois de clonar o repositório, prepare o ambiente Python e configure os arquivos
-privados, que não acompanham o clone.
+O clone traz o código, `config.ini`, `selectors.ini`, regulamentos e modelos.
+O ambiente virtual, credenciais, tokens, assinatura digitalizada e arquivos
+baixados/gerados precisam ser preparados na máquina; não acompanham o clone.
 
-### 1. Instalar Python e Google Chrome
+### 1. Instalar os pré-requisitos e clonar
 
-Recomenda-se **Python 3.13**, versão utilizada no ambiente atual, e **Google
-Chrome atualizado**. O projeto baixa o ChromeDriver automaticamente na primeira
-execução; mantenha acesso à internet.
+Recomenda-se **Python 3.13** e **Google Chrome atualizado**. Também é necessário
+ter Git para clonar. O projeto baixa o ChromeDriver automaticamente na primeira
+execução; mantenha acesso à internet para instalar dependências, acessar o iFut
+e autorizar o Google Drive.
+
+**Linux (Ubuntu/Debian):**
+
+```bash
+sudo apt update
+sudo apt install git python3 python3-venv python3-pip
+python3 --version
+```
+
+Esses pacotes instalam o Python padrão da distribuição, não necessariamente
+3.13. Se você já instalou o Python 3.13 separadamente, use `python3.13` ao criar
+a `.venv` e instale o pacote de suporte a `venv` dessa versão, quando necessário.
+
+Instale o Google Chrome pelo [site oficial](https://www.google.com/chrome/).
+Para a configuração padrão (`headless = false`), use uma sessão gráfica com
+navegador disponível. Em servidor sem interface gráfica, é possível definir
+`[selenium] headless = true`, mas a primeira autorização OAuth ainda precisa
+de um navegador e do retorno ao servidor local aberto pela automação.
+
+**Windows:** instale Git, Python 3.13 e Google Chrome. Abra o PowerShell.
+
+Em ambos os sistemas, clone e entre na raiz do projeto:
+
+```bash
+git clone https://github.com/diegomachadoti/aeuv-ifut-manager.git
+cd aeuv-ifut-manager
+```
+
+Se já clonou, apenas abra o terminal na pasta que contém `main.py` e
+`requirements.txt`. Execute os comandos deste guia sempre nessa pasta: os
+caminhos relativos de configuração e recursos dependem dela.
 
 ### 2. Criar o ambiente e instalar as dependências
 
-Abra o PowerShell na pasta do projeto clonado e execute:
+**Linux:**
+
+```bash
+python3 -m venv .venv
+./.venv/bin/python -m pip install -r requirements.txt
+```
+
+**Windows (PowerShell):**
 
 ```powershell
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r .\requirements.txt
 ```
 
-Não copie a `.venv` da máquina antiga: crie um ambiente novo. Os comandos deste
-guia usam diretamente o Python da `.venv`, sem precisar ativá-la.
+Não copie a `.venv` de outra máquina ou sistema operacional: crie um ambiente
+novo. Os exemplos de execução abaixo usam **Linux**, com o Python da `.venv`
+diretamente, sem precisar ativá-la. No Windows, substitua
+`./.venv/bin/python` por `.\.venv\Scripts\python.exe` e use `\` nos caminhos.
+
+No Linux, a ativação é opcional:
+
+```bash
+source .venv/bin/activate
+python main.py --help
+deactivate
+```
+
+Depois de ativar, `python` e `pip` apontam para a `.venv`. Sem ativar, continue
+usando `./.venv/bin/python`. Não use `.venv/Scripts/python.exe` no Linux.
 
 ### 3. Configurar o acesso ao iFut
 
@@ -78,7 +131,59 @@ O `config.ini` e o `selectors.ini` já acompanham o clone. Revise caminhos
 absolutos que possam apontar para a máquina antiga, além das URLs e parâmetros
 usados nas rotinas.
 
-### 4. Configurar o Google Drive
+### 4. Ajustar os caminhos no Linux
+
+O `config.ini` versionado usa caminhos do Windows. No Linux, `\` **não é um
+separador de diretório**: `logs\ifut.log`, por exemplo, vira um arquivo com
+esse nome literal, em vez de um arquivo dentro de `logs/`.
+
+Acrescente as seções abaixo ao mesmo `config.local.ini` das credenciais.
+Elas substituem os caminhos sem alterar a configuração compartilhada:
+
+```ini
+[drive]
+download_dir = downloads/inscricoes
+processed_dir = downloads/inscricoes/processados
+failed_dir = downloads/inscricoes/falhas
+results_dir = downloads/inscricoes/resultados
+
+[app]
+log_path = logs/ifut.log
+dry_run = true
+
+[sumulas]
+download_dir = downloads/sumulas
+processed_dir = downloads/sumulas/processados
+failed_dir = downloads/sumulas/falhas
+notas_dir = downloads/sumulas/notas-oficiais
+regulamento = regulamento/regulamento-7-super-liga-união-2026
+controle_punicoes = downloads/sumulas/CONTROLE DE PUNIÇÕES - AEUV.txt
+
+[ia]
+modelo_nota = regulamento/modelo-nota-oficial.txt
+
+[pdf]
+logo = assets/logo-aeuv.png
+assinatura = assets/assinatura-presidente.png
+```
+
+Se uma seção já existir no arquivo, adicione as opções nela, sem repetir o
+cabeçalho. Preserve as credenciais de `[ifut]` e eventual chave de `[ia]`.
+No Windows, mantenha os caminhos do `config.ini`; a substituição acima é para
+Linux. Os exemplos de configuração nas demais seções deste README ainda
+mostram caminhos Windows: converta-os para `/` se for usá-los no Linux.
+
+As pastas de saída são criadas pelas rotinas que as utilizam. Para assinar PDFs
+finais, transfira por um meio seguro a imagem privada para
+`assets/assinatura-presidente.png`; ela não vem no clone. A logo é baixada de
+`[pdf] logo_url` se não existir localmente.
+
+> **Atenção:** `dry_run = true` impede salvar inclusões e confirmar
+> portabilidades, mas **não impede remoções**, movimentação/publicação no Drive
+> ou atualização da planilha. Não trate essa opção como uma simulação sem
+> efeitos externos. Antes do fluxo completo, revise as entradas e permissões.
+
+### 5. Configurar o Google Drive
 
 Para usar **OAuth (recomendado)**, coloque o arquivo
 **`google-oauth-client.json`** na raiz do projeto. Pode ser o mesmo arquivo de
@@ -91,30 +196,74 @@ da máquina antiga. Consulte [Configurar o OAuth](#configurar-o-oauth-uma-vez)
 para obter o arquivo de cliente caso ainda não o tenha.
 
 Se utilizar conta de serviço, transfira o JSON correspondente por um meio
-seguro e confira o caminho em `[drive] service_account_json`. Para publicação
-de novos arquivos no Drive, prefira OAuth.
+seguro e confira o caminho em `[drive] service_account_json` (o nome atual é
+`google-service-account-arte-top-udi.json`). Compartilhe as pastas e a planilha
+com o e-mail `client_email` dessa conta, com permissão de Editor para as rotinas
+que alteram arquivos. Para publicação de novos arquivos no Drive, prefira OAuth.
+
+Confira se a **Google Drive API** está ativada no projeto Google Cloud das
+credenciais. Revise `[drive] folder_embed_url`, `[sumulas] folder_embed_url`,
+`[sheets] spreadsheet_id` e as URLs/times do iFut: os valores do clone apontam
+para os recursos da associação, não para pastas de teste.
 
 **Não envie os arquivos de credenciais ou tokens ao Git.**
 
-### 5. Executar
+### 6. Conferir a instalação e executar
 
-Primeiro, execute apenas o login no iFut:
+Confira os comandos disponíveis, sem iniciar o processamento:
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py --login-only
+```bash
+./.venv/bin/python main.py --help
+```
+
+Primeiro, teste apenas o login no iFut, **sem sincronizar o Drive**:
+
+```bash
+./.venv/bin/python main.py --login-only --process-local-only
+```
+
+`--login-only` sozinho sincroniza o Drive antes de fazer login; a combinação
+acima dispensa a configuração do Drive para esse primeiro teste e encerra após
+o login, sem processar os TXT locais.
+
+Depois de configurar o OAuth, teste somente o download:
+
+```bash
+./.venv/bin/python main.py --sync-drive-only
 ```
 
 Depois, para executar o fluxo completo:
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py
+```bash
+./.venv/bin/python main.py
 ```
 
+Para salvar inclusões e confirmar portabilidades de fato, altere
+`[app] dry_run = false` no `config.local.ini` após revisar as entradas.
+
 > **Atenção:** o `config.ini` atual utiliza `dry_run = false`. O fluxo completo
-> pode realizar alterações reais no iFut; revise essa opção antes de executar.
+> pode realizar alterações reais no iFut, Drive e planilha. Revise as opções no
+> `config.local.ini` e as limitações de `dry_run` descritas acima antes de executar.
 
 Os aplicativos **Apps Script continuam rodando no Google**. Não é necessário
 reinstalá-los ou republicá-los apenas por mudar a máquina que executa o Python.
+A interface web não é um servidor Python local em `localhost`. Para uma
+implantação nova dos formulários e sistema interno, siga o
+[guia dos aplicativos Apps Script](apps-scripts/README.md).
+
+### Problemas comuns na primeira instalação (Linux)
+
+| Mensagem/sintoma | O que conferir |
+| --- | --- |
+| `..venvScriptspython.exe: command not found` | Foi usado um comando Windows no Bash. Use `./.venv/bin/python`. |
+| `ensurepip is not available` ao criar a `.venv` | Instale `python3-venv` (ou o pacote correspondente à versão escolhida) e crie a `.venv` novamente. |
+| `ModuleNotFoundError` | Instale `requirements.txt` com o mesmo Python da `.venv` usado para executar. |
+| Credencial `[ifut]` não configurada | Crie `config.local.ini` na raiz com usuário e senha; confira se está executando na raiz do projeto. |
+| JSON de credencial não encontrado | Coloque o cliente OAuth na raiz ou ajuste o caminho da conta de serviço; esses arquivos não vêm no clone. |
+| `access_denied` no OAuth | Confira a conta autorizada e, se o app estiver em teste, inclua-a como usuário de teste na tela de permissão OAuth. |
+| Erro ao abrir o Chrome ou ausência de janela | Confira a instalação do Google Chrome e a sessão gráfica; para execução sem janela, configure `[selenium] headless = true`. |
+| Regulamento/assinatura não encontrado ou arquivos com `\` no nome | Aplique as substituições de caminhos Linux da etapa 4 e confira os arquivos de entrada. |
+| Erro de acesso à API/pasta/planilha do Drive | Confira a API habilitada, os IDs configurados e as permissões da conta usada no OAuth ou da conta de serviço. |
 
 ## Configuração
 
@@ -188,35 +337,50 @@ Mapa `nome do time = url direta do time no iFut`.
 
 ## Execução
 
+Os comandos usam o Python da `.venv` no **Linux**, a partir da raiz do projeto.
+No PowerShell do Windows, substitua `./.venv/bin/python` por
+`.\.venv\Scripts\python.exe`. As opções (`--...`) são as mesmas.
+
 Baixar somente os TXT do Drive:
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py --sync-drive-only
+```bash
+./.venv/bin/python main.py --sync-drive-only
 ```
 
 Processar somente os arquivos locais já baixados:
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py --process-local-only
+```bash
+./.venv/bin/python main.py --process-local-only
 ```
 
-Testar somente login:
+Testar somente login, sem sincronizar o Drive:
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py --login-only
+```bash
+./.venv/bin/python main.py --login-only --process-local-only
 ```
 
 Fluxo completo:
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py
+```bash
+./.venv/bin/python main.py
 ```
 
 Atualizar somente a quantidade de atletas de todos os times configurados na planilha:
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py --update-all-team-counts
+```bash
+./.venv/bin/python main.py --update-all-team-counts
 ```
+
+Gerar relatórios financeiros a partir da planilha do Drive:
+
+```bash
+./.venv/bin/python main.py --gerar-pdf-financeiro geral --periodo 3m
+./.venv/bin/python main.py --gerar-pdf-financeiro competicao --origem "SUPER LIGA UNIÃO"
+./.venv/bin/python main.py --gerar-pdf-financeiro emenda --emenda "Emenda 042/2026"
+./.venv/bin/python main.py --gerar-pdf-financeiro geral --data-inicio 01/01/2026 --data-fim 31/03/2026
+```
+
+Esses relatórios exigem acesso à planilha `AEUV - Financeiro` no Drive.
 
 ## Fluxos suportados
 
@@ -279,13 +443,13 @@ A geração do PDF acontece depois que o TXT já está gravado e roda dentro de 
 `try/except`: se algo falhar ali, o processamento não é invalidado — fica só um
 aviso no log, e o PDF pode ser refeito depois pela linha de comando:
 
-```powershell
+```bash
 # um arquivo específico (nome completo ou trecho do nome)
-python resultado_pdf.py CRUZMALTINO-2026-09-24-12-28-59-1790263739846-resultado-20260924-160911.txt
-python resultado_pdf.py CRUZMALTINO
+./.venv/bin/python resultado_pdf.py CRUZMALTINO-2026-09-24-12-28-59-1790263739846-resultado-20260924-160911.txt
+./.venv/bin/python resultado_pdf.py CRUZMALTINO
 
 # todos os resultados já existentes
-python resultado_pdf.py --todos
+./.venv/bin/python resultado_pdf.py --todos
 ```
 
 ## Organização do Drive
@@ -426,7 +590,8 @@ no envio não invalida a execução: o arquivo local continua gravado.
    - ⚠️ Move local, mas não move no Drive (usar com cuidado)
 
 4. **`main.py --login-only`**
-   - ✅ Apenas faz login e encerra
+   - ✅ Sincroniza os TXT do Drive, faz login e encerra
+   - Para apenas fazer login, sem sincronizar, combine com `--process-local-only`
 
 ### Configuração de service account
 
@@ -501,8 +666,8 @@ Durante a execução, você verá logs prefixados com `[PLANILHA]` indicando cad
 
 O comando abaixo:
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py --update-all-team-counts
+```bash
+./.venv/bin/python main.py --update-all-team-counts
 ```
 
 faz o seguinte:
@@ -543,8 +708,8 @@ cada envio.
 ## Observações
 
 - `--process-local-only` usa apenas os TXT já existentes em `downloads\`.
-- Sem `service_account_json`, o fluxo do Drive usa scraping público (lento) e não consegue mover arquivos.
-- Com `service_account_json`, a API do Google Drive gerencia sincronização e movimentação automática.
+- Com o cliente OAuth ou a conta de serviço disponível, a API do Google Drive gerencia sincronização e movimentação automática.
+- Sem credencial disponível, o download de inscrições usa scraping público (lento) e não consegue mover arquivos no Drive; isso não substitui as credenciais exigidas pelas demais rotinas.
 - Em portabilidade, o campeonato de origem vem de `COMPETICAO ANTERIOR` do TXT; se não existir, usa `portability_source_championship`.
 - Os delays mais sensíveis ficaram em `[app]`.
 - Comissão técnica segue o fluxo da aba **Comissão Téc.** e retorna para **Elenco** nas ações de inclusão e remoção.
@@ -558,12 +723,12 @@ Lê as súmulas geradas pelo formulário [súmula digital](apps-scripts/README.m
 confronta o relato do árbitro com o regulamento e gera o **rascunho da Nota
 Oficial** da Comissão Disciplinar.
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py --analisar-sumulas
-# ou somente com arquivos já baixados em downloads\sumulas
-.\.venv\Scripts\python.exe .\main.py --analisar-sumulas --process-local-only
+```bash
+./.venv/bin/python main.py --analisar-sumulas
+# ou somente com arquivos já baixados em downloads/sumulas
+./.venv/bin/python main.py --analisar-sumulas --process-local-only
 # gerando a nota com IA (Gemini/OpenAI) em vez das regras fixas
-.\.venv\Scripts\python.exe .\main.py --analisar-sumulas --ia
+./.venv/bin/python main.py --analisar-sumulas --ia
 ```
 
 Há dois modos de gerar a nota:
@@ -739,13 +904,13 @@ linha de aviso do topo do TXT não precisa ser apagada.
 Para regerar o PDF depois de revisar o TXT ou de refazer a análise, sem
 analisar a súmula de novo:
 
-```powershell
+```bash
 # pelo número da nota
-.\.venv\Scripts\python.exe .\main.py --gerar-pdf-nota 5
+./.venv/bin/python main.py --gerar-pdf-nota 5
 # pelo protocolo da súmula (usa a nota de maior número dessa súmula)
-.\.venv\Scripts\python.exe .\main.py --gerar-pdf-nota SUM-20260925-BAE8C370
+./.venv/bin/python main.py --gerar-pdf-nota SUM-20260925-BAE8C370
 # pelo caminho do TXT
-.\.venv\Scripts\python.exe .\main.py --gerar-pdf-nota "downloads\sumulas\notas-oficiais\NOTA OFICIAL Nº 005-2026 – COMISSÃO DISCIPLINAR - CRUZMALTINOxTRK.txt"
+./.venv/bin/python main.py --gerar-pdf-nota "downloads/sumulas/notas-oficiais/NOTA OFICIAL Nº 005-2026 – COMISSÃO DISCIPLINAR - CRUZMALTINOxTRK.txt"
 ```
 
 ```ini
@@ -816,8 +981,8 @@ leva de volta ao relato que a motivou.
 Para refazer o controle a partir de todas as notas da pasta, valendo a nota de
 maior número de cada súmula:
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py --atualizar-controle-punicoes
+```bash
+./.venv/bin/python main.py --atualizar-controle-punicoes
 ```
 
 #### PDF do controle
@@ -869,15 +1034,15 @@ Presidente, o nome da associação e a competição. Informe o nome ou o caminho
 arquivo texto; ele é procurado também na pasta `regulamento\`, com ou sem a
 extensão `.txt`:
 
-```powershell
-# pelo nome do arquivo (procurado na pasta regulamento\)
-.\.venv\Scripts\python.exe .\main.py --gerar-pdf-regulamento regulamento-7-super-liga-união-2026.txt
+```bash
+# pelo nome do arquivo (procurado na pasta regulamento/)
+./.venv/bin/python main.py --gerar-pdf-regulamento regulamento-7-super-liga-união-2026.txt
 # sem a extensão .txt
-.\.venv\Scripts\python.exe .\main.py --gerar-pdf-regulamento regulamento-7-super-liga-união-2026
+./.venv/bin/python main.py --gerar-pdf-regulamento regulamento-7-super-liga-união-2026
 # pelo caminho completo
-.\.venv\Scripts\python.exe .\main.py --gerar-pdf-regulamento "regulamento\regulamento-7-super-liga-união-2026"
+./.venv/bin/python main.py --gerar-pdf-regulamento "regulamento/regulamento-7-super-liga-união-2026"
 # subtítulo personalizado (padrão: derivado do nome do arquivo -> "7ª SUPER LIGA UNIÃO 2026")
-.\.venv\Scripts\python.exe .\regulamento_pdf.py regulamento-7-super-liga-união-2026.txt --titulo "7ª SUPER LIGA UNIÃO 2026"
+./.venv/bin/python regulamento_pdf.py regulamento-7-super-liga-união-2026.txt --titulo "7ª SUPER LIGA UNIÃO 2026"
 ```
 
 Resultado: `regulamento\regulamento-7-super-liga-união-2026.pdf`.
@@ -896,8 +1061,8 @@ regulamento mudar, basta rodar o comando de novo.
 Para gerar e publicar a forma de disputa, informe o nome do arquivo (procurado
 automaticamente na pasta `formadisputa\`):
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py --gerar-pdf-forma-disputa "forma-disputa-7-super-liga-união-2026-3-rodadas"
+```bash
+./.venv/bin/python main.py --gerar-pdf-forma-disputa "forma-disputa-7-super-liga-união-2026-3-rodadas"
 ```
 
 O PDF gerado ao lado do texto também é publicado na subpasta `Regulamentos`,
@@ -919,8 +1084,8 @@ Ou seja, a publicação acontece no momento em que o documento final é gerado, 
 não exige um passo a mais. Para reenviar tudo de uma vez — na primeira carga,
 ou depois de revisar várias notas — existe o comando em lote:
 
-```powershell
-.\.venv\Scripts\python.exe .\main.py --publicar-drive
+```bash
+./.venv/bin/python main.py --publicar-drive
 ```
 
 **Só nota final é publicada.** Enquanto o texto tiver marcadores
@@ -966,12 +1131,16 @@ serviço em todos eles.
 No [Google Cloud Console](https://console.cloud.google.com/), projeto
 `arte-top-udi`:
 
-1. **APIs e serviços → Tela de permissão OAuth**: tipo **Externo**. Preencha
+1. **APIs e serviços → Biblioteca**: ative a **Google Drive API**, se ainda
+   não estiver habilitada.
+2. **APIs e serviços → Tela de permissão OAuth**: tipo **Externo**. Preencha
    nome do app, e-mail de suporte e de contato. Em **Público-alvo**, clique em
-   **Publicar app** (sem isso a autorização vence a cada 7 dias).
-2. **Credenciais → Criar credenciais → ID do cliente OAuth**, tipo
+   **Publicar app** (sem isso a autorização vence a cada 7 dias). Se mantiver
+   em teste durante a configuração, cadastre a conta que vai autorizar como
+   usuário de teste.
+3. **Credenciais → Criar credenciais → ID do cliente OAuth**, tipo
    **App para computador**. Baixe o JSON.
-3. Salve o arquivo na raiz do projeto como **`google-oauth-client.json`**.
+4. Salve o arquivo na raiz do projeto como **`google-oauth-client.json`**.
 
 Na primeira execução o navegador abre pedindo autorização. Como o app não passou
 pela verificação do Google, aparece o aviso *"O Google não verificou este app"* —

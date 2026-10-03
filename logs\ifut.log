@@ -1,0 +1,10 @@
+2026-10-02 17:27:10,544 [INFO] Arquivos sincronizados do Drive: 0
+2026-10-02 17:27:18,191 [INFO] Login executado com sucesso; encerrando por --login-only.
+2026-10-02 17:27:27,829 [INFO] [PDF] Logomarca baixada para assets\logo-aeuv.png
+2026-10-02 17:27:27,980 [INFO] [PDF] PDF da Forma de Disputa gerado em formadisputa/forma-disputa-7-super-liga-união-2026-3-rodadas.pdf
+2026-10-02 17:27:27,980 [ERROR] [DRIVE] Forma de disputa nao publicado: [Errno 2] No such file or directory: 'google-service-account-arte-top-udi.json'
+2026-10-02 17:30:03,606 [INFO] [PDF] PDF da Forma de Disputa gerado em formadisputa/forma-disputa-7-super-liga-união-2026-3-rodadas.pdf
+2026-10-02 17:30:07,255 [ERROR] [DRIVE] A conta de servico nao pode criar arquivos novos no Drive. Configure o acesso OAuth (ver 'Publicacao no Drive' no README) ou copie os arquivos para a pasta uma primeira vez pelo navegador.
+2026-10-02 17:30:07,255 [ERROR] [DRIVE] Nao publicado (primeira copia manual): forma-disputa-7-super-liga-união-2026-3-rodadas.pdf
+2026-10-02 17:32:03,509 [INFO] [PDF] PDF da Forma de Disputa gerado em formadisputa/forma-disputa-7-super-liga-união-2026-3-rodadas.pdf
+2026-10-02 17:32:07,161 [INFO] [DRIVE] Publicado: forma-disputa-7-super-liga-união-2026-3-rodadas.pdf
