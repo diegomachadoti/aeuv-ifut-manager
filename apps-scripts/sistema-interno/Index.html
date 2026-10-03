@@ -1518,6 +1518,35 @@
       background: #fff; color: var(--texto); }
     .ata-editor .campo textarea:focus { outline: 2px solid var(--dourado); }
     .ata-editor .campo input { width: 100%; box-sizing: border-box; }
+
+    /* ---------- Gestão do campeonato ---------- */
+    .campeonatos { table-layout: fixed; font-size: 13px; }
+    .campeonatos th, .campeonatos td { padding: 9px 10px; vertical-align: top; }
+    .campeonatos th:nth-child(1) { width: 18%; }
+    .campeonatos th:nth-child(2) { width: 10%; }
+    .campeonatos th:nth-child(3) { width: 12%; }
+    .campeonatos th:nth-child(4) { width: 11%; }
+    .campeonatos th:nth-child(5) { width: 14%; }
+    .campeonatos th:nth-child(6) { width: 17%; }
+    .campeonatos th:nth-child(7) { width: 18%; }
+
+    .campeonato-form textarea {
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 120px;
+      resize: vertical;
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      padding: 10px;
+      font: inherit;
+      background: #fff;
+      color: var(--texto);
+    }
+
+    .campeonato-form textarea:focus { outline: 2px solid var(--dourado); }
+
+    .pilula.rascunho { background: #fff2d8; color: #8a5a00; font-weight: bold; }
+    .pilula.encerrado { background: #e6e8ec; color: #3b4254; font-weight: bold; }
   </style>
   <style>
     /* ---------- Botao discreto de tema (claro / escuro) ---------- */
@@ -1983,6 +2012,20 @@
         return;
       }
 
+      if (modulo.id === 'campeonatos') {
+        conteudo.innerHTML = cabecalho
+          + '<div id="areaCampeonatos">' + blocoCarregando('statusCampeonatos') + '</div>';
+        carregarCampeonatos();
+        return;
+      }
+
+      if (modulo.id === 'grupos-rodadas') {
+        conteudo.innerHTML = cabecalho
+          + '<div id="areaGruposRodadas">' + blocoCarregando('statusGruposRodadas') + '</div>';
+        carregarGruposRodadas();
+        return;
+      }
+
       if (modulo.tipo === 'usuarios') {
         conteudo.innerHTML = cabecalho
           + '<div id="areaUsuarios">' + blocoCarregando('statusUsuarios') + '</div>';
@@ -2045,6 +2088,13 @@
         conteudo.innerHTML = cabecalho
           + '<div id="areaAtas">' + blocoCarregando() + '</div>';
         carregarAtas();
+        return;
+      }
+
+      if (modulo.tipo === 'campeonato') {
+        conteudo.innerHTML = cabecalho
+          + '<div class="aviso"><strong>Em desenvolvimento.</strong> '
+          + 'O módulo <strong>' + escapar(modulo.nome) + '</strong> faz parte do MVP da Gestão do Campeonato e será liberado em uma etapa futura.</div>';
         return;
       }
 
@@ -2488,6 +2538,384 @@
             '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>');
         })
         .removerEquipe(nome);
+    }
+
+    /**
+     * Gestão do campeonato: primeiro bloco funcional do MVP.
+     */
+    let campeonatos = { registros: [], status: [], modalidades: [], visibilidades: [], podeEditar: false, podeExcluir: false };
+
+    function carregarCampeonatos() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'campeonatos') {
+            return;
+          }
+
+          campeonatos = dados;
+          montarTelaCampeonatos();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'campeonatos') {
+            return;
+          }
+
+          document.getElementById('statusCampeonatos').outerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarCampeonatos();
+    }
+
+    function classeCampeonatoStatus(status) {
+      if (status === 'ativo') {
+        return 'pilula ativo';
+      }
+
+      if (status === 'encerrado') {
+        return 'pilula encerrado';
+      }
+
+      return 'pilula rascunho';
+    }
+
+    function opcoesSelect(lista, selecionado, rotuloVazio) {
+      const vazio = rotuloVazio ? '<option value="">' + escapar(rotuloVazio) + '</option>' : '';
+
+      return vazio + (lista || []).map(function (item) {
+        const id = typeof item === 'object' ? item.id : item;
+        const nome = typeof item === 'object' ? item.nome : item;
+
+        return '<option value="' + escapar(id) + '"' + (String(id) === String(selecionado) ? ' selected' : '') + '>'
+          + escapar(nome) + '</option>';
+      }).join('');
+    }
+
+    function montarTelaCampeonatos(recado) {
+      const registros = campeonatos.registros || [];
+      const soma = { rascunho: 0, ativo: 0, encerrado: 0 };
+
+      registros.forEach(function (item) {
+        if (soma[item.status] !== undefined) {
+          soma[item.status]++;
+        }
+      });
+
+      const linhas = registros.map(function (item) {
+        const periodo = [item.dataInicio ? formatarDataBr(item.dataInicio) : '—', item.dataFim ? formatarDataBr(item.dataFim) : '—'].join(' a ');
+        const acoes = campeonatos.podeEditar
+          ? '<button type="button" class="botao-apoio" data-editar-campeonato="' + escapar(item.id) + '">Editar</button>'
+            + (campeonatos.podeExcluir ? ' <button type="button" class="botao-apoio perigo" data-remover-campeonato="' + escapar(item.id) + '">Remover</button>' : '')
+          : '<span class="apoio">-</span>';
+
+        return '<tr>'
+          + '<td data-rotulo="Nome">' + escapar(item.nome || '-') + '<div class="equipe-dado">' + escapar(item.temporada || '') + '</div></td>'
+          + '<td data-rotulo="Modalidade">' + escapar(item.modalidade || '-') + '</td>'
+          + '<td data-rotulo="Status"><span class="' + classeCampeonatoStatus(item.status || '') + '">' + escapar(item.status || '-') + '</span></td>'
+          + '<td data-rotulo="Visibilidade">' + escapar(item.visibilidade || '-') + '</td>'
+          + '<td data-rotulo="Período">' + escapar(periodo) + '</td>'
+          + '<td data-rotulo="Responsável">' + escapar(item.responsavel || '-') + '</td>'
+          + '<td class="acoes-linha" data-rotulo="Ações">' + acoes + '</td>'
+          + '</tr>';
+      }).join('');
+
+      const sucesso = recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '';
+
+      const resumo = '<div class="resumo">'
+        + '<div class="indicador"><div class="numero">' + registros.length + '</div><div class="rotulo">Total</div></div>'
+        + '<div class="indicador cumprir"><div class="numero">' + soma.ativo + '</div><div class="rotulo">Ativos</div></div>'
+        + '<div class="indicador pendente"><div class="numero">' + soma.rascunho + '</div><div class="rotulo">Rascunhos</div></div>'
+        + '<div class="indicador cumprida"><div class="numero">' + soma.encerrado + '</div><div class="rotulo">Encerrados</div></div>'
+        + '</div>';
+
+      const barra = campeonatos.podeEditar
+        ? '<div class="barra-acoes">'
+          + '<button type="button" class="botao-principal" id="novoCampeonato">Novo campeonato</button>'
+          + '<button type="button" class="botao-apoio" id="recarregarCampeonatos">Atualizar</button>'
+          + '<span class="espaco"></span>'
+          + '</div>'
+        : '';
+
+      const vazio = '<div class="vazio">Nenhum campeonato cadastrado ainda.</div>';
+
+      document.getElementById('areaCampeonatos').innerHTML = sucesso
+        + resumo
+        + barra
+        + (registros.length
+          ? '<div class="tabela-rolagem"><table class="campeonatos"><thead><tr>'
+            + '<th>Nome</th><th>Modalidade</th><th>Status</th><th>Visibilidade</th><th>Período</th><th>Responsável</th><th>Ações</th>'
+            + '</tr></thead><tbody>' + linhas + '</tbody></table></div>'
+          : vazio)
+        + '<div id="campeonatoFormArea"></div>'
+        + '<div class="aviso">Este é o ponto de partida do MVP da gestão do campeonato. A partir daqui, o próximo passo é ligar grupos, rodadas, jogos, disciplina e súmula.</div>';
+
+      if (campeonatos.podeEditar) {
+        document.getElementById('novoCampeonato').addEventListener('click', function () {
+          abrirFormularioCampeonato('');
+        });
+
+        document.getElementById('recarregarCampeonatos').addEventListener('click', function () {
+          abrirModulo('campeonatos');
+        });
+
+        document.querySelectorAll('[data-editar-campeonato]').forEach(function (botao) {
+          botao.addEventListener('click', function () {
+            abrirFormularioCampeonato(botao.dataset.editarCampeonato);
+          });
+        });
+
+        if (campeonatos.podeExcluir) {
+          document.querySelectorAll('[data-remover-campeonato]').forEach(function (botao) {
+            botao.addEventListener('click', function () {
+              removerCampeonatoDoSistema(botao.dataset.removerCampeonato);
+            });
+          });
+        }
+      }
+    }
+
+    function abrirFormularioCampeonato(id) {
+      const registro = (campeonatos.registros || []).filter(function (item) {
+        return item.id === id;
+      })[0] || null;
+
+      const statusAtual = registro ? registro.status : 'rascunho';
+      const modalidadeAtual = registro ? registro.modalidade : (campeonatos.modalidades[0] ? campeonatos.modalidades[0].id : 'Futsal');
+      const visibilidadeAtual = registro ? registro.visibilidade : (campeonatos.visibilidades[0] ? campeonatos.visibilidades[0].id : 'Interno');
+
+      document.getElementById('campeonatoFormArea').innerHTML = '<div class="formulario campeonato-form">'
+        + '<h3>' + (registro ? 'Editar campeonato' : 'Novo campeonato') + '</h3>'
+        + '<p class="apoio">Cadastre a edição, organize o começo da competição e deixe a base pronta para grupos, rodadas e jogos.</p>'
+        + '<div class="grupo"><div class="campos">'
+        + campoTexto('cNome', 'Nome do campeonato', registro ? registro.nome : '', 'largo', '', 'text')
+        + campoTexto('cTemporada', 'Temporada / Edição', registro ? registro.temporada : '', 'curto', '', 'text')
+        + '<div class="campo curto"><label for="cModalidade">Modalidade</label><select id="cModalidade">'
+        + opcoesSelect(campeonatos.modalidades, modalidadeAtual, '')
+        + '</select></div>'
+        + '<div class="campo curto"><label for="cStatus">Status</label><select id="cStatus">'
+        + opcoesSelect(campeonatos.status, statusAtual, '')
+        + '</select></div>'
+        + '<div class="campo curto"><label for="cVisibilidade">Visibilidade</label><select id="cVisibilidade">'
+        + opcoesSelect(campeonatos.visibilidades, visibilidadeAtual, '')
+        + '</select></div>'
+        + campoTexto('cResponsavel', 'Organização responsável', registro ? registro.responsavel : '', 'largo', '', 'text')
+        + campoTexto('cInicio', 'Data de início', registro ? registro.dataInicio : '', 'curto', '', 'date')
+        + campoTexto('cFim', 'Data de fim', registro ? registro.dataFim : '', 'curto', '', 'date')
+        + '<div class="campo cheio"><label for="cDescricao">Descrição</label>'
+        + '<textarea id="cDescricao" placeholder="Descreva a competição, formato, observações e regras específicas">'
+        + escapar(registro ? registro.descricao : '') + '</textarea></div>'
+        + '</div></div>'
+        + '<div class="acoes-formulario">'
+        + '<button type="button" class="botao-principal" id="gravarCampeonato">'
+        + (registro ? 'Salvar' : 'Criar campeonato') + '</button>'
+        + '<button type="button" class="botao-apoio" id="voltarCampeonatos">Voltar à lista</button>'
+        + '<span class="espaco"></span>'
+        + '<span class="apoio" id="avisoCampeonato"></span>'
+        + '</div>'
+        + '</div>';
+
+      document.getElementById('voltarCampeonatos').addEventListener('click', function () {
+        document.getElementById('campeonatoFormArea').innerHTML = '';
+      });
+
+      document.getElementById('gravarCampeonato').addEventListener('click', function () {
+        gravarCampeonato(registro ? registro.id : '');
+      });
+    }
+
+    function gravarCampeonato(idOriginal) {
+      const botao = document.getElementById('gravarCampeonato');
+      const aviso = document.getElementById('avisoCampeonato');
+
+      botao.disabled = true;
+      aviso.textContent = 'Gravando...';
+
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          campeonatos = dados;
+          montarTelaCampeonatos(dados.recado);
+        })
+        .withFailureHandler(function (erro) {
+          botao.disabled = false;
+          aviso.innerHTML = '<span class="alerta">'
+            + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+        })
+        .salvarCampeonato({
+          idOriginal: idOriginal,
+          nome: document.getElementById('cNome').value,
+          temporada: document.getElementById('cTemporada').value,
+          modalidade: document.getElementById('cModalidade').value,
+          status: document.getElementById('cStatus').value,
+          visibilidade: document.getElementById('cVisibilidade').value,
+          responsavel: document.getElementById('cResponsavel').value,
+          dataInicio: document.getElementById('cInicio').value,
+          dataFim: document.getElementById('cFim').value,
+          descricao: document.getElementById('cDescricao').value
+        });
+    }
+
+    function removerCampeonatoDoSistema(id) {
+      if (!window.confirm('Remover este campeonato?')) {
+        return;
+      }
+
+      document.getElementById('areaCampeonatos').innerHTML = blocoCarregando('statusCampeonatos');
+
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          campeonatos = dados;
+          montarTelaCampeonatos(dados.recado);
+        })
+        .withFailureHandler(function (erro) {
+          montarTelaCampeonatos();
+
+          document.getElementById('areaCampeonatos').insertAdjacentHTML('afterbegin',
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>');
+        })
+        .removerCampeonato(id);
+    }
+
+    let gruposRodadas = { campeonatos: [], formatos: [], registros: [], podeEditar: false };
+
+    function carregarGruposRodadas() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'grupos-rodadas') {
+            return;
+          }
+
+          gruposRodadas = dados;
+          montarTelaGruposRodadas();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'grupos-rodadas') {
+            return;
+          }
+
+          document.getElementById('statusGruposRodadas').outerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarGruposRodadas();
+    }
+
+    function montarTelaGruposRodadas(recado) {
+      const registros = gruposRodadas.registros || [];
+      const sucesso = recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '';
+
+      if (!(gruposRodadas.campeonatos || []).length) {
+        document.getElementById('areaGruposRodadas').innerHTML = sucesso
+          + '<div class="aviso"><strong>Cadastre um campeonato primeiro.</strong> A configuração de grupos e rodadas depende de pelo menos um campeonato criado na etapa anterior.</div>';
+        return;
+      }
+
+      const linhas = registros.map(function (item) {
+        const estrutura = item.grupos
+          ? item.grupos + ' grupo(s) · ' + item.vagasPorGrupo + ' vaga(s) · ' + item.rodadas + ' rodada(s)'
+          : 'Ainda não configurado';
+
+        return '<tr>'
+          + '<td data-rotulo="Campeonato">' + escapar(item.campeonatoNome || '-') + '<div class="equipe-dado">' + escapar(item.temporada || '') + '</div></td>'
+          + '<td data-rotulo="Fase">' + escapar(item.faseNome || '—') + '</td>'
+          + '<td data-rotulo="Formato">' + escapar(item.formato || '—') + '</td>'
+          + '<td data-rotulo="Estrutura">' + escapar(estrutura) + (item.idaVolta ? '<div class="equipe-dado">ida e volta</div>' : '') + '</td>'
+          + '<td class="acoes-linha" data-rotulo="Ações"><button type="button" class="botao-apoio" data-editar-estrutura="' + escapar(item.campeonatoId) + '">Configurar</button></td>'
+          + '</tr>';
+      }).join('');
+
+      document.getElementById('areaGruposRodadas').innerHTML = sucesso
+        + '<div class="barra-acoes">'
+        + '<button type="button" class="botao-principal" id="novaEstruturaCampeonato">Nova configuração</button>'
+        + '<button type="button" class="botao-apoio" id="recarregarEstruturasCampeonato">Atualizar</button>'
+        + '</div>'
+        + '<div class="tabela-rolagem"><table class="campeonatos"><thead><tr>'
+        + '<th>Campeonato</th><th>Fase</th><th>Formato</th><th>Estrutura</th><th>Ações</th>'
+        + '</tr></thead><tbody>' + linhas + '</tbody></table></div>'
+        + '<div id="gruposRodadasFormArea"></div>'
+        + '<div class="aviso">Nesta etapa do MVP você define a estrutura base da fase: quantidade de grupos, vagas por grupo, rodadas e se a fase terá ida e volta.</div>';
+
+      document.getElementById('novaEstruturaCampeonato').addEventListener('click', function () {
+        abrirFormularioGruposRodadas('');
+      });
+
+      document.getElementById('recarregarEstruturasCampeonato').addEventListener('click', function () {
+        abrirModulo('grupos-rodadas');
+      });
+
+      document.querySelectorAll('[data-editar-estrutura]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          abrirFormularioGruposRodadas(botao.dataset.editarEstrutura);
+        });
+      });
+    }
+
+    function abrirFormularioGruposRodadas(campeonatoId) {
+      const selecionado = campeonatoId || ((gruposRodadas.campeonatos[0] && gruposRodadas.campeonatos[0].id) || '');
+      const registro = (gruposRodadas.registros || []).filter(function (item) {
+        return item.campeonatoId === selecionado;
+      })[0] || null;
+
+      document.getElementById('gruposRodadasFormArea').innerHTML = '<div class="formulario campeonato-form">'
+        + '<h3>Configurar grupos e rodadas</h3>'
+        + '<p class="apoio">Defina a fase inicial do campeonato para preparar o caminho das próximas telas do MVP.</p>'
+        + '<div class="grupo"><div class="campos">'
+        + '<div class="campo largo"><label for="grCampeonato">Campeonato</label><select id="grCampeonato">'
+        + opcoesSelect(gruposRodadas.campeonatos, selecionado, '') + '</select></div>'
+        + campoTexto('grFaseNome', 'Nome da fase', registro ? registro.faseNome : 'Classificação', 'curto', '', 'text')
+        + '<div class="campo largo"><label for="grFormato">Formato</label><select id="grFormato">'
+        + opcoesSelect(gruposRodadas.formatos, registro ? registro.formato : (gruposRodadas.formatos[0] ? gruposRodadas.formatos[0].id : ''), '') + '</select></div>'
+        + campoTexto('grGrupos', 'Quantidade de grupos', registro && registro.grupos ? registro.grupos : '2', 'mini', '', 'number')
+        + campoTexto('grVagas', 'Vagas por grupo', registro && registro.vagasPorGrupo ? registro.vagasPorGrupo : '4', 'mini', '', 'number')
+        + campoTexto('grRodadas', 'Quantidade de rodadas', registro && registro.rodadas ? registro.rodadas : '3', 'mini', '', 'number')
+        + '<div class="campo curto"><label for="grIdaVolta">Ida e volta</label><select id="grIdaVolta">'
+        + '<option value="nao"' + (registro && registro.idaVolta ? '' : ' selected') + '>Não</option>'
+        + '<option value="sim"' + (registro && registro.idaVolta ? ' selected' : '') + '>Sim</option>'
+        + '</select></div>'
+        + '<div class="campo cheio"><label for="grObservacoes">Observações</label>'
+        + '<textarea id="grObservacoes" placeholder="Ex.: classificação por pontos corridos, sorteio posterior do mata-mata, critérios especiais de desempate">'
+        + escapar(registro ? registro.observacoes : '') + '</textarea></div>'
+        + '</div></div>'
+        + '<div class="acoes-formulario">'
+        + '<button type="button" class="botao-principal" id="gravarGruposRodadas">Salvar configuração</button>'
+        + '<button type="button" class="botao-apoio" id="voltarGruposRodadas">Voltar à lista</button>'
+        + '<span class="espaco"></span>'
+        + '<span class="apoio" id="avisoGruposRodadas"></span>'
+        + '</div></div>';
+
+      document.getElementById('voltarGruposRodadas').addEventListener('click', function () {
+        document.getElementById('gruposRodadasFormArea').innerHTML = '';
+      });
+
+      document.getElementById('gravarGruposRodadas').addEventListener('click', function () {
+        gravarGruposRodadas();
+      });
+    }
+
+    function gravarGruposRodadas() {
+      const botao = document.getElementById('gravarGruposRodadas');
+      const aviso = document.getElementById('avisoGruposRodadas');
+
+      botao.disabled = true;
+      aviso.textContent = 'Gravando...';
+
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          gruposRodadas = dados;
+          montarTelaGruposRodadas(dados.recado);
+        })
+        .withFailureHandler(function (erro) {
+          botao.disabled = false;
+          aviso.innerHTML = '<span class="alerta">'
+            + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+        })
+        .salvarGruposRodadas({
+          campeonatoId: document.getElementById('grCampeonato').value,
+          faseNome: document.getElementById('grFaseNome').value,
+          formato: document.getElementById('grFormato').value,
+          grupos: document.getElementById('grGrupos').value,
+          vagasPorGrupo: document.getElementById('grVagas').value,
+          rodadas: document.getElementById('grRodadas').value,
+          idaVolta: document.getElementById('grIdaVolta').value === 'sim',
+          observacoes: document.getElementById('grObservacoes').value
+        });
     }
 
     /**

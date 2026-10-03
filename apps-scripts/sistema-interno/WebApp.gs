@@ -183,7 +183,8 @@ const PERFIS_DA_EQUIPE = ['associado'];
  * de cima. Grupo sem nenhum modulo liberado nao aparece.
  */
 const GRUPOS = [
-  { id: 'formularios', nome: 'Formulários', icone: '📨' }
+  { id: 'formularios', nome: 'Formulários', icone: '📨' },
+  { id: 'campeonato', nome: 'Gestão do campeonato', icone: '🏆' }
 ];
 
 /**
@@ -279,7 +280,7 @@ const MODULOS = [
     nome: 'Associados',
     icone: '🤝',
     tipo: 'associados',
-    descricao: 'Cadastro das equipes associadas, com representante legal, documentação e situação.',
+    descricao: 'Cadastro das equipes associadas, com representante legal, documentacao e situacao.',
     perfis: ['admin', 'diretoria', 'associado']
   },
   {
@@ -288,6 +289,69 @@ const MODULOS = [
     icone: '🏳️',
     tipo: 'equipes',
     descricao: 'Equipes participantes. A lista alimenta o cadastro, os acessos e os dois formulários.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'campeonatos',
+    nome: 'Campeonatos',
+    icone: '🏆',
+    tipo: 'campeonato',
+    grupo: 'campeonato',
+    descricao: 'Cadastro e gestão das competições da associação.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'grupos-rodadas',
+    nome: 'Grupos e Rodadas',
+    icone: '🗂️',
+    tipo: 'campeonato',
+    grupo: 'campeonato',
+    descricao: 'Configuração de grupos, fases e rodadas do campeonato.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'times-campeonato',
+    nome: 'Times',
+    icone: '🏳️',
+    tipo: 'campeonato',
+    grupo: 'campeonato',
+    descricao: 'Cadastro e reaproveitamento de times entre competições.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'atletas-campeonato',
+    nome: 'Atletas',
+    icone: '👥',
+    tipo: 'campeonato',
+    grupo: 'campeonato',
+    descricao: 'Cadastro e importação de atletas vinculados aos times.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'jogos-campeonato',
+    nome: 'Jogos',
+    icone: '⚽',
+    tipo: 'campeonato',
+    grupo: 'campeonato',
+    descricao: 'Geração de confrontos e lançamentos de resultado.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'disciplina-campeonato',
+    nome: 'Disciplina',
+    icone: '🟨',
+    tipo: 'campeonato',
+    grupo: 'campeonato',
+    descricao: 'Cartões, suspensão e zeragem de cartões.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'sumula-campeonato',
+    nome: 'Súmula',
+    icone: '📋',
+    tipo: 'campeonato',
+    grupo: 'campeonato',
+    descricao: 'Geração da súmula básica da partida.',
     perfis: ['admin', 'diretoria']
   },
   {
@@ -310,7 +374,7 @@ const MODULOS = [
     id: 'atletas',
     nome: 'Atletas',
     icone: '👥',
-    tipo: 'breve',
+    tipo: 'atletas',
     descricao: 'Cadastro consolidado dos atletas e a situação de cada um na competição.',
     perfis: ['admin', 'diretoria']
   },
@@ -323,6 +387,15 @@ const MODULOS = [
     perfis: ['admin']
   }
 ];
+
+/** Gestão inicial do campeonato: a base usa propriedades do script para não
+ * criar novas planilhas nem exigir mais infraestrutura no MVP. */
+const CAMPEONATOS_CHAVE = 'CAMPEONATOS_LISTA';
+const CAMPEONATOS_STATUS = ['rascunho', 'ativo', 'encerrado'];
+const CAMPEONATOS_MODALIDADES = ['Futsal', 'Society', 'Futebol de Campo', 'Outro'];
+const CAMPEONATOS_VISIBILIDADES = ['Interno', 'Público'];
+const CAMPEONATO_ESTRUTURA_CHAVE = 'CAMPEONATO_ESTRUTURA_';
+const CAMPEONATO_FORMATOS_FASE = ['Grupos corridos', 'Mata-mata', 'Grupos + mata-mata', 'Pontos corridos'];
 
 /******************************************************
  * ABERTURA DO SISTEMA
@@ -591,7 +664,7 @@ function higienizarUsuarios_(lista) {
  * @return {boolean}
  */
 function emailValido_(email) {
-  return /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(String(email || ''));
+  return new RegExp('^[^@\\s]+@[^@\\s.]+\\.[^@\\s]+$').test(String(email || ''));
 }
 
 /**
@@ -861,7 +934,7 @@ function higienizarEquipes_(lista) {
   const vistos = {};
 
   const validos = (lista || []).map(function (nome) {
-    return String(nome || '').replace(/\s+/g, ' ').trim();
+    return limparEspacos_(nome);
   }).filter(function (nome) {
     const chave = chaveEquipe_(nome);
 
@@ -975,7 +1048,7 @@ function listarEquipes() {
 function salvarEquipe(dados) {
   const sessao = exigirEdicaoEquipes_();
 
-  const nome = String((dados && dados.nome) || '').replace(/\s+/g, ' ').trim();
+  const nome = limparEspacos_(dados && dados.nome);
   const original = String((dados && dados.nomeOriginal) || '').trim();
 
   if (!nome) {
@@ -1287,6 +1360,434 @@ function moduloLiberado_(id, perfil) {
   });
 }
 
+function limparEspacos_(valor) {
+  return String(valor === null || valor === undefined ? '' : valor)
+    .replace(new RegExp('\\s+', 'g'), ' ')
+    .trim();
+}
+
+/******************************************************
+ * GESTAO DO CAMPEONATO
+ ******************************************************/
+
+function sessaoCampeonato_() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || (sessao.usuario.perfil !== 'admin' && sessao.usuario.perfil !== 'diretoria')) {
+    throw new Error('Você não tem permissão para gerenciar campeonatos.');
+  }
+
+  return sessao;
+}
+
+function dataIsoValida_(valor) {
+  const texto = String(valor || '').trim();
+
+  if (!texto) {
+    return '';
+  }
+
+  const partes = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!partes) {
+    return '';
+  }
+
+  const data = new Date(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3]));
+
+  if (data.getFullYear() !== Number(partes[1]) || data.getMonth() !== Number(partes[2]) - 1 || data.getDate() !== Number(partes[3])) {
+    return '';
+  }
+
+  return texto;
+}
+
+function campeonatos_() {
+  try {
+    const bruto = PropertiesService.getScriptProperties().getProperty(CAMPEONATOS_CHAVE);
+
+    if (!bruto) {
+      return [];
+    }
+
+    const lista = JSON.parse(bruto);
+
+    if (!Array.isArray(lista)) {
+      return [];
+    }
+
+    return lista.map(function (item) {
+      return normalizarCampeonato_(item, true);
+    }).filter(function (item) {
+      return Boolean(item.id && item.nome);
+    });
+  } catch (e) {
+    return [];
+  }
+}
+
+function normalizarCampeonato_(dados, preservaMetadados) {
+  const bruto = dados || {};
+  const id = String(bruto.id || '').trim() || Utilities.getUuid();
+  const nome = limparEspacos_(bruto.nome);
+  const temporada = limparEspacos_(bruto.temporada);
+  const modalidade = CAMPEONATOS_MODALIDADES.indexOf(String(bruto.modalidade || '').trim()) !== -1
+    ? String(bruto.modalidade || '').trim()
+    : CAMPEONATOS_MODALIDADES[0];
+  const status = CAMPEONATOS_STATUS.indexOf(String(bruto.status || '').trim()) !== -1
+    ? String(bruto.status || '').trim()
+    : CAMPEONATOS_STATUS[0];
+  const visibilidade = CAMPEONATOS_VISIBILIDADES.indexOf(String(bruto.visibilidade || '').trim()) !== -1
+    ? String(bruto.visibilidade || '').trim()
+    : CAMPEONATOS_VISIBILIDADES[0];
+
+  return {
+    id: id,
+    nome: nome,
+    temporada: temporada,
+    modalidade: modalidade,
+    status: status,
+    descricao: String(bruto.descricao || '').trim(),
+    responsavel: String(bruto.responsavel || '').trim(),
+    visibilidade: visibilidade,
+    dataInicio: dataIsoValida_(bruto.dataInicio),
+    dataFim: dataIsoValida_(bruto.dataFim),
+    criadoEm: preservaMetadados ? String(bruto.criadoEm || '') : '',
+    criadoPor: preservaMetadados ? String(bruto.criadoPor || '') : '',
+    atualizadoEm: preservaMetadados ? String(bruto.atualizadoEm || '') : '',
+    atualizadoPor: preservaMetadados ? String(bruto.atualizadoPor || '') : '',
+    revisao: preservaMetadados ? String(bruto.revisao || '') : ''
+  };
+}
+
+function gravarCampeonatos_(lista) {
+  PropertiesService.getScriptProperties()
+    .setProperty(CAMPEONATOS_CHAVE, JSON.stringify(lista));
+}
+
+function montarTelaCampeonatos_(lista, sessao) {
+  const ordenados = lista.slice().sort(function (a, b) {
+    const ordemStatus = CAMPEONATOS_STATUS.indexOf(a.status) - CAMPEONATOS_STATUS.indexOf(b.status);
+
+    return ordemStatus || String(b.atualizadoEm || b.criadoEm || '').localeCompare(String(a.atualizadoEm || a.criadoEm || ''));
+  });
+
+  return {
+    registros: ordenados.map(function (item) {
+      return {
+        id: item.id,
+        nome: item.nome,
+        temporada: item.temporada,
+        modalidade: item.modalidade,
+        status: item.status,
+        descricao: item.descricao,
+        responsavel: item.responsavel,
+        visibilidade: item.visibilidade,
+        dataInicio: item.dataInicio,
+        dataFim: item.dataFim,
+        criadoEm: item.criadoEm,
+        criadoPor: item.criadoPor,
+        atualizadoEm: item.atualizadoEm,
+        atualizadoPor: item.atualizadoPor
+      };
+    }),
+    status: CAMPEONATOS_STATUS.map(function (valor) {
+      return { id: valor, nome: valor.charAt(0).toUpperCase() + valor.slice(1) };
+    }),
+    modalidades: CAMPEONATOS_MODALIDADES.map(function (valor) {
+      return { id: valor, nome: valor };
+    }),
+    visibilidades: CAMPEONATOS_VISIBILIDADES.map(function (valor) {
+      return { id: valor, nome: valor };
+    }),
+    podeEditar: true,
+    podeExcluir: sessao.usuario.perfil === 'admin'
+  };
+}
+
+function listarCampeonatos() {
+  const sessao = sessaoCampeonato_();
+
+  return montarTelaCampeonatos_(campeonatos_(), sessao);
+}
+
+function salvarCampeonato(payload) {
+  const sessao = sessaoCampeonato_();
+  const dados = payload || {};
+  const nome = limparEspacos_(dados.nome);
+  const temporada = limparEspacos_(dados.temporada);
+  const modalidade = String(dados.modalidade || '').trim();
+  const status = String(dados.status || '').trim();
+  const visibilidade = String(dados.visibilidade || '').trim();
+  const descricao = String(dados.descricao || '').trim();
+  const responsavel = String(dados.responsavel || '').trim();
+  const dataInicio = dataIsoValida_(dados.dataInicio);
+  const dataFim = dataIsoValida_(dados.dataFim);
+
+  if (!nome) {
+    throw new Error('Informe o nome do campeonato.');
+  }
+
+  if (dados.dataInicio && !dataInicio) {
+    throw new Error('Informe uma data inicial válida no formato AAAA-MM-DD.');
+  }
+
+  if (dados.dataFim && !dataFim) {
+    throw new Error('Informe uma data final válida no formato AAAA-MM-DD.');
+  }
+
+  if (dataInicio && dataFim && dataInicio > dataFim) {
+    throw new Error('A data inicial não pode ser maior que a data final.');
+  }
+
+  if (CAMPEONATOS_MODALIDADES.indexOf(modalidade) === -1) {
+    throw new Error('Escolha uma modalidade válida.');
+  }
+
+  if (CAMPEONATOS_STATUS.indexOf(status) === -1) {
+    throw new Error('Escolha um status válido.');
+  }
+
+  if (CAMPEONATOS_VISIBILIDADES.indexOf(visibilidade) === -1) {
+    throw new Error('Escolha uma visibilidade válida.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const lista = campeonatos_();
+    const idOriginal = String(dados.idOriginal || dados.id || '').trim();
+    const agora = formatarDataHora_(new Date());
+    const existente = idOriginal
+      ? lista.reduce(function (achado, item, indice) {
+          return item.id === idOriginal ? { item: item, indice: indice } : achado;
+        }, null)
+      : null;
+
+    if (idOriginal && !existente) {
+      throw new Error('Este campeonato não está mais na lista. Recarregue a página.');
+    }
+
+    const registro = normalizarCampeonato_({
+      id: existente ? existente.item.id : '',
+      nome: nome,
+      temporada: temporada,
+      modalidade: modalidade,
+      status: status,
+      descricao: descricao,
+      responsavel: responsavel,
+      visibilidade: visibilidade,
+      dataInicio: dataInicio,
+      dataFim: dataFim,
+      criadoEm: existente ? existente.item.criadoEm : agora,
+      criadoPor: existente ? existente.item.criadoPor : sessao.email,
+      atualizadoEm: agora,
+      atualizadoPor: sessao.email,
+      revisao: Utilities.getUuid()
+    }, true);
+
+    if (existente) {
+      lista[existente.indice] = registro;
+    } else {
+      lista.push(registro);
+    }
+
+    gravarCampeonatos_(lista);
+
+    const tela = montarTelaCampeonatos_(lista, sessao);
+    tela.recado = (existente ? 'Campeonato atualizado: ' : 'Campeonato incluído: ') + nome;
+    return tela;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function removerCampeonato(id) {
+  const sessao = sessaoCampeonato_();
+
+  if (sessao.usuario.perfil !== 'admin') {
+    throw new Error('Somente o Administrador pode excluir campeonatos.');
+  }
+
+  const idAlvo = String(id || '').trim();
+
+  if (!idAlvo) {
+    throw new Error('Informe o campeonato que deseja excluir.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const lista = campeonatos_();
+    const restante = lista.filter(function (item) {
+      return item.id !== idAlvo;
+    });
+
+    if (restante.length === lista.length) {
+      throw new Error('Campeonato não encontrado.');
+    }
+
+    gravarCampeonatos_(restante);
+    PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_ESTRUTURA_CHAVE + idAlvo);
+
+    const tela = montarTelaCampeonatos_(restante, sessao);
+    tela.recado = 'Campeonato removido com sucesso.';
+    return tela;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function chaveEstruturaCampeonato_(campeonatoId) {
+  return CAMPEONATO_ESTRUTURA_CHAVE + String(campeonatoId || '').trim();
+}
+
+function campeonatosResumo_() {
+  return campeonatos_().map(function (item) {
+    return {
+      id: item.id,
+      nome: item.nome,
+      temporada: item.temporada,
+      status: item.status
+    };
+  });
+}
+
+function estruturaCampeonato_(campeonatoId) {
+  const chave = chaveEstruturaCampeonato_(campeonatoId);
+
+  try {
+    const bruto = PropertiesService.getScriptProperties().getProperty(chave);
+
+    if (!bruto) {
+      return null;
+    }
+
+    const item = JSON.parse(bruto) || {};
+
+    return {
+      campeonatoId: String(item.campeonatoId || '').trim(),
+      faseNome: limparCampo_(item.faseNome || 'Classificação', 80),
+      formato: CAMPEONATO_FORMATOS_FASE.indexOf(String(item.formato || '')) !== -1
+        ? String(item.formato)
+        : CAMPEONATO_FORMATOS_FASE[0],
+      grupos: Number(item.grupos || 1),
+      vagasPorGrupo: Number(item.vagasPorGrupo || 4),
+      rodadas: Number(item.rodadas || 1),
+      idaVolta: Boolean(item.idaVolta),
+      observacoes: limparCampo_(item.observacoes || '', 500),
+      atualizadoEm: String(item.atualizadoEm || ''),
+      atualizadoPor: String(item.atualizadoPor || '')
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function listarGruposRodadas() {
+  sessaoCampeonato_();
+
+  const campeonatos = campeonatosResumo_();
+  const estruturas = campeonatos.map(function (campeonato) {
+    const estrutura = estruturaCampeonato_(campeonato.id);
+
+    return {
+      campeonatoId: campeonato.id,
+      campeonatoNome: campeonato.nome,
+      temporada: campeonato.temporada,
+      status: campeonato.status,
+      faseNome: estrutura ? estrutura.faseNome : '',
+      formato: estrutura ? estrutura.formato : '',
+      grupos: estrutura ? estrutura.grupos : 0,
+      vagasPorGrupo: estrutura ? estrutura.vagasPorGrupo : 0,
+      rodadas: estrutura ? estrutura.rodadas : 0,
+      idaVolta: estrutura ? estrutura.idaVolta : false,
+      observacoes: estrutura ? estrutura.observacoes : '',
+      atualizadoEm: estrutura ? estrutura.atualizadoEm : '',
+      atualizadoPor: estrutura ? estrutura.atualizadoPor : ''
+    };
+  });
+
+  return {
+    campeonatos: campeonatos,
+    formatos: CAMPEONATO_FORMATOS_FASE.map(function (valor) {
+      return { id: valor, nome: valor };
+    }),
+    registros: estruturas,
+    podeEditar: true
+  };
+}
+
+function salvarGruposRodadas(payload) {
+  const sessao = sessaoCampeonato_();
+  const dados = payload || {};
+  const campeonatoId = String(dados.campeonatoId || '').trim();
+  const campeonatos = campeonatos_();
+  const campeonato = campeonatos.filter(function (item) {
+    return item.id === campeonatoId;
+  })[0];
+
+  if (!campeonato) {
+    throw new Error('Escolha um campeonato válido para configurar.');
+  }
+
+  const faseNome = limparCampo_(dados.faseNome || 'Classificação', 80);
+  const formato = String(dados.formato || '').trim();
+  const grupos = Number(dados.grupos || 0);
+  const vagasPorGrupo = Number(dados.vagasPorGrupo || 0);
+  const rodadas = Number(dados.rodadas || 0);
+  const observacoes = limparCampo_(dados.observacoes || '', 500);
+
+  if (!faseNome) {
+    throw new Error('Informe o nome da fase ou etapa.');
+  }
+
+  if (CAMPEONATO_FORMATOS_FASE.indexOf(formato) === -1) {
+    throw new Error('Escolha um formato válido para a fase.');
+  }
+
+  if (grupos < 1 || grupos > 32) {
+    throw new Error('A quantidade de grupos deve ficar entre 1 e 32.');
+  }
+
+  if (vagasPorGrupo < 2 || vagasPorGrupo > 64) {
+    throw new Error('As vagas por grupo devem ficar entre 2 e 64.');
+  }
+
+  if (rodadas < 1 || rodadas > 99) {
+    throw new Error('A quantidade de rodadas deve ficar entre 1 e 99.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const registro = {
+      campeonatoId: campeonatoId,
+      faseNome: faseNome,
+      formato: formato,
+      grupos: grupos,
+      vagasPorGrupo: vagasPorGrupo,
+      rodadas: rodadas,
+      idaVolta: Boolean(dados.idaVolta),
+      observacoes: observacoes,
+      atualizadoEm: formatarDataHora_(new Date()),
+      atualizadoPor: sessao.email
+    };
+
+    PropertiesService.getScriptProperties()
+      .setProperty(chaveEstruturaCampeonato_(campeonatoId), JSON.stringify(registro));
+
+    const tela = listarGruposRodadas();
+    tela.recado = 'Grupos e rodadas atualizados para ' + campeonato.nome + '.';
+    return tela;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /******************************************************
  * SOLICITACOES DE INSCRICAO, REMOCAO E PORTABILIDADE
  *
@@ -1344,7 +1845,8 @@ function listarSolicitacoes() {
       const arquivo = iterador.next();
       const nome = arquivo.getName();
 
-      if (nome.toLowerCase().slice(-4) !== '.txt') {
+      // A pasta tambem recebe PDFs e anexos; so os TXT da sumula interessam.
+      if (!/^SUMULA_.+\.txt$/i.test(nome)) {
         continue;
       }
 
@@ -1364,7 +1866,7 @@ function listarSolicitacoes() {
     const arquivo = iteradorRaiz.next();
     const nome = arquivo.getName();
 
-    if (nome.toLowerCase().slice(-4) !== '.txt' || nomesVistos[nome]) {
+    if (!/^SUMULA_.+\.txt$/i.test(nome) || nomesVistos[nome]) {
       continue;
     }
 
@@ -1992,6 +2494,548 @@ function aparar_(linhas) {
   }
 
   return copia;
+}
+
+/******************************************************
+ * ATLETAS CONSOLIDADOS
+ ******************************************************/
+
+function listarAtletas() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || !moduloLiberado_('atletas', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar o cadastro consolidado de atletas.');
+  }
+
+  const dadosSolicitacoes = listarSolicitacoes();
+  const dadosPunicoes = listarPunicoes();
+  const dadosSumulas = listarSumulas();
+  const mapa = {};
+  const lista = [];
+  const indiceNome = {};
+
+  (dadosSolicitacoes.registros || []).forEach(function (solicitacao) {
+    (solicitacao.pessoas || []).forEach(function (pessoa) {
+      const chave = chaveAtletaSolicitacao_(pessoa);
+
+      if (!chave) {
+        return;
+      }
+
+      let atleta = mapa[chave];
+
+      if (!atleta) {
+        atleta = criarAtletaConsolidado_(chave, {
+          nome: pessoa.nome,
+          cpf: pessoa.cpf,
+          nascimento: pessoa.nascimento,
+          tipo: pessoa.tipo,
+          equipe: solicitacao.equipe,
+          competicao: solicitacao.competicao
+        });
+        mapa[chave] = atleta;
+        lista.push(atleta);
+        registrarIndiceNomeAtleta_(indiceNome, atleta);
+      }
+
+      atualizarBaseAtleta_(atleta, {
+        nome: pessoa.nome,
+        cpf: pessoa.cpf,
+        nascimento: pessoa.nascimento,
+        tipo: pessoa.tipo,
+        equipe: solicitacao.equipe,
+        competicao: solicitacao.competicao
+      });
+
+      adicionarEquipeAoAtleta_(atleta, solicitacao.equipe);
+      adicionarCompeticaoAoAtleta_(atleta, solicitacao.competicao);
+      atleta.movimentacoes.push({
+        ordem: Number(solicitacao.ordem || 0),
+        protocolo: solicitacao.protocolo || '',
+        dataHora: solicitacao.dataHora || '',
+        situacaoSolicitacao: solicitacao.situacao || '',
+        acao: pessoa.acao || '',
+        tipo: pessoa.tipo || '',
+        equipe: solicitacao.equipe || '',
+        competicao: solicitacao.competicao || '',
+        competicaoAnterior: pessoa.competicaoAnterior || '',
+        responsavel: solicitacao.responsavel || '',
+        arquivoUrl: solicitacao.arquivoUrl || '',
+        resultadoPdfUrl: solicitacao.resultadoPdfUrl || '',
+        resultadoTxtUrl: solicitacao.resultadoTxtUrl || ''
+      });
+    });
+  });
+
+  (dadosPunicoes.registros || []).forEach(function (registro) {
+    let atleta = localizarAtletaPorNomeEquipe_(indiceNome, registro.punido, registro.equipe);
+
+    if (!atleta) {
+      const chaveAvulsa = chaveAtletaAvulso_(registro.punido, registro.equipe);
+
+      if (!chaveAvulsa) {
+        return;
+      }
+
+      atleta = mapa[chaveAvulsa];
+
+      if (!atleta) {
+        atleta = criarAtletaConsolidado_(chaveAvulsa, {
+          nome: registro.punido,
+          tipo: registro.tipo,
+          equipe: registro.equipe,
+          competicao: registro.competicao
+        });
+        mapa[chaveAvulsa] = atleta;
+        lista.push(atleta);
+        registrarIndiceNomeAtleta_(indiceNome, atleta);
+      }
+    }
+
+    atualizarBaseAtleta_(atleta, {
+      nome: registro.punido,
+      tipo: registro.tipo,
+      equipe: registro.equipe,
+      competicao: registro.competicao
+    });
+
+    adicionarEquipeAoAtleta_(atleta, registro.equipe);
+    adicionarCompeticaoAoAtleta_(atleta, registro.competicao);
+    atleta.punicoes.push({
+      nota: registro.nota || '',
+      dataNota: registro.dataNota || '',
+      competicao: registro.competicao || '',
+      dataJogo: registro.dataJogo || '',
+      partida: registro.partida || '',
+      equipe: registro.equipe || '',
+      tipo: registro.tipo || '',
+      camisa: registro.camisa || '',
+      artigo: registro.artigo || '',
+      partidas: registro.partidas || '',
+      tempo: registro.tempo || '',
+      decisao: registro.decisao || '',
+      status: registro.status || '',
+      situacao: registro.situacao || '',
+      sumula: registro.sumula || ''
+    });
+  });
+
+  (dadosSumulas.registros || []).forEach(function (registro) {
+    (registro.envolvidos || []).forEach(function (envolvido) {
+      let atleta = localizarAtletaPorNomeEquipe_(indiceNome, envolvido.nome, envolvido.equipe);
+
+      if (!atleta) {
+        const chaveAvulsa = chaveAtletaAvulso_(envolvido.nome, envolvido.equipe);
+
+        if (!chaveAvulsa) {
+          return;
+        }
+
+        atleta = mapa[chaveAvulsa];
+
+        if (!atleta) {
+          atleta = criarAtletaConsolidado_(chaveAvulsa, {
+            nome: envolvido.nome,
+            tipo: envolvido.tipo,
+            equipe: envolvido.equipe
+          });
+          mapa[chaveAvulsa] = atleta;
+          lista.push(atleta);
+          registrarIndiceNomeAtleta_(indiceNome, atleta);
+        }
+      }
+
+      atualizarBaseAtleta_(atleta, {
+        nome: envolvido.nome,
+        tipo: envolvido.tipo,
+        equipe: envolvido.equipe
+      });
+
+      adicionarEquipeAoAtleta_(atleta, envolvido.equipe);
+      atleta.sumulas.push({
+        ordem: Number(registro.ordem || 0),
+        situacao: registro.situacao || '',
+        protocolo: registro.protocolo || '',
+        dataJogo: registro.dataJogo || '',
+        dataEnvio: registro.dataEnvio || '',
+        confronto: registro.confronto || '',
+        equipe: envolvido.equipe || '',
+        tipo: envolvido.tipo || '',
+        camisa: envolvido.camisa || '',
+        pdfUrl: registro.pdfUrl || '',
+        arquivoUrl: registro.arquivoUrl || ''
+      });
+    });
+  });
+
+  const registros = lista.map(function (atleta) {
+    atleta.movimentacoes.sort(function (a, b) {
+      return Number(b.ordem || 0) - Number(a.ordem || 0);
+    });
+
+    atleta.punicoes.sort(function (a, b) {
+      const ordemB = ordemDataBr_(b.dataNota) || ordemDataBr_(b.dataJogo);
+      const ordemA = ordemDataBr_(a.dataNota) || ordemDataBr_(a.dataJogo);
+
+      return ordemB - ordemA;
+    });
+
+    atleta.sumulas.sort(function (a, b) {
+      return Number(b.ordem || 0) - Number(a.ordem || 0);
+    });
+
+    const ultimaMovimentacao = atleta.movimentacoes[0] || null;
+    const ultimaProcessada = atleta.movimentacoes.filter(function (item) {
+      return item.situacaoSolicitacao === 'Processada';
+    })[0] || null;
+
+    atleta.aguardandoCadastro = atleta.movimentacoes.filter(function (item) {
+      return item.situacaoSolicitacao === 'Aguardando';
+    }).length;
+    atleta.falhasCadastro = atleta.movimentacoes.filter(function (item) {
+      return item.situacaoSolicitacao === 'Falha';
+    }).length;
+    atleta.pendenciasCadastro = atleta.aguardandoCadastro + atleta.falhasCadastro;
+    atleta.totalMovimentacoes = atleta.movimentacoes.length;
+    atleta.totalPunicoes = atleta.punicoes.length;
+    atleta.punicoesACumprir = atleta.punicoes.filter(function (item) {
+      return String(item.situacao || '').indexOf('A CUMPRIR') === 0;
+    }).length;
+    atleta.punicoesPendentes = atleta.punicoes.filter(function (item) {
+      return item.status !== 'DEFINIDA';
+    }).length;
+    atleta.totalSumulas = atleta.sumulas.length;
+    atleta.ultimaMovimentacao = ultimaMovimentacao ? ultimaMovimentacao.dataHora : '';
+    atleta.ultimaAcao = ultimaMovimentacao ? ultimaMovimentacao.acao : '';
+    atleta.ultimaSolicitacaoSituacao = ultimaMovimentacao ? ultimaMovimentacao.situacaoSolicitacao : '';
+    atleta.ultimaSolicitacaoProtocolo = ultimaMovimentacao ? ultimaMovimentacao.protocolo : '';
+    atleta.ultimaSumulaData = atleta.sumulas.length ? (atleta.sumulas[0].dataJogo || atleta.sumulas[0].dataEnvio) : '';
+    atleta.situacaoCadastro = situacaoCadastroAtleta_(ultimaMovimentacao, ultimaProcessada);
+    atleta.situacaoDisciplina = situacaoDisciplinaAtleta_(atleta);
+    atleta.situacaoAtual = situacaoAtualAtleta_(atleta, ultimaMovimentacao, ultimaProcessada);
+
+    if (ultimaProcessada) {
+      atleta.equipeAtual = ultimaProcessada.equipe || atleta.equipeAtual;
+      atleta.competicaoAtual = ultimaProcessada.competicao || atleta.competicaoAtual;
+    }
+
+    return {
+      chave: atleta.chave,
+      nome: atleta.nome,
+      cpf: atleta.cpf,
+      nascimento: atleta.nascimento,
+      tipo: atleta.tipo,
+      equipeAtual: atleta.equipeAtual,
+      competicaoAtual: atleta.competicaoAtual,
+      situacaoAtual: atleta.situacaoAtual,
+      situacaoCadastro: atleta.situacaoCadastro,
+      situacaoDisciplina: atleta.situacaoDisciplina,
+      totalMovimentacoes: atleta.totalMovimentacoes,
+      pendenciasCadastro: atleta.pendenciasCadastro,
+      aguardandoCadastro: atleta.aguardandoCadastro,
+      falhasCadastro: atleta.falhasCadastro,
+      totalPunicoes: atleta.totalPunicoes,
+      punicoesACumprir: atleta.punicoesACumprir,
+      punicoesPendentes: atleta.punicoesPendentes,
+      totalSumulas: atleta.totalSumulas,
+      ultimaMovimentacao: atleta.ultimaMovimentacao,
+      ultimaAcao: atleta.ultimaAcao,
+      ultimaSolicitacaoSituacao: atleta.ultimaSolicitacaoSituacao,
+      ultimaSolicitacaoProtocolo: atleta.ultimaSolicitacaoProtocolo,
+      ultimaSumulaData: atleta.ultimaSumulaData,
+      equipesHistorico: atleta.equipesHistorico.slice(),
+      competicoesHistorico: atleta.competicoesHistorico.slice(),
+      movimentacoes: atleta.movimentacoes.slice(0, 12),
+      punicoes: atleta.punicoes.slice(0, 8),
+      sumulas: atleta.sumulas.slice(0, 8)
+    };
+  }).sort(function (a, b) {
+    const ordem = prioridadeSituacaoAtleta_(a.situacaoAtual) - prioridadeSituacaoAtleta_(b.situacaoAtual);
+
+    if (ordem !== 0) {
+      return ordem;
+    }
+
+    return String(a.nome || '').localeCompare(String(b.nome || ''));
+  });
+
+  return {
+    registros: registros,
+    total: registros.length,
+    fontes: {
+      solicitacoesLidas: (dadosSolicitacoes.registros || []).length,
+      solicitacoesTotal: Number(dadosSolicitacoes.total || 0),
+      solicitacoesPastaUrl: dadosSolicitacoes.pastaUrl || '',
+      punicoesTotal: (dadosPunicoes.registros || []).length,
+      punicoesArquivoUrl: dadosPunicoes.arquivoUrl || '',
+      punicoesAtualizadoEm: dadosPunicoes.atualizadoEm || '',
+      sumulasLidas: (dadosSumulas.registros || []).length,
+      sumulasTotal: Number(dadosSumulas.total || 0),
+      sumulasPastaUrl: dadosSumulas.pastaUrl || ''
+    }
+  };
+}
+
+function criarAtletaConsolidado_(chave, dados) {
+  const atleta = {
+    chave: chave,
+    nome: limparCampo_(dados.nome || 'Atleta não identificado', 150) || 'Atleta não identificado',
+    cpf: somenteDigitos_(dados.cpf),
+    nascimento: limparCampo_(dados.nascimento || '', 20),
+    tipo: limparCampo_(dados.tipo || '', 40),
+    equipeAtual: limparCampo_(dados.equipe || '', 120),
+    competicaoAtual: limparCampo_(dados.competicao || '', 120),
+    situacaoAtual: '',
+    situacaoCadastro: '',
+    situacaoDisciplina: '',
+    totalMovimentacoes: 0,
+    pendenciasCadastro: 0,
+    aguardandoCadastro: 0,
+    falhasCadastro: 0,
+    totalPunicoes: 0,
+    punicoesACumprir: 0,
+    punicoesPendentes: 0,
+    totalSumulas: 0,
+    ultimaMovimentacao: '',
+    ultimaAcao: '',
+    ultimaSolicitacaoSituacao: '',
+    ultimaSolicitacaoProtocolo: '',
+    ultimaSumulaData: '',
+    equipesHistorico: [],
+    competicoesHistorico: [],
+    movimentacoes: [],
+    punicoes: [],
+    sumulas: [],
+    _equipes: {}
+  };
+
+  adicionarEquipeAoAtleta_(atleta, dados.equipe);
+  adicionarCompeticaoAoAtleta_(atleta, dados.competicao);
+
+  return atleta;
+}
+
+function atualizarBaseAtleta_(atleta, dados) {
+  const nome = limparCampo_(dados.nome || '', 150);
+  const cpf = somenteDigitos_(dados.cpf);
+  const nascimento = limparCampo_(dados.nascimento || '', 20);
+  const tipo = limparCampo_(dados.tipo || '', 40);
+  const equipe = limparCampo_(dados.equipe || '', 120);
+  const competicao = limparCampo_(dados.competicao || '', 120);
+
+  if (nome && (atleta.nome === 'Atleta não identificado' || atleta.nome.length < nome.length)) {
+    atleta.nome = nome;
+  }
+
+  if (!atleta.cpf && cpf.length === 11) {
+    atleta.cpf = cpf;
+  }
+
+  if (!atleta.nascimento && nascimento) {
+    atleta.nascimento = nascimento;
+  }
+
+  if (!atleta.tipo && tipo) {
+    atleta.tipo = tipo;
+  }
+
+  if (!atleta.equipeAtual && equipe) {
+    atleta.equipeAtual = equipe;
+  }
+
+  if (!atleta.competicaoAtual && competicao) {
+    atleta.competicaoAtual = competicao;
+  }
+}
+
+function registrarIndiceNomeAtleta_(indiceNome, atleta) {
+  const chave = chaveNomePessoa_(atleta.nome);
+
+  if (!chave) {
+    return;
+  }
+
+  if (!indiceNome[chave]) {
+    indiceNome[chave] = [];
+  }
+
+  if (indiceNome[chave].indexOf(atleta) === -1) {
+    indiceNome[chave].push(atleta);
+  }
+}
+
+function localizarAtletaPorNomeEquipe_(indiceNome, nome, equipe) {
+  const candidatos = indiceNome[chaveNomePessoa_(nome)] || [];
+
+  if (!candidatos.length) {
+    return null;
+  }
+
+  const equipeChave = chaveEquipe_(equipe);
+
+  if (!equipeChave) {
+    return candidatos.length === 1 ? candidatos[0] : null;
+  }
+
+  const comEquipe = candidatos.filter(function (atleta) {
+    return Boolean(atleta._equipes[equipeChave]);
+  });
+
+  if (comEquipe.length === 1) {
+    return comEquipe[0];
+  }
+
+  return candidatos.length === 1 ? candidatos[0] : null;
+}
+
+function adicionarEquipeAoAtleta_(atleta, equipe) {
+  const texto = limparCampo_(equipe || '', 120);
+
+  if (!texto) {
+    return;
+  }
+
+  atleta._equipes[chaveEquipe_(texto)] = true;
+  adicionarValorUnico_(atleta.equipesHistorico, texto);
+}
+
+function adicionarCompeticaoAoAtleta_(atleta, competicao) {
+  adicionarValorUnico_(atleta.competicoesHistorico, limparCampo_(competicao || '', 120));
+}
+
+function adicionarValorUnico_(lista, valor) {
+  const texto = String(valor || '').trim();
+
+  if (texto && lista.indexOf(texto) === -1) {
+    lista.push(texto);
+  }
+}
+
+function chaveAtletaSolicitacao_(pessoa) {
+  const cpf = somenteDigitos_(pessoa && pessoa.cpf);
+
+  if (cpf.length === 11) {
+    return 'CPF:' + cpf;
+  }
+
+  const nome = chaveNomePessoa_(pessoa && pessoa.nome);
+  const nascimento = limparCampo_(pessoa && pessoa.nascimento || '', 20);
+
+  return nome ? 'NOME:' + nome + '|' + nascimento : '';
+}
+
+function chaveAtletaAvulso_(nome, equipe) {
+  const chaveNome = chaveNomePessoa_(nome);
+
+  if (!chaveNome) {
+    return '';
+  }
+
+  return 'AVULSO:' + chaveNome + '|' + chaveEquipe_(equipe || '');
+}
+
+function chaveNomePessoa_(nome) {
+  return String(nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function ordemDataBr_(valor) {
+  const achado = String(valor || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
+
+  if (!achado) {
+    return 0;
+  }
+
+  return Number(achado[3] + achado[2] + achado[1] + (achado[4] || '00') + (achado[5] || '00'));
+}
+
+function situacaoCadastroAtleta_(ultimaMovimentacao, ultimaProcessada) {
+  if (ultimaMovimentacao && ultimaMovimentacao.situacaoSolicitacao === 'Aguardando') {
+    return 'Aguardando';
+  }
+
+  if (ultimaMovimentacao && ultimaMovimentacao.situacaoSolicitacao === 'Falha') {
+    return 'Falha';
+  }
+
+  if (!ultimaProcessada) {
+    return 'Sem cadastro';
+  }
+
+  if (ultimaProcessada.acao === 'Remocao') {
+    return 'Removido';
+  }
+
+  if (ultimaProcessada.acao === 'Portabilidade') {
+    return 'Portado';
+  }
+
+  if (ultimaProcessada.acao === 'Inclusao') {
+    return 'Inscrito';
+  }
+
+  return 'Processado';
+}
+
+function situacaoDisciplinaAtleta_(atleta) {
+  if (atleta.punicoesACumprir > 0) {
+    return 'Suspenso';
+  }
+
+  if (atleta.punicoesPendentes > 0) {
+    return 'Pena a definir';
+  }
+
+  return 'Regular';
+}
+
+function situacaoAtualAtleta_(atleta, ultimaMovimentacao, ultimaProcessada) {
+  if (atleta.punicoesACumprir > 0) {
+    return 'Suspenso';
+  }
+
+  if (ultimaMovimentacao && ultimaMovimentacao.situacaoSolicitacao === 'Aguardando') {
+    return ultimaProcessada ? 'Aguardando atualização' : 'Aguardando inscrição';
+  }
+
+  if (ultimaMovimentacao && ultimaMovimentacao.situacaoSolicitacao === 'Falha') {
+    return ultimaProcessada ? 'Falha recente' : 'Cadastro com falha';
+  }
+
+  if (ultimaProcessada) {
+    return ultimaProcessada.acao === 'Remocao' ? 'Fora da competição' : 'Regular';
+  }
+
+  if (atleta.totalSumulas > 0) {
+    return 'Em súmula';
+  }
+
+  if (atleta.punicoesPendentes > 0) {
+    return 'Pena a definir';
+  }
+
+  return 'Sem inscrição processada';
+}
+
+function prioridadeSituacaoAtleta_(situacao) {
+  const ordem = {
+    'Suspenso': 0,
+    'Aguardando inscrição': 1,
+    'Aguardando atualização': 2,
+    'Cadastro com falha': 3,
+    'Falha recente': 4,
+    'Pena a definir': 5,
+    'Regular': 6,
+    'Em súmula': 7,
+    'Fora da competição': 8,
+    'Sem inscrição processada': 9
+  };
+
+  return ordem[situacao] !== undefined ? ordem[situacao] : 99;
 }
 
 /******************************************************
@@ -2749,7 +3793,7 @@ function chaveEquipe_(equipe) {
   return String(equipe || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(new RegExp('\\s+', 'g'), ' ')
     .trim()
     .toUpperCase();
 }
@@ -3074,10 +4118,7 @@ function nomeSeguroAssociados_(valor) {
  * @return {string}
  */
 function limparCampo_(valor, limite) {
-  return String(valor === null || valor === undefined ? '' : valor)
-    .replace(/\s+/g, ' ')
-    .trim()
-    .substring(0, limite);
+  return limparEspacos_(valor).substring(0, limite);
 }
 
 /**
@@ -4149,3 +5190,5 @@ function abaFinanceiro_() {
 
   return aba;
 }
+
+
