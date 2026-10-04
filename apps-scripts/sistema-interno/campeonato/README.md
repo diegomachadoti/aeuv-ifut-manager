@@ -110,8 +110,8 @@ Cadastro dos atletas vinculados aos times:
   competição anterior da mesma equipe, marque inscrições ou selecione todas
   as disponíveis e confirme a quantidade; cancelar retorna à mesma aba
 - admin e diretoria podem transferir um atleta para outra equipe ativa vinculada
-  ao mesmo campeonato somente quando nenhum resultado detalhado encerrado registra
-  sua participação pela equipe atual; o vínculo do atleta é atualizado sem trocar
+  ao mesmo campeonato somente quando nenhum resultado detalhado encerrado do
+  campeonato registra sua participação (por qualquer equipe); o vínculo do atleta é atualizado sem trocar
   seu ID, foto ou dados pessoais/esportivos, e a inscrição anterior permanece no
   histórico. Associados não recebem essa ação
 - ao inscrever atleta, CPF já vinculado a outra equipe no mesmo campeonato bloqueia
@@ -122,6 +122,20 @@ Cadastro dos atletas vinculados aos times:
   obrigatórios inválidos aparecem na lista e desabilitam a seleção
 - vincular atleta à participação atual
 - manter histórico de inscrição
+- atleta que já participou de algum jogo do campeonato permanece vinculado à
+  equipe: não pode ser removido nem transferido, e a edição não aceita troca de
+  equipe ou CPF (nome, apelido, número, posição, data, RG e foto continuam
+  editáveis). A regra vale para todos os perfis (admin, diretoria e associado),
+  tanto no elenco da equipe quanto no cadastro global de atletas, e continua
+  valendo depois que o campeonato é encerrado, preservando o elenco histórico.
+  O botão **Remover** aparece desabilitado com o motivo visível; o servidor
+  revalida sob o lock antes de qualquer gravação de elenco ou histórico
+- um CPF com participação registrada no campeonato só pode ser inscrito,
+  importado ou ter o cadastro alterado para a(s) equipe(s) pela(s) qual(is) jogou;
+  vincular a outra equipe é recusado, informando a equipe original (e, para o
+  associado, o responsável e telefone publicados). Isso cobre inscrições removidas
+  antes desta regra, desde que o resultado detalhado do jogo continue salvo.
+  Comissão técnica não é afetada
 
 #### Histórico permanente e importação
 
@@ -144,13 +158,18 @@ O **Banco de Dados de Atletas** lê esse mesmo histórico (somente inscrições
 do tipo atleta), reconciliando-o antes sob o lock. `inscritoEm` é exibido como
 data de registro no histórico, nunca como data real de entrada ou transferência.
 
-A elegibilidade de transferência consulta os resultados detalhados ainda
-persistidos do campeonato e considera somente o campo explícito `participou: true`
-para a equipe de origem; gols, cartões, escalação e participação em outra equipe
+A elegibilidade de transferência, remoção e troca de equipe/CPF consulta os
+resultados detalhados ainda persistidos do campeonato e considera somente o campo
+explícito `participou: true`, em qualquer equipe, casando o atleta pelo mesmo ID
+de cadastro ou pelo mesmo CPF normalizado; gols, cartões, escalação e participação em outra equipe
 ou competição não substituem esse registro. Um resultado antigo sem evidência de
 participação não é tratado como participação. Jogos/resultados apagados antes da
 consulta não podem ser reconstruídos, então essa regra reflete os dados detalhados
-disponíveis e não certifica participação fora deles. A transferência é validada
+disponíveis e não certifica participação fora deles; a regra também não impede
+o uso de um CPF diferente ainda não registrado em jogo. Uma tabela ou resultado
+salvo inválido interrompe a consulta com erro explícito (nunca libera a ação).
+Campeonatos sem tabela gravada não têm jogos e, portanto, nenhuma participação.
+A transferência é validada
 novamente sob o lock do servidor e a gravação preserva a inscrição histórica da
 equipe de origem e registra o novo vínculo.
 
@@ -320,15 +339,40 @@ novas marcações. Referências de jogos existentes são protegidas contra
 exclusões e alterações de estrutura que tornariam a tabela inconsistente.
 
 ### 6. Disciplina
-Cartões por atleta e comissão são registrados no lançamento do resultado.
-O módulo específico de disciplina e as regras automáticas abaixo permanecem
-planejados, não aplicados pelo lançamento:
+Cartões de atletas e comissão são registrados no resultado, mas a disciplina
+automática aplica-se somente a atletas e é recalculada a partir dos resultados
+detalhados finalizados da mesma equipe e competição:
 
-- cartões amarelos
-- cartões vermelhos
-- suspensão automática
-- suspensão manual
-- zeragem de cartões por regra configurada
+- A cada três cartões amarelos acumulados, aplica-se uma suspensão de um jogo.
+  Subtrai-se três do acumulado e qualquer excedente continua para a próxima
+  partida; cartões não são zerados automaticamente por fase.
+- Vermelho direto aplica uma suspensão de um jogo. Expulsão por segundo amarelo
+  também aplica um jogo, mas os dois amarelos informados nessa partida não
+  entram no acumulado. O resultado exige tipo explícito para todo vermelho e
+  exige exatamente dois amarelos para o tipo segundo amarelo.
+- Amarelos que completam a terceira advertência e vermelho direto no mesmo
+  jogo geram duas suspensões cumulativas. A suspensão começa após essa partida.
+- A suspensão é cumprida no próximo jogo da equipe que tenha resultado
+  detalhado finalizado e registre `participou: false` para o atleta. Cada jogo
+  assim cumpre uma suspensão, independentemente do número da rodada. Um
+  participante ausente do snapshot, sem registro explícito, não cumpre jogo.
+  Jogos agendados, adiados, cancelados e partidas sem resultado detalhado não
+  contam; um jogo finalizado por WO conta apenas quando o snapshot explicita a
+  não participação.
+- A ordem é data, horário e ID estável do jogo. Corrigir ou salvar um resultado
+  recalcula o histórico; a gravação é bloqueada se criar participação em jogo
+  com suspensão pendente. Violações já existentes são preservadas para permitir
+  corrigir os respectivos resultados sem bloquear alterações não relacionadas.
+- Resultados antigos com vermelho e sem tipo são interpretados como vermelho
+  direto, com aviso visível; não se tenta inferir expulsão por segundo amarelo.
+  Novos resultados não podem omitir o tipo do vermelho.
+- A súmula em branco indica a suspensão calculada para aquele jogo. O editor
+  mostra motivo e saldo, impede marcar participação de atleta suspenso e pula
+  esses atletas na marcação em lote. O servidor repete a validação.
+- Suspensões definidas manualmente no **Controle de punições** continuam
+  independentes e aparecem junto das automáticas na súmula. As regras não
+  alteram estatísticas de cartões do ranking, sanções da comissão, avanço de
+  fase ou pontuação.
 
 ### 7. Súmula básica em PDF
 
@@ -363,32 +407,36 @@ campeonato, temporada, fase/grupo/rodada, local, data e horário da partida.
 A data/hora de geração fica no canto superior direito, no fuso do script.
 As duas equipes aparecem lado a lado, com comissão acima dos atletas e CPF
 parcialmente mascarado em ambas (somente quatro dígitos centrais; ausente ou
-inválido aparece como `—`). Há no mínimo 22 linhas de atletas e quatro de
+inválido aparece como `—`). Há 18 linhas de atletas e quatro de
 comissão por equipe/folha. Elencos maiores continuam em folhas adicionais,
 sem truncar inscritos nem diminuir a fonte. Placar, cartões, gols,
-substituições, pedidos de tempo, gols contra, arbitragem, assinaturas,
+substituições, gols contra, arbitragem, assinaturas,
 relatório e horários de início/fim ficam para preenchimento manual.
 Não há campos de faltas acumuladas ou defesa difícil.
+O layout usa texto e bordas pretos sobre fundo branco, mantendo suspensos em
+vermelho e as cores originais das logos e escudos. Gols e gols contra não têm campo de minuto. Cada equipe tem dez
+espaços numerados de substituição (Entra/Sai), sem minuto ou pedido de tempo.
+A arbitragem inclui Árbitro(a), Auxiliar 1, Auxiliar 2 e Mesário(a), mantendo
+os horários de início/fim dos tempos.
 
-Os elencos ativos e as suspensões são consultados **no momento da emissão**,
-não historicamente na data da partida. Uma pessoa aparece com a linha inteira
-em vermelho e a indicação **SUSPENSO** somente quando o **Controle de punições**
-traz status `DEFINIDA`, situação iniciada por `A CUMPRIR` e correspondência
-exata de competição, equipe, tipo (`Atleta` ou `Comissão técnica`) e nome,
-ignorando acentos, maiúsculas e espaços repetidos. Punições pendentes,
-rascunhos, cumpridas ou de equipe não marcam pessoas; flags manuais do elenco
-e cartões de jogos não são usados. A data de atualização do controle aparece
-no rodapé. Falta do arquivo, erro de leitura ou permissão bloqueiam a geração:
-não são interpretados como ausência de suspensão.
+Os elencos ativos e as suspensões manuais são consultados **no momento da
+emissão**; as suspensões automáticas são calculadas antes do jogo impresso,
+considerando somente partidas anteriores na ordem data/hora/ID. A marcação
+automática identifica atleta por CPF válido, com ID como alternativa, sempre
+dentro da mesma equipe e competição. O PDF junta essas suspensões às do
+**Controle de punições** (status `DEFINIDA`, situação iniciada por
+`A CUMPRIR`, competição/equipe/tipo/nome correspondentes); as sanções manuais
+continuam independentes e não substituem o cálculo automático. Falta do arquivo
+manual, erro de leitura ou permissão bloqueiam a geração: não são interpretados
+como ausência de suspensão.
 
 **Limite da fonte:** o controle não fornece CPF nem ID/temporada da competição;
 a correspondência é pelo nome completo do campeonato, não por trecho ou ID.
 Identifique a edição exatamente no nome da competição no controle e no
 cadastro, especialmente quando o nome é reutilizado em temporadas diferentes.
-Homônimos na mesma equipe/tipo não podem ser distinguidos por essa fonte.
-Não registra eventos, não envia a súmula digital e não lança resultados.
-Não aplica nem decrementa punições. A disciplina automática continua fora
-desta etapa. O download não exige tornar
+Homônimos na mesma equipe/tipo não podem ser distinguidos pela fonte manual.
+O PDF não registra eventos, não envia a súmula digital e não lança resultados.
+O download não exige tornar
 os cadastros, o logo ou o controle públicos no Drive.
 
 ---

@@ -1183,6 +1183,17 @@ inclusive por RPC direto. Administração continua editando normalmente.
 Cada mutação revalida sessão, vínculo e bloqueio dentro do mesmo ScriptLock
 antes de alterar elenco ou histórico; falha de leitura do registro impede escrita.
 
+**Atleta que já jogou fica no elenco:** se um resultado detalhado salvo do
+campeonato registra `participou: true` para o atleta (mesmo ID de cadastro ou
+mesmo CPF, por qualquer equipe), ele não pode ser removido, transferido nem ter
+equipe/CPF alterados, por nenhum perfil e em nenhuma das telas (elenco da equipe
+e cadastro global), inclusive após o encerramento do campeonato. O CPF também
+não pode ser inscrito ou importado em outra equipe da mesma competição. O botão
+**Remover** fica desabilitado com o motivo visível, e o servidor revalida tudo
+sob o ScriptLock antes de gravar. Apenas resultados detalhados ainda salvos são
+evidência: gols/cartões sem `participou`, placares sem resultado detalhado e
+jogos removidos não contam. Detalhes em `sistema-interno/campeonato/README.md`.
+
 As ações **Importar atletas / Importar comissão** aparecem nas duas abas de
 cadastro quando a edição é permitida, mesmo com elenco vazio ou sem histórico
 de origem. Abrir a importação sem fontes mostra a orientação contextual.
@@ -1223,8 +1234,17 @@ abre uma tela separada com placar, participação, gols, gols contra e cartões
 dos atletas, além de participação e cartões da comissão técnica, nas abas dos
 dois times. As duas listas exibem CPF completo em vez de data de nascimento;
 a súmula em PDF mantém o CPF parcialmente mascarado.
-WO, prorrogação e placar de pênaltis são informados manualmente, sem aplicar
-suspensões nem avanço automático. Gols dos atletas atualizam o placar da equipe;
+WO, prorrogação e placar de pênaltis são informados manualmente, sem avanço
+automático. Três amarelos acumulados suspendem por um jogo (subtraindo três e
+mantendo excedente); vermelho direto e expulsão por segundo amarelo suspendem
+por um jogo cada. O segundo amarelo exige dois CA e não soma esses cartões ao
+acumulado. Suspensões pendentes são cumpridas por jogo finalizado da mesma
+equipe com participação explicitamente falsa; a participação suspensa é
+bloqueada no editor e no servidor. Corrigir resultados recalcula as pendências.
+O tipo do vermelho é obrigatório em novos resultados; vermelhos legados sem
+tipo são tratados como diretos e avisados. A súmula em branco combina essas
+suspensões com o Controle de punições manual, que permanece independente.
+Cartões da comissão e contagem de cartões do ranking não mudam. Gols dos atletas atualizam o placar da equipe;
 gols contra atualizam o placar do adversário. Ajustes diretos no placar permitem
 gols administrativos ou sem autoria. Diferenças entre gols atribuídos e placar
 geram aviso, não bloqueio. A coluna de assistências foi removida, preservando
@@ -1250,10 +1270,13 @@ PDF A4 paisagem, com logo AEUV, escudos disponíveis e painéis paralelos de
 comissão e atletas ativos atuais, CPFs parcialmente mascarados e campos
 manuais em branco. Elencos maiores continuam em folhas adicionais.
 A emissão consulta obrigatoriamente o Controle de punições atual e marca
-**SUSPENSO** em vermelho somente para pessoas com `DEFINIDA` / `A CUMPRIR`
-da mesma competição, equipe, tipo e nome; falha de acesso bloqueia o PDF.
-O controle não tem CPF ou ID de edição: nomes de competição reutilizados
-exigem cuidado, e a consulta não representa o histórico na data da partida
+**SUSPENSO** em vermelho para punições manuais correspondentes e suspensões
+automáticas apuradas antes do jogo impresso; falha de leitura do controle
+manual bloqueia o PDF. O cálculo automático usa jogos finalizados da própria
+equipe/competição em ordem de data, hora e ID e é recalculado, não congelado
+como histórico. O controle manual não tem CPF ou ID de edição: nomes de
+competição reutilizados exigem cuidado, e a consulta não representa o histórico
+na data da partida
 ([critérios e limites](sistema-interno/campeonato/README.md#7-súmula-básica-em-pdf)).
 Não há avanço automático, aplicação de punições em pontos nem integração do
 placar com a súmula digital.

@@ -1702,6 +1702,9 @@
     .resultado-tabela th, .resultado-tabela td { padding: 12px; border-bottom: 1px solid var(--borda); text-align: center; }
     .resultado-tabela th:first-child, .resultado-tabela td:first-child { text-align: left; min-width: 200px; }
     .resultado-tabela input[type="number"], .resultado-tabela select { width: 82px; min-height: 42px; }
+    .resultado-tabela .tipo-vermelho { display: block; margin: 4px auto 0; max-width: 150px; }
+    .resultado-tabela tr.suspenso-automatico td { background: rgba(176, 0, 32, .08); }
+    .resultado-tabela .aviso-suspensao { display: block; color: #b00020; font-weight: 700; margin-top: 4px; }
     .resultado-tabela caption { text-align: left; padding: 12px; font-weight: bold; }
     .resultado-resumo { margin: 16px 0; }
     .resultado-contexto { overflow-wrap: anywhere; }
@@ -4104,26 +4107,46 @@
       function controle(pessoa, tipo, posicao, campo) {
         const id = 'tr-' + indice + '-' + tipo + '-' + posicao + '-' + campo;
         const atributos = 'data-tr-equipe="' + indice + '" data-tr-tipo="' + tipo + '" data-tr-pessoa="' + posicao + '" data-tr-estat="' + campo + '"';
-        const rotulo = pessoa.nome + ' · ' + ({ numeroJogo: 'Número na partida (opcional)', participou: 'Participação', gols: 'Gols', golsContra: 'Gols contra', amarelos: 'Cartões amarelos (0, 1 ou 2)', vermelho: 'Cartão vermelho' })[campo];
+        const rotulo = pessoa.nome + ' · ' + ({ numeroJogo: 'Número na partida (opcional)', participou: 'Participação', gols: 'Gols', golsContra: 'Gols contra', amarelos: 'Cartões amarelos (0, 1 ou 2)', vermelho: 'Cartão vermelho', vermelhoTipo: 'Tipo de cartão vermelho' })[campo];
         if (campo === 'numeroJogo') return '<input id="' + id + '" type="number" min="0" max="999" step="1" value="'
           + escapar(pessoa.numeroJogo == null ? '' : pessoa.numeroJogo) + '" aria-label="' + escapar(rotulo) + '" ' + atributos + '>';
-        if (campo === 'participou' || campo === 'vermelho') return '<input id="' + id + '" type="checkbox" ' + atributos
-          + (pessoa[campo] ? ' checked' : '') + ' aria-label="' + escapar(rotulo) + '">';
+        if (campo === 'participou' || campo === 'vermelho') {
+          const bloqueado = campo === 'participou' && tipo === 'atletas'
+            && pessoa.suspensaoAutomatica && pessoa.participou !== true;
+          const checkbox = '<input id="' + id + '" type="checkbox" ' + atributos
+            + (pessoa[campo] ? ' checked' : '') + (bloqueado ? ' disabled' : '') + ' aria-label="' + escapar(rotulo) + '">';
+          if (campo !== 'vermelho' || tipo !== 'atletas') return checkbox;
+          const tipoId = 'tr-' + indice + '-atletas-' + posicao + '-vermelhoTipo';
+          return checkbox + '<select id="' + tipoId + '" class="tipo-vermelho" data-tr-equipe="' + indice
+            + '" data-tr-tipo="atletas" data-tr-pessoa="' + posicao + '" data-tr-estat="vermelhoTipo"'
+            + (pessoa.vermelho ? ' required' : ' hidden') + ' aria-label="' + escapar(rotulo) + '">'
+            + '<option value="">Selecione o tipo</option><option value="direto"'
+            + (pessoa.vermelhoTipo === 'direto' ? ' selected' : '') + '>Vermelho direto</option>'
+            + '<option value="segundo-amarelo"' + (pessoa.vermelhoTipo === 'segundo-amarelo' ? ' selected' : '')
+            + '>2º amarelo (exige 2 CA)</option></select>';
+        }
         if (campo === 'amarelos') return '<select id="' + id + '" ' + atributos + ' aria-label="' + escapar(rotulo) + '">'
           + [0, 1, 2].map(function (numero) { return '<option value="' + numero + '"' + (Number(pessoa[campo]) === numero ? ' selected' : '') + '>' + numero + '</option>'; }).join('') + '</select>';
         return tabelaResultadoNumeroHTML_(id, pessoa[campo], rotulo, atributos);
       }
       function nome(pessoa) {
-        return escapar(pessoa.nome) + (pessoa.disponivel === false ? '<br><span class="apoio">Cadastro anterior</span>' : '');
+        const anterior = pessoa.disponivel === false ? '<br><span class="apoio">Cadastro anterior</span>' : '';
+        const acumulado = Number.isInteger(pessoa.amarelosAcumulados)
+          ? '<br><span class="apoio">CA acumulados antes deste jogo: ' + escapar(pessoa.amarelosAcumulados) + '/3</span>' : '';
+        const suspenso = pessoa.suspensaoAutomatica
+          ? '<br><span class="aviso-suspensao">SUSPENSO — ' + escapar(pessoa.motivoSuspensaoAutomatica)
+            + ' (' + escapar(pessoa.jogosSuspensaoPendentes) + ' jogo(s) pendente(s))</span>' : '';
+        return escapar(pessoa.nome) + anterior + acumulado + suspenso;
       }
       return '<section id="trEquipe' + indice + '"' + (indice ? ' hidden' : '') + ' aria-label="' + escapar(equipe.nome) + '">'
         + '<h3>' + escapar(equipe.nome) + '</h3><div class="tabela-acoes">'
         + '<button type="button" class="botao-apoio" data-tr-participacao="' + indice + '" data-tr-marcar="sim">Marcar todas as participações</button>'
         + '<button type="button" class="botao-apoio" data-tr-participacao="' + indice + '" data-tr-marcar="nao">Remover participações</button></div>'
+        + '<p id="trSuspensos' + indice + '" class="apoio" role="status" aria-live="polite"></p>'
         + '<div class="tabela-scroll" tabindex="0" role="region" aria-label="Atletas de ' + escapar(equipe.nome) + ' — role horizontalmente"><table class="resultado-tabela"><caption>Atletas</caption>'
-        + '<thead><tr><th scope="col">Nome</th><th scope="col">Nº</th><th scope="col">CPF</th><th scope="col">Participação</th><th scope="col">Gols</th><th scope="col">Gols contra</th><th scope="col">Amarelos (0–2)</th><th scope="col">Vermelho</th></tr></thead><tbody>'
+        + '<thead><tr><th scope="col">Nome</th><th scope="col">Nº</th><th scope="col">CPF</th><th scope="col">Participação</th><th scope="col">Gols</th><th scope="col">Gols contra</th><th scope="col">Amarelos (0–2)</th><th scope="col">Vermelho / tipo</th></tr></thead><tbody>'
         + equipe.atletas.map(function (pessoa, posicao) {
-          return '<tr><td>' + nome(pessoa) + '</td><td>' + controle(pessoa, 'atletas', posicao, 'numeroJogo') + '</td><td>'
+          return '<tr' + (pessoa.suspensaoAutomatica ? ' class="suspenso-automatico"' : '') + '><td>' + nome(pessoa) + '</td><td>' + controle(pessoa, 'atletas', posicao, 'numeroJogo') + '</td><td>'
             + escapar(pessoa.cpf || 'Não informado') + '</td>'
             + ['participou', 'gols', 'golsContra', 'amarelos', 'vermelho'].map(function (campo) { return '<td>' + controle(pessoa, 'atletas', posicao, campo) + '</td>'; }).join('') + '</tr>';
         }).join('') + (equipe.atletas.length ? '' : '<tr><td colspan="8">Nenhum atleta no elenco.</td></tr>') + '</tbody></table></div>'
@@ -4175,7 +4198,7 @@
         + tabelaResultadoNumeroHTML_('trPenGolsMandante', resultado.golsPenaltisMandante, 'Pênaltis de ' + equipes[0].nome, 'data-tr-resultado="golsPenaltisMandante"') + '</div>'
         + '<div class="campo" id="trPenVisitante"><label for="trPenGolsVisitante">Pênaltis · ' + escapar(equipes[1].nome) + '</label>'
         + tabelaResultadoNumeroHTML_('trPenGolsVisitante', resultado.golsPenaltisVisitante, 'Pênaltis de ' + equipes[1].nome, 'data-tr-resultado="golsPenaltisVisitante"') + '</div></div>'
-        + '<p class="apoio">WO, prorrogação e pênaltis não aplicam regras automaticamente. Participação e cartões são independentes; cartões não geram suspensão ou vermelho automático.</p>'
+        + '<p class="apoio">Atletas: três amarelos geram um jogo de suspensão (o excedente é mantido); vermelho direto e expulsão por segundo amarelo geram um jogo cada. Vermelho por segundo amarelo exige dois CA e não soma esses cartões ao acumulado. Suspensões só são cumpridas em jogo finalizado com participação explicitamente não marcada. Cartões da comissão não geram suspensão automática.</p>'
         + '<div id="trResumo" class="resultado-resumo" aria-live="polite"></div>'
         + '<div class="tabela-abas" aria-label="Equipe do resultado">' + equipes.map(function (equipe, indice) {
           return '<button type="button" class="botao-apoio" data-tr-aba="' + indice + '" aria-pressed="' + (indice === 0) + '" aria-controls="trEquipe' + indice + '">' + escapar(equipe.nome) + '</button>';
@@ -4193,6 +4216,10 @@
         else if (data.trResultado) draft.resultado[data.trResultado] = valor;
         else if (data.trEstat) {
           const pessoa = draft.equipes[Number(data.trEquipe)][data.trTipo][Number(data.trPessoa)];
+          if (data.trEstat === 'participou' && pessoa.suspensaoAutomatica && valor === true) {
+            input.checked = false;
+            return;
+          }
           if (data.trTipo === 'atletas' && (data.trEstat === 'gols' || data.trEstat === 'golsContra')) {
             const anterior = data.trEstat === 'gols' ? 'placarGolsAnterior' : 'placarGolsContraAnterior';
             if (/^\d+$/.test(String(valor)) && Number.isInteger(Number(valor)) && Number(valor) <= 999) {
@@ -4214,6 +4241,14 @@
             }
           }
           pessoa[data.trEstat] = valor;
+          if (data.trTipo === 'atletas' && (data.trEstat === 'vermelho' || data.trEstat === 'amarelos')) {
+            const tipoVermelho = document.getElementById('tr-' + data.trEquipe + '-atletas-' + data.trPessoa + '-vermelhoTipo');
+            if (!pessoa.vermelho) pessoa.vermelhoTipo = '';
+            if (pessoa.vermelhoTipo === 'segundo-amarelo' && Number(pessoa.amarelos) !== 2) pessoa.vermelhoTipo = '';
+            tipoVermelho.value = pessoa.vermelhoTipo || '';
+            tipoVermelho.hidden = !pessoa.vermelho;
+            tipoVermelho.required = !!pessoa.vermelho;
+          }
         }
         else return;
         tabelaEstado.sujo = true;
@@ -4231,7 +4266,13 @@
       });
       form.querySelectorAll('[data-tr-participacao]').forEach(function (botao) {
         botao.disabled = !draft.podeEditar;
-        botao.onclick = function () { tabelaResultadoParticipacoes_(Number(botao.dataset.trParticipacao), botao.dataset.trMarcar === 'sim'); };
+        botao.onclick = function () {
+          const indice = Number(botao.dataset.trParticipacao);
+          const suspensos = draft.equipes[indice].atletas.filter(function (item) { return item.suspensaoAutomatica; }).length;
+          tabelaResultadoParticipacoes_(indice, botao.dataset.trMarcar === 'sim');
+          document.getElementById('trSuspensos' + indice).textContent = botao.dataset.trMarcar === 'sim' && suspensos
+            ? suspensos + ' atleta(s) suspenso(s) foram ignorados na marcação em lote.' : '';
+        };
       });
       tabelaLigarTecladoAbas_(form, '[data-tr-aba]');
       if (!draft.podeEditar) form.querySelectorAll('input,select,textarea').forEach(function (input) { input.disabled = true; });
@@ -4256,6 +4297,11 @@
       if (tabelaEstado.ocupado || !draft || !draft.podeEditar) return;
       ['atletas', 'comissao'].forEach(function (tipo) {
         draft.equipes[indice][tipo].forEach(function (pessoa, posicao) {
+          if (tipo === 'atletas' && pessoa.suspensaoAutomatica) {
+            pessoa.participou = false;
+            document.getElementById('tr-' + indice + '-' + tipo + '-' + posicao + '-participou').checked = false;
+            return;
+          }
           pessoa.participou = marcou;
           document.getElementById('tr-' + indice + '-' + tipo + '-' + posicao + '-participou').checked = marcou;
         });
@@ -4288,7 +4334,17 @@
         const placar = document.getElementById(equipe.lado === 'mandante' ? 'trGolsMandante' : 'trGolsVisitante').value;
         if (gols + recebidos !== Number(placar)) avisos.push(equipe.nome + ': gols atribuídos, incluindo gols contra do adversário (' + (gols + recebidos) + '), diferem do placar (' + placar + '). Ajustes administrativos ou sem autoria são permitidos.');
       });
-      document.getElementById('trResumo').innerHTML = totais.map(function (texto) { return '<p>' + escapar(texto) + '</p>'; }).join('') + tabelaAvisosHTML_(avisos);
+      const pendencias = draft.equipes.reduce(function (lista, equipe) {
+        equipe.atletas.forEach(function (atleta) {
+          if (atleta.suspensaoAutomatica) lista.push(atleta.nome + ': suspenso por ' + atleta.motivoSuspensaoAutomatica
+            + ' (' + atleta.jogosSuspensaoPendentes + ' jogo(s) pendente(s)); participação bloqueada.');
+        });
+        return lista;
+      }, []);
+      document.getElementById('trResumo').innerHTML = totais.map(function (texto) { return '<p>' + escapar(texto) + '</p>'; }).join('')
+        + (pendencias.length ? '<div class="aviso" role="status"><strong>Suspensões automáticas</strong><ul>'
+          + pendencias.map(function (texto) { return '<li>' + escapar(texto) + '</li>'; }).join('') + '</ul></div>' : '')
+        + tabelaAvisosHTML_(avisos);
     }
 
     function tabelaResultadoPayload_() {
@@ -4307,9 +4363,11 @@
         },
         equipes: draft.equipes.map(function (equipe) {
           return { id: equipe.id, atletas: equipe.atletas.map(function (atleta) {
-            return { id: atleta.id, numeroJogo: atleta.numeroJogo == null || atleta.numeroJogo === '' ? '' : tabelaInteiro_(atleta.numeroJogo, 999),
+            const eventos = { id: atleta.id, numeroJogo: atleta.numeroJogo == null || atleta.numeroJogo === '' ? '' : tabelaInteiro_(atleta.numeroJogo, 999),
               participou: !!atleta.participou, gols: tabelaInteiro_(atleta.gols, 999), golsContra: tabelaInteiro_(atleta.golsContra, 999),
               amarelos: tabelaInteiro_(atleta.amarelos, 2), vermelho: !!atleta.vermelho };
+            if (atleta.vermelho) eventos.vermelhoTipo = atleta.vermelhoTipo || '';
+            return eventos;
           }), comissao: equipe.comissao.map(function (pessoa) {
             return { id: pessoa.id, participou: !!pessoa.participou, amarelos: tabelaInteiro_(pessoa.amarelos, 2), vermelho: !!pessoa.vermelho };
           }) };
@@ -5066,7 +5124,7 @@
       const contexto = elencoAtual;
       const area = document.getElementById('areaTimesCampeonato');
       area.innerHTML = '<section class="elenco">'
-        + (recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '')
+        + (recado ? '<div class="sucesso" id="elencoRecado">' + escapar(recado) + '</div>' : '')
         + '<div class="elenco-contexto apoio">Equipes participantes / ' + escapar(registro.campeonatoNome) + ' / Elenco</div>'
         + '<div class="elenco-cabecalho">'
         + (dados.equipe.escudo ? '<img class="elenco-escudo" src="' + escapar(dados.equipe.escudo) + '" alt="Escudo de ' + escapar(dados.equipe.nome) + '">' : '<span class="elenco-escudo" aria-hidden="true">🛡️</span>')
@@ -5084,8 +5142,10 @@
         + (cadastro ? '<div class="elenco-lista-cabecalho"><h4>' + (comissao ? 'Comissão técnica da equipe' : 'Atletas da equipe') + ' (' + pessoas.length + ')</h4>'
         + (editavel ? '<div class="elenco-lista-acoes"><button type="button" class="botao-principal" id="elencoNovo">' + (comissao ? 'Adicionar membro da comissão' : 'Adicionar atleta') + '</button>'
         + '<button type="button" class="botao-apoio" id="elencoImportar">' + (comissao ? 'Importar comissão' : 'Importar atletas') + '</button></div>' : '') + '</div>'
-        + (pessoas.length ? '<div class="elenco-pessoas-grid">' + pessoas.map(function (pessoa) {
+        + (pessoas.length ? '<div class="elenco-pessoas-grid">' + pessoas.map(function (pessoa, indice) {
           const descricao = comissao ? pessoa.cargo : pessoa.posicao;
+          const motivoRemocao = comissao ? '' : motivoBloqueioRemocaoAtleta_(pessoa);
+          const ajudaRemocaoId = 'elencoRemocaoMotivo' + indice;
           const adicionais = [];
           if (!comissao && pessoa.apelido) adicionais.push('“' + escapar(pessoa.apelido) + '”');
           if (!comissao && pessoa.numero !== null && pessoa.numero !== undefined && String(pessoa.numero).trim()) adicionais.push('Camisa ' + escapar(pessoa.numero));
@@ -5095,11 +5155,14 @@
             + (adicionais.length ? '<p class="apoio">' + adicionais.join(' · ') + '</p>' : '')
             + '</div></div><div class="elenco-pessoa-acoes"><button type="button" class="botao-apoio" aria-label="Ver detalhes de ' + escapar(pessoa.nome) + '" data-elenco-detalhes="' + escapar(pessoa.id) + '">Ver detalhes</button>'
             + (editavel ? '<button type="button" class="botao-apoio" aria-label="Editar ' + escapar(pessoa.nome) + '" data-elenco-editar="' + escapar(pessoa.id) + '">Editar</button>'
-            + '<button type="button" class="botao-apoio perigo" aria-label="Remover ' + escapar(pessoa.nome) + '" data-elenco-remover="' + escapar(pessoa.id) + '">Remover</button>' : '')
+            + '<button type="button" class="botao-apoio perigo" aria-label="Remover ' + escapar(pessoa.nome) + '" data-elenco-remover="' + escapar(pessoa.id) + '"'
+            + (motivoRemocao ? ' disabled title="' + escapar(motivoRemocao) + '" aria-describedby="' + ajudaRemocaoId + '"' : '') + '>Remover</button>' : '')
             + (!comissao && dados.podeTransferir === true
               ? '<button type="button" class="botao-apoio" aria-label="Transferir ' + escapar(pessoa.nome) + '" data-elenco-transferir="' + escapar(pessoa.id) + '" title="' + escapar(pessoa.motivoTransferencia || '') + '"'
-                + (pessoa.participouPelaEquipeAtual || !(dados.equipesDestinoTransferencia || []).length ? ' disabled' : '') + '>Transferir</button>'
-              : '') + '</div></article>';
+                + (pessoa.participouCompeticao !== false || !(dados.equipesDestinoTransferencia || []).length ? ' disabled' : '') + '>Transferir</button>'
+              : '') + '</div>'
+            + (editavel && motivoRemocao ? '<p class="apoio elenco-remocao-motivo" id="' + ajudaRemocaoId + '">' + escapar(motivoRemocao) + '</p>' : '')
+            + '</article>';
         }).join('') + '</div>'
         : '<div class="elenco-vazio apoio">' + (comissao ? 'Nenhum membro da comissão técnica cadastrado nesta equipe.' : 'Nenhum atleta cadastrado nesta equipe.') + (editavel ? ' Use o botão Adicionar para começar.' : '') + '</div>')
         + (dados.linkInscricao ? '<div class="elenco-link-acoes"><span id="elencoAvisoLink" class="apoio" role="status" aria-live="polite"></span>'
@@ -5115,7 +5178,8 @@
           + '<button type="button" class="botao-apoio elenco-detalhes-fechar" data-elenco-fechar aria-label="Fechar detalhes">×</button></div>'
           + '<div class="elenco-detalhes-pessoa" data-elenco-detalhes-conteudo></div>'
           + (editavel ? '<div class="elenco-detalhes-acoes"><button type="button" class="botao-apoio" data-elenco-editar>Editar</button>'
-          + '<button type="button" class="botao-apoio perigo" data-elenco-remover>Remover</button></div>' : '') + '</div></dialog>' : '') + '</section>';
+          + '<button type="button" class="botao-apoio perigo" data-elenco-remover>Remover</button>'
+          + '<p class="apoio elenco-remocao-motivo" id="elencoDetalhesRemocaoMotivo" data-elenco-remocao-motivo hidden></p></div>' : '') + '</div></dialog>' : '') + '</section>';
       const dialogo = cadastro ? area.querySelector('.elenco-detalhes-dialog') : null;
       if (dialogo) {
         dialogo.addEventListener('keydown', function (evento) {
@@ -5203,8 +5267,20 @@
             botaoEditar.setAttribute('aria-label', 'Editar ' + String(pessoa.nome || 'cadastro'));
           }
           if (botaoRemover) {
+            const motivoRemocao = comissao ? '' : motivoBloqueioRemocaoAtleta_(pessoa);
+            const ajudaRemocao = dialogo.querySelector('[data-elenco-remocao-motivo]');
             botaoRemover.dataset.elencoRemover = pessoa.id;
             botaoRemover.setAttribute('aria-label', 'Remover ' + String(pessoa.nome || 'cadastro'));
+            botaoRemover.disabled = Boolean(motivoRemocao);
+            if (motivoRemocao) {
+              botaoRemover.title = motivoRemocao;
+              botaoRemover.setAttribute('aria-describedby', ajudaRemocao.id);
+            } else {
+              botaoRemover.removeAttribute('title');
+              botaoRemover.removeAttribute('aria-describedby');
+            }
+            ajudaRemocao.textContent = motivoRemocao;
+            ajudaRemocao.hidden = !motivoRemocao;
           }
           dialogo._elencoOrigemFoco = botao;
           dialogoDetalhesElencoAtual = dialogo;
@@ -5226,7 +5302,7 @@
       area.querySelectorAll('[data-elenco-remover]').forEach(function (botao) {
         botao.addEventListener('click', function () {
           const pessoaId = botao.dataset.elencoRemover;
-          if (!pessoas.some(function (item) { return item.id === pessoaId; }) || elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+          if (botao.disabled || !pessoas.some(function (item) { return item.id === pessoaId; }) || elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
           removerCadastroPessoa(abaElencoAtiva, elencoAtual.campeonatoId, pessoaId);
         });
       });
@@ -5247,12 +5323,14 @@
 
     function abrirFormularioTransferenciaAtleta_(atleta) {
       if (!elencoAtual || cadastroPessoasCampeonato.podeTransferir !== true
-          || atleta.participouPelaEquipeAtual
+          || atleta.participouCompeticao !== false
           || !(cadastroPessoasCampeonato.equipesDestinoTransferencia || []).length
           || !permitirEdicaoElenco_()) return;
       const estado = { contexto: elencoAtual, atletaId: atleta.id, salvando: false, recarregar: false };
       const destinos = cadastroPessoasCampeonato.equipesDestinoTransferencia;
       alternarFormularioElenco(true);
+      const recadoAnterior = document.getElementById('elencoRecado');
+      if (recadoAnterior) recadoAnterior.remove();
       const formulario = document.getElementById('cadastroPessoasFormArea');
       formulario.innerHTML = '<section class="grupo elenco-form"><h4>Transferir atleta</h4>'
         + '<p class="apoio"><strong>' + escapar(atleta.nome) + '</strong> — origem: '
@@ -5298,13 +5376,18 @@
           confirmar.disabled = true;
           cancelar.disabled = true;
           aviso.textContent = 'Validando participação e transferindo atleta…';
+          mostrarLoadingCadastroPessoa_(true);
           google.script.run.withSuccessHandler(function (dados) {
             if (elencoAtual !== estado.contexto || moduloAtual !== 'times-campeonato') return;
+            mostrarLoadingCadastroPessoa_(false);
+            estado.salvando = false;
+            marcarElencoPendente_(false);
             cadastroPessoasCampeonato = dados;
             abaElencoAtiva = 'atletas';
             montarElenco(dados.recado);
           }).withFailureHandler(function (erro) {
             if (elencoAtual !== estado.contexto || moduloAtual !== 'times-campeonato') return;
+            mostrarLoadingCadastroPessoa_(false);
             estado.salvando = false;
             estado.recarregar = true;
             marcarElencoPendente_(false);
@@ -5732,14 +5815,18 @@
            + '</tr>';
        }).join('');
 
-       const linhasCadastro = listarRegistrosCadastroPessoa(colecaoCadastroPessoaAtual()).map(function (item) {
+       const linhasCadastro = listarRegistrosCadastroPessoa(colecaoCadastroPessoaAtual()).map(function (item, indice) {
          const pessoa = item.pessoa || {};
          const apelidoColuna = abaCadastroPessoasAtiva === 'atletas'
            ? '<td data-rotulo="Apelido">' + escapar(pessoa.apelido || '—') + '</td>'
            : '';
+         const motivoRemocao = abaCadastroPessoasAtiva === 'atletas' ? motivoBloqueioRemocaoAtleta_(pessoa) : '';
+         const ajudaRemocaoId = 'cadastroRemocaoMotivo' + indice;
          const acoes = modoEdicaoCadastroPessoas
            ? '<button type="button" class="botao-apoio" data-editar-cadastro data-tipo-cadastro="' + escapar(abaCadastroPessoasAtiva) + '" data-campeonato-id="' + escapar(item.campeonatoId) + '" data-registro-id="' + escapar(pessoa.id) + '">Editar</button>'
-             + ' <button type="button" class="botao-apoio perigo" data-remover-cadastro data-tipo-cadastro="' + escapar(abaCadastroPessoasAtiva) + '" data-campeonato-id="' + escapar(item.campeonatoId) + '" data-registro-id="' + escapar(pessoa.id) + '">Remover</button>'
+             + ' <button type="button" class="botao-apoio perigo" data-remover-cadastro data-tipo-cadastro="' + escapar(abaCadastroPessoasAtiva) + '" data-campeonato-id="' + escapar(item.campeonatoId) + '" data-registro-id="' + escapar(pessoa.id) + '"'
+             + (motivoRemocao ? ' disabled title="' + escapar(motivoRemocao) + '" aria-describedby="' + ajudaRemocaoId + '"' : '') + '>Remover</button>'
+             + (motivoRemocao ? '<p class="apoio elenco-remocao-motivo" id="' + ajudaRemocaoId + '">' + escapar(motivoRemocao) + '</p>' : '')
            : '<span class="apoio">Ative o modo edição</span>';
 
          return '<tr>'
@@ -5816,6 +5903,7 @@
 
        document.querySelectorAll('[data-remover-cadastro]').forEach(function (botao) {
          botao.addEventListener('click', function () {
+           if (botao.disabled) return;
            removerCadastroPessoa(botao.dataset.tipoCadastro, botao.dataset.campeonatoId, botao.dataset.registroId);
          });
        });
@@ -5912,6 +6000,20 @@
          + '</div></div>';
 
        if (!elencoAtual) preencherTimesCadastroPessoa(selecionado, pessoaEmEdicao ? pessoaEmEdicao.timeVinculado : '');
+       if (pessoaEmEdicao && tipoAtual === 'atletas' && pessoaEmEdicao.participouCompeticao === true) {
+         // O servidor também recusa a troca; aqui apenas evitamos uma edição que seria rejeitada.
+         const campoCpf = document.getElementById('cpCpf');
+         campoCpf.disabled = true;
+         campoCpf.setAttribute('aria-describedby', 'cpAvisoVinculoCompeticao');
+         const campoTime = document.getElementById('cpTime');
+         if (campoTime.tagName === 'SELECT') {
+           campoTime.disabled = true;
+           campoTime.setAttribute('aria-describedby', 'cpAvisoVinculoCompeticao');
+         }
+         campoCpf.closest('.grupo').insertAdjacentHTML('beforeend', '<p class="apoio" id="cpAvisoVinculoCompeticao">'
+           + 'Atleta com participação em jogo deste campeonato: o CPF e a equipe ficam bloqueados para preservar o elenco histórico. '
+           + 'Nome, número, posição e foto podem ser corrigidos.</p>');
+       }
        atualizarCamposTipoCadastroPessoa();
        configurarMascaraCpfCadastroPessoa();
        configurarPreviewFotoCadastroPessoa();
@@ -6119,10 +6221,29 @@
        return pessoa ? { registro: registro, pessoa: pessoa } : null;
      }
 
+     // Somente sinalização na interface; o servidor revalida a participação sob o lock.
+     function motivoBloqueioRemocaoAtleta_(pessoa) {
+       if (pessoa && pessoa.podeRemover === true) return '';
+       return String((pessoa && pessoa.motivoRemocao) || '')
+         || 'Remoção indisponível: a participação deste atleta na competição não foi confirmada pelo servidor. Atualize a lista.';
+     }
+
+     function avisarRemocaoAtletaBloqueada_(motivo) {
+       const area = document.getElementById(elencoAtual ? 'areaTimesCampeonato' : 'areaCadastroPessoasCampeonato');
+       const anterior = document.getElementById('avisoRemocaoBloqueada');
+       if (anterior) anterior.remove();
+       if (area) area.insertAdjacentHTML('afterbegin', '<div class="erro" id="avisoRemocaoBloqueada" role="alert">' + escapar(motivo) + '</div>');
+     }
+
      function removerCadastroPessoa(tipo, campeonatoId, registroId) {
        if (confirmacaoElencoAtual || !permitirEdicaoElenco_()) return;
        const encontrado = localizarCadastroPessoa_(tipo, campeonatoId, registroId);
        if (!encontrado) return;
+       const motivoBloqueio = tipo === 'atletas' ? motivoBloqueioRemocaoAtleta_(encontrado.pessoa) : '';
+       if (motivoBloqueio) {
+         avisarRemocaoAtletaBloqueada_(motivoBloqueio);
+         return;
+       }
        const contextoOrigem = elencoAtual;
        const moduloOrigem = moduloAtual;
        const dadosOrigem = cadastroPessoasCampeonato;
