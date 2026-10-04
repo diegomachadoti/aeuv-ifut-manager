@@ -559,6 +559,37 @@
     .solicitacoes tbody tr.linha { cursor: pointer; }
     .solicitacoes tbody tr.linha:hover { background: var(--fundo); }
 
+    /* ----- Banco de Dados de Atletas ----- */
+
+    .atletas-bd th:nth-child(1) { width: 24%; }
+    .atletas-bd th:nth-child(2) { width: 17%; }
+    .atletas-bd th:nth-child(3) { width: 17%; }
+    .atletas-bd th:nth-child(4) { width: 17%; }
+    .atletas-bd th:nth-child(5) { width: 13%; }
+    .atletas-bd th:nth-child(6) { width: 12%; }
+
+    .atleta-bd-alternar {
+      background: none;
+      border: 0;
+      padding: 0;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .atleta-bd-alternar:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
+
+    .atleta-bd-titulo {
+      margin: 14px 0 6px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--apoio);
+    }
+
+    .atleta-bd-titulo:first-child { margin-top: 0; }
+
     /* ----- Notas oficiais ----- */
 
     /* Cinco colunas: número e data são curtos, a partida e os punidos
@@ -2662,8 +2693,8 @@
         return;
       }
 
-      if (moduloAtual === 'jogos-campeonato' && (tabelaEstado.ocupado || tabelaEstado.sujo)) {
-        if (window.location.hash !== '#jogos-campeonato') window.location.hash = 'jogos-campeonato';
+      if (tabelaModuloAtivo_() && (tabelaEstado.ocupado || tabelaEstado.sujo)) {
+        if (window.location.hash !== '#' + moduloAtual) window.location.hash = moduloAtual;
         tabelaNavegar_(function () { abrirModulo(id, busca); });
         return;
       }
@@ -2694,6 +2725,7 @@
         importacaoElencoAtual = null;
       }
 
+      if (moduloAtual === 'sumula-campeonato') sumulasRestaurarTabela_();
       moduloAtual = id;
 
       // Sempre reatribuido: abrir a tela sem termo tem de limpar o que
@@ -2715,7 +2747,7 @@
      * Desenha a tela de um modulo. Novas funcionalidades entram aqui.
      */
     function renderizarModulo(modulo) {
-      document.body.classList.toggle('modulo-tabela', modulo.id === 'jogos-campeonato');
+      document.body.classList.toggle('modulo-tabela', modulo.id === 'jogos-campeonato' || modulo.id === 'sumula-campeonato');
       fecharDetalhesPessoaElenco(false);
       elencoAtual = null;
       const cabecalho = '<div class="cabecalho-modulo">'
@@ -2746,6 +2778,17 @@
       if (modulo.id === 'jogos-campeonato') {
         conteudo.innerHTML = cabecalho + '<div id="areaTabelaCampeonato" class="tabela-campeonato"></div>';
         carregarTabelaCampeonato_(tabelaEstado.campeonatoId);
+        return;
+      }
+
+      if (modulo.id === 'sumula-campeonato') {
+        sumulasEstado.tabelaAnterior = {
+          dados: tabelaEstado.dados, campeonatoId: tabelaEstado.campeonatoId,
+          fase: tabelaEstado.fase, grupo: tabelaEstado.grupo, rodada: tabelaEstado.rodada
+        };
+        tabelaFecharFormulario_();
+        conteudo.innerHTML = cabecalho + '<div id="areaTabelaCampeonato" class="tabela-campeonato"></div>';
+        carregarSumulasCampeonato_();
         return;
       }
 
@@ -2825,6 +2868,12 @@
         conteudo.innerHTML = cabecalho
           + '<div id="areaAtas">' + blocoCarregando() + '</div>';
         carregarAtas();
+        return;
+      }
+
+      if (modulo.tipo === 'atletas') {
+        conteudo.innerHTML = cabecalho + blocoCarregando('statusAtletas');
+        carregarAtletas();
         return;
       }
 
@@ -3325,6 +3374,119 @@
       dados: null, campeonatoId: '', aba: 'jogos', fase: '', grupo: '', rodada: '',
       ocupado: false, sujo: false, formulario: '', requisicao: 0, resultado: null
     };
+    const sumulasEstado = {
+      dados: null, campeonato: '', rodada: '', equipe: '', data: '', consulta: false, tabelaAnterior: null
+    };
+
+    function tabelaModuloAtivo_() {
+      return moduloAtual === 'jogos-campeonato' || moduloAtual === 'sumula-campeonato';
+    }
+
+    function sumulasRestaurarTabela_() {
+      if (sumulasEstado.tabelaAnterior) Object.assign(tabelaEstado, sumulasEstado.tabelaAnterior);
+      sumulasEstado.tabelaAnterior = null;
+      tabelaFecharFormulario_();
+      ++tabelaEstado.requisicao;
+    }
+
+    function carregarSumulasCampeonato_(recado) {
+      if (tabelaEstado.ocupado || moduloAtual !== 'sumula-campeonato') return;
+      const area = document.getElementById('areaTabelaCampeonato'), requisicao = ++tabelaEstado.requisicao;
+      tabelaFecharFormulario_();
+      area.innerHTML = '<div id="tabelaLoading"></div><div id="tabelaMensagem" aria-live="polite"></div>';
+      tabelaOcupada_(true);
+      google.script.run.withSuccessHandler(function (dados) {
+        if (requisicao !== tabelaEstado.requisicao || moduloAtual !== 'sumula-campeonato') return;
+        tabelaOcupada_(false);
+        sumulasEstado.dados = dados;
+        montarSumulasCampeonato_(recado);
+      }).withFailureHandler(function (erro) {
+        if (requisicao !== tabelaEstado.requisicao || moduloAtual !== 'sumula-campeonato') return;
+        tabelaOcupada_(false);
+        if (sumulasEstado.dados) montarSumulasCampeonato_();
+        tabelaErro_(recado ? new Error(recado + ' Não foi possível atualizar a lista: ' + (erro && erro.message ? erro.message : erro)) : erro);
+      }).listarSumulasCampeonato();
+    }
+
+    function sumulasJogosFiltrados_(ignorarRodada) {
+      return sumulasEstado.dados.jogos.filter(function (jogo) {
+        return (!sumulasEstado.campeonato || jogo.campeonatoId === sumulasEstado.campeonato)
+          && (!sumulasEstado.equipe || jogo.mandanteId === sumulasEstado.equipe || jogo.visitanteId === sumulasEstado.equipe)
+          && (!sumulasEstado.data || jogo.data === sumulasEstado.data)
+          && (ignorarRodada || !sumulasEstado.rodada || String(jogo.rodada) === sumulasEstado.rodada);
+      });
+    }
+
+    function montarSumulasCampeonato_(recado) {
+      const dados = sumulasEstado.dados, area = document.getElementById('areaTabelaCampeonato');
+      if (!dados || !area || moduloAtual !== 'sumula-campeonato') return;
+      if (!dados.campeonatos.some(function (item) { return item.id === sumulasEstado.campeonato; })) sumulasEstado.campeonato = '';
+      if (!dados.equipes.some(function (item) { return item.id === sumulasEstado.equipe; })) sumulasEstado.equipe = '';
+      const rodadas = Array.from(new Set(sumulasJogosFiltrados_(true).map(function (jogo) { return jogo.rodada; })))
+        .sort(function (a, b) { return a - b; }).map(function (rodada) { return { id: String(rodada), nome: 'Rodada ' + rodada }; });
+      if (!rodadas.some(function (item) { return item.id === sumulasEstado.rodada; })) sumulasEstado.rodada = '';
+      const jogos = sumulasJogosFiltrados_(false);
+      function time(id) {
+        const equipe = dados.equipes.find(function (item) { return item.id === id; });
+        return '<div class="tabela-jogo-time"><div class="tabela-jogo-escudo">'
+          + (equipe.escudo ? '<img src="' + escapar(equipe.escudo) + '" alt="Escudo de ' + escapar(equipe.nome) + '" loading="lazy">'
+            : '<span class="tabela-jogo-sem-escudo" aria-hidden="true">' + escapar(equipe.nome.trim().split(/\s+/).slice(0, 2).map(function (parte) { return parte.charAt(0); }).join('')) + '</span>')
+          + '</div><span class="tabela-jogo-time-nome">' + escapar(equipe.nome) + '</span></div>';
+      }
+      area.innerHTML = '<div class="tabela-barra">'
+        + tabelaSelect_('sumulasCampeonato', 'Campeonato', dados.campeonatos.map(function (item) { return { id: item.id, nome: item.nome + (item.temporada ? ' · ' + item.temporada : '') }; }), sumulasEstado.campeonato, 'Todos os campeonatos')
+        + tabelaSelect_('sumulasRodada', 'Rodada', rodadas, sumulasEstado.rodada, 'Todas as rodadas')
+        + tabelaSelect_('sumulasEquipe', 'Equipe', dados.equipes, sumulasEstado.equipe, 'Todas as equipes')
+        + '<div class="campo"><label for="sumulasData">Data do jogo</label><input type="date" id="sumulasData" value="' + escapar(sumulasEstado.data) + '"></div>'
+        + '<button type="button" class="botao-apoio" id="sumulasLimpar">Limpar filtros</button>'
+        + '<button type="button" class="botao-apoio" id="sumulasAtualizar">Atualizar</button></div>'
+        + '<div id="tabelaLoading"></div><div id="tabelaMensagem" aria-live="polite">'
+        + (recado ? '<div class="sucesso" role="status">' + escapar(recado) + '</div>' : '') + '</div>'
+        + '<p class="apoio">Súmulas preenchidas e finalizadas: somente partidas encerradas com resultado detalhado salvo. Jogos antigos com apenas placar não aparecem aqui. A consulta usa os participantes e eventos registrados na partida, não o elenco atual.</p>'
+        + '<p class="apoio" role="status">' + jogos.length + ' súmula(s) encontrada(s).</p>'
+        + (jogos.length ? '<div class="tabela-grade">' + jogos.map(function (jogo) {
+          return '<article class="tabela-jogo tabela-jogo-partida"><div class="tabela-jogo-cabecalho"><strong>'
+            + escapar(jogo.campeonatoNome) + (jogo.temporada ? ' · ' + escapar(jogo.temporada) : '') + '</strong><span class="tabela-jogo-status">Finalizada</span></div>'
+            + '<p class="apoio">' + escapar(jogo.faseNome) + ' · Rodada ' + escapar(jogo.rodada) + (jogo.grupoNome ? ' · ' + escapar(jogo.grupoNome) : '') + '</p>'
+            + '<div class="apoio tabela-jogo-local">' + escapar(formatarDataBr(jogo.data)) + ' · ' + escapar(jogo.hora) + '<br>' + escapar(jogo.campoNome) + '</div>'
+            + '<div class="tabela-jogo-times tabela-jogo-confronto">' + time(jogo.mandanteId)
+            + '<div class="tabela-jogo-placar" aria-label="Placar: ' + escapar(jogo.golsMandante) + ' a ' + escapar(jogo.golsVisitante) + '"><span class="tabela-jogo-gols">' + escapar(jogo.golsMandante)
+            + '</span><span class="tabela-jogo-versus">×</span><span class="tabela-jogo-gols">' + escapar(jogo.golsVisitante) + '</span></div>' + time(jogo.visitanteId) + '</div><div class="tabela-acoes">'
+            + '<button type="button" class="botao-apoio" data-sumula-id="' + escapar(jogo.id) + '" data-sumula-campeonato="' + escapar(jogo.campeonatoId) + '" data-sumula-consulta="sim">Consultar</button>'
+            + (dados.podeEditar ? '<button type="button" class="botao-apoio" data-sumula-id="' + escapar(jogo.id) + '" data-sumula-campeonato="' + escapar(jogo.campeonatoId) + '" data-sumula-consulta="nao">Editar resultado</button>' : '')
+            + '</div></article>';
+        }).join('') + '</div>' : '<div class="vazio">Nenhuma súmula finalizada encontrada para os filtros selecionados.</div>');
+      ['Campeonato', 'Rodada', 'Equipe', 'Data'].forEach(function (nome) {
+        document.getElementById('sumulas' + nome).onchange = function (evento) {
+          const valor = evento.target.value;
+          tabelaNavegar_(function () { sumulasEstado[nome.toLowerCase()] = valor; montarSumulasCampeonato_(); });
+        };
+      });
+      document.getElementById('sumulasLimpar').onclick = function () {
+        tabelaNavegar_(function () {
+          sumulasEstado.campeonato = ''; sumulasEstado.rodada = ''; sumulasEstado.equipe = ''; sumulasEstado.data = '';
+          montarSumulasCampeonato_();
+        });
+      };
+      document.getElementById('sumulasAtualizar').onclick = function () { tabelaNavegar_(carregarSumulasCampeonato_); };
+      area.querySelectorAll('[data-sumula-id]').forEach(function (botao) {
+        botao.onclick = function () {
+          tabelaNavegar_(function () {
+            sumulasEstado.consulta = botao.dataset.sumulaConsulta === 'sim';
+            if (sumulasEstado.consulta) {
+              tabelaEstado.campeonatoId = botao.dataset.sumulaCampeonato;
+              tabelaEstado.dados = { campeonatos: dados.campeonatos };
+              abrirTabelaResultado_(botao.dataset.sumulaId);
+            } else carregarTabelaCampeonato_(botao.dataset.sumulaCampeonato, botao.dataset.sumulaId);
+          });
+        };
+      });
+    }
+
+    function tabelaVoltarLista_(recado) {
+      if (moduloAtual === 'sumula-campeonato') montarSumulasCampeonato_(recado);
+      else montarTabelaCampeonato_(recado);
+    }
     try {
       const selecaoTabela = JSON.parse(sessionStorage.getItem('aeuv-tabela-selecao') || '{}');
       if (typeof selecaoTabela.campeonatoId === 'string') tabelaEstado.campeonatoId = selecaoTabela.campeonatoId;
@@ -3348,9 +3510,9 @@
         acao();
         return;
       }
-      const requisicao = tabelaEstado.requisicao;
+      const requisicao = tabelaEstado.requisicao, modulo = moduloAtual;
       confirmarDescarteElenco_({ titulo: 'Descartar alterações da tabela?', confirmar: 'Descartar e continuar' }).then(function (confirmado) {
-        if (!confirmado || tabelaEstado.ocupado || requisicao !== tabelaEstado.requisicao || moduloAtual !== 'jogos-campeonato') return;
+        if (!confirmado || tabelaEstado.ocupado || requisicao !== tabelaEstado.requisicao || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
         tabelaFecharFormulario_();
         acao();
       });
@@ -3359,13 +3521,19 @@
     function tabelaErro_(erro) {
       const area = document.getElementById('tabelaMensagem');
       if (area) {
+        const listaSumulas = moduloAtual === 'sumula-campeonato' && !tabelaEstado.resultado;
         area.innerHTML = '<div class="erro" role="alert">' + escapar(erro && erro.message ? erro.message : erro)
-          + '<p>Suas alterações não foram descartadas. Se os dados estiverem desatualizados, use Atualizar e confirme o descarte antes de tentar novamente.</p>'
+          + (listaSumulas ? '<p>A lista pode estar desatualizada. Atualize antes de consultar ou editar novamente.</p>'
+            : '<p>Suas alterações não foram descartadas. Se os dados estiverem desatualizados, use Atualizar e confirme o descarte antes de tentar novamente.</p>')
           + '<button type="button" class="botao-apoio" id="tabelaRecarregarLista">'
-          + (tabelaEstado.resultado ? 'Recarregar resultado' : 'Recarregar lista de campeonatos') + '</button></div>';
+          + (tabelaEstado.resultado ? 'Recarregar resultado' : (listaSumulas ? 'Recarregar lista de súmulas' : 'Recarregar lista de campeonatos')) + '</button></div>';
         document.getElementById('tabelaRecarregarLista').onclick = function () {
           const resultadoId = tabelaEstado.resultado && tabelaEstado.resultado.jogo.id;
-          tabelaNavegar_(function () { if (resultadoId) abrirTabelaResultado_(resultadoId); else carregarTabelaCampeonato_(''); });
+          tabelaNavegar_(function () {
+            if (resultadoId) abrirTabelaResultado_(resultadoId);
+            else if (moduloAtual === 'sumula-campeonato') carregarSumulasCampeonato_();
+            else carregarTabelaCampeonato_('');
+          });
         };
       }
     }
@@ -3388,15 +3556,15 @@
       });
     }
 
-    function carregarTabelaCampeonato_(id) {
+    function carregarTabelaCampeonato_(id, resultadoId) {
       if (tabelaEstado.ocupado) return;
       const area = document.getElementById('areaTabelaCampeonato');
       if (!area) return;
-      const requisicao = ++tabelaEstado.requisicao;
+      const requisicao = ++tabelaEstado.requisicao, modulo = moduloAtual;
       area.innerHTML = '<div id="tabelaLoading"></div><div id="tabelaMensagem"></div>';
       tabelaOcupada_(true);
       google.script.run.withSuccessHandler(function (dados) {
-        if (requisicao !== tabelaEstado.requisicao || moduloAtual !== 'jogos-campeonato') return;
+        if (requisicao !== tabelaEstado.requisicao || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
         tabelaOcupada_(false);
         if (tabelaEstado.campeonatoId !== dados.campeonatoId) {
           tabelaEstado.fase = ''; tabelaEstado.grupo = ''; tabelaEstado.rodada = '';
@@ -3406,14 +3574,16 @@
         tabelaEstado.sujo = false;
         tabelaEstado.formulario = '';
         tabelaEstado.resultado = null;
-        montarTabelaCampeonato_();
+        if (modulo === 'sumula-campeonato' && resultadoId) abrirTabelaResultado_(resultadoId);
+        else tabelaVoltarLista_();
       }).withFailureHandler(function (erro) {
-        if (requisicao !== tabelaEstado.requisicao || moduloAtual !== 'jogos-campeonato') return;
+        if (requisicao !== tabelaEstado.requisicao || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
         tabelaOcupada_(false);
-        if (tabelaEstado.dados) montarTabelaCampeonato_();
+        if (modulo === 'sumula-campeonato' && sumulasEstado.dados) montarSumulasCampeonato_();
+        else if (tabelaEstado.dados) montarTabelaCampeonato_();
         else area.innerHTML = '<div id="tabelaLoading"></div><div id="tabelaMensagem"></div><button type="button" class="botao-apoio" id="tabelaTentar">Tentar novamente</button>';
         const tentar = document.getElementById('tabelaTentar');
-        if (tentar) tentar.onclick = function () { carregarTabelaCampeonato_(id); };
+        if (tentar) tentar.onclick = function () { carregarTabelaCampeonato_(id, resultadoId); };
         tabelaErro_(erro);
       }).listarTabelaCampeonato(id || '');
     }
@@ -3425,11 +3595,11 @@
       payload.campeonatoId = tabelaEstado.campeonatoId;
       if (!pdf && !Object.prototype.hasOwnProperty.call(payload, 'revisao')) payload.revisao = tabelaEstado.dados.revisao;
       const requisicao = ++tabelaEstado.requisicao;
-      const campeonatoId = tabelaEstado.campeonatoId;
+      const campeonatoId = tabelaEstado.campeonatoId, modulo = moduloAtual;
       document.getElementById('tabelaMensagem').innerHTML = '';
       tabelaOcupada_(true);
       google.script.run.withSuccessHandler(function (dados) {
-        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== 'jogos-campeonato') return;
+        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
         tabelaOcupada_(false);
         if (pdf) {
           try {
@@ -3451,9 +3621,10 @@
         tabelaEstado.sujo = false;
         tabelaEstado.formulario = '';
         tabelaEstado.resultado = null;
-        montarTabelaCampeonato_(dados.recado || 'Alterações salvas.');
+        if (modulo === 'sumula-campeonato') carregarSumulasCampeonato_(dados.recado || 'Alterações salvas.');
+        else montarTabelaCampeonato_(dados.recado || 'Alterações salvas.');
       }).withFailureHandler(function (erro) {
-        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== 'jogos-campeonato') return;
+        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
         tabelaOcupada_(false);
         tabelaErro_(erro);
       })[metodo](payload);
@@ -3893,33 +4064,35 @@
       if (tabelaEstado.ocupado || !tabelaEstado.dados) return;
       const area = document.getElementById('areaTabelaCampeonato');
       if (!area) return;
-      const campeonatoId = tabelaEstado.campeonatoId, requisicao = ++tabelaEstado.requisicao;
+      const campeonatoId = tabelaEstado.campeonatoId, requisicao = ++tabelaEstado.requisicao, modulo = moduloAtual;
+      const sumula = modulo === 'sumula-campeonato', consulta = sumula && sumulasEstado.consulta;
       tabelaEstado.resultado = null;
       tabelaEstado.formulario = 'Resultado da partida';
       area.innerHTML = '<div class="tabela-barra">'
-        + tabelaSelect_('tabelaCampeonato', 'Campeonato', tabelaEstado.dados.campeonatos, campeonatoId, '')
-        + '<button type="button" class="botao-apoio" id="trVoltar">Voltar para a tabela</button>'
+        + (sumula ? '' : tabelaSelect_('tabelaCampeonato', 'Campeonato', tabelaEstado.dados.campeonatos, campeonatoId, ''))
+        + '<button type="button" class="botao-apoio" id="trVoltar">' + (sumula ? 'Voltar para as súmulas' : 'Voltar para a tabela') + '</button>'
         + '<button type="button" class="botao-apoio" id="trRecarregar">Atualizar resultado</button></div>'
         + '<div id="tabelaLoading"></div><div id="tabelaMensagem" aria-live="polite"></div><div id="tabelaResultadoArea" class="tabela-form"></div>';
-      document.getElementById('trVoltar').onclick = function () { tabelaNavegar_(montarTabelaCampeonato_); };
+      document.getElementById('trVoltar').onclick = function () { tabelaNavegar_(function () { tabelaVoltarLista_(); }); };
       document.getElementById('trRecarregar').onclick = function () { tabelaNavegar_(function () { abrirTabelaResultado_(id); }); };
-      document.getElementById('tabelaCampeonato').onchange = function (evento) {
+      if (!sumula) document.getElementById('tabelaCampeonato').onchange = function (evento) {
         const selecionado = evento.target.value;
         evento.target.value = campeonatoId;
         tabelaNavegar_(function () { carregarTabelaCampeonato_(selecionado); });
       };
       tabelaOcupada_(true);
       google.script.run.withSuccessHandler(function (dados) {
-        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== 'jogos-campeonato') return;
+        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
         tabelaOcupada_(false);
         tabelaEstado.resultado = JSON.parse(JSON.stringify(dados));
+        if (consulta) tabelaEstado.resultado.podeEditar = false;
         tabelaEstado.sujo = false;
         montarTabelaResultado_();
       }).withFailureHandler(function (erro) {
-        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== 'jogos-campeonato') return;
+        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
         tabelaOcupada_(false);
         tabelaErro_(erro);
-      }).listarResultadoJogoCampeonato({ campeonatoId: campeonatoId, id: id });
+      })[consulta ? 'consultarSumulaCampeonato' : 'listarResultadoJogoCampeonato']({ campeonatoId: campeonatoId, id: id });
     }
 
     function tabelaResultadoNumeroHTML_(id, valor, rotulo, atributos) {
@@ -3985,12 +4158,16 @@
       }
       const area = document.getElementById('tabelaResultadoArea');
       area.innerHTML = '<form id="tabelaResultadoFormulario" class="formulario tabela-painel"><h3>'
-        + (jogo.status === 'encerrado' ? 'Editar resultado' : 'Lançar resultado') + '</h3><p class="apoio resultado-contexto">'
+        + (!draft.podeEditar ? (jogo.status === 'encerrado' ? 'Consultar súmula finalizada' : 'Consultar resultado') : (jogo.status === 'encerrado' ? 'Editar resultado' : 'Lançar resultado')) + '</h3><p class="apoio resultado-contexto">'
         + escapar(draft.campeonato.nome) + (draft.campeonato.temporada ? ' · ' + escapar(draft.campeonato.temporada) : '')
-        + ' · ' + escapar(draft.fase.nome) + ' · Rodada ' + escapar(jogo.rodada) + '</p>'
-        + (draft.podeEditar ? '' : '<div class="aviso">Consulta somente. Você não tem permissão para alterar este resultado.</div>')
+        + ' · ' + escapar(draft.fase.nome) + ' · Rodada ' + escapar(jogo.rodada)
+        + ' · ' + escapar(formatarDataBr(jogo.data)) + ' · ' + escapar(jogo.hora) + '</p>'
+        + (draft.podeEditar ? '' : '<div class="aviso">'
+          + (moduloAtual === 'sumula-campeonato' ? 'Consulta somente: participantes e eventos salvos na partida. Para corrigir, volte à lista e escolha Editar resultado.'
+            : 'Consulta somente. Você não tem permissão para alterar este resultado.') + '</div>')
         + '<div class="resultado-placar">' + placar(equipes[0], 'Mandante') + '<strong aria-hidden="true">×</strong>' + placar(equipes[1], 'Visitante') + '</div>'
-        + '<p class="apoio">Gols dos atletas atualizam o placar; gols contra são creditados ao adversário. Você também pode ajustar o placar diretamente para gols administrativos ou sem autoria. O placar inclui a prorrogação; pênaltis ficam separados. Finalizar encerra a partida.</p>'
+        + '<p class="apoio">' + (draft.podeEditar ? 'Gols dos atletas atualizam o placar; gols contra são creditados ao adversário. Você também pode ajustar o placar diretamente para gols administrativos ou sem autoria. ' : 'Gols contra são creditados ao adversário. ')
+        + 'O placar inclui a prorrogação; pênaltis ficam separados.' + (draft.podeEditar ? ' Finalizar encerra a partida.' : '') + '</p>'
         + '<div class="resultado-flags">' + flag('wo', 'WO') + flag('prorrogacao', 'Prorrogação') + flag('penaltis', 'Disputa de pênaltis') + '</div>'
         + '<div class="campos"><div class="campo" id="trWoCampo"><label for="trWoEquipe">Equipe ausente no WO</label><select id="trWoEquipe" data-tr-resultado="woEquipeId">'
         + opcoesSelect(equipes, resultado.woEquipeId || '', 'Selecione a equipe ausente') + '</select></div>'
@@ -4330,7 +4507,7 @@
     }
 
     window.addEventListener('beforeunload', function (evento) {
-      if (moduloAtual !== 'jogos-campeonato' || (!tabelaEstado.sujo && !tabelaEstado.ocupado)) return;
+      if (!tabelaModuloAtivo_() || (!tabelaEstado.sujo && !tabelaEstado.ocupado)) return;
       evento.preventDefault();
       evento.returnValue = '';
     });
@@ -4918,7 +5095,11 @@
             + (adicionais.length ? '<p class="apoio">' + adicionais.join(' · ') + '</p>' : '')
             + '</div></div><div class="elenco-pessoa-acoes"><button type="button" class="botao-apoio" aria-label="Ver detalhes de ' + escapar(pessoa.nome) + '" data-elenco-detalhes="' + escapar(pessoa.id) + '">Ver detalhes</button>'
             + (editavel ? '<button type="button" class="botao-apoio" aria-label="Editar ' + escapar(pessoa.nome) + '" data-elenco-editar="' + escapar(pessoa.id) + '">Editar</button>'
-            + '<button type="button" class="botao-apoio perigo" aria-label="Remover ' + escapar(pessoa.nome) + '" data-elenco-remover="' + escapar(pessoa.id) + '">Remover</button>' : '') + '</div></article>';
+            + '<button type="button" class="botao-apoio perigo" aria-label="Remover ' + escapar(pessoa.nome) + '" data-elenco-remover="' + escapar(pessoa.id) + '">Remover</button>' : '')
+            + (!comissao && dados.podeTransferir === true
+              ? '<button type="button" class="botao-apoio" aria-label="Transferir ' + escapar(pessoa.nome) + '" data-elenco-transferir="' + escapar(pessoa.id) + '" title="' + escapar(pessoa.motivoTransferencia || '') + '"'
+                + (pessoa.participouPelaEquipeAtual || !(dados.equipesDestinoTransferencia || []).length ? ' disabled' : '') + '>Transferir</button>'
+              : '') + '</div></article>';
         }).join('') + '</div>'
         : '<div class="elenco-vazio apoio">' + (comissao ? 'Nenhum membro da comissão técnica cadastrado nesta equipe.' : 'Nenhum atleta cadastrado nesta equipe.') + (editavel ? ' Use o botão Adicionar para começar.' : '') + '</div>')
         + (dados.linkInscricao ? '<div class="elenco-link-acoes"><span id="elencoAvisoLink" class="apoio" role="status" aria-live="polite"></span>'
@@ -5049,11 +5230,98 @@
           removerCadastroPessoa(abaElencoAtiva, elencoAtual.campeonatoId, pessoaId);
         });
       });
+      area.querySelectorAll('[data-elenco-transferir]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          const atleta = pessoas.find(function (item) { return item.id === botao.dataset.elencoTransferir; });
+          if (botao.disabled || !atleta || elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+          abrirFormularioTransferenciaAtleta_(atleta);
+        });
+      });
       if (dados.linkInscricao && cadastro) document.getElementById('elencoCopiar').addEventListener('click', function () {
         if (navigator.clipboard && window.isSecureContext) {
           navigator.clipboard.writeText(dados.linkInscricao).then(function () { document.getElementById('elencoAvisoLink').textContent = 'Link copiado. O destinatário precisa de acesso autorizado à equipe.'; })
             .catch(function () { window.prompt('Copie o link de inscrição:', dados.linkInscricao); });
         } else window.prompt('Copie o link de inscrição:', dados.linkInscricao);
+      });
+    }
+
+    function abrirFormularioTransferenciaAtleta_(atleta) {
+      if (!elencoAtual || cadastroPessoasCampeonato.podeTransferir !== true
+          || atleta.participouPelaEquipeAtual
+          || !(cadastroPessoasCampeonato.equipesDestinoTransferencia || []).length
+          || !permitirEdicaoElenco_()) return;
+      const estado = { contexto: elencoAtual, atletaId: atleta.id, salvando: false, recarregar: false };
+      const destinos = cadastroPessoasCampeonato.equipesDestinoTransferencia;
+      alternarFormularioElenco(true);
+      const formulario = document.getElementById('cadastroPessoasFormArea');
+      formulario.innerHTML = '<section class="grupo elenco-form"><h4>Transferir atleta</h4>'
+        + '<p class="apoio"><strong>' + escapar(atleta.nome) + '</strong> — origem: '
+        + escapar(cadastroPessoasCampeonato.equipe.nome) + ' / '
+        + escapar(cadastroPessoasCampeonato.registros[0].campeonatoNome) + '.</p>'
+        + '<label class="campo cheio" for="transferenciaEquipeDestino">Equipe de destino<select id="transferenciaEquipeDestino">'
+        + '<option value="">Selecione outra equipe deste campeonato</option>'
+        + destinos.map(function (item) { return '<option value="' + escapar(item.id) + '">' + escapar(item.nome) + '</option>'; }).join('')
+        + '</select></label><div id="transferenciaAviso" role="status" aria-live="polite"></div>'
+        + '<div class="barra-acoes"><button type="button" class="botao-principal" id="transferenciaConfirmar" disabled>Transferir atleta</button>'
+        + '<button type="button" class="botao-apoio" id="transferenciaCancelar">Cancelar e voltar à lista</button></div></section>';
+      const destino = document.getElementById('transferenciaEquipeDestino');
+      const confirmar = document.getElementById('transferenciaConfirmar');
+      const cancelar = document.getElementById('transferenciaCancelar');
+      const aviso = document.getElementById('transferenciaAviso');
+      destino.addEventListener('change', function () { confirmar.disabled = !destino.value || estado.salvando; });
+      cancelar.addEventListener('click', function () {
+        if (estado.salvando || elencoAtual !== estado.contexto) return;
+        if (estado.recarregar) {
+          abaElencoAtiva = 'atletas';
+          abrirElenco(estado.contexto.campeonatoId, estado.contexto.equipeId);
+        } else {
+          montarElenco();
+        }
+      });
+      confirmar.addEventListener('click', function () {
+        if (confirmar.disabled || estado.salvando || elencoAtual !== estado.contexto || moduloAtual !== 'times-campeonato') return;
+        const equipeDestinoId = destino.value;
+        const equipeDestino = destinos.find(function (item) { return item.id === equipeDestinoId; });
+        if (!equipeDestino) return;
+        confirmarDescarteElenco_({
+          titulo: 'Confirmar transferência?',
+          mensagem: atleta.nome + ' será vinculado a ' + equipeDestino.nome + ' neste campeonato. O histórico desta equipe será preservado.',
+          cancelar: 'Cancelar',
+          confirmar: 'Transferir atleta',
+          perigo: false
+        }).then(function (aprovado) {
+          if (!aprovado || elencoAtual !== estado.contexto || moduloAtual !== 'times-campeonato'
+              || estado.salvando || !confirmar.isConnected) return;
+          estado.salvando = true;
+          marcarElencoPendente_(true);
+          destino.disabled = true;
+          confirmar.disabled = true;
+          cancelar.disabled = true;
+          aviso.textContent = 'Validando participação e transferindo atleta…';
+          google.script.run.withSuccessHandler(function (dados) {
+            if (elencoAtual !== estado.contexto || moduloAtual !== 'times-campeonato') return;
+            cadastroPessoasCampeonato = dados;
+            abaElencoAtiva = 'atletas';
+            montarElenco(dados.recado);
+          }).withFailureHandler(function (erro) {
+            if (elencoAtual !== estado.contexto || moduloAtual !== 'times-campeonato') return;
+            estado.salvando = false;
+            estado.recarregar = true;
+            marcarElencoPendente_(false);
+            destino.disabled = true;
+            confirmar.disabled = true;
+            cancelar.disabled = false;
+            cancelar.textContent = 'Atualizar elenco';
+            aviso.innerHTML = '<span class="alerta">Não foi possível confirmar a transferência: '
+              + escapar(erro && erro.message ? erro.message : erro)
+              + ' Atualize o elenco antes de tentar novamente.</span>';
+          }).transferirAtletaElenco({
+            campeonatoId: estado.contexto.campeonatoId,
+            equipeId: estado.contexto.equipeId,
+            registroId: estado.atletaId,
+            equipeDestinoId: equipeDestinoId
+          });
+        });
       });
     }
 
@@ -6529,6 +6797,449 @@
       return 'pilula ' + simplificar(situacao);
     }
 
+    /********* BANCO DE DADOS DE ATLETAS *********/
+
+    /**
+     * Le uma vez do servidor (elencos de todos os campeonatos, historico
+     * permanente de inscricoes e fontes legadas) e filtra sobre essa copia.
+     * O detalhe abre na propria tabela, como nas Sumulas Enviadas.
+     */
+    let atletasBd = { dados: null, abertos: {} };
+    let atletasBdRequisicao = 0;
+
+    function carregarAtletas() {
+      const requisicao = ++atletasBdRequisicao;
+
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'atletas' || requisicao !== atletasBdRequisicao) return;
+          atletasBd = { dados: dados || { registros: [] }, abertos: {} };
+          montarTelaAtletas();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'atletas' || requisicao !== atletasBdRequisicao) return;
+          const status = document.getElementById('statusAtletas');
+          if (status) status.outerHTML = '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarAtletas();
+    }
+
+    function atletaBdValores_(registros) {
+      const equipes = [];
+      const competicoes = [];
+      const incluir = function (lista, valor) {
+        if (valor && lista.indexOf(valor) === -1) lista.push(valor);
+      };
+
+      registros.forEach(function (registro) {
+        (registro.vinculos || []).forEach(function (vinculo) {
+          incluir(equipes, vinculo.equipeNome);
+          incluir(competicoes, vinculo.campeonatoNome);
+        });
+        (registro.equipesHistorico || []).forEach(function (valor) { incluir(equipes, valor); });
+        (registro.competicoesHistorico || []).forEach(function (valor) { incluir(competicoes, valor); });
+      });
+
+      const ordenar = function (a, b) { return String(a).localeCompare(String(b), 'pt-BR'); };
+
+      return { equipes: equipes.sort(ordenar), competicoes: competicoes.sort(ordenar) };
+    }
+
+    function montarTelaAtletas() {
+      const status = document.getElementById('statusAtletas');
+      const dados = atletasBd.dados || {};
+      const registros = dados.registros || [];
+      const fontes = dados.fontes || {};
+      const termo = consumirBusca();
+
+      if (!status) return;
+
+      if (!registros.length) {
+        status.outerHTML = '<div class="vazio">Nenhum atleta encontrado nos elencos dos campeonatos, no hist&oacute;rico '
+          + 'de inscri&ccedil;&otilde;es ou nas solicita&ccedil;&otilde;es, puni&ccedil;&otilde;es e s&uacute;mulas.</div>';
+        return;
+      }
+
+      const valores = atletaBdValores_(registros);
+      const opcoes = function (lista) {
+        return lista.map(function (valor) {
+          return '<option value="' + escapar(valor) + '">' + escapar(valor) + '</option>';
+        }).join('');
+      };
+      const recortes = [];
+
+      if (Number(fontes.solicitacoesTotal || 0) > Number(fontes.solicitacoesLidas || 0)) {
+        recortes.push('solicitações: ' + fontes.solicitacoesLidas + ' mais recentes de ' + fontes.solicitacoesTotal);
+      }
+
+      if (Number(fontes.sumulasTotal || 0) > Number(fontes.sumulasLidas || 0)) {
+        recortes.push('súmulas: ' + fontes.sumulasLidas + ' mais recentes de ' + fontes.sumulasTotal);
+      }
+
+      status.outerHTML = ''
+        + '<div class="resumo" id="resumoAtletas"></div>'
+        + '<div class="filtros">'
+        + '<input type="search" id="buscaAtletas" aria-label="Buscar atleta" placeholder="Buscar por nome, apelido ou CPF">'
+        + '<select id="filtroEquipeAtletas" aria-label="Equipe"><option value="">Todas as equipes</option>' + opcoes(valores.equipes) + '</select>'
+        + '<select id="filtroCompeticaoAtletas" aria-label="Competi&ccedil;&atilde;o"><option value="">Todas as competi&ccedil;&otilde;es</option>' + opcoes(valores.competicoes) + '</select>'
+        + '<select id="filtroVinculoAtletas" aria-label="V&iacute;nculo no elenco">'
+        + '<option value="">Todos os v&iacute;nculos</option>'
+        + '<option value="atual">Com inscri&ccedil;&atilde;o atual</option>'
+        + '<option value="historico">Com v&iacute;nculo anterior</option>'
+        + '<option value="sem">Sem v&iacute;nculo no elenco</option>'
+        + '</select>'
+        + '</div>'
+        + '<div class="barra-acoes">'
+        + '<span id="contagemAtletas" aria-live="polite"></span>'
+        + '<span class="espaco"></span>'
+        + '<button type="button" class="botao-apoio" id="recarregarAtletas">Atualizar</button>'
+        + '</div>'
+        + '<p class="apoio">Inclui todos os atletas dos elencos de todos os campeonatos (inscri&ccedil;&otilde;es atuais e '
+        + 'anteriores do hist&oacute;rico permanente) e as pessoas citadas em solicita&ccedil;&otilde;es, puni&ccedil;&otilde;es e s&uacute;mulas. '
+        + 'Clique no atleta para ver o hist&oacute;rico de v&iacute;nculos.'
+        + (recortes.length ? ' Fontes legadas parciais (' + escapar(recortes.join('; ')) + ').' : '')
+        + '</p>'
+        + '<div class="tabela-rolagem"><table class="solicitacoes atletas-bd"><thead><tr>'
+        + '<th>Atleta</th><th>Situa&ccedil;&atilde;o</th><th>Equipe atual</th><th>Competi&ccedil;&atilde;o atual</th>'
+        + '<th>V&iacute;nculos</th><th>Disciplina</th>'
+        + '</tr></thead><tbody id="linhasAtletas"></tbody></table></div>';
+
+      document.getElementById('buscaAtletas').addEventListener('input', filtrarAtletas);
+      ['filtroEquipeAtletas', 'filtroCompeticaoAtletas', 'filtroVinculoAtletas'].forEach(function (id) {
+        document.getElementById(id).addEventListener('change', filtrarAtletas);
+      });
+      document.getElementById('recarregarAtletas').addEventListener('click', function () {
+        abrirModulo('atletas');
+      });
+      document.getElementById('linhasAtletas').addEventListener('click', cliqueLinhasAtletas_);
+
+      if (termo) {
+        document.getElementById('buscaAtletas').value = termo;
+      }
+
+      filtrarAtletas();
+    }
+
+    function cliqueLinhasAtletas_(evento) {
+      const alvo = evento && evento.target;
+
+      if (!alvo || !alvo.closest) return;
+
+      const atalho = alvo.closest('[data-atleta-atalho]');
+
+      if (atalho) {
+        abrirModulo(atalho.dataset.atletaAtalho, atalho.dataset.atletaBusca || '');
+        return;
+      }
+
+      if (alvo.closest('a')) return;
+
+      const linha = alvo.closest('[data-atleta-indice]');
+
+      if (linha) alternarAtletaBd(Number(linha.dataset.atletaIndice));
+    }
+
+    function alternarAtletaBd(indice) {
+      const registro = ((atletasBd.dados || {}).registros || [])[indice];
+
+      if (!registro) return;
+
+      if (atletasBd.abertos[registro.chave]) {
+        delete atletasBd.abertos[registro.chave];
+      } else {
+        atletasBd.abertos[registro.chave] = true;
+      }
+
+      filtrarAtletas();
+
+      const botao = document.getElementById('atletaBdBotao' + indice);
+
+      if (botao) botao.focus();
+    }
+
+    function filtrosAtletasBd_() {
+      const valor = function (id) {
+        const campo = document.getElementById(id);
+        return campo ? String(campo.value || '').trim() : '';
+      };
+
+      return {
+        busca: valor('buscaAtletas'),
+        equipe: valor('filtroEquipeAtletas'),
+        competicao: valor('filtroCompeticaoAtletas'),
+        vinculo: valor('filtroVinculoAtletas')
+      };
+    }
+
+    function atletaBdPassa_(registro, filtros) {
+      const vinculos = registro.vinculos || [];
+
+      if (filtros.busca) {
+        const texto = simplificar([registro.nome, registro.cpf].concat(vinculos.map(function (vinculo) {
+          return vinculo.nome + ' ' + vinculo.apelido + ' ' + vinculo.cpf;
+        })).join(' '));
+        const digitos = filtros.busca.replace(/\D/g, '');
+        const porTexto = texto.indexOf(simplificar(filtros.busca)) !== -1;
+        const porCpf = digitos.length >= 3 && /^[\d.\-\s]+$/.test(filtros.busca) && texto.indexOf(digitos) !== -1;
+
+        if (!porTexto && !porCpf) return false;
+      }
+
+      if (filtros.vinculo === 'sem') {
+        if (vinculos.length) return false;
+      }
+
+      const exigeVinculo = filtros.vinculo === 'atual' || filtros.vinculo === 'historico';
+
+      if (!filtros.equipe && !filtros.competicao && !exigeVinculo) return true;
+
+      const combina = vinculos.some(function (vinculo) {
+        return (!filtros.equipe || vinculo.equipeNome === filtros.equipe)
+          && (!filtros.competicao || vinculo.campeonatoNome === filtros.competicao)
+          && (filtros.vinculo !== 'atual' || vinculo.atual)
+          && (filtros.vinculo !== 'historico' || !vinculo.atual);
+      });
+
+      if (combina) return true;
+      if (exigeVinculo) return false;
+
+      // Solicitações, punições e súmulas não têm vínculo de elenco: valem as listas consolidadas.
+      return (!filtros.equipe || (registro.equipesHistorico || []).indexOf(filtros.equipe) !== -1)
+        && (!filtros.competicao || (registro.competicoesHistorico || []).indexOf(filtros.competicao) !== -1);
+    }
+
+    function filtrarAtletas() {
+      const registros = (atletasBd.dados || {}).registros || [];
+      const filtros = filtrosAtletasBd_();
+      const filtrados = [];
+
+      registros.forEach(function (registro, indice) {
+        if (atletaBdPassa_(registro, filtros)) filtrados.push({ registro: registro, indice: indice });
+      });
+
+      desenharResumoAtletas(filtrados, registros.length);
+      desenharLinhasAtletas(filtrados);
+
+      return filtrados;
+    }
+
+    function desenharResumoAtletas(filtrados, total) {
+      const equipes = {};
+      const competicoes = {};
+      let atuais = 0;
+      let historicos = 0;
+      let suspensos = 0;
+
+      filtrados.forEach(function (item) {
+        const registro = item.registro;
+
+        if (Number(registro.vinculosAtuais || 0) > 0) atuais++;
+        else if (Number(registro.totalVinculos || 0) > 0) historicos++;
+        if (registro.situacaoDisciplina === 'Suspenso') suspensos++;
+
+        (registro.vinculos || []).forEach(function (vinculo) {
+          if (!vinculo.atual) return;
+          if (vinculo.equipeNome) equipes[vinculo.equipeNome] = true;
+          if (vinculo.campeonatoNome) competicoes[vinculo.campeonatoNome] = true;
+        });
+      });
+
+      const itens = [
+        ['', filtrados.length, 'Atletas'],
+        ['cumprida', atuais, 'Com inscrição atual'],
+        ['', historicos, 'Somente histórico'],
+        ['pendente', suspensos, 'Suspensos'],
+        ['', Object.keys(equipes).length, 'Equipes atuais'],
+        ['', Object.keys(competicoes).length, 'Competições atuais']
+      ];
+      const resumo = document.getElementById('resumoAtletas');
+      const contagem = document.getElementById('contagemAtletas');
+
+      if (resumo) {
+        resumo.innerHTML = itens.map(function (item) {
+          return '<div class="indicador ' + item[0] + '">'
+            + '<div class="numero">' + escapar(item[1]) + '</div>'
+            + '<div class="rotulo">' + escapar(item[2]) + '</div>'
+            + '</div>';
+        }).join('');
+      }
+
+      if (contagem) {
+        contagem.textContent = filtrados.length === total
+          ? total + ' atleta(s)'
+          : filtrados.length + ' de ' + total + ' atleta(s)';
+      }
+    }
+
+    function cpfMascaradoAtletaBd_(cpf) {
+      const d = String(cpf || '').replace(/\D/g, '');
+
+      return d.length === 11 ? '***.' + d.slice(3, 6) + '.' + d.slice(6, 9) + '-**' : '';
+    }
+
+    function dataAtletaBd_(iso) {
+      const data = iso ? new Date(iso) : null;
+
+      return data && !isNaN(data.getTime()) ? data.toLocaleDateString('pt-BR') : '';
+    }
+
+    function classeSituacaoAtletaBd_(situacao) {
+      const mapa = {
+        'Suspenso': 'alerta',
+        'Regular': 'ativo',
+        'Inscrito no elenco': 'ativo',
+        'Aguardando inscrição': 'aguardando',
+        'Aguardando atualização': 'aguardando',
+        'Pena a definir': 'pendente',
+        'Cadastro com falha': 'falha',
+        'Falha recente': 'falha'
+      };
+
+      return 'pilula ' + (mapa[situacao] || 'suspenso');
+    }
+
+    function classeVinculoAtletaBd_(vinculo) {
+      if (vinculo.atual) return vinculo.ativo ? 'pilula ativo' : 'pilula pendente';
+
+      return vinculo.campeonatoExcluido ? 'pilula inativo' : 'pilula suspenso';
+    }
+
+    function desenharLinhasAtletas(filtrados) {
+      const corpo = document.getElementById('linhasAtletas');
+
+      if (!corpo) return;
+
+      if (!filtrados.length) {
+        corpo.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--apoio);">'
+          + 'Nenhum atleta encontrado com os filtros atuais.</td></tr>';
+        return;
+      }
+
+      corpo.innerHTML = filtrados.map(function (item) {
+        const r = item.registro;
+        const i = item.indice;
+        const aberto = !!atletasBd.abertos[r.chave];
+        const idDetalhe = 'atletaBdDetalhe' + i;
+        const cpf = cpfMascaradoAtletaBd_(r.cpf);
+        const equipes = (r.equipesAtuais || []).length ? r.equipesAtuais.join(', ') : (r.equipeAtual || '');
+        const competicoes = (r.competicoesAtuais || []).length ? r.competicoesAtuais.join(', ') : (r.competicaoAtual || '');
+        const atuais = Number(r.vinculosAtuais || 0);
+        const anteriores = Number(r.totalVinculos || 0) - atuais;
+
+        const linha = '<tr class="linha" data-atleta-indice="' + i + '">'
+          + celula('Atleta', '<button type="button" class="atleta-bd-alternar" id="atletaBdBotao' + i + '"'
+            + ' aria-expanded="' + (aberto ? 'true' : 'false') + '" aria-controls="' + idDetalhe + '">'
+            + '<span aria-hidden="true">' + (aberto ? '▾' : '▸') + '</span> '
+            + '<span class="pessoa-nome">' + escapar(r.nome || 'Atleta não identificado') + '</span></button>'
+            + '<div class="equipe-dado">' + escapar(cpf ? 'CPF ' + cpf : 'CPF não informado') + '</div>')
+          + celula('Situação', '<span class="' + classeSituacaoAtletaBd_(r.situacaoAtual) + '">'
+            + escapar(r.situacaoAtual || '—') + '</span>'
+            + '<div class="equipe-dado">Elenco: ' + escapar(r.situacaoElenco || 'Sem vínculo no elenco') + '</div>')
+          + celula('Equipe atual', '<span class="equipe-nome">' + escapar(equipes || '—') + '</span>')
+          + celula('Competição atual', escapar(competicoes || '—'))
+          + celula('Vínculos', '<div class="contagem"><span><strong>' + atuais + '</strong> atual(is)</span>'
+            + '<span><strong>' + anteriores + '</strong> anterior(es)</span></div>')
+          + celula('Disciplina', escapar(r.situacaoDisciplina || '—')
+            + (Number(r.totalPunicoes || 0) ? '<div class="equipe-dado">' + escapar(r.totalPunicoes + ' punição(ões)') + '</div>' : ''))
+          + '</tr>';
+
+        return linha + (aberto ? detalheAtletaBd_(r, idDetalhe) : '');
+      }).join('');
+    }
+
+    function detalheAtletaBd_(r, idDetalhe) {
+      const dados = [
+        ['CPF', formatarCpf(r.cpf)],
+        ['Nascimento', r.nascimento],
+        ['Tipo', r.tipo],
+        ['Equipes no histórico', (r.equipesHistorico || []).join(', ')],
+        ['Competições no histórico', (r.competicoesHistorico || []).join(', ')]
+      ].filter(function (item) {
+        return item[1];
+      }).map(function (item) {
+        return '<span>' + escapar(item[0]) + ': <strong>' + escapar(item[1]) + '</strong></span>';
+      }).join('');
+
+      const vinculos = (r.vinculos || []).map(function (v) {
+        const statusCampeonato = { ativo: 'Em andamento', encerrado: 'Encerrado', rascunho: 'Rascunho', excluido: 'Excluída' }[v.campeonatoStatus] || '';
+        const competicao = '<span class="equipe-nome">' + escapar(v.campeonatoNome || 'Competição sem nome') + '</span>'
+          + '<div class="equipe-dado">' + escapar([v.temporada, statusCampeonato].filter(Boolean).join(' · ') || '—') + '</div>'
+          + (v.campeonatoNomeRegistrado ? '<div class="equipe-dado">' + escapar('Registrada como ' + v.campeonatoNomeRegistrado) + '</div>' : '')
+          + (v.campeonatoNomeOriginal ? '<div class="equipe-dado">' + escapar('Nome original: ' + v.campeonatoNomeOriginal) + '</div>' : '');
+        const equipe = '<span class="equipe-nome">' + escapar(v.equipeNome || 'Sem equipe vinculada') + '</span>'
+          + (v.equipeNomeRegistrado ? '<div class="equipe-dado">' + escapar('Registrada como ' + v.equipeNomeRegistrado) + '</div>' : '')
+          + (v.equipeNomeOriginal ? '<div class="equipe-dado">' + escapar('Nome original: ' + v.equipeNomeOriginal) + '</div>' : '')
+          + (v.equipeNome && !v.equipeAssociada ? '<div class="equipe-dado">Fora da lista atual de equipes</div>' : '');
+        const inscricao = [
+          v.numero !== '' && v.numero !== null && v.numero !== undefined ? 'Camisa ' + v.numero : '',
+          v.posicao,
+          v.apelido ? '"' + v.apelido + '"' : ''
+        ].filter(Boolean).join(' · ');
+        const nomeInscrito = v.nome && simplificar(v.nome) !== simplificar(r.nome) ? 'Inscrito como ' + v.nome : '';
+        const registro = v.noHistorico
+          ? escapar(dataAtletaBd_(v.registradoEm) || '—')
+            + (v.atualizadoEm && v.atualizadoEm !== v.registradoEm
+              ? '<div class="equipe-dado">' + escapar('Dados atualizados em ' + dataAtletaBd_(v.atualizadoEm)) + '</div>' : '')
+          : '<span class="equipe-dado">Ainda sem registro no histórico (equipe não informada no elenco)</span>';
+
+        return '<tr>'
+          + celula('Situação', '<span class="' + classeVinculoAtletaBd_(v) + '">' + escapar(v.situacao) + '</span>')
+          + celula('Competição', competicao)
+          + celula('Equipe', equipe)
+          + celula('Inscrição', escapar(inscricao || '—')
+            + (nomeInscrito ? '<div class="equipe-dado">' + escapar(nomeInscrito) + '</div>' : ''))
+          + celula('Registro no histórico', registro)
+          + '</tr>';
+      }).join('');
+
+      const historico = '<h4 class="atleta-bd-titulo">Histórico de vínculos em elencos</h4>'
+        + (vinculos
+          ? '<table class="pessoas"><thead><tr><th>Situação</th><th>Competição</th><th>Equipe</th><th>Inscrição</th>'
+            + '<th>Registro no histórico</th></tr></thead><tbody>' + vinculos + '</tbody></table>'
+            + '<p class="apoio">Mais recentes primeiro. A data é a de entrada no histórico permanente: inscrições '
+            + 'já existentes quando o histórico foi ativado mostram a data dessa primeira sincronização, não a data real '
+            + 'de entrada no elenco. Datas de transferência não são deduzidas.</p>'
+          : '<p class="equipe-dado">Sem vínculo nos elencos dos campeonatos; dados vindos apenas de solicitações, punições ou súmulas.</p>');
+
+      const atalho = function (modulo, busca, texto) {
+        return busca && moduloDisponivel(modulo)
+          ? '<button type="button" class="botao-apoio" data-atleta-atalho="' + escapar(modulo) + '" data-atleta-busca="' + escapar(busca) + '">' + escapar(texto) + '</button>'
+          : '';
+      };
+      const tabela = function (titulo, cabecalhos, linhas) {
+        return linhas.length
+          ? '<h4 class="atleta-bd-titulo">' + escapar(titulo) + '</h4><table class="pessoas"><thead><tr>'
+            + cabecalhos.map(function (item) { return '<th>' + escapar(item) + '</th>'; }).join('')
+            + '</tr></thead><tbody>' + linhas.join('') + '</tbody></table>'
+          : '';
+      };
+
+      const solicitacoes = tabela('Solicitações de inscrição', ['Data', 'Ação', 'Equipe', 'Competição', 'Situação', 'Protocolo'],
+        (r.movimentacoes || []).map(function (m) {
+          return '<tr>' + celula('Data', escapar(m.dataHora || '—')) + celula('Ação', escapar(m.acao || '—'))
+            + celula('Equipe', escapar(m.equipe || '—')) + celula('Competição', escapar(m.competicao || '—'))
+            + celula('Situação', escapar(m.situacaoSolicitacao || '—'))
+            + celula('Protocolo', escapar(m.protocolo || '—')) + '</tr>';
+        }));
+      const punicoes = tabela('Punições', ['Nota', 'Competição', 'Partida', 'Decisão', 'Situação'],
+        (r.punicoes || []).map(function (p) {
+          return '<tr>' + celula('Nota', escapar(p.nota || '—') + ' ' + atalho('punicoes', p.nota, 'Abrir'))
+            + celula('Competição', escapar(p.competicao || '—')) + celula('Partida', escapar(p.partida || '—'))
+            + celula('Decisão', escapar(p.decisao || '—')) + celula('Situação', escapar(p.situacao || p.status || '—')) + '</tr>';
+        }));
+      const sumulas = tabela('Súmulas', ['Data do jogo', 'Partida', 'Equipe', 'Situação', 'Protocolo'],
+        (r.sumulas || []).map(function (s) {
+          return '<tr>' + celula('Data do jogo', escapar(s.dataJogo || s.dataEnvio || '—')) + celula('Partida', escapar(s.confronto || '—'))
+            + celula('Equipe', escapar(s.equipe || '—')) + celula('Situação', escapar(s.situacao || '—'))
+            + celula('Protocolo', escapar(s.protocolo || '—') + ' ' + atalho('sumulas', s.protocolo, 'Abrir')) + '</tr>';
+        }));
+
+      return '<tr class="detalhe" id="' + idDetalhe + '"><td colspan="6"><div class="detalhe-caixa">'
+        + (dados ? '<div class="detalhe-dados">' + dados + '</div>' : '')
+        + historico + solicitacoes + punicoes + sumulas
+        + '</div></td></tr>';
+    }
+
     /**
      * Estado da tela de sumulas. Mesma ideia das solicitacoes: le do
      * Drive uma vez e filtra sobre essa copia.
@@ -7619,7 +8330,7 @@
 
         // Sem registro aberto, esconde as equipes que ja tem cadastro:
         // cada equipe entra uma vez so.
-        if (!registro && jaTem) {
+        if (jaTem && !selecionada) {
           return '';
         }
 
@@ -7677,9 +8388,9 @@
         + historico
         + '<div class="grupo"><h4>Equipe</h4><div class="campos">'
         + '<div class="campo largo"><label for="fEquipe">Equipe associada</label>'
-        + '<select id="fEquipe"' + (registro ? ' disabled' : trava) + '>'
+        + '<select id="fEquipe"' + trava + '>'
         + (registro ? '' : '<option value="">Selecione</option>') + opcoesEquipe + '</select>'
-        + (registro ? '<span class="dica">A equipe n&atilde;o muda depois de cadastrada.</span>' : '')
+        + (somenteLeitura ? '' : '<span class="dica">Equipe e CPF do representante devem ser exclusivos entre os associados.</span>')
         + '</div>'
         + '<div class="campo largo"><label for="fStatus">Situa&ccedil;&atilde;o</label>'
         + '<select id="fStatus"' + trava + '>' + opcoesStatus + '</select></div>'
@@ -7794,7 +8505,8 @@
       aviso.textContent = 'Enviando...';
 
       const payload = {
-        equipe: registro ? registro.equipe : document.getElementById('fEquipe').value,
+        equipe: document.getElementById('fEquipe').value,
+        equipeOriginal: registro ? registro.equipe : '',
         status: document.getElementById('fStatus').value,
         nome: document.getElementById('fNome').value,
         nascimento: document.getElementById('fNascimento').value,

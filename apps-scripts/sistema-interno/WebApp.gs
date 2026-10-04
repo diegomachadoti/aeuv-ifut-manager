@@ -334,7 +334,7 @@ const MODULOS = [
     icone: '📋',
     tipo: 'campeonato',
     grupo: 'campeonato',
-    descricao: 'Geração da súmula básica da partida.',
+    descricao: 'Consulta e edição de súmulas finalizadas, com filtros por campeonato, rodada, equipe e data.',
     perfis: ['admin', 'diretoria']
   },
   {
@@ -358,7 +358,7 @@ const MODULOS = [
     nome: 'Banco de Dados de Atletas',
     icone: '📟',
     tipo: 'atletas',
-    descricao: 'Cadastro consolidado dos atletas e a situação de cada um na competição.',
+    descricao: 'Todos os atletas dos elencos de todos os campeonatos, com o histórico de vínculos por equipe e competição.',
     perfis: ['admin', 'diretoria']
   },
   {
@@ -1139,7 +1139,7 @@ function definirBloqueioElenco(payload) {
     const json = JSON.stringify(registros);
     if (arquivos.hasNext()) arquivos.next().setContent(json);
     else raiz.createFile(Utilities.newBlob(json, 'application/json', ELENCO_BLOQUEIOS_ARQUIVO));
-    return listarElenco(contexto.campeonato.id, contexto.equipe.id);
+    return listarElenco(contexto.campeonato.id, contexto.equipe.id, true);
   } finally { lock.releaseLock(); }
 }
 
@@ -1155,33 +1155,126 @@ function validarAlvoElenco_(contexto, tipo, id) {
   return atual;
 }
 
-function listarElenco(campeonatoId, equipeId) {
-  const contexto = sessaoElenco_(campeonatoId, equipeId);
-  const bloqueado = elencoBloqueado_(contexto.campeonato.id, contexto.equipe.id);
-  const podeBloquear = EQUIPES_PERFIS_EDICAO.indexOf(contexto.sessao.usuario.perfil) !== -1;
-  const podeEditar = podeBloquear || !bloqueado;
-  const proprio = function (item) { return chaveEquipe_(item.timeVinculado) === chaveEquipe_(contexto.equipe.nome); };
-  const times = {};
-  times[contexto.campeonato.id] = [contexto.equipe.nome];
-  return {
-    bloqueado: bloqueado,
-    podeEditar: podeEditar,
-    podeBloquear: podeBloquear,
-    recado: !podeEditar ? 'Somente leitura — elenco bloqueado pela administração.' : '',
-    equipe: contexto.equipe,
-    campeonatos: [{ id: contexto.campeonato.id, nome: contexto.campeonato.nome }],
-    times: times,
-    posicoes: ATLETAS_CAMPEONATO_POSICOES,
-    cargos: COMISSAO_CARGOS.slice(),
-    registros: [{
-      campeonatoId: contexto.campeonato.id, campeonatoNome: contexto.campeonato.nome,
-      atletas: atletasCampeonato_(contexto.campeonato.id).filter(proprio),
-      comissao: comissaoTecnicaCampeonato_(contexto.campeonato.id).filter(proprio)
-    }],
-    linkInscricao: contexto.sessao.usuario.perfil === 'associado' ? ''
-      : ScriptApp.getService().getUrl() + '?origem=direto&campeonatoId='
-        + encodeURIComponent(contexto.campeonato.id) + '&equipeId=' + encodeURIComponent(contexto.equipe.id)
-  };
+function atletaParticipouPelaEquipe_(jogos, equipeId, atleta) {
+  const cpf = somenteDigitos_(atleta.cpf || '');
+  return (jogos || []).some(function (jogo) {
+    if (jogo.status !== 'encerrado' || !jogo.resultado) return false;
+    const equipe = jogo.resultado.equipes.find(function (item) { return item.id === equipeId; });
+    return Boolean(equipe && equipe.atletas.some(function (participante) {
+      if (participante.participou !== true) return false;
+      return participante.id === atleta.id || (cpf && somenteDigitos_(participante.cpf || '') === cpf);
+    }));
+  });
+}
+
+function equipesDestinoTransferencia_(contexto, lockJaAdquirido) {
+  const nomes = timesCampeonato_(contexto.campeonato.id);
+  const ativas = obterEquipes_().map(chaveEquipe_);
+  return equipesRegistro_(lockJaAdquirido).filter(function (equipe) {
+    return equipe.id !== contexto.equipe.id && ativas.indexOf(chaveEquipe_(equipe.nome)) !== -1
+      && nomes.some(function (nome) { return chaveEquipe_(nome) === chaveEquipe_(equipe.nome); });
+  }).map(function (equipe) { return { id: equipe.id, nome: equipe.nome }; });
+}
+
+function listarElenco(campeonatoId, equipeId, lockJaAdquirido) {
+  const lock = lockJaAdquirido ? null : LockService.getScriptLock();
+  if (lock) lock.waitLock(30000);
+  try {
+    const contexto = sessaoElenco_(campeonatoId, equipeId, true);
+    const bloqueado = elencoBloqueado_(contexto.campeonato.id, contexto.equipe.id);
+    const podeBloquear = EQUIPES_PERFIS_EDICAO.indexOf(contexto.sessao.usuario.perfil) !== -1;
+    const podeEditar = podeBloquear || !bloqueado;
+    const proprio = function (item) { return chaveEquipe_(item.timeVinculado) === chaveEquipe_(contexto.equipe.nome); };
+    const atletas = atletasCampeonato_(contexto.campeonato.id, true).filter(proprio);
+    const podeTransferir = EQUIPES_PERFIS_EDICAO.indexOf(contexto.sessao.usuario.perfil) !== -1;
+    const destinos = podeTransferir ? equipesDestinoTransferencia_(contexto, true) : [];
+    if (podeTransferir && atletas.length && destinos.length) {
+      const tabela = contextoTabela_(contexto.campeonato.id, campeonatos_(), true);
+      atletas.forEach(function (atleta) {
+        atleta.participouPelaEquipeAtual = atletaParticipouPelaEquipe_(tabela.jogos, contexto.equipe.id, atleta);
+        atleta.motivoTransferencia = atleta.participouPelaEquipeAtual
+          ? 'O atleta participou de pelo menos um jogo desta equipe neste campeonato.'
+          : 'Não há participação registrada em jogos encerrados desta equipe.';
+      });
+    } else if (podeTransferir) {
+      atletas.forEach(function (atleta) {
+        atleta.participouPelaEquipeAtual = false;
+        atleta.motivoTransferencia = 'Não há outra equipe ativa vinculada a este campeonato.';
+      });
+    }
+    const times = {};
+    times[contexto.campeonato.id] = [contexto.equipe.nome];
+    return {
+      bloqueado: bloqueado,
+      podeEditar: podeEditar,
+      podeBloquear: podeBloquear,
+      podeTransferir: podeTransferir,
+      equipesDestinoTransferencia: destinos,
+      recado: !podeEditar ? 'Somente leitura — elenco bloqueado pela administração.' : '',
+      equipe: contexto.equipe,
+      campeonatos: [{ id: contexto.campeonato.id, nome: contexto.campeonato.nome }],
+      times: times,
+      posicoes: ATLETAS_CAMPEONATO_POSICOES,
+      cargos: COMISSAO_CARGOS.slice(),
+      registros: [{
+        campeonatoId: contexto.campeonato.id, campeonatoNome: contexto.campeonato.nome,
+        atletas: atletas,
+        comissao: comissaoTecnicaCampeonato_(contexto.campeonato.id).filter(proprio)
+      }],
+      linkInscricao: contexto.sessao.usuario.perfil === 'associado' ? ''
+        : ScriptApp.getService().getUrl() + '?origem=direto&campeonatoId='
+          + encodeURIComponent(contexto.campeonato.id) + '&equipeId=' + encodeURIComponent(contexto.equipe.id)
+    };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+function transferirAtletaElenco(payload) {
+  const dados = payload || {};
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || EQUIPES_PERFIS_EDICAO.indexOf(sessao.usuario.perfil) === -1) {
+    throw new Error('Somente admin e diretoria podem transferir atletas entre equipes.');
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const contexto = sessaoElenco_(dados.campeonatoId, dados.equipeId, true);
+    if (EQUIPES_PERFIS_EDICAO.indexOf(contexto.sessao.usuario.perfil) === -1) {
+      throw new Error('Somente admin e diretoria podem transferir atletas entre equipes.');
+    }
+    const atletaId = String(dados.registroId || '').trim();
+    if (!atletaId) throw new Error('Informe o atleta a transferir.');
+    const origemAtual = exigirEdicaoElenco_(contexto);
+    const destino = sessaoElenco_(origemAtual.campeonato.id, dados.equipeDestinoId, true);
+    if (destino.equipe.id === origemAtual.equipe.id) throw new Error('Escolha outra equipe do mesmo campeonato.');
+    const permitidas = equipesDestinoTransferencia_(origemAtual, true);
+    if (!permitidas.some(function (item) { return item.id === destino.equipe.id; })) {
+      throw new Error('A equipe de destino não está ativa e vinculada a este campeonato.');
+    }
+
+    const lista = atletasCampeonato_(origemAtual.campeonato.id);
+    const atleta = lista.find(function (item) {
+      return item.id === atletaId && chaveEquipe_(item.timeVinculado) === chaveEquipe_(origemAtual.equipe.nome);
+    });
+    if (!atleta) throw new Error('O atleta não pertence mais a esta equipe. Atualize o elenco.');
+
+    const tabela = contextoTabela_(origemAtual.campeonato.id, campeonatos_(), true);
+    if (atletaParticipouPelaEquipe_(tabela.jogos, origemAtual.equipe.id, atleta)) {
+      throw new Error('O atleta participou de pelo menos um jogo desta equipe neste campeonato e não pode ser transferido.');
+    }
+
+    const atualizada = lista.map(function (item) {
+      if (item.id !== atleta.id) return item;
+      return Object.assign({}, item, { timeVinculado: destino.equipe.nome });
+    });
+    gravarAtletasCampeonato_(origemAtual.campeonato.id, atualizada);
+    const resposta = listarElenco(origemAtual.campeonato.id, origemAtual.equipe.id, true);
+    resposta.recado = atleta.nome + ' transferido para ' + destino.equipe.nome + '.';
+    return resposta;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function salvarCadastroElenco(payload) {
@@ -1410,6 +1503,7 @@ function validarPessoaImportacaoElenco_(inscricao, contexto, tipo, listas) {
     if (pessoa.numero !== '' && (!Number.isFinite(Number(pessoa.numero)) || Number(pessoa.numero) < 0 || Number(pessoa.numero) > 99)) {
       throw new Error('O número da camisa deve ficar entre 0 e 99.');
     }
+    bloquearCpfAtletaEmOutraEquipe_(contexto, pessoa.cpf, listas.atletas, '');
   }
   const duplicata = tipo === 'atletas'
     ? validarDuplicataAtleta_(pessoa.nome, pessoa.cpf, listas.atletas)
@@ -2698,13 +2792,17 @@ function validarJogoTabela_(dados, contexto, existente) {
   return jogo;
 }
 
-function contextoTabela_(id, lista, lockJaAdquirido) {
+function contextoTabela_(id, lista, lockJaAdquirido, recursos) {
   const campeonato = lista.find(function (item) { return item.id === id; });
   if (!campeonato) throw new Error('Campeonato não encontrado.');
   const estrutura = estruturaCampeonato_(id, campeonato);
   const doc = lerTabelaCampeonato_(id);
-  const camposDoc = lerCamposTabela_();
-  const equipes = equipesTabela_(id, lockJaAdquirido);
+  const camposDoc = recursos ? recursos.camposDoc : lerCamposTabela_();
+  const nomes = recursos ? timesCampeonato_(id).map(chaveEquipe_) : [];
+  const equipes = recursos ? recursos.registro.filter(function (item) {
+    return nomes.indexOf(chaveEquipe_(item.nome)) !== -1 && recursos.ativas.indexOf(chaveEquipe_(item.nome)) !== -1;
+  }).map(function (item) { return { id: item.id, nome: item.nome, escudo: item.escudo || '' }; })
+    : equipesTabela_(id, lockJaAdquirido);
   const esqueleto = esqueletoTabela_(estrutura);
   const contexto = {
     campeonato: campeonato, estrutura: estrutura, doc: doc, camposDoc: camposDoc,
@@ -2970,6 +3068,71 @@ function listarTabelaCampeonato(campeonatoId) {
     const lista = campeonatos_();
     const id = String(campeonatoId || '').trim() || (lista.length ? lista[0].id : '');
     return montarTelaTabela_(lista, id ? contextoTabela_(id, lista, true) : null);
+  } finally { lock.releaseLock(); }
+}
+
+function recursosSumulasCampeonato_() {
+  return { camposDoc: lerCamposTabela_(), registro: lerRegistroEquipes_(), ativas: obterEquipes_().map(chaveEquipe_) };
+}
+
+function listarSumulasCampeonato() {
+  sessaoCampeonato_();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const lista = campeonatos_(), recursos = recursosSumulasCampeonato_();
+    const jogos = [];
+    const equipes = {};
+    lista.forEach(function (campeonato) {
+      const contexto = contextoTabela_(campeonato.id, lista, true, recursos);
+      contexto.jogos.forEach(function (jogo) {
+        if (jogo.status !== 'encerrado' || !jogo.resultado) return;
+        [jogo.mandanteId, jogo.visitanteId].forEach(function (id) {
+          equipes[id] = contexto.equipes.find(function (item) { return item.id === id; });
+        });
+        jogos.push({
+          id: jogo.id, campeonatoId: campeonato.id, campeonatoNome: campeonato.nome, temporada: campeonato.temporada,
+          mandanteId: jogo.mandanteId, visitanteId: jogo.visitanteId, rodada: jogo.rodada,
+          faseNome: contexto.fases.find(function (item) { return item.id === jogo.faseId; }).nome,
+          grupoNome: (contexto.grupos.find(function (item) { return item.id === jogo.grupoId; }) || {}).nome || '',
+          campoNome: contexto.campos.find(function (item) { return item.id === jogo.campoId; }).nome,
+          data: jogo.data, hora: jogo.hora, golsMandante: jogo.golsMandante, golsVisitante: jogo.golsVisitante,
+          resultadoDisponivel: true
+        });
+      });
+    });
+    jogos.sort(function (a, b) { return (b.data + b.hora).localeCompare(a.data + a.hora) || a.id.localeCompare(b.id); });
+    return {
+      campeonatos: lista.map(function (item) { return { id: item.id, nome: item.nome, temporada: item.temporada }; }),
+      equipes: Object.keys(equipes).map(function (id) { return equipes[id]; }), jogos: jogos, podeEditar: true
+    };
+  } finally { lock.releaseLock(); }
+}
+
+function consultarSumulaCampeonato(payload) {
+  sessaoCampeonato_();
+  const dados = payload || {}, lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const contexto = contextoTabela_(String(dados.campeonatoId || '').trim(), campeonatos_(), true, recursosSumulasCampeonato_());
+    const jogo = contexto.jogos.find(function (item) { return item.id === dados.id; });
+    if (!jogo || jogo.status !== 'encerrado' || !jogo.resultado) throw new Error('Súmula finalizada não encontrada. Atualize a lista.');
+    const equipes = [jogo.mandanteId, jogo.visitanteId].map(function (id, indice) {
+      const equipe = contexto.equipes.find(function (item) { return item.id === id; });
+      const salvo = jogo.resultado.equipes.find(function (item) { return item.id === id; });
+      const resposta = { id: id, nome: equipe.nome, escudo: equipe.escudo, lado: indice ? 'visitante' : 'mandante' };
+      ['atletas', 'comissao'].forEach(function (tipo) {
+        resposta[tipo] = salvo[tipo].map(function (pessoa) {
+          return Object.assign({ numeroJogo: '', participou: false, golsContra: 0, amarelos: 0, vermelho: false }, pessoa);
+        });
+      });
+      return resposta;
+    });
+    return {
+      campeonatoId: contexto.campeonato.id, campeonato: { id: contexto.campeonato.id, nome: contexto.campeonato.nome, temporada: contexto.campeonato.temporada },
+      fase: contexto.fases.find(function (item) { return item.id === jogo.faseId; }),
+      jogo: jogo, resultado: jogo.resultado, equipes: equipes, podeEditar: false, avisos: avisosResultadoTabela_(jogo, equipes)
+    };
   } finally { lock.releaseLock(); }
 }
 
@@ -4048,6 +4211,37 @@ function validarCpfUnicoEntreCadastros_(campeonatoId, cpf, origem, idIgnorado) {
   }
 }
 
+function contatoResponsavelEquipeConflito_(equipe) {
+  const bruto = PropertiesService.getScriptProperties().getProperty(chaveConsultaAssociado_(equipe));
+  if (!bruto) return { nome: 'responsável não cadastrado', telefone: 'telefone não informado' };
+  let registro;
+  try { registro = JSON.parse(bruto); }
+  catch (e) { throw new Error('O cadastro publicado de contato da equipe ' + equipe + ' está inválido. Peça à administração que o corrija.'); }
+  if (!registro || typeof registro !== 'object' || Array.isArray(registro)
+      || typeof registro.equipe !== 'string' || chaveEquipe_(registro.equipe) !== chaveEquipe_(equipe)) {
+    throw new Error('O cadastro publicado de contato da equipe ' + equipe + ' está inconsistente. Peça à administração que o corrija.');
+  }
+  return {
+    nome: typeof registro.nome === 'string' && registro.nome.trim() ? registro.nome.trim() : 'responsável não cadastrado',
+    telefone: typeof registro.telefone === 'string' && registro.telefone.trim()
+      ? registro.telefone.trim() : 'telefone não informado'
+  };
+}
+
+function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado) {
+  if (!contexto || contexto.sessao.usuario.perfil !== 'associado') return;
+  const atual = lista.find(function (item) {
+    return (!atletaIdIgnorado || item.id !== atletaIdIgnorado)
+      && somenteDigitos_(item.cpf || '') === somenteDigitos_(cpf)
+      && String(item.timeVinculado || '').trim()
+      && chaveEquipe_(item.timeVinculado) !== chaveEquipe_(contexto.equipe.nome);
+  });
+  if (!atual) return;
+  const contato = contatoResponsavelEquipeConflito_(atual.timeVinculado);
+  throw new Error('Este atleta já está cadastrado na equipe ' + atual.timeVinculado
+    + ' neste campeonato. Responsável: ' + contato.nome + '. Telefone: ' + contato.telefone + '.');
+}
+
  function salvarAtletaCampeonato(payload) {
    sessaoCampeonato_();
    return salvarAtletaCampeonatoInterno_(payload);
@@ -4097,8 +4291,9 @@ function validarCpfUnicoEntreCadastros_(campeonatoId, cpf, origem, idIgnorado) {
    lock.waitLock(30000);
 
    try {
-     validarAlvoElenco_(contexto, 'atletas', '');
+     const contextoAtual = validarAlvoElenco_(contexto, 'atletas', '');
      const lista = atletasCampeonato_(campeonatoId).slice();
+      bloquearCpfAtletaEmOutraEquipe_(contextoAtual, cpf, lista, '');
       const validacaoDuplicata = validarDuplicataAtleta_(nome, cpf, lista);
 
       if (!validacaoDuplicata.ok) {
@@ -4208,7 +4403,7 @@ function validarCpfUnicoEntreCadastros_(campeonatoId, cpf, origem, idIgnorado) {
      lock.waitLock(30000);
 
      try {
-       validarAlvoElenco_(contexto, 'atletas', atletaId);
+       const contextoAtual = validarAlvoElenco_(contexto, 'atletas', atletaId);
        const lista = atletasCampeonato_(campeonatoId);
        const atletaExistente = lista.find(function (a) { return a.id === atletaId; });
 
@@ -4220,6 +4415,7 @@ function validarCpfUnicoEntreCadastros_(campeonatoId, cpf, origem, idIgnorado) {
           throw new Error('Envie a foto do atleta.');
        }
 
+        bloquearCpfAtletaEmOutraEquipe_(contextoAtual, cpf, lista, atletaId);
         const validacaoDuplicata = validarDuplicataAtleta_(nome, cpf, lista, atletaId);
         if (!validacaoDuplicata.ok) {
           throw new Error(validacaoDuplicata.motivo);
@@ -5106,6 +5302,7 @@ function listarAtletas() {
     throw new Error('Você não tem permissão para consultar o cadastro consolidado de atletas.');
   }
 
+  const elenco = vinculosAtletasElenco_();
   const dadosSolicitacoes = listarSolicitacoes();
   const dadosPunicoes = listarPunicoes();
   const dadosSumulas = listarSumulas();
@@ -5164,6 +5361,38 @@ function listarAtletas() {
         resultadoTxtUrl: solicitacao.resultadoTxtUrl || ''
       });
     });
+  });
+
+  // Roster links come before name-based sources so punishments/súmulas can attach to them.
+  elenco.grupos.forEach(function (grupo) {
+    let atleta = mapa[grupo.chave];
+    const criado = !atleta;
+
+    if (!atleta) {
+      // The most recent roster name wins for roster-only athletes.
+      atleta = criarAtletaConsolidado_(grupo.chave, {
+        nome: grupo.vinculos[0].nome,
+        cpf: grupo.vinculos[0].cpf,
+        nascimento: dataIsoParaBrAtleta_(grupo.vinculos[0].dataNascimento),
+        tipo: 'Atleta'
+      });
+      mapa[grupo.chave] = atleta;
+      lista.push(atleta);
+    }
+
+    grupo.vinculos.forEach(function (vinculo) {
+      atualizarBaseAtleta_(atleta, {
+        nome: criado ? '' : vinculo.nome,
+        cpf: vinculo.cpf,
+        nascimento: dataIsoParaBrAtleta_(vinculo.dataNascimento),
+        tipo: 'Atleta'
+      });
+      adicionarEquipeAoAtleta_(atleta, vinculo.equipeNome);
+      adicionarCompeticaoAoAtleta_(atleta, vinculo.campeonatoNome);
+      atleta.vinculos.push(vinculo);
+    });
+
+    registrarIndiceNomeAtleta_(indiceNome, atleta);
   });
 
   (dadosPunicoes.registros || []).forEach(function (registro) {
@@ -5313,10 +5542,33 @@ function listarAtletas() {
     atleta.situacaoDisciplina = situacaoDisciplinaAtleta_(atleta);
     atleta.situacaoAtual = situacaoAtualAtleta_(atleta, ultimaMovimentacao, ultimaProcessada);
 
+    const vinculosAtuais = atleta.vinculos.filter(function (vinculo) { return vinculo.atual; });
+    const vinculosAtivos = vinculosAtuais.filter(function (vinculo) { return vinculo.ativo; });
+
+    atleta.situacaoElenco = !atleta.vinculos.length ? 'Sem vínculo no elenco'
+      : (vinculosAtivos.length ? 'Inscrito' : (vinculosAtuais.length ? 'Inscrito (inativo)' : 'Somente histórico'));
+
+    // Legacy-only signals keep their meaning; roster data only replaces "no information".
+    if (atleta.situacaoAtual === 'Sem inscrição processada' && atleta.vinculos.length) {
+      atleta.situacaoAtual = vinculosAtuais.length ? 'Inscrito no elenco' : 'Fora dos elencos atuais';
+    }
+
     if (ultimaProcessada) {
       atleta.equipeAtual = ultimaProcessada.equipe || atleta.equipeAtual;
       atleta.competicaoAtual = ultimaProcessada.competicao || atleta.competicaoAtual;
+    } else if (vinculosAtuais.length) {
+      const referencia = vinculosAtivos[0] || vinculosAtuais[0];
+      atleta.equipeAtual = referencia.equipeNome || atleta.equipeAtual;
+      atleta.competicaoAtual = referencia.campeonatoNome || atleta.competicaoAtual;
     }
+
+    const equipesAtuais = [];
+    const competicoesAtuais = [];
+
+    vinculosAtuais.forEach(function (vinculo) {
+      adicionarValorUnico_(equipesAtuais, vinculo.equipeNome);
+      adicionarValorUnico_(competicoesAtuais, vinculo.campeonatoNome);
+    });
 
     return {
       chave: atleta.chave,
@@ -5346,7 +5598,13 @@ function listarAtletas() {
       competicoesHistorico: atleta.competicoesHistorico.slice(),
       movimentacoes: atleta.movimentacoes.slice(0, 12),
       punicoes: atleta.punicoes.slice(0, 8),
-      sumulas: atleta.sumulas.slice(0, 8)
+      sumulas: atleta.sumulas.slice(0, 8),
+      situacaoElenco: atleta.situacaoElenco,
+      equipesAtuais: equipesAtuais,
+      competicoesAtuais: competicoesAtuais,
+      totalVinculos: atleta.vinculos.length,
+      vinculosAtuais: vinculosAtuais.length,
+      vinculos: atleta.vinculos.slice()
     };
   }).sort(function (a, b) {
     const ordem = prioridadeSituacaoAtleta_(a.situacaoAtual) - prioridadeSituacaoAtleta_(b.situacaoAtual);
@@ -5370,9 +5628,199 @@ function listarAtletas() {
       punicoesAtualizadoEm: dadosPunicoes.atualizadoEm || '',
       sumulasLidas: (dadosSumulas.registros || []).length,
       sumulasTotal: Number(dadosSumulas.total || 0),
-      sumulasPastaUrl: dadosSumulas.pastaUrl || ''
+      sumulasPastaUrl: dadosSumulas.pastaUrl || '',
+      elencoCampeonatos: elenco.campeonatos,
+      elencoInscricoesAtuais: elenco.atuais,
+      elencoInscricoesAnteriores: elenco.anteriores
     }
   };
+}
+
+/**
+ * Athlete enrollments from every championship roster, current and historical.
+ * Reconciles the permanent history under the script lock (same path as imports),
+ * then releases it before the legacy Drive sources are read. Commission members
+ * are not athletes and stay out. Photos/RG never leave the server.
+ */
+function vinculosAtletasElenco_() {
+  const lock = LockService.getScriptLock();
+  const cache = {};
+  let historico;
+  let campeonatos;
+  let equipes;
+
+  lock.waitLock(30000);
+
+  try {
+    historico = prepararHistoricoElenco_(cache);
+    campeonatos = campeonatos_();
+    equipes = equipesRegistro_(true);
+  } finally {
+    lock.releaseLock();
+  }
+
+  const associadas = obterEquipes_().map(chaveEquipe_);
+  const campeonatoPorId = {};
+  const equipePorId = {};
+  const participacaoPorPar = {};
+  const cobertos = {};
+  const grupos = {};
+  const ordem = [];
+  let atuais = 0;
+  let anteriores = 0;
+
+  campeonatos.forEach(function (item) { campeonatoPorId[item.id] = item; });
+  equipes.forEach(function (item) { equipePorId[item.id] = item; });
+  historico.participacoes.forEach(function (item) {
+    participacaoPorPar[item.equipeId + '|' + item.campeonatoId] = item;
+  });
+
+  function adicionar(vinculo) {
+    // Valid CPF links the same person across teams/championships; otherwise
+    // only the stable roster record does — names are never used to merge.
+    const chave = cpfValido_(vinculo.cpf)
+      ? 'CPF:' + vinculo.cpf
+      : 'REGISTRO:' + vinculo.campeonatoId + ':' + (vinculo.registroId || vinculo.id);
+
+    if (!grupos[chave]) {
+      grupos[chave] = { chave: chave, vinculos: [] };
+      ordem.push(chave);
+    }
+
+    grupos[chave].vinculos.push(vinculo);
+
+    if (vinculo.atual) atuais++;
+    else anteriores++;
+  }
+
+  historico.inscricoes.forEach(function (item) {
+    if (item.tipo !== 'atletas') return;
+
+    const campeonato = campeonatoPorId[item.campeonatoId] || null;
+    const atual = Boolean(item.presente && campeonato);
+
+    if (atual) cobertos[item.campeonatoId + '|' + item.registroId] = true;
+
+    adicionar(montarVinculoAtleta_({
+      id: item.id,
+      registroId: item.registroId,
+      campeonatoId: item.campeonatoId,
+      campeonato: campeonato,
+      participacao: participacaoPorPar[item.equipeId + '|' + item.campeonatoId] || null,
+      equipeId: item.equipeId,
+      equipe: equipePorId[item.equipeId] || null,
+      associadas: associadas,
+      cpf: item.cpf,
+      dados: item.dados || {},
+      atual: atual,
+      registradoEm: item.inscritoEm,
+      atualizadoEm: item.atualizadoEm,
+      sequencia: item.sequencia,
+      noHistorico: true
+    }));
+  });
+
+  // Rows the history cannot attach to a team (blank team) are still real roster rows.
+  campeonatos.forEach(function (campeonato) {
+    ((cache[campeonato.id] || {}).atletas || []).forEach(function (pessoa) {
+      if (cobertos[campeonato.id + '|' + pessoa.id]) return;
+
+      adicionar(montarVinculoAtleta_({
+        id: 'elenco:' + campeonato.id + ':' + pessoa.id,
+        registroId: pessoa.id,
+        campeonatoId: campeonato.id,
+        campeonato: campeonato,
+        participacao: null,
+        equipeId: '',
+        equipe: null,
+        associadas: associadas,
+        cpf: pessoa.cpf,
+        dados: pessoa,
+        atual: true,
+        registradoEm: '',
+        atualizadoEm: '',
+        sequencia: 0,
+        noHistorico: false
+      }));
+    });
+  });
+
+  return {
+    campeonatos: campeonatos.length,
+    atuais: atuais,
+    anteriores: anteriores,
+    grupos: ordem.map(function (chave) {
+      grupos[chave].vinculos.sort(compararVinculosAtleta_);
+      return grupos[chave];
+    })
+  };
+}
+
+function montarVinculoAtleta_(origem) {
+  const dados = origem.dados || {};
+  const campeonato = origem.campeonato;
+  const participacao = origem.participacao;
+  const equipe = origem.equipe;
+  const nomeRegistrado = participacao ? String(participacao.equipeNome || '') : String(dados.timeVinculado || '');
+  const equipeNome = equipe ? String(equipe.nome || '') : nomeRegistrado;
+  const equipeNomeOriginal = participacao ? String(participacao.equipeNomeOriginal || '') : '';
+  const campeonatoNomeRegistrado = participacao ? String(participacao.campeonatoNome || '') : '';
+  const campeonatoNomeOriginal = participacao ? String(participacao.campeonatoNomeOriginal || '') : '';
+  const campeonatoNome = campeonato ? campeonato.nome : (campeonatoNomeRegistrado || campeonatoNomeOriginal);
+  const ativo = dados.ativo !== false;
+  const diferente = function (a, b) { return Boolean(a) && chaveEquipe_(a) !== chaveEquipe_(b); };
+  let situacao = 'Vínculo anterior';
+
+  if (origem.atual) situacao = ativo ? 'Inscrição atual' : 'Inscrição atual (inativo)';
+  else if (!campeonato) situacao = 'Competição excluída';
+
+  return {
+    id: String(origem.id || ''),
+    registroId: String(origem.registroId || ''),
+    atual: Boolean(origem.atual),
+    ativo: ativo,
+    situacao: situacao,
+    noHistorico: Boolean(origem.noHistorico),
+    campeonatoId: String(origem.campeonatoId || ''),
+    campeonatoNome: campeonatoNome,
+    campeonatoNomeOriginal: diferente(campeonatoNomeOriginal, campeonatoNome) ? campeonatoNomeOriginal : '',
+    campeonatoNomeRegistrado: diferente(campeonatoNomeRegistrado, campeonatoNome) ? campeonatoNomeRegistrado : '',
+    temporada: campeonato ? String(campeonato.temporada || '') : '',
+    campeonatoStatus: campeonato ? String(campeonato.status || '') : 'excluido',
+    campeonatoExcluido: !campeonato,
+    equipeId: String(origem.equipeId || ''),
+    equipeNome: equipeNome,
+    equipeNomeOriginal: diferente(equipeNomeOriginal, equipeNome) ? equipeNomeOriginal : '',
+    equipeNomeRegistrado: diferente(nomeRegistrado, equipeNome) ? nomeRegistrado : '',
+    equipeAssociada: Boolean(equipe && origem.associadas.indexOf(chaveEquipe_(equipe.nome)) !== -1),
+    nome: limparCampo_(dados.nome || '', 150),
+    apelido: limparCampo_(dados.apelido || '', 50),
+    numero: dados.numero === undefined || dados.numero === null ? '' : dados.numero,
+    posicao: limparCampo_(dados.posicao || '', 40),
+    cpf: somenteDigitos_(origem.cpf || dados.cpf || ''),
+    dataNascimento: limparCampo_(dados.dataNascimento || '', 20),
+    registradoEm: String(origem.registradoEm || ''),
+    atualizadoEm: String(origem.atualizadoEm || ''),
+    sequencia: Number(origem.sequencia || 0)
+  };
+}
+
+// Most recent first: rows outside the history are current, so they lead.
+function compararVinculosAtleta_(a, b) {
+  const dataA = a.noHistorico ? a.registradoEm : '\uffff';
+  const dataB = b.noHistorico ? b.registradoEm : '\uffff';
+
+  if (dataA !== dataB) return dataA < dataB ? 1 : -1;
+  if (a.sequencia !== b.sequencia) return b.sequencia - a.sequencia;
+  if (a.atual !== b.atual) return a.atual ? -1 : 1;
+
+  return String(a.campeonatoNome).localeCompare(String(b.campeonatoNome));
+}
+
+function dataIsoParaBrAtleta_(valor) {
+  const partes = String(valor || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  return partes ? partes[3] + '/' + partes[2] + '/' + partes[1] : limparCampo_(valor || '', 20);
 }
 
 function criarAtletaConsolidado_(chave, dados) {
@@ -5405,6 +5853,7 @@ function criarAtletaConsolidado_(chave, dados) {
     movimentacoes: [],
     punicoes: [],
     sumulas: [],
+    vinculos: [],
     _equipes: {}
   };
 
@@ -5629,8 +6078,10 @@ function prioridadeSituacaoAtleta_(situacao) {
     'Falha recente': 4,
     'Pena a definir': 5,
     'Regular': 6,
+    'Inscrito no elenco': 6,
     'Em súmula': 7,
     'Fora da competição': 8,
+    'Fora dos elencos atuais': 8,
     'Sem inscrição processada': 9
   };
 
@@ -6951,8 +7402,8 @@ function listarAssociados() {
 }
 
 /**
- * Grava um associado. Cria quando a equipe ainda nao tem cadastro e
- * atualiza quando ja tem: existe um registro por equipe.
+ * Grava um associado, identificado na edicao pela equipe original.
+ * Equipe e CPF do representante devem ser exclusivos entre cadastros.
  *
  * @param {Object} payload Campos da tela, com os anexos em base64.
  * @return {{sucesso: boolean, equipe: string, novo: boolean}}
@@ -6975,15 +7426,32 @@ function salvarAssociado(payload) {
     const aba = abaAssociados_();
     const valores = aba.getDataRange().getValues();
     const chave = chaveEquipe_(dados.equipe);
+    const equipeOriginal = limparCampo_(payload.equipeOriginal || '', 120);
+    const chaveOriginal = chaveEquipe_(equipeOriginal);
 
     let linhaExistente = 0;
     let anterior = null;
 
     for (let i = 1; i < valores.length; i++) {
-      if (chaveEquipe_(valores[i][0]) === chave) {
+      if (chaveOriginal && chaveEquipe_(valores[i][0]) === chaveOriginal) {
         linhaExistente = i + 1;
         anterior = linhaParaAssociado_(valores[i]);
         break;
+      }
+    }
+
+    if (chaveOriginal && !anterior) {
+      throw new Error('O cadastro original não foi encontrado. Atualize a lista antes de salvar.');
+    }
+    for (let i = 1; i < valores.length; i++) {
+      if (i + 1 === linhaExistente) continue;
+      const outro = linhaParaAssociado_(valores[i]);
+      if (!outro.equipe) continue;
+      if (chaveEquipe_(outro.equipe) === chave) {
+        throw new Error('Esta equipe já possui um associado cadastrado. Escolha outra equipe.');
+      }
+      if (somenteDigitos_(outro.cpf) === dados.cpf) {
+        throw new Error('Este representante legal já está cadastrado para a equipe ' + outro.equipe + '.');
       }
     }
 
@@ -7016,6 +7484,9 @@ function salvarAssociado(payload) {
 
     PropertiesService.getScriptProperties()
       .setProperty(chaveConsultaAssociado_(dados.equipe), JSON.stringify(linhaParaAssociado_(linha)));
+    if (anterior && chaveOriginal !== chave) {
+      PropertiesService.getScriptProperties().deleteProperty(chaveConsultaAssociado_(anterior.equipe));
+    }
 
     return { sucesso: true, equipe: dados.equipe, novo: !linhaExistente };
   } finally {

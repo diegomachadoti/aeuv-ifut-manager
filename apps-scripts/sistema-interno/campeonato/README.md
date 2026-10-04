@@ -70,7 +70,10 @@ Cadastro dos atletas vinculados aos times:
 
 - cadastro exclusivamente em **Equipes participantes → Gerenciar elenco**
 - sem entradas separadas **Atletas** ou **Comissão técnica** no menu lateral
-- **Banco de Dados de Atletas** permanece como consulta administrativa geral
+- **Banco de Dados de Atletas** permanece como consulta administrativa geral:
+  lista todos os atletas dos elencos de todos os campeonatos e, ao expandir,
+  o histórico de vínculos (atuais, removidos, de outra equipe ou de campeonato
+  excluído) a partir do histórico permanente abaixo; comissão técnica não entra
 - cabeçalho com equipe, escudo, campeonato e retorno às equipes participantes
 - abas **Atletas**, **Comissão técnica**, **Jogos** e **Estatísticas** sempre visíveis;
   somente as duas primeiras possuem contagem de cadastros
@@ -106,6 +109,14 @@ Cadastro dos atletas vinculados aos times:
 - **Importar atletas / Importar comissão** ao lado de adicionar: escolha a
   competição anterior da mesma equipe, marque inscrições ou selecione todas
   as disponíveis e confirme a quantidade; cancelar retorna à mesma aba
+- admin e diretoria podem transferir um atleta para outra equipe ativa vinculada
+  ao mesmo campeonato somente quando nenhum resultado detalhado encerrado registra
+  sua participação pela equipe atual; o vínculo do atleta é atualizado sem trocar
+  seu ID, foto ou dados pessoais/esportivos, e a inscrição anterior permanece no
+  histórico. Associados não recebem essa ação
+- ao inscrever atleta, CPF já vinculado a outra equipe no mesmo campeonato bloqueia
+  o cadastro do associado e informa equipe, responsável legal e telefone publicados
+  para aquela equipe; cadastros de outras competições não causam bloqueio
 - inscrições removidas também aparecem, identificadas como anteriores; impedimentos
   por CPF (inclusive outro tipo ou equipe no destino), nomes similares ou dados
   obrigatórios inválidos aparecem na lista e desabilitam a seleção
@@ -129,6 +140,19 @@ Não é possível reconstruir vínculos ou pessoas excluídos antes dessa ativa�
 Edição, remoção, desvinculação, encerramento ou exclusão da competição não apagam
 o histórico. Somente a presença atual é reconciliada; os dados da última inscrição
 continuam disponíveis. Não é necessário ter participado de jogos.
+O **Banco de Dados de Atletas** lê esse mesmo histórico (somente inscrições
+do tipo atleta), reconciliando-o antes sob o lock. `inscritoEm` é exibido como
+data de registro no histórico, nunca como data real de entrada ou transferência.
+
+A elegibilidade de transferência consulta os resultados detalhados ainda
+persistidos do campeonato e considera somente o campo explícito `participou: true`
+para a equipe de origem; gols, cartões, escalação e participação em outra equipe
+ou competição não substituem esse registro. Um resultado antigo sem evidência de
+participação não é tratado como participação. Jogos/resultados apagados antes da
+consulta não podem ser reconstruídos, então essa regra reflete os dados detalhados
+disponíveis e não certifica participação fora deles. A transferência é validada
+novamente sob o lock do servidor e a gravação preserva a inscrição histórica da
+equipe de origem e registra o novo vínculo.
 
 Somente fontes da mesma equipe, diferentes do destino, são oferecidas. Destino,
 vínculo e acesso são novamente verificados sob um único lock. Associados acessam
@@ -308,6 +332,31 @@ planejados, não aplicados pelo lançamento:
 
 ### 7. Súmula básica em PDF
 
+#### Consulta de súmulas finalizadas
+
+O submenu **Súmula** (`sumula-campeonato`), exclusivo de admin/diretoria,
+lista todas as partidas encerradas com resultado detalhado salvo, inicialmente
+de **todos os campeonatos**. Filtre por campeonato/temporada, rodada, equipe
+(mandante ou visitante, pelo ID permanente) e data exata do jogo. **Limpar
+filtros** retorna à lista completa; **Atualizar** busca novamente os dados,
+mantendo os filtros válidos. Campeonatos sem súmulas também aparecem no seletor.
+Jogos agendados, adiados, cancelados ou legados com somente placar não aparecem.
+Estes últimos continuam disponíveis na Tabela e Classificação para detalhamento.
+
+**Consultar** mostra somente os snapshots salvos dos atletas e da comissão,
+com participação, número na partida (`numeroJogo`, opcional e independente
+do número cadastrado), CPF, gols/gols contra, cartões, placar, WO, prorrogação,
+pênaltis e observações. Não acrescenta pessoas do elenco atual e não grava
+cadastros. **Editar resultado** reutiliza o editor da tabela, com controle de
+revisão do jogo/elenco e participantes históricos preservados. O retorno,
+descarte e salvamento mantêm os filtros; após salvar, a lista é atualizada.
+Navegação e fechamento da página protegem alterações pendentes e gravações.
+
+Este módulo não é **Súmulas Enviadas** da arbitragem. Não oferece PDF histórico
+preenchido: o PDF abaixo permanece um formulário em branco com elencos atuais.
+
+#### Emissão do formulário em branco
+
 A ação **Gerar súmula** fica no jogo em **Tabela e Classificação**. O PDF
 usa A4 paisagem, com identificação e logo da AEUV, escudos disponíveis,
 campeonato, temporada, fase/grupo/rodada, local, data e horário da partida.
@@ -338,8 +387,8 @@ Identifique a edição exatamente no nome da competição no controle e no
 cadastro, especialmente quando o nome é reutilizado em temporadas diferentes.
 Homônimos na mesma equipe/tipo não podem ser distinguidos por essa fonte.
 Não registra eventos, não envia a súmula digital e não lança resultados.
-Não aplica nem decrementa punições. O submenu separado de súmula e a
-disciplina automática continuam fora desta etapa. O download não exige tornar
+Não aplica nem decrementa punições. A disciplina automática continua fora
+desta etapa. O download não exige tornar
 os cadastros, o logo ou o controle públicos no Drive.
 
 ---

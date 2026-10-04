@@ -534,12 +534,49 @@ pode declarar `grupo` para entrar num submenu.
 | `atas` | Atas de reuniões da associação ou campeonato; usa `listarAtas()`, `salvarAta()`, `exportarAtaPdf()` e `excluirAta()`. |
 | `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
 | `equipes` | Equipes participantes; usa `listarEquipes()`, `salvarEquipe()` e `removerEquipe()`. |
+| `atletas` | Banco de Dados de Atletas; busca os dados com `listarAtletas()` (somente admin/diretoria). |
 | `breve` | Funcionalidade já prevista, exibida com o aviso "em desenvolvimento". |
 
 Módulos publicados hoje: Início, Formulários (Súmula digital e Inscrição e
 portabilidade), Solicitações de Inscrições, Súmulas Enviadas, Notas oficiais,
 Regulamentos, Controle de punições, Financeiro e Prestação de Contas, Atas de reuniões, Associados,
-Atletas e Usuários do sistema. Só Atletas ainda está marcado como `breve`.
+Banco de Dados de Atletas e Usuários do sistema.
+
+#### Banco de Dados de Atletas
+
+Consulta somente leitura (admin/diretoria; a permissão é verificada antes de
+qualquer leitura). `listarAtletas()` reúne:
+
+- **todos os atletas dos elencos de todos os campeonatos**, inclusive cadastros
+  inativos, sem equipe informada ou de equipes fora da lista atual de associadas;
+- **inscrições anteriores** guardadas no histórico permanente
+  (`AEUV - Historico de Inscricoes.json`): atletas removidos do elenco, que
+  trocaram de equipe ou de competição, ou de campeonatos excluídos;
+- as fontes legadas já existentes (solicitações, punições e súmulas enviadas),
+  com os mesmos recortes de leitura e avisos de "mais recentes de".
+
+Comissão técnica dos elencos não entra como atleta. Pessoas com o mesmo CPF
+válido viram um único atleta com vários vínculos; sem CPF válido, cada cadastro
+de elenco (campeonato + ID do cadastro) fica separado. Nomes nunca unem CPFs
+diferentes. Punições e súmulas continuam associadas por nome + equipe apenas
+quando há um único candidato.
+
+A lista mostra situação, equipe/competição atuais e contagem de vínculos.
+Clicar na linha (ou no botão do nome, por teclado) expande o **histórico de
+vínculos em elencos**, mais recente primeiro: situação (inscrição atual,
+atual inativa, vínculo anterior ou competição excluída), competição com
+temporada e status, equipe com nome registrado/original quando renomeada,
+camisa/posição e a data de entrada no histórico. Essa data não é a data real
+de entrada no elenco para inscrições já existentes quando o histórico foi
+ativado; datas de transferência não são deduzidas. O detalhe também lista as
+solicitações, punições e súmulas do atleta. Filtros: busca por nome, apelido
+ou CPF, equipe, competição e tipo de vínculo. A lista mostra CPF mascarado;
+o completo aparece só no detalhe. Fotos e RG não saem do servidor.
+
+A consulta reconcilia o histórico permanente sob o ScriptLock (o mesmo
+processo das importações de elenco, podendo gravar o histórico e IDs
+legados) e libera o lock antes de ler as fontes legadas. Falhas de leitura
+são exibidas como erro, sem lista parcial.
 
 #### Atas de reuniões
 
@@ -1225,18 +1262,45 @@ Consulte o [fluxo e limites do MVP](sistema-interno/campeonato/README.md#5-tabel
 Atualize **WebApp.gs e Index.html** no projeto interno e publique uma nova
 versão da implantação para disponibilizar a funcionalidade.
 
+### Súmulas finalizadas do campeonato
+
+**Gestão do Campeonato → Súmula** (`sumula-campeonato`) permite a admin/diretoria
+consultar e editar partidas **encerradas com resultado detalhado salvo**, em
+todos os campeonatos, sem limite arbitrário de registros. Os filtros combinam
+campeonato, rodada, equipe (mandante ou visitante) e data exata; a seleção
+inicial abrange todos os campeonatos. **Limpar filtros** e **Atualizar** também
+estão disponíveis. A lista retorna apenas metadados dos jogos e equipes, sem
+CPFs nem eventos individuais; não migra ou altera cadastros.
+
+**Consultar** usa exclusivamente os participantes e eventos salvos, em modo
+somente leitura. **Editar resultado** usa o editor existente, mantendo as
+verificações de revisão e o histórico das pessoas. Retorno, descarte e
+salvamento preservam os filtros; salvar recarrega a lista. Alterações pendentes
+exigem confirmação para sair, e gravações bloqueiam a navegação.
+Jogos sem resultado detalhado (inclusive legados com apenas placar) permanecem
+na Tabela e Classificação, mas não são apresentados como súmulas preenchidas.
+
+Não confundir com **Súmulas Enviadas** da arbitragem. O PDF em branco da tabela
+usa o elenco atual, não os eventos históricos, e não é oferecido nesta lista.
+Veja [consulta de súmulas finalizadas](sistema-interno/campeonato/README.md#consulta-de-súmulas-finalizadas).
+
 ### Cadastro de associados
 
 Reúne num só lugar quem são as equipes associadas, quem responde legalmente por
 cada uma e qual documentação já foi entregue.
 
 **Um registro por equipe.** O associado é a equipe; a pessoa aparece como
-representante legal dela. Por isso a equipe funciona como chave: ao salvar, o
-sistema procura a equipe na planilha e atualiza a linha existente em vez de
-criar outra. A comparação ignora acentos, maiúsculas e espaços repetidos
+representante legal dela. Na edição, o sistema procura a equipe original na
+planilha e atualiza a mesma linha, mesmo quando admin ou diretoria troca a
+equipe no combo. A comparação ignora acentos, maiúsculas e espaços repetidos
 (`chaveEquipe_`), então "Integração" e "INTEGRACAO" são a mesma equipe. O combo
 de equipes vem da tela **Equipes**; no formulário de cadastro novo ele só
-oferece equipes ainda sem registro, e na edição o campo fica travado.
+oferece equipes ainda sem registro; na edição também inclui a equipe atual.
+O servidor impede equipe duplicada e CPF de representante já vinculado a outro
+cadastro, antes de gravar ou enviar documentos. A troca preserva documentos e
+data de criação, publica o cadastro para a equipe nova e remove a cópia da
+equipe anterior. Não altera a equipe vinculada às contas do controle de acesso.
+Perfis de consulta continuam sem permissão para editar.
 
 #### Por que planilha e não um arquivo TXT
 
