@@ -2043,7 +2043,7 @@
     .campeonato-card .participante-card-acoes {
       display: flex;
       width: 100%;
-      justify-content: flex-end;
+      justify-content: center;
       gap: 8px;
       margin-top: auto;
       padding-top: 12px;
@@ -3150,24 +3150,41 @@
      * @param {string} nome
      */
     function removerEquipeDoSistema(nome) {
-      if (!window.confirm('Remover a equipe ' + nome + '?')) {
-        return;
-      }
+      if (confirmacaoElencoAtual || moduloAtual !== 'equipes' || !equipes.podeEditar) return;
+      const dadosOrigem = equipes;
+      const area = document.getElementById('areaEquipes');
+      const emLista = function () {
+        return moduloAtual === 'equipes' && equipes === dadosOrigem && Boolean(area && area.isConnected && area.querySelector('[data-remover-equipe]'))
+          && (equipes.equipes || []).some(function (item) { return item.nome === nome; });
+      };
+      if (!emLista()) return;
 
-      document.getElementById('areaEquipes').innerHTML = blocoCarregando();
+      confirmarDescarteElenco_({
+        titulo: 'Remover equipe do sistema?',
+        mensagem: 'A equipe "' + nome + '" sairá do Banco de Dados de Equipes e deixará de aparecer nos cadastros, acessos e formulários. '
+          + 'Equipes que ainda tenham cadastros ou acessos não podem ser removidas.',
+        cancelar: 'Cancelar',
+        confirmar: 'Remover equipe'
+      }).then(function (confirmado) {
+        if (!confirmado || !emLista()) return;
 
-      google.script.run
-        .withSuccessHandler(function (dados) {
-          equipes = dados;
-          montarTelaEquipes(dados.recado);
-        })
-        .withFailureHandler(function (erro) {
-          montarTelaEquipes();
+        area.innerHTML = blocoCarregando();
 
-          document.getElementById('areaEquipes').insertAdjacentHTML('afterbegin',
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>');
-        })
-        .removerEquipe(nome);
+        google.script.run
+          .withSuccessHandler(function (dados) {
+            equipes = dados;
+            if (moduloAtual !== 'equipes') return;
+            montarTelaEquipes(dados.recado);
+          })
+          .withFailureHandler(function (erro) {
+            if (moduloAtual !== 'equipes') return;
+            montarTelaEquipes();
+
+            document.getElementById('areaEquipes').insertAdjacentHTML('afterbegin',
+              '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>');
+          })
+          .removerEquipe(nome);
+      });
     }
 
     /**
@@ -3594,11 +3611,35 @@
       });
       area.querySelectorAll('[data-ep-remover]').forEach(function (botao) {
         botao.addEventListener('click', function () {
-          if (!window.confirm('Desvincular ' + botao.dataset.epRemover + '?')) return;
-          botao.disabled = true;
-          google.script.run.withSuccessHandler(function () { carregarTimesCampeonato(); })
-            .withFailureHandler(function (erro) { botao.disabled = false; area.insertAdjacentHTML('afterbegin', '<div class="erro">' + escapar(erro.message || erro) + '</div>'); })
-            .removerTimeCampeonato(campeonatoParticipantesAtual, botao.dataset.epRemover);
+          if (botao.disabled || confirmacaoElencoAtual) return;
+          const nome = botao.dataset.epRemover;
+          const campeonatoId = campeonatoParticipantesAtual;
+          const dadosOrigem = timesCampeonato;
+          const campeonatoNome = (campeonatos.find(function (item) { return item.id === campeonatoId; }) || {}).nome || 'este campeonato';
+          const naTela = function () {
+            return moduloAtual === 'times-campeonato' && !elencoAtual && timesCampeonato === dadosOrigem
+              && campeonatoParticipantesAtual === campeonatoId && botao.isConnected && !botao.disabled;
+          };
+          confirmarDescarteElenco_({
+            titulo: 'Desvincular equipe do campeonato?',
+            mensagem: 'A equipe "' + nome + '" deixará de participar de ' + campeonatoNome + '. '
+              + 'Ela continua no Banco de Dados de Equipes e pode ser vinculada novamente. Equipes com atletas ou comissão vinculados não podem ser desvinculadas.',
+            cancelar: 'Cancelar',
+            confirmar: 'Desvincular equipe'
+          }).then(function (confirmado) {
+            if (!confirmado || !naTela()) return;
+            botao.disabled = true;
+            google.script.run.withSuccessHandler(function () {
+              if (moduloAtual !== 'times-campeonato' || elencoAtual) return;
+              carregarTimesCampeonato();
+            })
+              .withFailureHandler(function (erro) {
+                botao.disabled = false;
+                if (!area.isConnected || moduloAtual !== 'times-campeonato' || elencoAtual) return;
+                area.insertAdjacentHTML('afterbegin', '<div class="erro">' + escapar(erro.message || erro) + '</div>');
+              })
+              .removerTimeCampeonato(campeonatoId, nome);
+          });
         });
       });
     }
@@ -3887,14 +3928,16 @@
     }
 
     /**
-     * Confirmacao propria (dialog nativo) para descartar o formulario do
-     * elenco. Resolve true so ao confirmar; Esc, fundo e "Continuar
-     * editando" resolvem false e devolvem o foco a origem.
+     * Confirmacao propria (dialog nativo) do sistema: descarte do formulario
+     * do elenco e remocoes de elenco/equipes. Resolve true so ao confirmar;
+     * Esc, fundo e o botao de cancelar resolvem false e devolvem o foco a
+     * origem. Opcoes: titulo, mensagem, confirmar, cancelar (padrao
+     * "Continuar editando"), perigo (padrao true) e origemFoco.
      */
     function confirmarDescarteElenco_(opcoes) {
       if (confirmacaoElencoAtual) confirmacaoElencoAtual.finalizar(false);
       return new Promise(function (resolver) {
-        const origem = document.activeElement;
+        const origem = opcoes.origemFoco || document.activeElement;
         const dialogo = document.createElement('dialog');
         const conteudo = document.createElement('div');
         const marca = document.createElement('div');
@@ -3928,10 +3971,10 @@
         acoes.className = 'elenco-confirmacao-acoes';
         cancelar.type = 'button';
         cancelar.className = 'botao-apoio';
-        cancelar.textContent = 'Continuar editando';
+        cancelar.textContent = opcoes.cancelar || 'Continuar editando';
         cancelar.autofocus = true;
         confirmar.type = 'button';
-        confirmar.className = 'botao-apoio perigo';
+        confirmar.className = opcoes.perigo === false ? 'botao-principal' : 'botao-apoio perigo';
         confirmar.textContent = opcoes.confirmar;
         acoes.appendChild(cancelar);
         acoes.appendChild(confirmar);
@@ -4643,12 +4686,45 @@
        abrirFormularioCadastroPessoa(campeonatoId, 'comissao', membroId);
      }
 
+     function localizarCadastroPessoa_(tipo, campeonatoId, registroId) {
+       const registros = (cadastroPessoasCampeonato && cadastroPessoasCampeonato.registros) || [];
+       const registro = elencoAtual ? registros[0] : registros.find(function (item) { return item.campeonatoId === campeonatoId; });
+       const lista = registro && (tipo === 'comissao' ? registro.comissao : tipo === 'atletas' ? registro.atletas : null);
+       const pessoa = (lista || []).find(function (item) { return item.id === registroId; });
+       return pessoa ? { registro: registro, pessoa: pessoa } : null;
+     }
+
      function removerCadastroPessoa(tipo, campeonatoId, registroId) {
-       if (!permitirEdicaoElenco_()) return;
-       const mensagem = tipo === 'comissao' ? 'Remover este membro da comissão?' : 'Remover este atleta?';
-       if (!window.confirm(mensagem)) {
-         return;
-       }
+       if (confirmacaoElencoAtual || !permitirEdicaoElenco_()) return;
+       const encontrado = localizarCadastroPessoa_(tipo, campeonatoId, registroId);
+       if (!encontrado) return;
+       const contextoOrigem = elencoAtual;
+       const moduloOrigem = moduloAtual;
+       const dadosOrigem = cadastroPessoasCampeonato;
+       const comissao = tipo === 'comissao';
+       const nome = String(encontrado.pessoa.nome || (comissao ? 'Membro sem nome' : 'Atleta sem nome'));
+       const equipeNome = contextoOrigem && dadosOrigem.equipe ? dadosOrigem.equipe.nome : encontrado.pessoa.timeVinculado;
+       const detalhes = dialogoDetalhesElencoAtual;
+       const origemFoco = detalhes && detalhes._elencoOrigemFoco && detalhes._elencoOrigemFoco.isConnected ? detalhes._elencoOrigemFoco : null;
+       fecharDetalhesPessoaElenco(false);
+
+       confirmarDescarteElenco_({
+         titulo: comissao ? 'Remover membro da comissão?' : 'Remover atleta?',
+         mensagem: '"' + nome + '" será removido ' + (comissao ? 'da comissão técnica' : 'do elenco')
+           + (equipeNome ? ' de ' + equipeNome : '') + ' em ' + (encontrado.registro.campeonatoNome || 'este campeonato') + '. '
+           + 'O histórico de inscrições já registrado é mantido.',
+         cancelar: 'Cancelar',
+         confirmar: comissao ? 'Remover membro' : 'Remover atleta',
+         origemFoco: origemFoco
+       }).then(function (confirmado) {
+         if (!confirmado || elencoAtual !== contextoOrigem || moduloAtual !== moduloOrigem || cadastroPessoasCampeonato !== dadosOrigem) return;
+         if (contextoOrigem ? abaElencoAtiva !== tipo : abaCadastroPessoasAtiva !== tipo) return;
+         if (!localizarCadastroPessoa_(tipo, campeonatoId, registroId) || !permitirEdicaoElenco_()) return;
+         executarRemocaoCadastroPessoa_(tipo, campeonatoId, registroId);
+       });
+     }
+
+     function executarRemocaoCadastroPessoa_(tipo, campeonatoId, registroId) {
        if (elencoAtual) {
          const contexto = elencoAtual;
          fecharDetalhesPessoaElenco(false);
