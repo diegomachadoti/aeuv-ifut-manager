@@ -1424,13 +1424,22 @@ function listarImportacaoElenco(payload) {
       origens: origens,
       candidatos: candidatos.map(function (item) {
         let motivo = '';
-        try { validarPessoaImportacaoElenco_(item, contexto, dados.tipo, cache[contexto.campeonato.id]); }
-        catch (e) { motivo = e.message; }
+        const listas = cache[contexto.campeonato.id];
+        const cpf = somenteDigitos_(item.cpf || item.dados.cpf);
+        const jaCadastrado = Boolean(cpf && ['atletas', 'comissao'].some(function (tipo) {
+          return existeCpfNoCadastro_(listas[tipo], cpf);
+        }));
+        if (jaCadastrado) {
+          motivo = 'Já cadastrado no campeonato de destino.';
+        } else {
+          try { validarPessoaImportacaoElenco_(item, contexto, dados.tipo, listas); }
+          catch (e) { motivo = e.message; }
+        }
         return {
           id: item.id, nome: item.dados.nome, cpf: item.cpf,
           funcao: dados.tipo === 'comissao' ? item.dados.cargo : item.dados.posicao,
           situacao: item.presente ? 'Inscrição atual na origem' : 'Inscrição anterior (removida ou competição excluída)',
-          atualizadoEm: item.atualizadoEm, motivo: motivo
+          atualizadoEm: item.atualizadoEm, motivo: motivo, jaCadastrado: jaCadastrado
         };
       }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); })
     };

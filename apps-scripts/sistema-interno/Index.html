@@ -1844,6 +1844,23 @@
       box-shadow: 0 18px 60px rgba(0, 0, 0, .35);
     }
     .elenco-detalhes-dialog::backdrop { background: rgba(8, 15, 28, .68); }
+    .elenco-confirmacao-dialog {
+      width: min(460px, calc(100% - 32px)); max-width: 460px; max-height: calc(100vh - 32px);
+      padding: 0; border: 1px solid var(--borda, #d6dbe4); border-radius: 14px; overflow: auto;
+      background: var(--superficie, #fff); color: var(--texto, #1d2433);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, .35); opacity: 1;
+    }
+    .elenco-confirmacao-dialog::backdrop { background: rgba(8, 15, 28, .68); }
+    .elenco-confirmacao-conteudo { padding: 20px; background: var(--superficie, #fff); }
+    .elenco-confirmacao-conteudo h3 { margin: 0 0 10px; overflow-wrap: anywhere; }
+    .elenco-confirmacao-conteudo p { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+    .elenco-confirmacao-acoes { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+    .elenco-confirmacao-acoes button { min-height: 40px; }
+    .elenco-confirmacao-dialog button:focus-visible { outline: 2px solid var(--dourado, #c9a227); outline-offset: 2px; }
+    @media (max-width: 480px) {
+      .elenco-confirmacao-acoes { flex-direction: column-reverse; }
+      .elenco-confirmacao-acoes button { width: 100%; }
+    }
     .elenco-detalhes-conteudo { padding: 20px; }
     .elenco-detalhes-marca {
       display: flex;
@@ -1892,11 +1909,34 @@
       padding: 14px; margin-bottom: 20px; border: 1px solid var(--borda);
       border-radius: 8px; background: var(--fundo); line-height: 1.6;
     }
-    .elenco-foto-preview {
-      width: 120px; height: 120px; background: var(--fundo); border: 2px dashed var(--borda);
-      border-radius: 8px; display: grid; place-items: center; font-size: 40px; overflow: hidden;
+    .campo label.imagem-upload {
+      position: relative; display: flex; align-items: center; gap: 14px; padding: 14px;
+      border: 2px dashed var(--borda); border-radius: 10px;
+      background: var(--superficie, #fff); cursor: pointer; min-width: 0;
     }
-    .elenco-foto-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .campo label.imagem-upload:hover { border-color: var(--azul); background: var(--fundo); }
+    .campo label.imagem-upload:focus-within { outline: 3px solid var(--dourado); outline-offset: 2px; }
+    .campo .imagem-upload input.imagem-upload-input {
+      position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0;
+      overflow: hidden; clip-path: inset(50%); opacity: 0;
+    }
+    .imagem-upload-preview {
+      flex: 0 0 80px; width: 80px; height: 80px; display: grid; place-items: center;
+      border: 1px solid var(--borda); border-radius: 8px; background: var(--fundo);
+      overflow: hidden; font-size: 32px;
+    }
+    .imagem-upload-preview img { width: 100%; height: 100%; object-fit: contain; }
+    .imagem-upload-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+    .imagem-upload-titulo { color: var(--texto); }
+    .imagem-upload-acao { font-size: 15px; color: var(--azul); }
+    .imagem-upload-ajuda, .imagem-upload-status {
+      font-weight: normal; color: var(--apoio); overflow-wrap: anywhere;
+    }
+    .imagem-upload-status.alerta { color: var(--perigo); }
+    @media (max-width: 420px) {
+      .campo label.imagem-upload { gap: 10px; padding: 10px; }
+      .imagem-upload-preview { flex-basis: 64px; width: 64px; height: 64px; }
+    }
     .elenco-form .acoes-formulario { flex-wrap: wrap; }
     .elenco-form #avisoCadastroPessoa { overflow-wrap: anywhere; }
     @media (max-width: 760px) {
@@ -1962,6 +2002,13 @@
       padding: 14px;
       background: var(--superficie);
     }
+
+    #elencoBloqueio {
+      background: var(--dourado);
+      border-color: var(--dourado);
+      color: var(--azul);
+    }
+    #elencoBloqueio:hover { background: var(--dourado); filter: brightness(.95); }
 
     .elenco-importacao > h4 { margin-bottom: 16px; }
     .elenco-importacao > p { margin: 0 0 20px; line-height: 1.65; }
@@ -2262,6 +2309,70 @@
         .replace(/"/g, '&quot;');
     }
 
+    function imagemUpload(id, titulo, opcoes) {
+      const atual = opcoes.atual || '';
+      return '<label class="imagem-upload" for="' + escapar(id) + '">'
+        + '<input class="imagem-upload-input" type="file" id="' + escapar(id) + '" accept="' + escapar(opcoes.accept) + '"'
+        + ' aria-labelledby="' + escapar(id + 'Titulo') + ' ' + escapar(id + 'Acao') + '"'
+        + ' aria-describedby="' + escapar(id + 'Ajuda') + ' ' + escapar(id + 'Status') + '">'
+        + '<span class="imagem-upload-preview" id="' + escapar(id + 'Preview') + '">'
+        + (atual ? '<img src="' + escapar(atual) + '" alt="' + escapar(opcoes.alt || titulo) + '">'
+          : '<span aria-hidden="true">' + escapar(opcoes.placeholder || '📷') + '</span>')
+        + '</span><span class="imagem-upload-texto">'
+        + '<span class="imagem-upload-titulo" id="' + escapar(id + 'Titulo') + '">' + escapar(titulo) + '</span>'
+        + '<strong class="imagem-upload-acao" id="' + escapar(id + 'Acao') + '">' + (atual ? 'Trocar imagem' : 'Selecionar imagem') + '</strong>'
+        + '<span class="imagem-upload-ajuda" id="' + escapar(id + 'Ajuda') + '">' + escapar(opcoes.ajuda) + '</span>'
+        + '<span class="imagem-upload-status" id="' + escapar(id + 'Status') + '" role="status" aria-live="polite" aria-atomic="true">'
+        + (atual ? 'Imagem atual mantida.' : 'Nenhuma imagem selecionada.')
+        + '</span></span></label>';
+    }
+
+    function inicializarImagemUpload(id, aoErro) {
+      const input = document.getElementById(id);
+      const preview = document.getElementById(id + 'Preview');
+      const acao = document.getElementById(id + 'Acao');
+      const status = document.getElementById(id + 'Status');
+      if (!input || !preview || !acao || !status) return;
+      const previewOriginal = preview.innerHTML;
+      const acaoOriginal = acao.textContent;
+      const statusOriginal = status.textContent;
+      let selecao = 0;
+
+      function atualizar() {
+        const versao = ++selecao;
+        const arquivo = input.files && input.files[0];
+        status.classList.remove('alerta');
+        if (!arquivo) {
+          preview.innerHTML = previewOriginal;
+          acao.textContent = acaoOriginal;
+          status.textContent = statusOriginal;
+          return;
+        }
+        acao.textContent = 'Trocar imagem';
+        status.textContent = 'Lendo imagem: ' + arquivo.name;
+        const leitor = new FileReader();
+        leitor.onload = function () {
+          if (versao !== selecao) return;
+          preview.innerHTML = '<img src="' + escapar(leitor.result) + '" alt="Prévia da imagem selecionada">';
+          status.textContent = 'Imagem selecionada: ' + arquivo.name;
+        };
+        leitor.onerror = leitor.onabort = function () {
+          if (versao !== selecao) return;
+          preview.innerHTML = previewOriginal;
+          const mensagem = 'Não foi possível ler a imagem. Selecione o arquivo novamente.';
+          status.textContent = mensagem + ' Arquivo: ' + arquivo.name;
+          status.classList.add('alerta');
+          if (aoErro) aoErro(mensagem);
+        };
+        leitor.readAsDataURL(arquivo);
+      }
+
+      input.addEventListener('change', atualizar);
+      input.addEventListener('cancel', function () {
+        if (!input.files || !input.files[0]) atualizar();
+      });
+    }
+
     /**
      * Preenche a identificacao do usuario no cabecalho.
      */
@@ -2420,13 +2531,19 @@
     /**
      * Abre um modulo e registra o endereco na barra do navegador.
      * O segundo argumento pre-preenche a busca da tela, usado para ir da
-     * sumula para a nota no controle de punicoes e vice-versa.
+     * sumula para a nota no controle de punicoes e vice-versa. O terceiro
+     * e interno: aprovacao de uso unico do descarte do elenco.
      */
-    function abrirModulo(id, busca) {
+    function abrirModulo(id, busca, aprovacaoDescarte) {
       const modulo = MODULOS.filter(function (item) { return item.id === id; })[0];
 
       if (!modulo) {
         return abrirModulo(MODULOS[0].id);
+      }
+
+      if (confirmacaoElencoAtual) {
+        if (moduloAtual && window.location.hash !== '#' + moduloAtual) window.location.hash = moduloAtual;
+        return;
       }
 
       if (moduloAtual === 'atas' && !podeSairDaAta()) {
@@ -2437,8 +2554,19 @@
       if (elencoAtual) {
         const formulario = document.getElementById('cadastroPessoasFormArea');
         const descartar = formulario && !formulario.hidden;
-        if (elencoAtual.salvando || (descartar && !window.confirm('Sair do elenco? As alterações e seleções não salvas serão descartadas.'))) {
+        const aprovado = descartar && aprovacaoDescarteElencoValida_(aprovacaoDescarte);
+        if (elencoAtual.salvando || (descartar && !aprovado)) {
           if (window.location.hash !== '#' + moduloAtual) window.location.hash = moduloAtual;
+          if (elencoAtual.salvando) return;
+          const contexto = elencoAtual;
+          const moduloOrigem = moduloAtual;
+          confirmarDescarteElenco_({
+            titulo: 'Sair do elenco?',
+            confirmar: 'Descartar e sair'
+          }).then(function (confirmado) {
+            if (!confirmado || elencoAtual !== contexto || contexto.salvando || moduloAtual !== moduloOrigem) return;
+            abrirModulo(id, busca, { tipo: 'descarte-elenco', elenco: contexto, modulo: moduloOrigem, usado: false });
+          });
           return;
         }
         importacaoElencoAtual = null;
@@ -2950,10 +3078,13 @@
         + '<h3>' + (registro ? 'Renomear equipe' : 'Incluir equipe') + '</h3>'
         + '<div class="grupo"><div class="campos">'
         + campoTexto('eNome', 'Nome da equipe', registro ? registro.nome : '', 'largo', '', 'text')
-        + '<div class="campo largo"><label for="eEscudo">Escudo (PNG, JPEG ou WebP, até 1,5 MB)</label>'
-        + '<input type="file" id="eEscudo" accept="image/png,image/jpeg,image/webp">'
+        + '<div class="campo largo">'
+        + imagemUpload('eEscudo', 'Escudo da equipe', {
+          accept: 'image/png,image/jpeg,image/webp', ajuda: 'PNG, JPEG ou WebP, até 1,5 MB.',
+          atual: registro ? registro.escudo : '', alt: 'Escudo atual', placeholder: '🛡️'
+        })
         + '<input type="hidden" id="eEscudoAtual" value="' + escapar(registro ? registro.escudo || '' : '') + '">'
-        + '<div id="eEscudoPreview">' + (registro && registro.escudo ? '<img src="' + escapar(registro.escudo) + '" alt="Escudo atual" width="80" height="80" style="object-fit:contain">' : '') + '</div></div>'
+        + '</div>'
         + '</div></div>'
         + '<div class="acoes-formulario">'
         + '<button type="button" class="botao-principal" id="gravarEquipe">'
@@ -2970,14 +3101,8 @@
       document.getElementById('gravarEquipe').addEventListener('click', function () {
         gravarEquipe(registro ? registro.nome : '');
       });
-      document.getElementById('eEscudo').addEventListener('change', function () {
-        const arquivo = this.files && this.files[0];
-        if (!arquivo) return;
-        const leitor = new FileReader();
-        leitor.onload = function () {
-          document.getElementById('eEscudoPreview').innerHTML = '<img src="' + escapar(leitor.result) + '" alt="Prévia do escudo" width="80" height="80" style="object-fit:contain">';
-        };
-        leitor.readAsDataURL(arquivo);
+      inicializarImagemUpload('eEscudo', function (mensagem) {
+        document.getElementById('avisoEquipe').textContent = mensagem;
       });
     }
 
@@ -3243,11 +3368,12 @@
          + campoTexto('cResponsavel', 'Organização responsável', registro ? registro.responsavel : '', 'largo', '', 'text')
          + campoTexto('cInicio', 'Data de início', registro ? registro.dataInicio : '', 'curto', '', 'date')
          + campoTexto('cFim', 'Data de fim', registro ? registro.dataFim : '', 'curto', '', 'date')
-         + '<div class="campo cheio"><label for="cEscudo">Escudo do campeonato</label>'
-         + '<input type="file" id="cEscudo" accept="image/*" style="margin-bottom:10px;">'
-         + '<div id="cEscudoPreview" style="width:100px;height:100px;background:var(--fundo);border:2px dashed var(--borda);border-radius:8px;display:grid;place-items:center;font-size:40px;margin-top:10px;overflow:hidden;">'
-         + (registro && registro.escudo ? '<img src="' + escapar(registro.escudo) + '" style="width:100%;height:100%;object-fit:contain;" alt="Escudo">' : '🏆')
-         + '</div></div>'
+         + '<div class="campo cheio">'
+         + imagemUpload('cEscudo', 'Escudo do campeonato', {
+           accept: 'image/*', ajuda: 'Selecione um arquivo de imagem.',
+           atual: registro ? registro.escudo : '', alt: 'Escudo atual do campeonato', placeholder: '🏆'
+         })
+         + '</div>'
          + '<div class="campo cheio"><label for="cDescricao">Descrição</label>'
          + '<textarea id="cDescricao" placeholder="Descreva a competição, formato, observações e regras específicas">'
          + escapar(registro ? registro.descricao : '') + '</textarea></div>'
@@ -3281,21 +3407,9 @@
          document.getElementById('campeonatoFormArea').innerHTML = '';
        });
 
-       // Listener para preview do escudo em tempo real
-       const inputEscudo = document.getElementById('cEscudo');
-       const previewEscudo = document.getElementById('cEscudoPreview');
-
-       if (inputEscudo && previewEscudo) {
-         inputEscudo.addEventListener('change', function () {
-           if (this.files && this.files[0]) {
-             const leitor = new FileReader();
-             leitor.onload = function (e) {
-               previewEscudo.innerHTML = '<img src="' + e.target.result + '" style="width:100%;height:100%;object-fit:contain;" alt="Escudo">';
-             };
-             leitor.readAsDataURL(this.files[0]);
-           }
-         });
-       }
+       inicializarImagemUpload('cEscudo', function (mensagem) {
+         document.getElementById('avisoCampeonato').textContent = mensagem;
+       });
 
        document.getElementById('gravarCampeonato').addEventListener('click', function () {
          gravarCampeonato(registro ? registro.id : '');
@@ -3500,8 +3614,9 @@
         + '<option value="">Selecione uma equipe disponível</option>'
         + disponiveis.map(function (item) { return '<option value="' + escapar(item.id) + '">' + escapar(item.nome) + '</option>'; }).join('')
         + '</select></div></div><div class="barra-acoes"><button type="button" class="botao-principal" id="epSalvar" disabled>Vincular</button>'
-        + '<button type="button" class="botao-apoio" id="epCancelar">Cancelar</button></div><span id="epAviso" class="apoio">'
-        + (!disponiveis.length ? 'Nenhuma equipe disponível. Cadastre no Banco de Dados de Equipes.' : 'Selecione uma equipe; equipes já vinculadas não aparecem nesta lista.') + '</span></section>';
+        + '<button type="button" class="botao-apoio" id="epCancelar">Cancelar</button></div><span id="epAviso" class="apoio" role="status" aria-live="polite">'
+        + (!disponiveis.length ? 'Nenhuma equipe disponível. Cadastre no Banco de Dados de Equipes.' : 'Selecione uma equipe; equipes já vinculadas não aparecem nesta lista.') + '</span>'
+        + '<div id="epLoading" hidden></div></section>';
       document.getElementById('epEquipe').addEventListener('change', function () {
         document.getElementById('epSalvar').disabled = !this.value;
       });
@@ -3509,11 +3624,32 @@
       document.getElementById('epSalvar').addEventListener('click', function () {
         if (!document.getElementById('epEquipe').value) return;
         const botao = this;
+        const campeonatoId = campeonatoParticipantesAtual;
+        const equipe = document.getElementById('epEquipe');
+        const equipeId = equipe.value;
+        const cancelar = document.getElementById('epCancelar');
+        const aviso = document.getElementById('epAviso');
+        const loading = document.getElementById('epLoading');
         botao.disabled = true;
-        document.getElementById('epAviso').textContent = 'Vinculando...';
-        google.script.run.withSuccessHandler(function (dados) { timesCampeonato = dados; montarEquipesParticipantes('Equipe vinculada.'); })
-          .withFailureHandler(function (erro) { botao.disabled = false; document.getElementById('epAviso').textContent = erro.message || erro; })
-          .vincularEquipeParticipante({ campeonatoId: campeonatoParticipantesAtual, equipeId: document.getElementById('epEquipe').value });
+        equipe.disabled = true;
+        cancelar.disabled = true;
+        aviso.textContent = 'Vinculando equipe...';
+        loading.hidden = false;
+        loading.innerHTML = blocoCarregando();
+        google.script.run.withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'times-campeonato' || campeonatoParticipantesAtual !== campeonatoId
+              || document.getElementById('epSalvar') !== botao || elencoAtual) return;
+          timesCampeonato = dados;
+          montarEquipesParticipantes('Equipe vinculada.');
+        }).withFailureHandler(function (erro) {
+          if (document.getElementById('epSalvar') !== botao) return;
+          loading.hidden = true;
+          loading.innerHTML = '';
+          botao.disabled = false;
+          equipe.disabled = false;
+          cancelar.disabled = false;
+          aviso.textContent = erro.message || erro;
+        }).vincularEquipeParticipante({ campeonatoId: campeonatoId, equipeId: equipeId });
       });
     }
 
@@ -3742,10 +3878,123 @@
       });
     }
 
+    let confirmacaoElencoAtual = null;
+
+    function aprovacaoDescarteElencoValida_(aprovacao) {
+      if (!aprovacao || aprovacao.tipo !== 'descarte-elenco' || aprovacao.usado) return false;
+      aprovacao.usado = true;
+      return aprovacao.elenco === elencoAtual && !elencoAtual.salvando && aprovacao.modulo === moduloAtual;
+    }
+
+    /**
+     * Confirmacao propria (dialog nativo) para descartar o formulario do
+     * elenco. Resolve true so ao confirmar; Esc, fundo e "Continuar
+     * editando" resolvem false e devolvem o foco a origem.
+     */
+    function confirmarDescarteElenco_(opcoes) {
+      if (confirmacaoElencoAtual) confirmacaoElencoAtual.finalizar(false);
+      return new Promise(function (resolver) {
+        const origem = document.activeElement;
+        const dialogo = document.createElement('dialog');
+        const conteudo = document.createElement('div');
+        const marca = document.createElement('div');
+        const titulo = document.createElement('h3');
+        const mensagem = document.createElement('p');
+        const acoes = document.createElement('div');
+        const cancelar = document.createElement('button');
+        const confirmar = document.createElement('button');
+        let finalizado = false;
+        const registro = {};
+
+        dialogo.className = 'elenco-confirmacao-dialog';
+        dialogo.setAttribute('role', 'alertdialog');
+        dialogo.setAttribute('aria-modal', 'true');
+        dialogo.setAttribute('aria-labelledby', 'elencoConfirmacaoTitulo');
+        dialogo.setAttribute('aria-describedby', 'elencoConfirmacaoMensagem');
+        conteudo.className = 'elenco-confirmacao-conteudo';
+        marca.className = 'elenco-detalhes-marca';
+        if (CONFIG.logoUrl) {
+          const logo = document.createElement('img');
+          logo.src = CONFIG.logoUrl;
+          logo.alt = '';
+          marca.appendChild(logo);
+        }
+        marca.appendChild(document.createElement('span'));
+        marca.lastChild.textContent = 'AEUV';
+        titulo.id = 'elencoConfirmacaoTitulo';
+        titulo.textContent = opcoes.titulo;
+        mensagem.id = 'elencoConfirmacaoMensagem';
+        mensagem.textContent = opcoes.mensagem || 'As alterações e seleções não salvas serão descartadas.';
+        acoes.className = 'elenco-confirmacao-acoes';
+        cancelar.type = 'button';
+        cancelar.className = 'botao-apoio';
+        cancelar.textContent = 'Continuar editando';
+        cancelar.autofocus = true;
+        confirmar.type = 'button';
+        confirmar.className = 'botao-apoio perigo';
+        confirmar.textContent = opcoes.confirmar;
+        acoes.appendChild(cancelar);
+        acoes.appendChild(confirmar);
+        conteudo.appendChild(marca);
+        conteudo.appendChild(titulo);
+        conteudo.appendChild(mensagem);
+        conteudo.appendChild(acoes);
+        dialogo.appendChild(conteudo);
+
+        registro.finalizar = function (resultado) {
+          if (finalizado) return;
+          finalizado = true;
+          if (confirmacaoElencoAtual === registro) confirmacaoElencoAtual = null;
+          if (dialogo.open && typeof dialogo.close === 'function') dialogo.close();
+          else dialogo.removeAttribute('open');
+          if (dialogo.parentNode) dialogo.parentNode.removeChild(dialogo);
+          if (!resultado && origem && origem.isConnected && typeof origem.focus === 'function') origem.focus();
+          resolver(resultado);
+        };
+        confirmacaoElencoAtual = registro;
+
+        cancelar.addEventListener('click', function () { registro.finalizar(false); });
+        confirmar.addEventListener('click', function () { registro.finalizar(true); });
+        dialogo.addEventListener('cancel', function (evento) {
+          evento.preventDefault();
+          registro.finalizar(false);
+        });
+        dialogo.addEventListener('keydown', function (evento) {
+          if (evento.key !== 'Escape') return;
+          evento.preventDefault();
+          registro.finalizar(false);
+        });
+        dialogo.addEventListener('click', function (evento) {
+          if (evento.target === dialogo) registro.finalizar(false);
+        });
+        dialogo.addEventListener('close', function () { registro.finalizar(false); });
+
+        document.body.appendChild(dialogo);
+        if (typeof dialogo.showModal === 'function') dialogo.showModal();
+        else dialogo.setAttribute('open', '');
+        cancelar.focus();
+      });
+    }
+
     function voltarEquipesElenco_() {
-      if (!elencoAtual || elencoAtual.salvando) return;
+      if (!elencoAtual || elencoAtual.salvando || confirmacaoElencoAtual) return;
       const formulario = document.getElementById('cadastroPessoasFormArea');
-      if (formulario && !formulario.hidden && !window.confirm('Voltar às equipes participantes? As alterações e seleções não salvas serão descartadas.')) return;
+      if (formulario && !formulario.hidden) {
+        const contexto = elencoAtual;
+        const moduloOrigem = moduloAtual;
+        confirmarDescarteElenco_({
+          titulo: 'Voltar às equipes participantes?',
+          confirmar: 'Descartar e voltar'
+        }).then(function (confirmado) {
+          if (!confirmado || elencoAtual !== contexto || contexto.salvando || moduloAtual !== moduloOrigem) return;
+          descartarVoltarEquipesElenco_();
+        });
+        return;
+      }
+      descartarVoltarEquipesElenco_();
+    }
+
+    function descartarVoltarEquipesElenco_() {
       campeonatoParticipantesAtual = elencoAtual.campeonatoId;
       importacaoElencoAtual = null;
       elencoAtual = null;
@@ -3857,7 +4106,9 @@
             + dados.candidatos.map(function (item) {
               return '<tr><td><input type="checkbox" data-importacao-id="' + escapar(item.id) + '" aria-label="Selecionar ' + escapar(item.nome) + '"' + (item.motivo ? ' disabled' : '') + '></td>'
                 + '<td>' + escapar(item.nome) + '<br>' + escapar(formatarCpf(item.cpf)) + '</td><td>' + escapar(item.funcao) + '</td>'
-                + '<td>' + escapar(item.situacao) + (item.motivo ? '<br><span class="erro">' + escapar(item.motivo) + '</span>' : '') + '</td></tr>';
+                + '<td>' + (item.jaCadastrado
+                  ? '<span class="pilula">Já cadastrado no destino</span><div class="apoio">Não precisa importar novamente.</div>'
+                  : escapar(item.situacao) + (item.motivo ? '<br><span class="alerta">' + escapar(item.motivo) + '</span>' : '')) + '</td></tr>';
             }).join('') + '</tbody></table></div>' : '';
         document.querySelectorAll('[data-importacao-id]').forEach(function (checkbox) {
           checkbox.addEventListener('change', atualizarContagemImportacaoElenco_);
@@ -4174,13 +4425,15 @@
          }).join('') + '</select></div>'
          + '</div></div>'
          + '<div class="grupo"><h4>Foto</h4><div class="campos">'
-         + '<div class="campo cheio"><label for="cpFoto">Foto *</label>'
+         + '<div class="campo cheio">'
          + '<input type="hidden" id="cpFotoAtual" value="' + escapar(pessoaEmEdicao ? (pessoaEmEdicao.foto || '') : '') + '">'
-         + '<input type="file" id="cpFoto" accept="image/*" aria-describedby="cpFotoAjuda">'
-         + '<span id="cpFotoAjuda" class="apoio">' + (pessoaEmEdicao ? 'Selecione uma imagem somente para substituir a foto atual.' : 'Selecione uma imagem para identificar a pessoa no elenco.') + '</span>'
-         + '<div id="cpFotoPreview" class="elenco-foto-preview">'
-         + (pessoaEmEdicao && pessoaEmEdicao.foto ? '<img src="' + escapar(pessoaEmEdicao.foto) + '" alt="Foto de ' + escapar(pessoaEmEdicao.nome) + '">' : '<span aria-label="Nenhuma foto selecionada">📷</span>')
-         + '</div></div>'
+         + imagemUpload('cpFoto', 'Foto *', {
+           accept: 'image/*',
+           ajuda: 'Arquivo de imagem. ' + (pessoaEmEdicao ? 'Selecione somente para substituir a foto atual.' : 'Selecione para identificar a pessoa no elenco.'),
+           atual: pessoaEmEdicao ? pessoaEmEdicao.foto : '',
+           alt: pessoaEmEdicao ? 'Foto de ' + pessoaEmEdicao.nome : 'Foto'
+         })
+         + '</div>'
          + '</div></div>'
          + '<p class="apoio">* Campos obrigatórios. ' + (tipoAtual === 'atletas' ? 'Apelido e número da camisa são opcionais.' : 'Selecione o cargo do membro da comissão técnica.') + '</p>'
          + '<div class="acoes-formulario">'
@@ -4262,23 +4515,9 @@
      }
 
      function configurarPreviewFotoCadastroPessoa() {
-       const input = document.getElementById('cpFoto');
-       const preview = document.getElementById('cpFotoPreview');
-       if (!input || !preview) return;
-
-       input.addEventListener('change', function (e) {
-         const arquivo = e.target.files && e.target.files[0];
-         if (!arquivo) return;
-
-         const leitor = new FileReader();
-         leitor.onload = function (evento) {
-           preview.innerHTML = '<img src="' + escapar(evento.target.result) + '" alt="Prévia da foto selecionada">';
-         };
-         leitor.onerror = leitor.onabort = function () {
-           exibirErroCadastroPessoa('Não foi possível ler a foto. Selecione o arquivo novamente.',
-             document.getElementById('gravarCadastroPessoa'), document.getElementById('avisoCadastroPessoa'));
-         };
-         leitor.readAsDataURL(arquivo);
+       inicializarImagemUpload('cpFoto', function (mensagem) {
+         exibirErroCadastroPessoa(mensagem,
+           document.getElementById('gravarCadastroPessoa'), document.getElementById('avisoCadastroPessoa'));
        });
      }
 
@@ -4315,6 +4554,7 @@
        aviso.textContent = 'Gravando...';
 
        const inputFoto = document.getElementById('cpFoto');
+       mostrarLoadingCadastroPessoa_(true);
        if (inputFoto && inputFoto.files && inputFoto.files[0]) {
          const leitor = new FileReader();
          leitor.onload = function (e) {
@@ -4330,8 +4570,22 @@
        }
      }
 
+     function mostrarLoadingCadastroPessoa_(ativo) {
+       const existente = document.getElementById('cadastroPessoaLoading');
+       if (existente) existente.remove();
+       if (!ativo) return;
+       const formulario = document.getElementById('cadastroPessoasFormArea');
+       const area = formulario && !formulario.hidden && formulario.children.length
+         ? formulario
+         : document.getElementById(elencoAtual ? 'elencoLista' : 'areaCadastroPessoasCampeonato');
+       if (area) {
+         area.insertAdjacentHTML('afterbegin', '<div id="cadastroPessoaLoading" role="status" aria-live="polite">' + blocoCarregando() + '</div>');
+       }
+     }
+
      function exibirErroCadastroPessoa(erro, botao, aviso) {
        if (botao && botao !== document.getElementById('gravarCadastroPessoa')) return;
+       mostrarLoadingCadastroPessoa_(false);
        marcarElencoPendente_(false);
        if (botao) botao.disabled = false;
        const cancelar = document.getElementById('voltarCadastroPessoa');
@@ -4397,7 +4651,9 @@
        }
        if (elencoAtual) {
          const contexto = elencoAtual;
+         fecharDetalhesPessoaElenco(false);
          marcarElencoPendente_(true);
+         mostrarLoadingCadastroPessoa_(true);
          document.getElementById('areaTimesCampeonato').querySelectorAll('[data-elenco-remover]').forEach(function (botao) { botao.disabled = true; });
          google.script.run.withSuccessHandler(function (dados) {
            if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
@@ -4417,6 +4673,7 @@
 
        const funcao = tipo === 'comissao' ? 'removerMembroComissao' : 'removerAtletaCampeonato';
        const moduloRemover = moduloAtual;
+       mostrarLoadingCadastroPessoa_(true);
 
        google.script.run
          .withSuccessHandler(function (dados) {
@@ -4427,6 +4684,7 @@
          })
          .withFailureHandler(function (erro) {
            if (elencoAtual || moduloAtual !== moduloRemover) return;
+           mostrarLoadingCadastroPessoa_(false);
            alert('Erro: ' + (erro && erro.message ? erro.message : erro));
          })[funcao](campeonatoId, registroId);
      }
