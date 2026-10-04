@@ -1183,7 +1183,9 @@ grupos e fases, cadastrar campos e parametrizar pontuação/desempates.
 Os jogos são cadastrados manualmente, com mandante, visitante, fase, rodada,
 campo, data e hora. **Editar jogo** altera o agendamento; **Lançar resultado**
 abre uma tela separada com placar, participação, gols, gols contra e cartões
-dos atletas, além de cartões da comissão técnica, nas abas dos dois times.
+dos atletas, além de participação e cartões da comissão técnica, nas abas dos
+dois times. As duas listas exibem CPF completo em vez de data de nascimento;
+a súmula em PDF mantém o CPF parcialmente mascarado.
 WO, prorrogação e placar de pênaltis são informados manualmente, sem aplicar
 suspensões nem avanço automático. Gols dos atletas atualizam o placar da equipe;
 gols contra atualizam o placar do adversário. Ajustes diretos no placar permitem

@@ -3043,11 +3043,13 @@ function inteiroResultadoTabela_(valor, maximo, nome) {
 function eventosResultadoTabela_(dados, atleta) {
   if (!dados || typeof dados !== 'object') throw new Error('Informe os eventos de cada participante.');
   const eventos = {
+    participou: booleanoResultadoTabela_(dados.participou, 'Participação'),
     amarelos: inteiroResultadoTabela_(dados.amarelos, 2, 'Cartões amarelos'),
     vermelho: booleanoResultadoTabela_(dados.vermelho, 'Cartão vermelho')
   };
   if (atleta) {
-    eventos.participou = booleanoResultadoTabela_(dados.participou, 'Participação');
+    eventos.numeroJogo = dados.numeroJogo === undefined || dados.numeroJogo === ''
+      ? '' : inteiroResultadoTabela_(dados.numeroJogo, 999, 'Número do atleta na partida');
     eventos.gols = inteiroResultadoTabela_(dados.gols, 999, 'Gols do atleta');
     eventos.golsContra = inteiroResultadoTabela_(dados.golsContra, 999, 'Gols contra');
   }
@@ -3099,12 +3101,17 @@ function validarResultadoSalvoTabela_(resultado, jogo) {
         }
         ids.add(pessoa.id);
         const eventos = eventosResultadoTabela_(
-          Object.assign({ golsContra: 0, amarelos: 0, vermelho: false }, pessoa), tipo === 'atletas');
+          Object.assign({ golsContra: 0, amarelos: 0, vermelho: false, participou: false }, pessoa), tipo === 'atletas');
         Object.keys(eventos).forEach(function (chave) {
+          if (chave === 'numeroJogo' && pessoa.numeroJogo === undefined) return;
+          if (chave === 'participou' && tipo === 'comissao' && pessoa.participou === undefined) return;
           if (chave === 'golsContra' && pessoa.golsContra === undefined) return;
           if ((chave === 'amarelos' || chave === 'vermelho') && pessoa[chave] === undefined) return;
           if (eventos[chave] !== pessoa[chave]) throw new Error('Eventos armazenados inválidos.');
         });
+        if (pessoa.cpf !== undefined && typeof pessoa.cpf !== 'string') {
+          throw new Error('CPF armazenado do participante inválido.');
+        }
         if (tipo === 'atletas') {
           if (typeof pessoa.dataNascimento !== 'string'
               || (typeof pessoa.numero !== 'string' && typeof pessoa.numero !== 'number')
@@ -3137,9 +3144,9 @@ function elencosResultadoTabela_(contexto, jogo, persistirIds) {
       });
       idsUnicosTabela_(atuais, tipo + ' do elenco');
       metadadosAtuais.push({ equipeId: id, tipo: tipo, pessoas: atuais.map(function (pessoa) {
-        return tipo === 'atletas' ? { id: pessoa.id, nome: pessoa.nome, numero: pessoa.numero == null ? '' : pessoa.numero,
+        return tipo === 'atletas' ? { id: pessoa.id, nome: pessoa.nome, cpf: String(pessoa.cpf || ''), numero: pessoa.numero == null ? '' : pessoa.numero,
           dataNascimento: String(pessoa.dataNascimento || '') }
-          : { id: pessoa.id, nome: pessoa.nome, cargo: String(pessoa.cargo || 'Comissão Técnica') };
+          : { id: pessoa.id, nome: pessoa.nome, cpf: String(pessoa.cpf || ''), cargo: String(pessoa.cargo || 'Comissão Técnica') };
       }) });
       const anteriores = salvo ? salvo[tipo] : [];
       const pessoas = anteriores.concat(atuais.filter(function (pessoa) {
@@ -3149,16 +3156,21 @@ function elencosResultadoTabela_(contexto, jogo, persistirIds) {
         if (identidades.has(pessoa.id)) throw new Error('Elencos com identificadores de participantes repetidos.');
         identidades.add(pessoa.id);
         const anterior = anteriores.find(function (item) { return item.id === pessoa.id; });
+        const atual = listas[tipo].find(function (item) {
+          return item.id === pessoa.id && chaveEquipe_(item.timeVinculado) === chaveEquipe_(equipe.nome);
+        });
         const snapshot = anterior || pessoa;
         const item = {
           id: pessoa.id, nome: String(snapshot.nome), disponivel: atuais.some(function (atual) { return atual.id === pessoa.id; }),
+          cpf: String(snapshot.cpf || (atual ? atual.cpf : '') || ''),
+          participou: anterior && typeof anterior.participou === 'boolean' ? anterior.participou : false,
           amarelos: anterior && Number.isInteger(anterior.amarelos) ? anterior.amarelos : 0,
           vermelho: anterior && typeof anterior.vermelho === 'boolean' ? anterior.vermelho : false
         };
         if (tipo === 'atletas') {
           item.numero = snapshot.numero == null ? '' : snapshot.numero;
+          item.numeroJogo = anterior && anterior.numeroJogo !== undefined ? anterior.numeroJogo : '';
           item.dataNascimento = String(snapshot.dataNascimento || '');
-          item.participou = anterior ? anterior.participou : false;
           item.gols = anterior ? anterior.gols : 0;
           item.golsContra = anterior && anterior.golsContra !== undefined ? anterior.golsContra : 0;
           if (anterior && anterior.assistencias !== undefined) item.assistencias = anterior.assistencias;
@@ -3172,9 +3184,9 @@ function elencosResultadoTabela_(contexto, jogo, persistirIds) {
     const snapshot = { id: equipe.id };
     ['atletas', 'comissao'].forEach(function (tipo) {
       snapshot[tipo] = equipe[tipo].map(function (pessoa) {
-        return tipo === 'atletas' ? { id: pessoa.id, nome: pessoa.nome, numero: pessoa.numero,
+        return tipo === 'atletas' ? { id: pessoa.id, nome: pessoa.nome, cpf: pessoa.cpf, numero: pessoa.numero,
           dataNascimento: pessoa.dataNascimento, disponivel: pessoa.disponivel }
-          : { id: pessoa.id, nome: pessoa.nome, cargo: pessoa.cargo, disponivel: pessoa.disponivel };
+          : { id: pessoa.id, nome: pessoa.nome, cpf: pessoa.cpf, cargo: pessoa.cargo, disponivel: pessoa.disponivel };
       });
     });
     return snapshot;

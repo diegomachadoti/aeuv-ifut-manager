@@ -196,8 +196,22 @@ incluindo resultados antigos cadastrados antes deste fluxo.
 O placar fica no topo, com identificação das duas equipes. As abas mantêm os
 dados de ambos os times durante o preenchimento. Para atletas, registre
 **participação**, **gols**, **gols contra**, **amarelos (0 a 2)** e
-**cartão vermelho**. Para comissão técnica, registre amarelos e vermelho.
-Marcar ou desmarcar todas as participações não apaga os gols ou cartões.
+**cartão vermelho**. Para comissão técnica, registre **participação**, amarelos
+e vermelho. O **número na partida** do atleta é opcional e começa em branco:
+preencha conforme a súmula física, sem importar o número do cadastro. Ele fica
+salvo apenas no resultado dessa partida e reaparece ao editar esse resultado,
+sem alterar a numeração do cadastro. Resultados antigos sem esse campo também
+abrem com o número da partida em branco.
+Marcar ou desmarcar todas as participações inclui atletas e
+comissão da equipe selecionada, sem apagar gols ou cartões. O resumo informa
+separadamente quantos atletas e integrantes da comissão participaram.
+Ambas as listas identificam as pessoas pelo **CPF completo, sem máscara**;
+a data de nascimento não aparece nesta tela. O CPF vem do cadastro confiável,
+é preservado no resultado e não pode ser alterado pelo lançamento. Resultados
+antigos recuperam o CPF do cadastro da mesma equipe quando ainda disponível;
+sem essa informação, exibem **Não informado**. A súmula em PDF continua com
+CPF parcialmente mascarado. Participações antigas da comissão sem registro
+são exibidas desmarcadas, sem presumir presença.
 Não há campos de assistência, defesa difícil, defesa de pênalti ou cartão azul.
 Assistências registradas em resultados anteriores continuam armazenadas,
 mas não aparecem nem são alteradas por esta tela.

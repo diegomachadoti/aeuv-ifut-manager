@@ -3931,7 +3931,9 @@
       function controle(pessoa, tipo, posicao, campo) {
         const id = 'tr-' + indice + '-' + tipo + '-' + posicao + '-' + campo;
         const atributos = 'data-tr-equipe="' + indice + '" data-tr-tipo="' + tipo + '" data-tr-pessoa="' + posicao + '" data-tr-estat="' + campo + '"';
-        const rotulo = pessoa.nome + ' · ' + ({ participou: 'Participação', gols: 'Gols', golsContra: 'Gols contra', amarelos: 'Cartões amarelos (0, 1 ou 2)', vermelho: 'Cartão vermelho' })[campo];
+        const rotulo = pessoa.nome + ' · ' + ({ numeroJogo: 'Número na partida (opcional)', participou: 'Participação', gols: 'Gols', golsContra: 'Gols contra', amarelos: 'Cartões amarelos (0, 1 ou 2)', vermelho: 'Cartão vermelho' })[campo];
+        if (campo === 'numeroJogo') return '<input id="' + id + '" type="number" min="0" max="999" step="1" value="'
+          + escapar(pessoa.numeroJogo == null ? '' : pessoa.numeroJogo) + '" aria-label="' + escapar(rotulo) + '" ' + atributos + '>';
         if (campo === 'participou' || campo === 'vermelho') return '<input id="' + id + '" type="checkbox" ' + atributos
           + (pessoa[campo] ? ' checked' : '') + ' aria-label="' + escapar(rotulo) + '">';
         if (campo === 'amarelos') return '<select id="' + id + '" ' + atributos + ' aria-label="' + escapar(rotulo) + '">'
@@ -3946,17 +3948,17 @@
         + '<button type="button" class="botao-apoio" data-tr-participacao="' + indice + '" data-tr-marcar="sim">Marcar todas as participações</button>'
         + '<button type="button" class="botao-apoio" data-tr-participacao="' + indice + '" data-tr-marcar="nao">Remover participações</button></div>'
         + '<div class="tabela-scroll" tabindex="0" role="region" aria-label="Atletas de ' + escapar(equipe.nome) + ' — role horizontalmente"><table class="resultado-tabela"><caption>Atletas</caption>'
-        + '<thead><tr><th scope="col">Nome</th><th scope="col">Nº</th><th scope="col">Nasc.</th><th scope="col">Participação</th><th scope="col">Gols</th><th scope="col">Gols contra</th><th scope="col">Amarelos (0–2)</th><th scope="col">Vermelho</th></tr></thead><tbody>'
+        + '<thead><tr><th scope="col">Nome</th><th scope="col">Nº</th><th scope="col">CPF</th><th scope="col">Participação</th><th scope="col">Gols</th><th scope="col">Gols contra</th><th scope="col">Amarelos (0–2)</th><th scope="col">Vermelho</th></tr></thead><tbody>'
         + equipe.atletas.map(function (pessoa, posicao) {
-          return '<tr><td>' + nome(pessoa) + '</td><td>' + escapar(pessoa.numero == null ? '—' : pessoa.numero) + '</td><td>'
-            + escapar(pessoa.dataNascimento ? formatarDataBr(pessoa.dataNascimento) : '—') + '</td>'
+          return '<tr><td>' + nome(pessoa) + '</td><td>' + controle(pessoa, 'atletas', posicao, 'numeroJogo') + '</td><td>'
+            + escapar(pessoa.cpf || 'Não informado') + '</td>'
             + ['participou', 'gols', 'golsContra', 'amarelos', 'vermelho'].map(function (campo) { return '<td>' + controle(pessoa, 'atletas', posicao, campo) + '</td>'; }).join('') + '</tr>';
         }).join('') + (equipe.atletas.length ? '' : '<tr><td colspan="8">Nenhum atleta no elenco.</td></tr>') + '</tbody></table></div>'
         + '<div class="tabela-scroll" tabindex="0" role="region" aria-label="Comissão de ' + escapar(equipe.nome) + ' — role horizontalmente"><table class="resultado-tabela"><caption>Comissão técnica</caption>'
-        + '<thead><tr><th scope="col">Nome</th><th scope="col">Cargo</th><th scope="col">Amarelos (0–2)</th><th scope="col">Vermelho</th></tr></thead><tbody>'
-        + equipe.comissao.map(function (pessoa, posicao) { return '<tr><td>' + nome(pessoa) + '</td><td>' + escapar(pessoa.cargo || '—')
-          + '</td><td>' + controle(pessoa, 'comissao', posicao, 'amarelos') + '</td><td>' + controle(pessoa, 'comissao', posicao, 'vermelho') + '</td></tr>'; }).join('')
-        + (equipe.comissao.length ? '' : '<tr><td colspan="4">Nenhum integrante na comissão.</td></tr>') + '</tbody></table></div></section>';
+        + '<thead><tr><th scope="col">Nome</th><th scope="col">CPF</th><th scope="col">Cargo</th><th scope="col">Participação</th><th scope="col">Amarelos (0–2)</th><th scope="col">Vermelho</th></tr></thead><tbody>'
+        + equipe.comissao.map(function (pessoa, posicao) { return '<tr><td>' + nome(pessoa) + '</td><td>' + escapar(pessoa.cpf || 'Não informado') + '</td><td>' + escapar(pessoa.cargo || '—')
+          + '</td><td>' + controle(pessoa, 'comissao', posicao, 'participou') + '</td><td>' + controle(pessoa, 'comissao', posicao, 'amarelos') + '</td><td>' + controle(pessoa, 'comissao', posicao, 'vermelho') + '</td></tr>'; }).join('')
+        + (equipe.comissao.length ? '' : '<tr><td colspan="6">Nenhum integrante na comissão.</td></tr>') + '</tbody></table></div></section>';
     }
 
     function montarTabelaResultado_() {
@@ -4075,9 +4077,11 @@
     function tabelaResultadoParticipacoes_(indice, marcou) {
       const draft = tabelaEstado.resultado;
       if (tabelaEstado.ocupado || !draft || !draft.podeEditar) return;
-      draft.equipes[indice].atletas.forEach(function (atleta, posicao) {
-        atleta.participou = marcou;
-        document.getElementById('tr-' + indice + '-atletas-' + posicao + '-participou').checked = marcou;
+      ['atletas', 'comissao'].forEach(function (tipo) {
+        draft.equipes[indice][tipo].forEach(function (pessoa, posicao) {
+          pessoa.participou = marcou;
+          document.getElementById('tr-' + indice + '-' + tipo + '-' + posicao + '-participou').checked = marcou;
+        });
       });
       tabelaEstado.sujo = true;
       tabelaResultadoResumo_();
@@ -4102,7 +4106,8 @@
         const golsContra = equipe.atletas.reduce(function (total, atleta) { return total + (Number(atleta.golsContra) || 0); }, 0);
         const adversaria = draft.equipes.find(function (item) { return item.id !== equipe.id; });
         const recebidos = adversaria.atletas.reduce(function (total, atleta) { return total + (Number(atleta.golsContra) || 0); }, 0);
-        totais.push(equipe.nome + ': ' + equipe.atletas.filter(function (atleta) { return atleta.participou; }).length + ' participação(ões), ' + gols + ' gol(s), ' + golsContra + ' gol(s) contra.');
+        totais.push(equipe.nome + ': ' + equipe.atletas.filter(function (atleta) { return atleta.participou; }).length + ' atleta(s) e '
+          + equipe.comissao.filter(function (pessoa) { return pessoa.participou; }).length + ' membro(s) da comissão participaram, ' + gols + ' gol(s), ' + golsContra + ' gol(s) contra.');
         const placar = document.getElementById(equipe.lado === 'mandante' ? 'trGolsMandante' : 'trGolsVisitante').value;
         if (gols + recebidos !== Number(placar)) avisos.push(equipe.nome + ': gols atribuídos, incluindo gols contra do adversário (' + (gols + recebidos) + '), diferem do placar (' + placar + '). Ajustes administrativos ou sem autoria são permitidos.');
       });
@@ -4125,10 +4130,11 @@
         },
         equipes: draft.equipes.map(function (equipe) {
           return { id: equipe.id, atletas: equipe.atletas.map(function (atleta) {
-            return { id: atleta.id, participou: !!atleta.participou, gols: tabelaInteiro_(atleta.gols, 999), golsContra: tabelaInteiro_(atleta.golsContra, 999),
+            return { id: atleta.id, numeroJogo: atleta.numeroJogo == null || atleta.numeroJogo === '' ? '' : tabelaInteiro_(atleta.numeroJogo, 999),
+              participou: !!atleta.participou, gols: tabelaInteiro_(atleta.gols, 999), golsContra: tabelaInteiro_(atleta.golsContra, 999),
               amarelos: tabelaInteiro_(atleta.amarelos, 2), vermelho: !!atleta.vermelho };
           }), comissao: equipe.comissao.map(function (pessoa) {
-            return { id: pessoa.id, amarelos: tabelaInteiro_(pessoa.amarelos, 2), vermelho: !!pessoa.vermelho };
+            return { id: pessoa.id, participou: !!pessoa.participou, amarelos: tabelaInteiro_(pessoa.amarelos, 2), vermelho: !!pessoa.vermelho };
           }) };
         })
       };
