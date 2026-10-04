@@ -3560,7 +3560,7 @@
       });
     }
 
-    function carregarTabelaCampeonato_(id, resultadoId) {
+    function carregarTabelaCampeonato_(id, resultadoId, recado) {
       if (tabelaEstado.ocupado) return;
       const area = document.getElementById('areaTabelaCampeonato');
       if (!area) return;
@@ -3579,7 +3579,7 @@
         tabelaEstado.formulario = '';
         tabelaEstado.resultado = null;
         if (modulo === 'sumula-campeonato' && resultadoId) abrirTabelaResultado_(resultadoId);
-        else tabelaVoltarLista_();
+        else tabelaVoltarLista_(recado);
       }).withFailureHandler(function (erro) {
         if (requisicao !== tabelaEstado.requisicao || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
         tabelaOcupada_(false);
@@ -3617,6 +3617,10 @@
             document.body.appendChild(link); link.click(); link.remove();
             window.setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
             document.getElementById('tabelaMensagem').innerHTML = '<div class="sucesso" role="status">Súmula PDF gerada com os elencos atuais. Download iniciado.</div>';
+            tabelaNavegar_(function () {
+              if (modulo === 'sumula-campeonato') carregarSumulasCampeonato_('Súmula PDF gerada. Download iniciado.');
+              else carregarTabelaCampeonato_(campeonatoId, '', 'Súmula PDF gerada. Download iniciado.');
+            });
           } catch (erro) { tabelaErro_(erro); }
           return;
         }
@@ -3626,6 +3630,9 @@
         tabelaEstado.formulario = '';
         tabelaEstado.resultado = null;
         if (modulo === 'sumula-campeonato') carregarSumulasCampeonato_(dados.recado || 'Alterações salvas.');
+        else if (['salvarJogoCampeonato', 'salvarResultadoJogoCampeonato', 'removerJogoCampeonato'].indexOf(metodo) >= 0) {
+          carregarTabelaCampeonato_(tabelaEstado.campeonatoId, '', dados.recado || 'Alterações salvas.');
+        }
         else montarTabelaCampeonato_(dados.recado || 'Alterações salvas.');
       }).withFailureHandler(function (erro) {
         if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
