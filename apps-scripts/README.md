@@ -1045,7 +1045,7 @@ Só os **PDFs** são publicados. Os textos de trabalho continuam no repositório
 em `regulamento/` e `formadisputa/` — publicar os dois formatos lado a lado
 criaria dúvida sobre qual versão é a oficial.
 
-### Equipes participantes
+### Banco de Dados de Equipes
 
 Lista as equipes que podem aparecer em qualquer parte dos três projetos. É a
 **fonte única**: antes desta tela, o mesmo nome de equipe existia hardcoded em
@@ -1076,16 +1076,102 @@ cadastro de associados, os dois formulários).
    apenas para preencher um combo — um nome de equipe ali precisa bater com
    o nome cadastrado no iFut, não com o nome usado nos formulários.
 
-**Remover uma equipe é recusado** enquanto ela ainda tiver acesso de associado
-vinculado (`USUARIOS_AUTORIZADOS`) ou cadastro na planilha de associados
-(`equipesEmUso_`) — a tela avisa qual dos dois antes de deixar remover, para
-não deixar acesso ou cadastro órfão. Renomear (editar mantendo a posição)
-não passa por essa checagem, porque não tira a equipe da lista.
+**Renomear ou remover uma equipe é recusado** enquanto ela tiver acesso de
+associado vinculado (`USUARIOS_AUTORIZADOS`), cadastro na planilha de associados
+ou vínculo com campeonato (`equipesEmUso_`). Isso preserva as referências
+legadas por nome; não há migração em massa dos consumidores externos.
+Editar somente o escudo continua permitido. Equipes sem uso podem ser
+renomeadas sem perder seu identificador permanente.
+
+O cadastro complementar **`AEUV - Equipes - Cadastro.json`**, na mesma pasta
+raiz do Drive, guarda `{id, nome, escudo}`. Na primeira consulta, os nomes
+legados ainda sem registro recebem UUIDs persistidos sob lock. Consultas
+posteriores reutilizam os mesmos IDs, inclusive nos links de inscrição.
+JSON inválido não é substituído silenciosamente: restaure o arquivo antes
+de continuar. O escudo é uma imagem PNG, JPEG ou WebP de até 1,5 MB, armazenada
+como Data URL base64 nesse arquivo, nunca nas Script Properties nem em
+`equipes.json`. Nenhuma permissão pública é criada para as imagens.
+O upload é feito por admin/diretoria no Banco de Dados de Equipes e o mesmo
+escudo aparece nos cards de participação.
 
 Depois de publicar o sistema interno pela primeira vez com esta tela, rode
 `publicarEquipesAgora()` uma vez pelo editor do Apps Script para os dois
 formulários já encontrarem o arquivo publicado — sem isso eles seguem com a
 lista fixa até a primeira gravação pela tela.
+
+### Equipes participantes e meu elenco
+
+O submenu **Gestão do campeonato → Equipes participantes** mantém o ID
+`times-campeonato` para compatibilidade. O fluxo desta etapa é:
+
+1. Admin/diretoria cadastra a equipe global, com escudo opcional, no
+   **Banco de Dados de Equipes**.
+2. Em **Equipes participantes**, seleciona o campeonato e **Vincular equipe
+   existente**. Os cards mostram o escudo e as quantidades de atletas e
+   comissão técnica. A desvinculação é recusada enquanto houver cadastros.
+3. **Gerenciar elenco** abre um contexto fixo de equipe + campeonato, com
+   abas **Atletas** e **Comissão técnica**. Adicionar, editar e remover
+   cadastram pessoas novas usando os validadores existentes (CPF, duplicidade
+   entre as duas abas, nascimento, time, foto e campos do atleta).
+   **Importar atletas / Importar comissão** copia inscrições atuais ou anteriores
+   de outra competição da mesma equipe, com seleção múltipla e validação em lote.
+   O histórico permanente fica no Drive em `AEUV - Historico de Inscricoes.json`;
+   não depende de jogos e não é apagado por remoção, desvinculação ou exclusão
+   de campeonato. A migração considera somente vínculos e cadastros ainda
+   persistidos, sem reconstruir dados já excluídos. Veja
+   [retenção, snapshots e recuperação de gravações](sistema-interno/campeonato/README.md#histórico-permanente-e-importação).
+4. Admin/diretoria pode **Copiar link de inscrição** ou **Enviar pelo
+   WhatsApp**. O link usa a URL real da implantação do Apps Script, com
+   `campeonatoId` e `equipeId`; depois do login ele abre diretamente o elenco.
+   O link é navegação, não concessão de acesso.
+
+O associado precisa entrar com a **Conta Google cujo e-mail está autorizado**
+e com `usuario.equipe` correspondente à equipe global. Ele vê esse mesmo
+submenu, mas só os campeonatos vinculados à sua equipe e seus próprios
+cadastros. Não pode vincular/desvincular equipes, editar campeonatos nem
+enviar escudos. Links de outra equipe, campeonato não vinculado ou IDs de
+cadastros de terceiros são recusados no servidor, inclusive em edição e
+remoção. As mutações revalidam o contexto e o alvo persistido dentro do lock;
+a resposta nunca inclui o cadastro global.
+
+**Bloquear elenco:** somente admin/diretoria pode bloquear/desbloquear no cabeçalho.
+O bloqueio vale para o par de IDs permanentes **campeonato + equipe**, não para a
+equipe global. O padrão é desbloqueado. O arquivo privado do Drive
+`AEUV - Bloqueios de Elenco.json` mantém esses estados; renomear a equipe ou
+desvincular/revincular o mesmo par não perde o bloqueio. Registros de campeonatos
+excluídos são retidos, sem conceder acesso a contextos inexistentes.
+Com o elenco bloqueado, o associado só consulta cards, detalhes e as quatro abas:
+adicionar, editar, remover e importar ficam ocultos e são recusados no servidor,
+inclusive por RPC direto. Administração continua editando normalmente.
+Cada mutação revalida sessão, vínculo e bloqueio dentro do mesmo ScriptLock
+antes de alterar elenco ou histórico; falha de leitura do registro impede escrita.
+
+As ações **Importar atletas / Importar comissão** aparecem nas duas abas de
+cadastro quando a edição é permitida, mesmo com elenco vazio ou sem histórico
+de origem. Abrir a importação sem fontes mostra a orientação contextual.
+O retorno do cabeçalho funciona com formulário aberto e confirma o descarte;
+o cancelamento interno preserva a aba do elenco. Ambos impedem navegação
+durante a gravação. O seletor de vínculo usa IDs, exclui equipes já vinculadas
+e exige selecionar uma equipe disponível, com aparência compatível com os temas.
+
+Os RPCs específicos são `listarEquipesParticipantes`, `listarElenco`,
+`salvarCadastroElenco`, `removerCadastroElenco` e `definirBloqueioElenco`. Os antigos endpoints globais
+de campeonato/atletas/comissão permanecem restritos a admin/diretoria.
+O armazenamento das pessoas continua nos arquivos privados por campeonato
+(`AEUV - Campeonato - <id> - Atletas.json` e `... - Comissao Tecnica.json`),
+sem alterar o formulário unificado do campeonato e sua `estrutura`.
+
+**Implantação/acesso:** permanece obrigatório executar como **Usuário que
+acessa o app da web**, exigir Conta Google e manter a lista de e-mails
+autorizados. Como nas demais telas atuais, a conta também precisa das
+permissões do Drive necessárias na pasta do projeto; o link não compartilha
+arquivos nem substitui essas permissões. Publique uma nova versão dos
+arquivos `WebApp.gs` e `Index.html` no projeto interno para disponibilizar
+este fluxo. Não use o backup diagnóstico `WebApp.publicado.gs`.
+Capturas com a antiga tabela/toolbar não representam o markup local atual
+(cards, detalhes e ações de importação): confirme a versão publicada. Atualize
+**ambos** os arquivos e publique uma **nova versão** da implantação; atualizar
+somente o backend ou somente o frontend não disponibiliza o fluxo completo.
 
 ### Cadastro de associados
 

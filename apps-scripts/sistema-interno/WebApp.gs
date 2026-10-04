@@ -102,6 +102,7 @@ const CONFIG = {
   equipes: {
     chaveLista: 'EQUIPES_LISTA',
     arquivo: 'equipes.json',
+    arquivoRegistro: 'AEUV - Equipes - Cadastro.json',
     chaveArquivo: 'EQUIPES_ARQUIVO_ID'
   },
 
@@ -284,14 +285,6 @@ const MODULOS = [
     perfis: ['admin', 'diretoria', 'associado']
   },
   {
-    id: 'equipes',
-    nome: 'Equipes',
-    icone: '🏳️',
-    tipo: 'equipes',
-    descricao: 'Equipes participantes. A lista alimenta o cadastro, os acessos e os dois formulários.',
-    perfis: ['admin', 'diretoria']
-  },
-  {
     id: 'campeonatos',
     nome: 'Campeonatos',
     icone: '🏆',
@@ -301,31 +294,13 @@ const MODULOS = [
     perfis: ['admin', 'diretoria']
   },
   {
-    id: 'grupos-rodadas',
-    nome: 'Grupos e Rodadas',
-    icone: '🗂️',
-    tipo: 'campeonato',
-    grupo: 'campeonato',
-    descricao: 'Configuração de grupos, fases e rodadas do campeonato.',
-    perfis: ['admin', 'diretoria']
-  },
-  {
     id: 'times-campeonato',
-    nome: 'Times',
-    icone: '🏳️',
+    nome: 'Equipes participantes',
+    icone: '🎫',
     tipo: 'campeonato',
     grupo: 'campeonato',
-    descricao: 'Cadastro e reaproveitamento de times entre competições.',
-    perfis: ['admin', 'diretoria']
-  },
-  {
-    id: 'atletas-campeonato',
-    nome: 'Atletas',
-    icone: '👥',
-    tipo: 'campeonato',
-    grupo: 'campeonato',
-    descricao: 'Cadastro e importação de atletas vinculados aos times.',
-    perfis: ['admin', 'diretoria']
+    descricao: 'Equipes vinculadas ao campeonato e cadastro de novos atletas e comissão técnica.',
+    perfis: ['admin', 'diretoria', 'associado']
   },
   {
     id: 'jogos-campeonato',
@@ -370,10 +345,18 @@ const MODULOS = [
     descricao: 'Redação, consulta e exportação das atas da associação e dos campeonatos.',
     perfis: ['admin', 'diretoria']
   },
+   {
+    id: 'equipes',
+    nome: 'Banco de Dados de Equipes',
+    icone: '📟',
+    tipo: 'equipes',
+    descricao: 'Equipes participantes. A lista alimenta o cadastro, os acessos e os dois formulários.',
+    perfis: ['admin', 'diretoria']
+  },
   {
     id: 'atletas',
-    nome: 'Atletas',
-    icone: '👥',
+    nome: 'Banco de Dados de Atletas',
+    icone: '📟',
     tipo: 'atletas',
     descricao: 'Cadastro consolidado dos atletas e a situação de cada um na competição.',
     perfis: ['admin', 'diretoria']
@@ -388,13 +371,16 @@ const MODULOS = [
   }
 ];
 
-/** Gestão inicial do campeonato: a base usa propriedades do script para não
- * criar novas planilhas nem exigir mais infraestrutura no MVP. */
+/** A lista fica no Drive; a chave antiga permite migrar os registros do MVP. */
 const CAMPEONATOS_CHAVE = 'CAMPEONATOS_LISTA';
+const CAMPEONATOS_ARQUIVO = 'AEUV - Campeonatos.json';
 const CAMPEONATOS_STATUS = ['rascunho', 'ativo', 'encerrado'];
 const CAMPEONATOS_MODALIDADES = ['Futsal', 'Society', 'Futebol de Campo', 'Outro'];
 const CAMPEONATOS_VISIBILIDADES = ['Interno', 'Público'];
 const CAMPEONATO_ESTRUTURA_CHAVE = 'CAMPEONATO_ESTRUTURA_';
+const CAMPEONATO_TIMES_CHAVE = 'CAMPEONATO_TIMES_';
+const CAMPEONATO_ATLETAS_CHAVE = 'CAMPEONATO_ATLETAS_';
+const CAMPEONATO_COMISSAO_CHAVE = 'CAMPEONATO_COMISSAO_';
 const CAMPEONATO_FORMATOS_FASE = ['Grupos corridos', 'Mata-mata', 'Grupos + mata-mata', 'Pontos corridos'];
 
 /******************************************************
@@ -437,6 +423,10 @@ function doGet(e) {
       ? urlPastaRegulamentos_() : '',
     grupos: GRUPOS,
     embutido: origem === 'portal',
+    elenco: {
+      campeonatoId: String((e && e.parameter && e.parameter.campeonatoId) || ''),
+      equipeId: String((e && e.parameter && e.parameter.equipeId) || '')
+    },
 
     // Só oferece a volta ao portal em acesso direto. Quando o proprio portal
     // desistiu de embutir (origem=direto), voltar criaria um vaivem sem fim.
@@ -457,7 +447,22 @@ function doGet(e) {
  * @return {string}
  */
 function include_(nome) {
-  return HtmlService.createHtmlOutputFromFile(nome).getContent();
+   return HtmlService.createHtmlOutputFromFile(nome).getContent();
+}
+
+/**
+ * Obtém o logo da AEUV do Drive e converte para Data URL base64.
+ * @return {string}
+ */
+function obterLogo_() {
+   try {
+     const arquivo = DriveApp.getFileById(CONFIG.logoFileId);
+     const blob = arquivo.getBlob();
+
+     return 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes());
+   } catch (e) {
+     return '';
+   }
 }
 
 /******************************************************
@@ -970,6 +975,499 @@ function exigirEdicaoEquipes_() {
   return sessao;
 }
 
+function lerRegistroEquipes_() {
+  const arquivos = pastaRaizProjeto_().getFilesByName(CONFIG.equipes.arquivoRegistro);
+  if (!arquivos.hasNext()) return [];
+  let lista;
+  try {
+    lista = JSON.parse(arquivos.next().getBlob().getDataAsString('UTF-8'));
+  } catch (e) {
+    throw new Error('O cadastro de equipes no Drive está inválido. Restaure o arquivo antes de continuar.');
+  }
+  if (!Array.isArray(lista) || lista.some(function (item) { return !item || !item.id || !item.nome; })) {
+    throw new Error('O cadastro de equipes no Drive está inválido.');
+  }
+  const ids = {};
+  const nomes = {};
+  lista.forEach(function (item) {
+    const nome = chaveEquipe_(item.nome);
+    if (ids[item.id] || nomes[nome]) throw new Error('O cadastro de equipes contém identificadores duplicados.');
+    ids[item.id] = true;
+    nomes[nome] = true;
+  });
+  return lista;
+}
+
+function gravarRegistroEquipes_(lista) {
+  const raiz = pastaRaizProjeto_();
+  const arquivos = raiz.getFilesByName(CONFIG.equipes.arquivoRegistro);
+  const json = JSON.stringify(lista);
+  if (arquivos.hasNext()) arquivos.next().setContent(json);
+  else raiz.createFile(Utilities.newBlob(json, 'application/json', CONFIG.equipes.arquivoRegistro));
+}
+
+// A leitura só semeia os nomes ainda sem ID; não muda equipes.json nem vínculos legados.
+function equipesRegistro_(lockJaAdquirido) {
+  let registros = lerRegistroEquipes_();
+  const faltam = function () {
+    return obterEquipes_().filter(function (nome) {
+      return !registros.some(function (item) { return chaveEquipe_(item.nome) === chaveEquipe_(nome); });
+    });
+  };
+  if (!faltam().length) return registros;
+  const lock = lockJaAdquirido ? null : LockService.getScriptLock();
+  if (lock) lock.waitLock(30000);
+  try {
+    registros = lerRegistroEquipes_();
+    faltam().forEach(function (nome) {
+      registros.push({ id: Utilities.getUuid(), nome: nome, escudo: '' });
+    });
+    gravarRegistroEquipes_(registros);
+    return registros;
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+function validarEscudoEquipe_(valor) {
+  const escudo = String(valor || '').trim();
+  if (!escudo) return '';
+  if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(escudo)
+      || escudo.length > 2 * 1024 * 1024 + 32) {
+    throw new Error('Envie um escudo PNG, JPEG ou WebP de até 1,5 MB.');
+  }
+  return escudo;
+}
+
+function sessaoElenco_(campeonatoId, equipeId, lockJaAdquirido) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || ['admin', 'diretoria', 'associado'].indexOf(sessao.usuario.perfil) === -1) {
+    throw new Error('Você não tem permissão para acessar este elenco.');
+  }
+  const equipe = equipesRegistro_(lockJaAdquirido).find(function (item) {
+    return item.id === String(equipeId || '').trim()
+      && obterEquipes_().some(function (nome) { return chaveEquipe_(nome) === chaveEquipe_(item.nome); });
+  });
+  if (!equipe || (sessao.usuario.perfil === 'associado'
+      && chaveEquipe_(sessao.usuario.equipe) !== chaveEquipe_(equipe.nome))) {
+    throw new Error('Esta equipe não pertence ao seu acesso.');
+  }
+  const campeonato = campeonatos_().find(function (item) { return item.id === String(campeonatoId || '').trim(); });
+  if (!campeonato || !timesCampeonato_(campeonato.id).some(function (nome) {
+    return chaveEquipe_(nome) === chaveEquipe_(equipe.nome);
+  })) {
+    throw new Error('Esta equipe não está vinculada a este campeonato.');
+  }
+  return { sessao: sessao, equipe: equipe, campeonato: campeonato };
+}
+
+const ELENCO_BLOQUEIOS_ARQUIVO = 'AEUV - Bloqueios de Elenco.json';
+
+function lerBloqueiosElenco_() {
+  const arquivos = pastaRaizProjeto_().getFilesByName(ELENCO_BLOQUEIOS_ARQUIVO);
+  if (!arquivos.hasNext()) return [];
+  let registros;
+  try { registros = JSON.parse(arquivos.next().getBlob().getDataAsString('UTF-8')); }
+  catch (e) { throw new Error('O registro de bloqueios de elenco no Drive está inválido.'); }
+  if (!Array.isArray(registros) || registros.some(function (item) {
+    return !item || typeof item.campeonatoId !== 'string' || !item.campeonatoId
+      || typeof item.equipeId !== 'string' || !item.equipeId || typeof item.bloqueado !== 'boolean';
+  })) throw new Error('O registro de bloqueios de elenco no Drive está inválido.');
+  const pares = new Set();
+  registros.forEach(function (item) {
+    const chave = JSON.stringify([item.campeonatoId, item.equipeId]);
+    if (pares.has(chave)) throw new Error('O registro de bloqueios de elenco contém vínculos duplicados.');
+    pares.add(chave);
+  });
+  return registros;
+}
+
+function elencoBloqueado_(campeonatoId, equipeId, registros) {
+  return (registros || lerBloqueiosElenco_()).some(function (item) {
+    return item.campeonatoId === campeonatoId && item.equipeId === equipeId && item.bloqueado;
+  });
+}
+
+// Executado dentro do ScriptLock de cada escrita, com sessão e vínculo reavaliados.
+function exigirEdicaoElenco_(contexto) {
+  const atual = sessaoElenco_(contexto.campeonato.id, contexto.equipe.id, true);
+  const bloqueado = elencoBloqueado_(atual.campeonato.id, atual.equipe.id);
+  if (atual.sessao.usuario.perfil === 'associado' && bloqueado) {
+    throw new Error('Elenco bloqueado. Somente leitura para o associado.');
+  }
+  return atual;
+}
+
+function definirBloqueioElenco(payload) {
+  const dados = payload || {};
+  if (typeof dados.bloqueado !== 'boolean') throw new Error('Informe o estado de bloqueio do elenco.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const contexto = sessaoElenco_(dados.campeonatoId, dados.equipeId, true);
+    if (EQUIPES_PERFIS_EDICAO.indexOf(contexto.sessao.usuario.perfil) === -1) {
+      throw new Error('Somente admin e diretoria podem bloquear ou desbloquear o elenco.');
+    }
+    const registros = lerBloqueiosElenco_();
+    let registro = registros.find(function (item) {
+      return item.campeonatoId === contexto.campeonato.id && item.equipeId === contexto.equipe.id;
+    });
+    if (!registro) {
+      registro = { campeonatoId: contexto.campeonato.id, equipeId: contexto.equipe.id };
+      registros.push(registro);
+    }
+    registro.bloqueado = dados.bloqueado;
+    const raiz = pastaRaizProjeto_();
+    const arquivos = raiz.getFilesByName(ELENCO_BLOQUEIOS_ARQUIVO);
+    const json = JSON.stringify(registros);
+    if (arquivos.hasNext()) arquivos.next().setContent(json);
+    else raiz.createFile(Utilities.newBlob(json, 'application/json', ELENCO_BLOQUEIOS_ARQUIVO));
+    return listarElenco(contexto.campeonato.id, contexto.equipe.id);
+  } finally { lock.releaseLock(); }
+}
+
+function validarAlvoElenco_(contexto, tipo, id) {
+  if (!contexto) return;
+  const atual = exigirEdicaoElenco_(contexto);
+  if (!id) return atual;
+  const lista = tipo === 'comissao' ? comissaoTecnicaCampeonato_(atual.campeonato.id) : atletasCampeonato_(atual.campeonato.id);
+  const alvo = lista.find(function (item) { return item.id === id; });
+  if (!alvo || chaveEquipe_(alvo.timeVinculado) !== chaveEquipe_(atual.equipe.nome)) {
+    throw new Error('Este cadastro não pertence ao elenco selecionado.');
+  }
+  return atual;
+}
+
+function listarElenco(campeonatoId, equipeId) {
+  const contexto = sessaoElenco_(campeonatoId, equipeId);
+  const bloqueado = elencoBloqueado_(contexto.campeonato.id, contexto.equipe.id);
+  const podeBloquear = EQUIPES_PERFIS_EDICAO.indexOf(contexto.sessao.usuario.perfil) !== -1;
+  const podeEditar = podeBloquear || !bloqueado;
+  const proprio = function (item) { return chaveEquipe_(item.timeVinculado) === chaveEquipe_(contexto.equipe.nome); };
+  const times = {};
+  times[contexto.campeonato.id] = [contexto.equipe.nome];
+  return {
+    bloqueado: bloqueado,
+    podeEditar: podeEditar,
+    podeBloquear: podeBloquear,
+    recado: !podeEditar ? 'Somente leitura — elenco bloqueado pela administração.' : '',
+    equipe: contexto.equipe,
+    campeonatos: [{ id: contexto.campeonato.id, nome: contexto.campeonato.nome }],
+    times: times,
+    posicoes: ATLETAS_CAMPEONATO_POSICOES,
+    cargos: COMISSAO_CARGOS.slice(),
+    registros: [{
+      campeonatoId: contexto.campeonato.id, campeonatoNome: contexto.campeonato.nome,
+      atletas: atletasCampeonato_(contexto.campeonato.id).filter(proprio),
+      comissao: comissaoTecnicaCampeonato_(contexto.campeonato.id).filter(proprio)
+    }],
+    linkInscricao: contexto.sessao.usuario.perfil === 'associado' ? ''
+      : ScriptApp.getService().getUrl() + '?origem=direto&campeonatoId='
+        + encodeURIComponent(contexto.campeonato.id) + '&equipeId=' + encodeURIComponent(contexto.equipe.id)
+  };
+}
+
+function salvarCadastroElenco(payload) {
+  const dados = Object.assign({}, payload || {});
+  const contexto = sessaoElenco_(dados.campeonatoId, dados.equipeId);
+  if (dados.tipo !== 'atletas' && dados.tipo !== 'comissao') throw new Error('Escolha um tipo de cadastro válido.');
+  const id = String(dados.registroId || '').trim();
+  dados.campeonatoId = contexto.campeonato.id;
+  dados.timeVinculado = contexto.equipe.nome;
+  delete dados.id;
+  delete dados.atletaId;
+  delete dados.membroId;
+  if (dados.tipo === 'comissao') {
+    if (id) {
+      dados.membroId = id;
+      return atualizarMembroComissaoInterno_(dados, contexto);
+    }
+    return salvarMembroComissaoInterno_(dados, contexto);
+  }
+  if (id) {
+    dados.atletaId = id;
+    return atualizarAtletaCampeonatoInterno_(dados, contexto);
+  }
+  return salvarAtletaCampeonatoInterno_(dados, contexto);
+}
+
+function removerCadastroElenco(payload) {
+  const dados = payload || {};
+  const contexto = sessaoElenco_(dados.campeonatoId, dados.equipeId);
+  const id = String(dados.registroId || '').trim();
+  if (!id || ['atletas', 'comissao'].indexOf(dados.tipo) === -1) throw new Error('Informe o cadastro a remover.');
+  return dados.tipo === 'comissao'
+    ? removerMembroComissaoInterno_(contexto.campeonato.id, id, contexto)
+    : removerAtletaCampeonatoInterno_(contexto.campeonato.id, id, contexto);
+}
+
+function respostaCadastro_(contexto) {
+  return contexto ? listarElenco(contexto.campeonato.id, contexto.equipe.id) : listarCadastroPessoasCampeonato();
+}
+
+// Permanent Drive history: enrollment snapshots, never a PropertiesService payload.
+const ELENCO_HISTORICO_ARQUIVO = 'AEUV - Historico de Inscricoes.json';
+
+function lerHistoricoElenco_() {
+  const arquivos = pastaRaizProjeto_().getFilesByName(ELENCO_HISTORICO_ARQUIVO);
+  if (!arquivos.hasNext()) return { versao: 1, sequencia: 0, participacoes: [], inscricoes: [] };
+  let dados;
+  try {
+    dados = JSON.parse(arquivos.next().getBlob().getDataAsString('UTF-8'));
+  } catch (e) {
+    throw new Error('Histórico de inscrições inválido no Drive. Restaure o arquivo antes de continuar.');
+  }
+  if (!dados || dados.versao !== 1 || !Array.isArray(dados.participacoes)
+      || !Array.isArray(dados.inscricoes) || !Number.isFinite(dados.sequencia)) {
+    throw new Error('Histórico de inscrições inválido no Drive.');
+  }
+  return dados;
+}
+
+function gravarHistoricoElenco_(dados) {
+  const raiz = pastaRaizProjeto_();
+  const arquivos = raiz.getFilesByName(ELENCO_HISTORICO_ARQUIVO);
+  const json = JSON.stringify(dados);
+  if (arquivos.hasNext()) arquivos.next().setContent(json);
+  else raiz.createFile(Utilities.newBlob(json, 'application/json', ELENCO_HISTORICO_ARQUIVO));
+}
+
+function garantirIdsHistoricoElenco_(campeonatoId, tipo, lista, persistirIds) {
+  if (!persistirIds) return;
+  let mudou = false;
+  lista.forEach(function (pessoa) {
+    if (pessoa && typeof pessoa === 'object' && String(pessoa.nome || '').trim()
+        && !String(pessoa.id || '').trim()) {
+      pessoa.id = gerarIdUnico_();
+      mudou = true;
+    }
+  });
+  // One-time migration under the caller's lock; preserve all legacy fields.
+  if (mudou) gravarListaCadastroDrive_(
+    arquivoCadastroPessoasCampeonato_(campeonatoId, tipo === 'atletas' ? 'Atletas' : 'Comissao Tecnica'),
+    tipo === 'atletas' ? chaveAtletasCampeonato_(campeonatoId) : chaveComissaoTecnicaCampeonato_(campeonatoId),
+    lista
+  );
+}
+
+function reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas) {
+  const agora = new Date().toISOString();
+  const nomes = timesCampeonato_(campeonato.id).concat(
+    listas.atletas.concat(listas.comissao).map(function (pessoa) { return pessoa.timeVinculado; })
+  ).filter(function (nome) { return !!nome; });
+  const identidades = Object.create(null);
+  nomes.forEach(function (nome) {
+    const chave = chaveEquipe_(nome);
+    if (identidades[chave]) return;
+    const equipe = equipes.find(function (item) { return chaveEquipe_(item.nome) === chave; });
+    const anterior = historico.participacoes.find(function (item) {
+      return chaveEquipe_(item.equipeNome) === chave;
+    });
+    const equipeId = equipe ? equipe.id : (anterior ? anterior.equipeId : Utilities.getUuid());
+    identidades[chave] = equipeId;
+    let participacao = historico.participacoes.find(function (item) {
+      return item.equipeId === equipeId && item.campeonatoId === campeonato.id;
+    });
+    if (!participacao) {
+      participacao = {
+        id: Utilities.getUuid(), equipeId: equipeId, campeonatoId: campeonato.id,
+        equipeNomeOriginal: nome, campeonatoNomeOriginal: campeonato.nome, inscritoEm: agora
+      };
+      historico.participacoes.push(participacao);
+    }
+    participacao.equipeNome = nome;
+    participacao.campeonatoNome = campeonato.nome;
+  });
+  historico.inscricoes.forEach(function (item) {
+    if (item.campeonatoId === campeonato.id) item.presente = false;
+  });
+  ['atletas', 'comissao'].forEach(function (tipo) {
+    listas[tipo].forEach(function (pessoa) {
+      const equipeId = identidades[chaveEquipe_(pessoa.timeVinculado)];
+      if (!equipeId) return;
+      const cpf = somenteDigitos_(pessoa.cpf || '');
+      let inscricao = historico.inscricoes.find(function (item) {
+        return item.campeonatoId === campeonato.id && item.equipeId === equipeId
+          && item.tipo === tipo && item.registroId === pessoa.id && item.cpf === cpf;
+      });
+      if (!inscricao) {
+        inscricao = {
+          id: Utilities.getUuid(), equipeId: equipeId, campeonatoId: campeonato.id,
+          tipo: tipo, registroId: pessoa.id, cpf: cpf, inscritoEm: agora
+        };
+        historico.inscricoes.push(inscricao);
+      }
+      if (!inscricao.presenteAntes || JSON.stringify(inscricao.dados) !== JSON.stringify(pessoa)) {
+        inscricao.dados = Object.assign({}, pessoa);
+        inscricao.atualizadoEm = agora;
+        inscricao.sequencia = ++historico.sequencia;
+      }
+      inscricao.presente = true;
+    });
+  });
+}
+
+// Called under the script lock, before destructive writes and on import reads.
+// Reconciliation also repairs a failed post-write history update from the saved roster.
+function prepararHistoricoElenco_(cache) {
+  const historico = lerHistoricoElenco_();
+  const antes = JSON.stringify(historico);
+  historico.inscricoes.forEach(function (item) { item.presenteAntes = item.presente; item.presente = false; });
+  const equipes = equipesRegistro_(true);
+  campeonatos_().forEach(function (campeonato) {
+    const listas = { atletas: atletasCampeonato_(campeonato.id, true), comissao: comissaoTecnicaCampeonato_(campeonato.id, true) };
+    if (cache) cache[campeonato.id] = listas;
+    reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas);
+  });
+  historico.inscricoes.forEach(function (item) { delete item.presenteAntes; });
+  if (antes !== JSON.stringify(historico)) gravarHistoricoElenco_(historico);
+  return historico;
+}
+
+function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado, listasPreparadas) {
+  const historico = historicoPreparado || prepararHistoricoElenco_();
+  const campeonato = campeonatos_().find(function (item) { return item.id === campeonatoId; });
+  if (!campeonato) throw new Error('Campeonato não encontrado.');
+  try {
+    gravarListaCadastroDrive_(
+      arquivoCadastroPessoasCampeonato_(campeonatoId, tipo === 'atletas' ? 'Atletas' : 'Comissao Tecnica'),
+      tipo === 'atletas' ? chaveAtletasCampeonato_(campeonatoId) : chaveComissaoTecnicaCampeonato_(campeonatoId),
+      lista
+    );
+  } catch (e) {
+    throw new Error('Não foi possível confirmar a gravação do elenco. Recarregue antes de repetir a operação; o histórico será reconciliado com os dados persistidos. ' + e.message);
+  }
+  try {
+    historico.inscricoes.forEach(function (item) { item.presenteAntes = item.presente; });
+    const listas = listasPreparadas || {
+      atletas: tipo === 'atletas' ? lista : atletasCampeonato_(campeonatoId),
+      comissao: tipo === 'comissao' ? lista : comissaoTecnicaCampeonato_(campeonatoId)
+    };
+    listas[tipo] = lista;
+    reconciliarHistoricoCampeonato_(historico, campeonato, equipesRegistro_(true), listas);
+    historico.inscricoes.forEach(function (item) { delete item.presenteAntes; });
+    gravarHistoricoElenco_(historico);
+  } catch (e) {
+    throw new Error('O elenco foi salvo, mas o histórico não foi atualizado. Recarregue antes de repetir: a próxima consulta de importação reconciliará os cadastros persistidos. ' + e.message);
+  }
+}
+
+function validarTipoImportacaoElenco_(tipo) {
+  if (tipo !== 'atletas' && tipo !== 'comissao') throw new Error('Escolha um tipo de importação válido.');
+}
+
+function fontesImportacaoElenco_(historico, contexto) {
+  return historico.participacoes.filter(function (item) {
+    return item.equipeId === contexto.equipe.id && item.campeonatoId !== contexto.campeonato.id;
+  });
+}
+
+function candidatosImportacaoElenco_(historico, contexto, tipo, origemId) {
+  const fonte = fontesImportacaoElenco_(historico, contexto).find(function (item) { return item.campeonatoId === origemId; });
+  if (!fonte) throw new Error('A origem não pertence ao histórico desta equipe ou é o campeonato de destino.');
+  const porPessoa = Object.create(null);
+  historico.inscricoes.filter(function (item) {
+    return item.equipeId === contexto.equipe.id && item.campeonatoId === origemId && item.tipo === tipo;
+  }).forEach(function (item) {
+    const chave = item.cpf || ('registro:' + item.registroId);
+    if (!porPessoa[chave] || porPessoa[chave].sequencia < item.sequencia) porPessoa[chave] = item;
+  });
+  return Object.keys(porPessoa).map(function (chave) { return porPessoa[chave]; });
+}
+
+function validarPessoaImportacaoElenco_(inscricao, contexto, tipo, listas) {
+  const pessoa = Object.assign({}, inscricao.dados);
+  pessoa.nome = limparCampo_(pessoa.nome || '', 100);
+  if (!pessoa.nome) throw new Error('Informe o nome do cadastro.');
+  pessoa.cpf = validarCpfCadastroCampeonato_(pessoa.cpf, 'do cadastro a importar');
+  pessoa.dataNascimento = validarDataNascimentoCampeonato_(pessoa.dataNascimento, 'do cadastro a importar');
+  pessoa.foto = String(pessoa.foto || '').trim();
+  if (!pessoa.foto) throw new Error('O cadastro anterior não possui a foto obrigatória.');
+  pessoa.rg = limparCampo_(pessoa.rg || '', 30);
+  pessoa.timeVinculado = contexto.equipe.nome;
+  if (tipo === 'comissao') {
+    // The existing-role exception is only applied to the trusted stored snapshot.
+    pessoa.cargo = validarCargoComissao_(pessoa.cargo, inscricao.dados);
+  } else {
+    if (ATLETAS_CAMPEONATO_POSICOES.indexOf(pessoa.posicao) === -1) throw new Error('Posição anterior inválida.');
+    if (pessoa.numero !== '' && (!Number.isFinite(Number(pessoa.numero)) || Number(pessoa.numero) < 0 || Number(pessoa.numero) > 99)) {
+      throw new Error('O número da camisa deve ficar entre 0 e 99.');
+    }
+  }
+  const duplicata = tipo === 'atletas'
+    ? validarDuplicataAtleta_(pessoa.nome, pessoa.cpf, listas.atletas)
+    : validarDuplicataComissao_(pessoa.nome, pessoa.cpf, listas.comissao);
+  if (!duplicata.ok) throw new Error(duplicata.motivo + ' A verificação abrange todas as equipes do campeonato de destino.');
+  const outroTipo = tipo === 'atletas' ? 'comissao' : 'atletas';
+  if (existeCpfNoCadastro_(listas[outroTipo], pessoa.cpf)) {
+    throw new Error('CPF já cadastrado em ' + (outroTipo === 'atletas' ? 'atletas' : 'comissão técnica') + ' neste campeonato (inclusive outras equipes).');
+  }
+  return pessoa;
+}
+
+function listarImportacaoElenco(payload) {
+  const dados = payload || {};
+  validarTipoImportacaoElenco_(dados.tipo);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const contexto = sessaoElenco_(dados.campeonatoId, dados.equipeId, true);
+    exigirEdicaoElenco_(contexto);
+    const cache = {};
+    const historico = prepararHistoricoElenco_(cache);
+    const fontes = fontesImportacaoElenco_(historico, contexto);
+    const origens = fontes.map(function (item) {
+      return { campeonatoId: item.campeonatoId, nome: item.campeonatoNome, equipeNome: item.equipeNome };
+    });
+    const candidatos = dados.origemId ? candidatosImportacaoElenco_(historico, contexto, dados.tipo, dados.origemId) : [];
+    return {
+      origens: origens,
+      candidatos: candidatos.map(function (item) {
+        let motivo = '';
+        try { validarPessoaImportacaoElenco_(item, contexto, dados.tipo, cache[contexto.campeonato.id]); }
+        catch (e) { motivo = e.message; }
+        return {
+          id: item.id, nome: item.dados.nome, cpf: item.cpf,
+          funcao: dados.tipo === 'comissao' ? item.dados.cargo : item.dados.posicao,
+          situacao: item.presente ? 'Inscrição atual na origem' : 'Inscrição anterior (removida ou competição excluída)',
+          atualizadoEm: item.atualizadoEm, motivo: motivo
+        };
+      }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); })
+    };
+  } finally { lock.releaseLock(); }
+}
+
+function importarCadastrosElenco(payload) {
+  const dados = payload || {};
+  validarTipoImportacaoElenco_(dados.tipo);
+  if (!Array.isArray(dados.inscricaoIds) || !dados.inscricaoIds.length
+      || dados.inscricaoIds.some(function (id) { return typeof id !== 'string' || !id; })
+      || new Set(dados.inscricaoIds).size !== dados.inscricaoIds.length) {
+    throw new Error('Selecione inscrições válidas, sem repetir identificadores.');
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const contexto = sessaoElenco_(dados.campeonatoId, dados.equipeId, true);
+    exigirEdicaoElenco_(contexto);
+    const cache = {};
+    const historico = prepararHistoricoElenco_(cache);
+    const candidatos = candidatosImportacaoElenco_(historico, contexto, dados.tipo, dados.origemId);
+    const listas = cache[contexto.campeonato.id];
+    const novos = dados.inscricaoIds.map(function (id) {
+      const inscricao = candidatos.find(function (item) { return item.id === id; });
+      if (!inscricao) throw new Error('Inscrição inválida para a origem, equipe e tipo selecionados.');
+      const pessoa = validarPessoaImportacaoElenco_(inscricao, contexto, dados.tipo, listas);
+      pessoa.id = gerarIdUnico_();
+      listas[dados.tipo].push(pessoa);
+      return pessoa;
+    });
+    // No roster write occurs until every selection has passed preflight.
+    gravarElencoComHistorico_(contexto.campeonato.id, dados.tipo, listas[dados.tipo], historico, listas);
+    return { quantidade: novos.length, recado: novos.length + ' cadastro(s) importado(s). Recarregue o elenco para consultar.' };
+  } finally { lock.releaseLock(); }
+}
+
 /**
  * Dados da tela de equipes.
  * @param {Array<string>} lista
@@ -977,10 +1475,12 @@ function exigirEdicaoEquipes_() {
  */
 function montarTelaEquipes_(lista, sessao) {
   const emUso = equipesEmUso_();
+  const registros = equipesRegistro_();
 
   return {
     equipes: lista.map(function (nome) {
-      return { nome: nome, emUso: emUso[chaveEquipe_(nome)] || [] };
+      const registro = registros.find(function (item) { return chaveEquipe_(item.nome) === chaveEquipe_(nome); });
+      return { id: registro.id, nome: nome, escudo: registro.escudo || '', emUso: emUso[chaveEquipe_(nome)] || [] };
     }),
     arquivoUrl: arquivoEquipesUrl_(),
     podeEditar: EQUIPES_PERFIS_EDICAO.indexOf(sessao.usuario.perfil) !== -1
@@ -1011,6 +1511,11 @@ function equipesEmUso_() {
 
   obterUsuarios_().forEach(function (usuario) {
     marcar(usuario.equipe, 'acesso');
+  });
+  campeonatos_().forEach(function (campeonato) {
+    timesCampeonato_(campeonato.id).forEach(function (nome) {
+      marcar(nome, 'vínculo com campeonato');
+    });
   });
 
   // O cadastro pode ainda nao existir; a tela de equipes nao depende dele.
@@ -1046,6 +1551,20 @@ function listarEquipes() {
  * @return {Object}
  */
 function salvarEquipe(dados) {
+  exigirEdicaoEquipes_();
+  equipesRegistro_();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  let tela;
+  try {
+    tela = salvarEquipeInterno_(dados);
+  } finally {
+    lock.releaseLock();
+  }
+  return tela;
+}
+
+function salvarEquipeInterno_(dados) {
   const sessao = exigirEdicaoEquipes_();
 
   const nome = limparEspacos_(dados && dados.nome);
@@ -1073,6 +1592,21 @@ function salvarEquipe(dados) {
   if (repetida) {
     throw new Error('Esta equipe já está na lista.');
   }
+  if (original && nome !== lista[posicao] && (equipesEmUso_()[chaveEquipe_(original)] || []).length) {
+    throw new Error('Esta equipe está em uso. Mantenha o nome para preservar os acessos e vínculos existentes.');
+  }
+  prepararHistoricoElenco_();
+  const registros = equipesRegistro_(true);
+  let registro = registros.find(function (item) { return chaveEquipe_(item.nome) === chaveEquipe_(original || nome); });
+  if (!registro) {
+    registro = { id: Utilities.getUuid(), nome: nome, escudo: '' };
+    registros.push(registro);
+  }
+  registro.nome = nome;
+  if (dados && Object.prototype.hasOwnProperty.call(dados, 'escudo')) {
+    registro.escudo = validarEscudoEquipe_(dados.escudo);
+  }
+  gravarRegistroEquipes_(registros);
 
   if (posicao === -1) {
     lista.push(nome);
@@ -1093,6 +1627,18 @@ function salvarEquipe(dados) {
  * @return {Object}
  */
 function removerEquipe(nome) {
+  exigirEdicaoEquipes_();
+  equipesRegistro_();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    return removerEquipeInterno_(nome);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function removerEquipeInterno_(nome) {
   const sessao = exigirEdicaoEquipes_();
   const alvo = chaveEquipe_(nome);
 
@@ -1108,6 +1654,9 @@ function removerEquipe(nome) {
   const lista = obterEquipes_().filter(function (item) {
     return chaveEquipe_(item) !== alvo;
   });
+  prepararHistoricoElenco_();
+  higienizarEquipes_(lista);
+  // Mantém a identidade histórica; a lista global define as equipes ativas.
 
   const tela = gravarEquipes_(lista, sessao);
 
@@ -1277,7 +1826,7 @@ function arquivoPunicoes_() {
 
   if (!pastas.hasNext()) {
     throw new Error('O arquivo "' + CONFIG.punicoes.arquivo + '" ainda não está na pasta "'
-      + CONFIG.punicoes.subpasta + '" do Drive. Ele é publicado pela automação a cada nova punição.');
+      + CONFIG.punicoes.subpasta + '" do Drive. Ele é publicado pela automacao a cada nova punição.');
   }
 
   const arquivo = pastas.next();
@@ -1403,27 +1952,42 @@ function dataIsoValida_(valor) {
 }
 
 function campeonatos_() {
-  try {
-    const bruto = PropertiesService.getScriptProperties().getProperty(CAMPEONATOS_CHAVE);
+  const lista = lerListaCadastroDrive_(CAMPEONATOS_ARQUIVO, CAMPEONATOS_CHAVE);
 
-    if (!bruto) {
-      return [];
-    }
+  return lista.map(function (item) {
+    return normalizarCampeonato_(item, true);
+  }).filter(function (item) {
+    return Boolean(item.id && item.nome);
+  });
+}
 
-    const lista = JSON.parse(bruto);
+function lerListaCadastroDrive_(nomeArquivo, chaveLegada) {
+  const arquivos = pastaRaizProjeto_().getFilesByName(nomeArquivo);
+  const arquivo = arquivos.hasNext() ? arquivos.next() : null;
+  const bruto = arquivo
+    ? arquivo.getBlob().getDataAsString('UTF-8')
+    : PropertiesService.getScriptProperties().getProperty(chaveLegada);
 
-    if (!Array.isArray(lista)) {
-      return [];
-    }
-
-    return lista.map(function (item) {
-      return normalizarCampeonato_(item, true);
-    }).filter(function (item) {
-      return Boolean(item.id && item.nome);
-    });
-  } catch (e) {
+  if (!arquivo && bruto === null) {
     return [];
   }
+
+  if (!String(bruto || '').trim()) {
+    throw new Error('O cadastro ' + nomeArquivo + ' está vazio. Restaure os dados antes de continuar.');
+  }
+
+  let lista;
+  try {
+    lista = JSON.parse(bruto);
+  } catch (e) {
+    throw new Error('O cadastro ' + nomeArquivo + ' contém JSON inválido. Restaure os dados antes de continuar.');
+  }
+
+  if (!Array.isArray(lista)) {
+    throw new Error('O cadastro ' + nomeArquivo + ' está inválido: o conteúdo deve ser uma lista.');
+  }
+
+  return lista;
 }
 
 function normalizarCampeonato_(dados, preservaMetadados) {
@@ -1441,7 +2005,7 @@ function normalizarCampeonato_(dados, preservaMetadados) {
     ? String(bruto.visibilidade || '').trim()
     : CAMPEONATOS_VISIBILIDADES[0];
 
-  return {
+  const registro = {
     id: id,
     nome: nome,
     temporada: temporada,
@@ -1452,58 +2016,105 @@ function normalizarCampeonato_(dados, preservaMetadados) {
     visibilidade: visibilidade,
     dataInicio: dataIsoValida_(bruto.dataInicio),
     dataFim: dataIsoValida_(bruto.dataFim),
+    escudo: String(bruto.escudo || '').trim(),
     criadoEm: preservaMetadados ? String(bruto.criadoEm || '') : '',
     criadoPor: preservaMetadados ? String(bruto.criadoPor || '') : '',
     atualizadoEm: preservaMetadados ? String(bruto.atualizadoEm || '') : '',
     atualizadoPor: preservaMetadados ? String(bruto.atualizadoPor || '') : '',
     revisao: preservaMetadados ? String(bruto.revisao || '') : ''
   };
+
+  if (Object.prototype.hasOwnProperty.call(bruto, 'estrutura')) {
+    registro.estrutura = validarEstruturaCampeonato_(bruto.estrutura, id);
+  }
+
+  return registro;
 }
 
 function gravarCampeonatos_(lista) {
-  PropertiesService.getScriptProperties()
-    .setProperty(CAMPEONATOS_CHAVE, JSON.stringify(lista));
+  gravarListaCadastroDrive_(CAMPEONATOS_ARQUIVO, CAMPEONATOS_CHAVE, lista);
 }
 
-function montarTelaCampeonatos_(lista, sessao) {
-  const ordenados = lista.slice().sort(function (a, b) {
-    const ordemStatus = CAMPEONATOS_STATUS.indexOf(a.status) - CAMPEONATOS_STATUS.indexOf(b.status);
+function gravarListaCadastroDrive_(nomeArquivo, chaveLegada, lista) {
+  const raiz = pastaRaizProjeto_();
+  const arquivos = raiz.getFilesByName(nomeArquivo);
+  const conteudo = JSON.stringify(lista);
 
-    return ordemStatus || String(b.atualizadoEm || b.criadoEm || '').localeCompare(String(a.atualizadoEm || a.criadoEm || ''));
+  // As chamadas de gravação já são protegidas pelo lock de salvar/remover.
+  if (arquivos.hasNext()) {
+    arquivos.next().setContent(conteudo);
+  } else {
+    raiz.createFile(Utilities.newBlob(conteudo, 'application/json', nomeArquivo));
+  }
+
+  // Só remove o armazenamento legado depois de persistir no Drive com sucesso.
+  PropertiesService.getScriptProperties().deleteProperty(chaveLegada);
+}
+
+function arquivoCadastroPessoasCampeonato_(campeonatoId, tipo) {
+  const id = String(campeonatoId || '').trim();
+  if (!id) {
+    throw new Error('Informe um campeonato válido para acessar o cadastro.');
+  }
+  return 'AEUV - Campeonato - ' + encodeURIComponent(id) + ' - ' + tipo + '.json';
+}
+
+function removerCadastroPessoasCampeonato_(campeonatoId) {
+  ['Atletas', 'Comissao Tecnica'].forEach(function (tipo) {
+    const arquivos = pastaRaizProjeto_().getFilesByName(arquivoCadastroPessoasCampeonato_(campeonatoId, tipo));
+    while (arquivos.hasNext()) {
+      arquivos.next().setTrashed(true);
+    }
   });
-
-  return {
-    registros: ordenados.map(function (item) {
-      return {
-        id: item.id,
-        nome: item.nome,
-        temporada: item.temporada,
-        modalidade: item.modalidade,
-        status: item.status,
-        descricao: item.descricao,
-        responsavel: item.responsavel,
-        visibilidade: item.visibilidade,
-        dataInicio: item.dataInicio,
-        dataFim: item.dataFim,
-        criadoEm: item.criadoEm,
-        criadoPor: item.criadoPor,
-        atualizadoEm: item.atualizadoEm,
-        atualizadoPor: item.atualizadoPor
-      };
-    }),
-    status: CAMPEONATOS_STATUS.map(function (valor) {
-      return { id: valor, nome: valor.charAt(0).toUpperCase() + valor.slice(1) };
-    }),
-    modalidades: CAMPEONATOS_MODALIDADES.map(function (valor) {
-      return { id: valor, nome: valor };
-    }),
-    visibilidades: CAMPEONATOS_VISIBILIDADES.map(function (valor) {
-      return { id: valor, nome: valor };
-    }),
-    podeEditar: true,
-    podeExcluir: sessao.usuario.perfil === 'admin'
-  };
+  const propriedades = PropertiesService.getScriptProperties();
+  propriedades.deleteProperty(chaveAtletasCampeonato_(campeonatoId));
+  propriedades.deleteProperty(chaveComissaoTecnicaCampeonato_(campeonatoId));
 }
+
+ function montarTelaCampeonatos_(lista, sessao) {
+   const ordenados = lista.slice().sort(function (a, b) {
+     const ordemStatus = CAMPEONATOS_STATUS.indexOf(a.status) - CAMPEONATOS_STATUS.indexOf(b.status);
+
+     return ordemStatus || String(b.atualizadoEm || b.criadoEm || '').localeCompare(String(a.atualizadoEm || a.criadoEm || ''));
+   });
+
+   return {
+     registros: ordenados.map(function (item) {
+       return {
+         id: item.id,
+         nome: item.nome,
+         temporada: item.temporada,
+         modalidade: item.modalidade,
+         status: item.status,
+         descricao: item.descricao,
+         responsavel: item.responsavel,
+         visibilidade: item.visibilidade,
+         dataInicio: item.dataInicio,
+         dataFim: item.dataFim,
+         escudo: item.escudo,
+         estrutura: estruturaCampeonato_(item.id, item),
+         criadoEm: item.criadoEm,
+         criadoPor: item.criadoPor,
+         atualizadoEm: item.atualizadoEm,
+         atualizadoPor: item.atualizadoPor
+       };
+     }),
+     status: CAMPEONATOS_STATUS.map(function (valor) {
+       return { id: valor, nome: valor.charAt(0).toUpperCase() + valor.slice(1) };
+     }),
+     modalidades: CAMPEONATOS_MODALIDADES.map(function (valor) {
+       return { id: valor, nome: valor };
+     }),
+     visibilidades: CAMPEONATOS_VISIBILIDADES.map(function (valor) {
+       return { id: valor, nome: valor };
+     }),
+     formatos: CAMPEONATO_FORMATOS_FASE.map(function (valor) {
+       return { id: valor, nome: valor };
+     }),
+     podeEditar: true,
+     podeExcluir: sessao.usuario.perfil === 'admin'
+   };
+ }
 
 function listarCampeonatos() {
   const sessao = sessaoCampeonato_();
@@ -1552,6 +2163,22 @@ function salvarCampeonato(payload) {
     throw new Error('Escolha uma visibilidade válida.');
   }
 
+  return salvarCampeonatoValidado_(Object.assign({}, dados, {
+    nome: nome,
+    temporada: temporada,
+    modalidade: modalidade,
+    status: status,
+    visibilidade: visibilidade,
+    descricao: descricao,
+    responsavel: responsavel,
+    dataInicio: dataInicio,
+    dataFim: dataFim
+  }), sessao, false);
+}
+
+function salvarCampeonatoValidado_(dados, sessao, apenasEstrutura) {
+  const temEstrutura = Object.prototype.hasOwnProperty.call(dados, 'estrutura');
+  const estruturaNova = temEstrutura ? validarEstruturaCampeonato_(dados.estrutura, '') : null;
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
@@ -1569,17 +2196,26 @@ function salvarCampeonato(payload) {
       throw new Error('Este campeonato não está mais na lista. Recarregue a página.');
     }
 
+    const campos = apenasEstrutura ? existente.item : dados;
+    const estrutura = temEstrutura
+      ? Object.assign({}, estruturaNova, {
+          campeonatoId: existente ? existente.item.id : '',
+          atualizadoEm: agora,
+          atualizadoPor: sessao.email
+        })
+      : (existente ? estruturaCampeonato_(existente.item.id, existente.item) : null);
     const registro = normalizarCampeonato_({
       id: existente ? existente.item.id : '',
-      nome: nome,
-      temporada: temporada,
-      modalidade: modalidade,
-      status: status,
-      descricao: descricao,
-      responsavel: responsavel,
-      visibilidade: visibilidade,
-      dataInicio: dataInicio,
-      dataFim: dataFim,
+      nome: campos.nome,
+      temporada: campos.temporada,
+      modalidade: campos.modalidade,
+      status: campos.status,
+      descricao: campos.descricao,
+      responsavel: campos.responsavel,
+      visibilidade: campos.visibilidade,
+      dataInicio: campos.dataInicio,
+      dataFim: campos.dataFim,
+      escudo: String(dados.escudo || (existente ? existente.item.escudo : '') || '').trim(),
       criadoEm: existente ? existente.item.criadoEm : agora,
       criadoPor: existente ? existente.item.criadoPor : sessao.email,
       atualizadoEm: agora,
@@ -1587,16 +2223,23 @@ function salvarCampeonato(payload) {
       revisao: Utilities.getUuid()
     }, true);
 
+    if (estrutura) {
+      estrutura.campeonatoId = registro.id;
+      registro.estrutura = estrutura;
+    }
+
     if (existente) {
       lista[existente.indice] = registro;
     } else {
       lista.push(registro);
     }
 
+    const tela = apenasEstrutura ? montarTelaGruposRodadas_(lista) : montarTelaCampeonatos_(lista, sessao);
+    prepararHistoricoElenco_();
     gravarCampeonatos_(lista);
-
-    const tela = montarTelaCampeonatos_(lista, sessao);
-    tela.recado = (existente ? 'Campeonato atualizado: ' : 'Campeonato incluído: ') + nome;
+    tela.recado = apenasEstrutura
+      ? 'Grupos e rodadas atualizados para ' + registro.nome + '.'
+      : (existente ? 'Campeonato atualizado: ' : 'Campeonato incluído: ') + registro.nome;
     return tela;
   } finally {
     lock.releaseLock();
@@ -1629,12 +2272,16 @@ function removerCampeonato(id) {
       throw new Error('Campeonato não encontrado.');
     }
 
-    gravarCampeonatos_(restante);
-    PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_ESTRUTURA_CHAVE + idAlvo);
+      prepararHistoricoElenco_();
+      gravarCampeonatos_(restante);
+      PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_ESTRUTURA_CHAVE + idAlvo);
+      PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_TIMES_CHAVE + idAlvo);
+      removerCadastroPessoasCampeonato_(idAlvo);
+      PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_COMISSAO_CHAVE + idAlvo);
 
-    const tela = montarTelaCampeonatos_(restante, sessao);
-    tela.recado = 'Campeonato removido com sucesso.';
-    return tela;
+     const tela = montarTelaCampeonatos_(restante, sessao);
+     tela.recado = 'Campeonato removido com sucesso.';
+     return tela;
   } finally {
     lock.releaseLock();
   }
@@ -1655,43 +2302,41 @@ function campeonatosResumo_() {
   });
 }
 
-function estruturaCampeonato_(campeonatoId) {
+function estruturaCampeonato_(campeonatoId, campeonato) {
+  const item = campeonato || campeonatos_().filter(function (registro) {
+    return registro.id === campeonatoId;
+  })[0];
+
+  if (item && Object.prototype.hasOwnProperty.call(item, 'estrutura')) {
+    return validarEstruturaCampeonato_(item.estrutura, campeonatoId);
+  }
+
   const chave = chaveEstruturaCampeonato_(campeonatoId);
-
-  try {
-    const bruto = PropertiesService.getScriptProperties().getProperty(chave);
-
-    if (!bruto) {
-      return null;
-    }
-
-    const item = JSON.parse(bruto) || {};
-
-    return {
-      campeonatoId: String(item.campeonatoId || '').trim(),
-      faseNome: limparCampo_(item.faseNome || 'Classificação', 80),
-      formato: CAMPEONATO_FORMATOS_FASE.indexOf(String(item.formato || '')) !== -1
-        ? String(item.formato)
-        : CAMPEONATO_FORMATOS_FASE[0],
-      grupos: Number(item.grupos || 1),
-      vagasPorGrupo: Number(item.vagasPorGrupo || 4),
-      rodadas: Number(item.rodadas || 1),
-      idaVolta: Boolean(item.idaVolta),
-      observacoes: limparCampo_(item.observacoes || '', 500),
-      atualizadoEm: String(item.atualizadoEm || ''),
-      atualizadoPor: String(item.atualizadoPor || '')
-    };
-  } catch (e) {
+  const bruto = PropertiesService.getScriptProperties().getProperty(chave);
+  if (bruto === null) {
     return null;
   }
+
+  let estrutura;
+  try {
+    estrutura = JSON.parse(bruto);
+  } catch (e) {
+    throw new Error('A forma de disputa do campeonato ' + campeonatoId + ' contém JSON inválido. Restaure os dados antes de continuar.');
+  }
+  return validarEstruturaCampeonato_(estrutura, campeonatoId);
 }
 
 function listarGruposRodadas() {
   sessaoCampeonato_();
+  return montarTelaGruposRodadas_(campeonatos_());
+}
 
-  const campeonatos = campeonatosResumo_();
-  const estruturas = campeonatos.map(function (campeonato) {
-    const estrutura = estruturaCampeonato_(campeonato.id);
+function montarTelaGruposRodadas_(lista) {
+  const campeonatos = lista.map(function (item) {
+    return { id: item.id, nome: item.nome, temporada: item.temporada, status: item.status };
+  });
+  const estruturas = lista.map(function (campeonato) {
+    const estrutura = estruturaCampeonato_(campeonato.id, campeonato);
 
     return {
       campeonatoId: campeonato.id,
@@ -1724,13 +2369,20 @@ function salvarGruposRodadas(payload) {
   const sessao = sessaoCampeonato_();
   const dados = payload || {};
   const campeonatoId = String(dados.campeonatoId || '').trim();
-  const campeonatos = campeonatos_();
-  const campeonato = campeonatos.filter(function (item) {
-    return item.id === campeonatoId;
-  })[0];
 
-  if (!campeonato) {
+  if (!campeonatoId) {
     throw new Error('Escolha um campeonato válido para configurar.');
+  }
+
+  return salvarCampeonatoValidado_({
+    idOriginal: campeonatoId,
+    estrutura: dados
+  }, sessao, true);
+}
+
+function validarEstruturaCampeonato_(dados, campeonatoId) {
+  if (!dados || typeof dados !== 'object' || Array.isArray(dados)) {
+    throw new Error('A forma de disputa do campeonato está inválida. Restaure os dados antes de continuar.');
   }
 
   const faseNome = limparCampo_(dados.faseNome || 'Classificação', 80);
@@ -1748,23 +2400,19 @@ function salvarGruposRodadas(payload) {
     throw new Error('Escolha um formato válido para a fase.');
   }
 
-  if (grupos < 1 || grupos > 32) {
+  if (!Number.isFinite(grupos) || grupos < 1 || grupos > 32) {
     throw new Error('A quantidade de grupos deve ficar entre 1 e 32.');
   }
 
-  if (vagasPorGrupo < 2 || vagasPorGrupo > 64) {
+  if (!Number.isFinite(vagasPorGrupo) || vagasPorGrupo < 2 || vagasPorGrupo > 64) {
     throw new Error('As vagas por grupo devem ficar entre 2 e 64.');
   }
 
-  if (rodadas < 1 || rodadas > 99) {
+  if (!Number.isFinite(rodadas) || rodadas < 1 || rodadas > 99) {
     throw new Error('A quantidade de rodadas deve ficar entre 1 e 99.');
   }
 
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-
-  try {
-    const registro = {
+  return {
       campeonatoId: campeonatoId,
       faseNome: faseNome,
       formato: formato,
@@ -1773,23 +2421,802 @@ function salvarGruposRodadas(payload) {
       rodadas: rodadas,
       idaVolta: Boolean(dados.idaVolta),
       observacoes: observacoes,
-      atualizadoEm: formatarDataHora_(new Date()),
-      atualizadoPor: sessao.email
-    };
+      atualizadoEm: String(dados.atualizadoEm || ''),
+      atualizadoPor: String(dados.atualizadoPor || '')
+  };
+}
 
-    PropertiesService.getScriptProperties()
-      .setProperty(chaveEstruturaCampeonato_(campeonatoId), JSON.stringify(registro));
+ /******************************************************
+  * TIMES DO CAMPEONATO
+  ******************************************************/
 
-    const tela = listarGruposRodadas();
-    tela.recado = 'Grupos e rodadas atualizados para ' + campeonato.nome + '.';
-    return tela;
-  } finally {
-    lock.releaseLock();
+ function chaveTimesCampeonato_(campeonatoId) {
+   return CAMPEONATO_TIMES_CHAVE + String(campeonatoId || '').trim();
+ }
+
+ function timesCampeonato_(campeonatoId) {
+   const chave = chaveTimesCampeonato_(campeonatoId);
+
+   try {
+     const bruto = PropertiesService.getScriptProperties().getProperty(chave);
+
+     if (!bruto) {
+       return [];
+     }
+
+     const lista = JSON.parse(bruto);
+
+    if (!Array.isArray(lista) || !lista.length) {
+       return [];
+     }
+
+    const nomes = lista.map(function (item) {
+      if (item && typeof item === 'object') {
+        return limparEspacos_(item.nome || item.time || item.equipe || '');
+      }
+
+      return limparEspacos_(item);
+    }).filter(function (nome) {
+      return !!nome;
+    });
+
+    return nomes.length ? higienizarEquipes_(nomes) : [];
+   } catch (e) {
+     return [];
+   }
+ }
+
+ function gravarTimesCampeonato_(campeonatoId, lista) {
+   const validos = lista.length ? higienizarEquipes_(lista) : [];
+
+   prepararHistoricoElenco_();
+   PropertiesService.getScriptProperties()
+     .setProperty(chaveTimesCampeonato_(campeonatoId), JSON.stringify(validos));
+   prepararHistoricoElenco_();
+ }
+
+  function detalharTimesCampeonato_(campeonatoId, times) {
+    const atletas = atletasCampeonato_(campeonatoId);
+    const comissao = comissaoTecnicaCampeonato_(campeonatoId);
+    const equipes = equipesRegistro_();
+
+    return (times || []).map(function (nomeTime) {
+      const chaveTime = chaveEquipe_(nomeTime);
+      const atletasVinculados = atletas.filter(function (atleta) {
+        return chaveEquipe_(atleta.timeVinculado) === chaveTime;
+      }).map(function (atleta) {
+        return {
+          id: atleta.id,
+          nome: atleta.nome,
+          apelido: atleta.apelido,
+          cpf: atleta.cpf,
+          foto: atleta.foto
+        };
+      });
+
+      return {
+        id: (equipes.find(function (item) { return chaveEquipe_(item.nome) === chaveTime; }) || {}).id || '',
+        escudo: (equipes.find(function (item) { return chaveEquipe_(item.nome) === chaveTime; }) || {}).escudo || '',
+        nome: nomeTime,
+        totalAtletas: atletasVinculados.length,
+        totalComissao: comissao.filter(function (item) { return chaveEquipe_(item.timeVinculado) === chaveTime; }).length,
+        atletas: atletasVinculados
+      };
+    });
+  }
+
+ function listarEquipesParticipantes() {
+   const sessao = identificarUsuario_();
+   if (!sessao.autorizado || ['admin', 'diretoria', 'associado'].indexOf(sessao.usuario.perfil) === -1) {
+     throw new Error('Você não tem permissão para consultar os elencos.');
+   }
+   const associado = sessao.usuario.perfil === 'associado';
+   const globais = equipesRegistro_();
+   const bloqueios = lerBloqueiosElenco_();
+   const campeonatos = campeonatosResumo_().filter(function (campeonato) {
+     return !associado || timesCampeonato_(campeonato.id).some(function (nome) {
+       return chaveEquipe_(nome) === chaveEquipe_(sessao.usuario.equipe);
+     });
+   });
+   return {
+     campeonatos: campeonatos,
+     equipesGlobais: associado ? [] : globais.filter(function (item) {
+       return obterEquipes_().some(function (nome) { return chaveEquipe_(nome) === chaveEquipe_(item.nome); });
+     }),
+     podeEditar: !associado,
+     registros: campeonatos.map(function (campeonato) {
+       const nomes = timesCampeonato_(campeonato.id).filter(function (nome) {
+         return !associado || chaveEquipe_(nome) === chaveEquipe_(sessao.usuario.equipe);
+       });
+       return {
+         campeonatoId: campeonato.id, campeonatoNome: campeonato.nome,
+         times: nomes,
+         timesDetalhados: detalharTimesCampeonato_(campeonato.id, nomes).map(function (time) {
+           return { id: time.id, nome: time.nome, escudo: time.escudo,
+             bloqueado: elencoBloqueado_(campeonato.id, time.id, bloqueios),
+             totalAtletas: time.totalAtletas, totalComissao: time.totalComissao };
+         })
+       };
+     })
+   };
+ }
+
+ function vincularEquipeParticipante(payload) {
+   sessaoCampeonato_();
+   const dados = payload || {};
+   equipesRegistro_();
+   const lock = LockService.getScriptLock();
+   lock.waitLock(30000);
+   try {
+     const equipe = equipesRegistro_(true).find(function (item) { return item.id === dados.equipeId; });
+     if (!equipe || !obterEquipes_().some(function (nome) { return chaveEquipe_(nome) === chaveEquipe_(equipe.nome); })) {
+       throw new Error('Escolha uma equipe do Banco de Dados de Equipes.');
+     }
+     salvarTimeCampeonatoInterno_({ campeonatoId: dados.campeonatoId, equipeExistente: equipe.nome });
+   } finally {
+     lock.releaseLock();
+   }
+   return listarEquipesParticipantes();
+ }
+
+ function listarTimesCampeonato() {
+   sessaoCampeonato_();
+
+   const campeonatos = campeonatosResumo_();
+
+   return {
+     campeonatos: campeonatos,
+     equipesGlobais: obterEquipes_(),
+     registros: campeonatos.map(function (campeonato) {
+       const times = timesCampeonato_(campeonato.id);
+
+       return {
+         campeonatoId: campeonato.id,
+         campeonatoNome: campeonato.nome,
+         temporada: campeonato.temporada,
+         status: campeonato.status,
+         total: times.length,
+          times: times,
+          timesDetalhados: detalharTimesCampeonato_(campeonato.id, times)
+       };
+     }),
+     podeEditar: true
+   };
+ }
+
+ function salvarTimeCampeonato(payload) {
+   sessaoCampeonato_();
+   equipesRegistro_();
+   const lock = LockService.getScriptLock();
+   lock.waitLock(30000);
+   try {
+     return salvarTimeCampeonatoInterno_(payload);
+   } finally {
+     lock.releaseLock();
+   }
+ }
+
+ function salvarTimeCampeonatoInterno_(payload) {
+   const sessao = sessaoCampeonato_();
+   const dados = payload || {};
+   const campeonatoId = String(dados.campeonatoId || '').trim();
+   const campeonatos = campeonatos_();
+   const campeonato = campeonatos.filter(function (item) {
+     return item.id === campeonatoId;
+   })[0];
+
+   if (!campeonato) {
+     throw new Error('Escolha um campeonato válido.');
+   }
+
+   const existente = limparEspacos_(dados.equipeExistente);
+   const novo = limparEspacos_(dados.equipeNova);
+
+   if (!existente && !novo) {
+     throw new Error('Escolha uma equipe existente ou informe um novo time.');
+   }
+
+   if (existente && novo) {
+     throw new Error('Escolha uma equipe existente ou digite uma nova, não os dois ao mesmo tempo.');
+   }
+
+   const nomeFinal = novo || existente;
+   const globais = obterEquipes_().slice();
+   const jaExisteGlobal = globais.some(function (nome) {
+     return chaveEquipe_(nome) === chaveEquipe_(nomeFinal);
+   });
+
+   if (!jaExisteGlobal) {
+     globais.push(nomeFinal);
+
+     const validas = higienizarEquipes_(globais);
+
+     PropertiesService.getScriptProperties()
+       .setProperty(CONFIG.equipes.chaveLista, JSON.stringify(validas));
+
+     publicarEquipes_(validas);
+   }
+
+   const lista = timesCampeonato_(campeonatoId).slice();
+   const repetido = lista.some(function (nome) {
+     return chaveEquipe_(nome) === chaveEquipe_(nomeFinal);
+   });
+
+   if (repetido) {
+     throw new Error('Este time já está vinculado a este campeonato.');
+   }
+
+   lista.push(nomeFinal);
+
+   gravarTimesCampeonato_(campeonatoId, lista);
+   equipesRegistro_(true);
+
+   const tela = listarTimesCampeonato();
+   tela.recado = 'Time vinculado ao campeonato: ' + nomeFinal;
+   return tela;
+ }
+
+ function removerTimeCampeonato(campeonatoId, nome) {
+   sessaoCampeonato_();
+   equipesRegistro_();
+   const lock = LockService.getScriptLock();
+   lock.waitLock(30000);
+   try {
+     return removerTimeCampeonatoInterno_(campeonatoId, nome);
+   } finally {
+     lock.releaseLock();
+   }
+ }
+
+ function removerTimeCampeonatoInterno_(campeonatoId, nome) {
+   sessaoCampeonato_();
+
+   const id = String(campeonatoId || '').trim();
+   const alvo = chaveEquipe_(nome);
+
+   if (!id || !alvo) {
+     throw new Error('Informe o campeonato e o time a remover.');
+   }
+   if (!campeonatos_().some(function (item) { return item.id === id; })
+       || !timesCampeonato_(id).some(function (item) { return chaveEquipe_(item) === alvo; })) {
+     throw new Error('Esta equipe não está vinculada a este campeonato.');
+   }
+
+    const atletasVinculados = atletasCampeonato_(id).filter(function (item) {
+      return chaveEquipe_(item.timeVinculado) === alvo;
+    });
+    const membrosVinculados = comissaoTecnicaCampeonato_(id).filter(function (item) {
+      return chaveEquipe_(item.timeVinculado) === alvo;
+    });
+
+    if (atletasVinculados.length || membrosVinculados.length) {
+      throw new Error('Não é possível remover este time porque ele possui '
+        + atletasVinculados.length + ' atleta(s) e '
+        + membrosVinculados.length + ' membro(s) da comissão vinculados.');
+    }
+
+   const lista = timesCampeonato_(id).filter(function (item) {
+     return chaveEquipe_(item) !== alvo;
+   });
+   gravarTimesCampeonato_(id, lista);
+
+   const tela = listarTimesCampeonato();
+   tela.recado = 'Time removido do campeonato: ' + nome;
+   return tela;
+ }
+
+ /******************************************************
+  * ATLETAS DO CAMPEONATO
+  ******************************************************/
+
+  const ATLETAS_CAMPEONATO_POSICOES = ['Indefinida', 'Goleiro', 'Zagueiro', 'Lateral', 'Meia', 'Atacante'];
+
+ function chaveAtletasCampeonato_(campeonatoId) {
+   return CAMPEONATO_ATLETAS_CHAVE + String(campeonatoId || '').trim();
+ }
+
+ function atletasCampeonato_(campeonatoId, persistirIds) {
+   const lista = lerListaCadastroDrive_(
+     arquivoCadastroPessoasCampeonato_(campeonatoId, 'Atletas'),
+     chaveAtletasCampeonato_(campeonatoId)
+   );
+   garantirIdsHistoricoElenco_(campeonatoId, 'atletas', lista, persistirIds);
+
+      return lista.filter(function (item) {
+        return item && typeof item === 'object' && String(item.nome || '').trim();
+      }).map(function (item) {
+        return {
+          id: String(item.id || '').trim() || gerarIdUnico_(),
+          nome: limparCampo_(item.nome || '', 100),
+          apelido: limparCampo_(item.apelido || '', 50),
+          numero: String(item.numero || '').trim() === '' ? '' : Number(item.numero),
+          posicao: String(item.posicao || '').trim() || 'Indefinida',
+          timeVinculado: String(item.timeVinculado || '').trim(),
+          cpf: String(item.cpf || '').trim(),
+          rg: String(item.rg || '').trim(),
+          foto: String(item.foto || '').trim(),
+          dataNascimento: String(item.dataNascimento || '').trim(),
+          ativo: Boolean(item.ativo !== false)
+        };
+      });
+ }
+
+  function gravarAtletasCampeonato_(campeonatoId, lista) {
+    const validos = (lista || []).filter(function (item) {
+      return item && typeof item === 'object' && String(item.nome || '').trim();
+    }).map(function (item) {
+      return {
+        id: String(item.id || '').trim() || gerarIdUnico_(),
+        nome: limparCampo_(item.nome || '', 100),
+        apelido: limparCampo_(item.apelido || '', 50),
+        numero: String(item.numero || '').trim() === '' ? '' : Number(item.numero),
+        posicao: String(item.posicao || '').trim() || 'Indefinida',
+        timeVinculado: String(item.timeVinculado || '').trim(),
+        cpf: String(item.cpf || '').trim(),
+        rg: String(item.rg || '').trim(),
+        foto: String(item.foto || '').trim(),
+        dataNascimento: String(item.dataNascimento || '').trim(),
+        ativo: Boolean(item.ativo !== false)
+      };
+    });
+
+    gravarElencoComHistorico_(campeonatoId, 'atletas', validos);
+  }
+
+ function listarAtletasCampeonato() {
+   sessaoCampeonato_();
+
+   const campeonatos = campeonatosResumo_();
+
+   return {
+     campeonatos: campeonatos,
+     times: (function () {
+       const times = {};
+
+       campeonatos.forEach(function (campeonato) {
+         times[campeonato.id] = timesCampeonato_(campeonato.id) || [];
+       });
+
+       return times;
+     })(),
+     registros: campeonatos.map(function (campeonato) {
+       const atletas = atletasCampeonato_(campeonato.id);
+       const times = timesCampeonato_(campeonato.id) || [];
+
+       return {
+         campeonatoId: campeonato.id,
+         campeonatoNome: campeonato.nome,
+         temporada: campeonato.temporada,
+         status: campeonato.status,
+         total: atletas.length,
+         atletas: atletas,
+         times: times
+       };
+     }),
+      posicoes: ATLETAS_CAMPEONATO_POSICOES.slice(),
+     podeEditar: true
+   };
+ }
+
+function validarDataNascimentoCampeonato_(valor, contexto) {
+  const texto = limparCampo_(valor, 10);
+  const partes = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!partes) {
+    throw new Error('Informe a data de nascimento ' + contexto + '.');
+  }
+
+  const ano = Number(partes[1]);
+  const mes = Number(partes[2]);
+  const dia = Number(partes[3]);
+  const data = new Date(ano, mes - 1, dia);
+
+  if (data.getFullYear() !== ano || data.getMonth() !== mes - 1 || data.getDate() !== dia) {
+    throw new Error('A data de nascimento informada ' + contexto + ' não existe no calendário.');
+  }
+
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  if (data > hoje) {
+    throw new Error('A data de nascimento informada ' + contexto + ' não pode ser futura.');
+  }
+
+  if (ano < 1900) {
+    throw new Error('Confira a data de nascimento informada ' + contexto + '.');
+  }
+
+  return partes[1] + '-' + partes[2] + '-' + partes[3];
+}
+
+function validarCpfCadastroCampeonato_(valor, contexto) {
+  const cpf = somenteDigitos_(valor || '');
+
+  if (!cpfValido_(cpf)) {
+    throw new Error('Informe um CPF válido ' + contexto + '.');
+  }
+
+  return cpf;
+}
+
+function validarTimeVinculadoCampeonato_(campeonatoId, valor, contexto) {
+  const timeVinculado = limparCampo_(valor || '', 100);
+
+  if (!timeVinculado) {
+    throw new Error('Selecione o time vinculado ' + contexto + '.');
+  }
+
+  const times = timesCampeonato_(campeonatoId) || [];
+  if (!times.some(function (t) {
+    return chaveEquipe_(t) === chaveEquipe_(timeVinculado);
+  })) {
+    throw new Error('Time não encontrado neste campeonato.');
+  }
+
+  return timeVinculado;
+}
+
+function existeCpfNoCadastro_(lista, cpf, idIgnorado) {
+  return (lista || []).some(function (item) {
+    if (idIgnorado && item.id === idIgnorado) {
+      return false;
+    }
+
+    return somenteDigitos_(item.cpf || '') === cpf;
+  });
+}
+
+function validarCpfUnicoEntreCadastros_(campeonatoId, cpf, origem, idIgnorado) {
+  const outraLista = origem === 'atleta'
+    ? comissaoTecnicaCampeonato_(campeonatoId)
+    : atletasCampeonato_(campeonatoId);
+
+  if (existeCpfNoCadastro_(outraLista, cpf, idIgnorado)) {
+    throw new Error('Este CPF já está cadastrado na ' + (origem === 'atleta' ? 'comissão técnica' : 'lista de atletas') + ' deste campeonato.');
   }
 }
 
-/******************************************************
- * SOLICITACOES DE INSCRICAO, REMOCAO E PORTABILIDADE
+ function salvarAtletaCampeonato(payload) {
+   sessaoCampeonato_();
+   return salvarAtletaCampeonatoInterno_(payload);
+ }
+
+ function salvarAtletaCampeonatoInterno_(payload, contexto) {
+   const dados = payload || {};
+   const campeonatoId = String(dados.campeonatoId || '').trim();
+   const campeonatos = campeonatos_();
+   const campeonato = campeonatos.filter(function (item) {
+     return item.id === campeonatoId;
+   })[0];
+
+   if (!campeonato) {
+     throw new Error('Escolha um campeonato válido.');
+   }
+
+   const nome = limparCampo_(dados.nome || '', 100);
+   const apelido = limparCampo_(dados.apelido || '', 50);
+    const numeroInformado = String(dados.numero || '').trim();
+    const numero = numeroInformado === '' ? '' : Number(numeroInformado);
+   const posicao = String(dados.posicao || 'Indefinida').trim();
+    const timeVinculado = validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'do atleta');
+    const cpf = validarCpfCadastroCampeonato_(dados.cpf, 'do atleta');
+   const rg = limparCampo_(dados.rg || '', 30);
+   const foto = String(dados.foto || '').trim();
+    const dataNascimento = validarDataNascimentoCampeonato_(dados.dataNascimento, 'do atleta');
+
+   if (!nome) {
+     throw new Error('Informe o nome do atleta.');
+   }
+
+    if (ATLETAS_CAMPEONATO_POSICOES.indexOf(posicao) === -1) {
+      throw new Error('Escolha uma posição válida para o atleta.');
+   }
+
+    if (numeroInformado !== '' && (isNaN(numero) || numero < 0 || numero > 99)) {
+     throw new Error('O número da camisa deve ficar entre 0 e 99.');
+   }
+
+
+    if (!foto) {
+      throw new Error('Envie a foto do atleta.');
+   }
+
+   const lock = LockService.getScriptLock();
+   lock.waitLock(30000);
+
+   try {
+     validarAlvoElenco_(contexto, 'atletas', '');
+     const lista = atletasCampeonato_(campeonatoId).slice();
+      const validacaoDuplicata = validarDuplicataAtleta_(nome, cpf, lista);
+
+      if (!validacaoDuplicata.ok) {
+        throw new Error(validacaoDuplicata.motivo);
+     }
+
+      validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'atleta');
+
+     const novoAtleta = {
+       id: gerarIdUnico_(),
+       nome: nome,
+       apelido: apelido,
+       numero: numero,
+       posicao: posicao,
+       timeVinculado: timeVinculado,
+       cpf: cpf,
+       rg: rg,
+       foto: foto,
+        dataNascimento: dataNascimento,
+       ativo: true
+     };
+
+     lista.push(novoAtleta);
+
+     gravarAtletasCampeonato_(campeonatoId, lista);
+   } finally {
+     lock.releaseLock();
+   }
+
+    const tela = respostaCadastro_(contexto);
+   tela.recado = 'Atleta ' + nome + ' adicionado ao campeonato.';
+   return tela;
+ }
+
+ function removerAtletaCampeonato(campeonatoId, atletaId) {
+   sessaoCampeonato_();
+   return removerAtletaCampeonatoInterno_(campeonatoId, atletaId);
+ }
+
+ function removerAtletaCampeonatoInterno_(campeonatoId, atletaId, contexto) {
+   const id = String(campeonatoId || '').trim();
+   const alvoId = String(atletaId || '').trim();
+
+   if (!id || !alvoId) {
+     throw new Error('Informe o campeonato e o atleta a remover.');
+   }
+
+   const lock = LockService.getScriptLock();
+   lock.waitLock(30000);
+
+   try {
+     validarAlvoElenco_(contexto, 'atletas', alvoId);
+     const lista = atletasCampeonato_(id).filter(function (item) {
+       return item.id !== alvoId;
+     });
+
+     gravarAtletasCampeonato_(id, lista);
+   } finally {
+     lock.releaseLock();
+   }
+
+    const tela = respostaCadastro_(contexto);
+   tela.recado = 'Atleta removido do campeonato.';
+   return tela;
+ }
+
+  function atualizarAtletaCampeonato(payload) {
+     sessaoCampeonato_();
+     return atualizarAtletaCampeonatoInterno_(payload);
+   }
+
+  function atualizarAtletaCampeonatoInterno_(payload, contexto) {
+     const dados = payload || {};
+     const campeonatoId = String(dados.campeonatoId || '').trim();
+     const atletaId = String(dados.atletaId || '').trim();
+
+     if (!campeonatoId || !atletaId) {
+       throw new Error('Informe campeonato e atleta válidos.');
+     }
+
+     const nome = limparCampo_(dados.nome || '', 100);
+     const apelido = limparCampo_(dados.apelido || '', 50);
+      const numeroInformado = String(dados.numero || '').trim();
+      const numero = numeroInformado === '' ? '' : Number(numeroInformado);
+     const posicao = String(dados.posicao || 'Indefinida').trim();
+      const timeVinculado = validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'do atleta');
+      const cpf = validarCpfCadastroCampeonato_(dados.cpf, 'do atleta');
+     const ativo = Boolean(dados.ativo !== false);
+     const rg = limparCampo_(dados.rg || '', 30);
+     const foto = String(dados.foto || '').trim();
+      const dataNascimento = validarDataNascimentoCampeonato_(dados.dataNascimento, 'do atleta');
+
+     if (!nome) {
+       throw new Error('Informe o nome do atleta.');
+     }
+
+      if (ATLETAS_CAMPEONATO_POSICOES.indexOf(posicao) === -1) {
+        throw new Error('Escolha uma posição válida para o atleta.');
+      }
+
+      if (numeroInformado !== '' && (isNaN(numero) || numero < 0 || numero > 99)) {
+       throw new Error('O número da camisa deve ficar entre 0 e 99.');
+     }
+
+
+     const lock = LockService.getScriptLock();
+     lock.waitLock(30000);
+
+     try {
+       validarAlvoElenco_(contexto, 'atletas', atletaId);
+       const lista = atletasCampeonato_(campeonatoId);
+       const atletaExistente = lista.find(function (a) { return a.id === atletaId; });
+
+       if (!atletaExistente) {
+         throw new Error('Atleta não encontrado neste campeonato.');
+       }
+
+        if (!foto && !atletaExistente.foto) {
+          throw new Error('Envie a foto do atleta.');
+       }
+
+        const validacaoDuplicata = validarDuplicataAtleta_(nome, cpf, lista, atletaId);
+        if (!validacaoDuplicata.ok) {
+          throw new Error(validacaoDuplicata.motivo);
+        }
+
+        validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'atleta');
+
+       const novaLista = lista.map(function (item) {
+         if (item.id === atletaId) {
+           return {
+             id: atletaId,
+             nome: nome,
+             apelido: apelido,
+             numero: numero,
+             posicao: posicao,
+             timeVinculado: timeVinculado,
+              cpf: cpf,
+              rg: rg,
+              foto: foto || item.foto,
+              dataNascimento: dataNascimento,
+             ativo: ativo
+           };
+         }
+
+         return item;
+       });
+
+       gravarAtletasCampeonato_(campeonatoId, novaLista);
+     } finally {
+       lock.releaseLock();
+     }
+
+      const tela = respostaCadastro_(contexto);
+     tela.recado = 'Atleta ' + nome + ' atualizado com sucesso.';
+     return tela;
+   }
+
+  /******************************************************
+   * COMISSÃO TÉCNICA DO CAMPEONATO
+   ******************************************************/
+
+  const COMISSAO_CARGOS = ['Massagista', 'Médico', 'Diretoria', 'Treinador', 'Auxiliar Técnico', 'Preparador Físico', 'Preparador de Goleiros', 'Fisioterapeuta'];
+
+  function validarCargoComissao_(valor, membroExistente) {
+    const cargo = String(valor || '').trim();
+    if (COMISSAO_CARGOS.indexOf(cargo) !== -1
+        || (membroExistente && cargo === membroExistente.cargo)) return cargo;
+    throw new Error('Selecione um cargo válido para a comissão técnica.');
+  }
+
+  function chaveComissaoCampeonato_(campeonatoId) {
+    return chaveComissaoTecnicaCampeonato_(campeonatoId);
+  }
+
+function listarCadastroPessoasCampeonato() {
+  sessaoCampeonato_();
+
+  const campeonatos = campeonatosResumo_();
+  const times = {};
+
+  const registros = campeonatos.map(function (campeonato) {
+    const timesDoCampeonato = timesCampeonato_(campeonato.id) || [];
+    times[campeonato.id] = timesDoCampeonato;
+
+    return {
+      campeonatoId: campeonato.id,
+      campeonatoNome: campeonato.nome,
+      temporada: campeonato.temporada,
+      status: campeonato.status,
+      times: timesDoCampeonato,
+      atletas: atletasCampeonato_(campeonato.id),
+      comissao: comissaoTecnicaCampeonato_(campeonato.id)
+    };
+  });
+
+  return {
+    campeonatos: campeonatos,
+    times: times,
+    registros: registros,
+    posicoes: ATLETAS_CAMPEONATO_POSICOES.slice(),
+    cargos: COMISSAO_CARGOS.slice(),
+    podeEditar: true
+  };
+}
+
+  function comissaoCampeonato_(campeonatoId) {
+    const lista = lerListaCadastroDrive_(
+      arquivoCadastroPessoasCampeonato_(campeonatoId, 'Comissao Tecnica'),
+      chaveComissaoCampeonato_(campeonatoId)
+    );
+
+      return lista.filter(function (item) {
+        return item && typeof item === 'object' && String(item.nome || '').trim();
+      }).map(function (item) {
+        return {
+          id: String(item.id || '').trim() || gerarIdUnico_(),
+          nome: limparCampo_(item.nome || '', 100),
+          cargo: String(item.cargo || '').trim() || 'Comissão Técnica',
+          cpf: String(item.cpf || '').trim(),
+          foto: String(item.foto || '').trim(),
+          dataNascimento: String(item.dataNascimento || '').trim(),
+          telefone: String(item.telefone || '').trim(),
+          email: String(item.email || '').trim(),
+          timeVinculado: String(item.timeVinculado || '').trim(),
+          ativo: Boolean(item.ativo !== false)
+        };
+      });
+  }
+
+  function gravarComissaoCampeonato_(campeonatoId, lista) {
+    const validos = (lista || []).filter(function (item) {
+      return item && typeof item === 'object' && String(item.nome || '').trim();
+    }).map(function (item) {
+      return {
+        id: String(item.id || '').trim() || gerarIdUnico_(),
+        nome: limparCampo_(item.nome || '', 100),
+        cargo: String(item.cargo || '').trim() || 'Comissão Técnica',
+        cpf: somenteDigitos_(item.cpf || ''),
+        rg: limparCampo_(item.rg || '', 30),
+        foto: String(item.foto || '').trim(),
+        dataNascimento: String(item.dataNascimento || '').trim(),
+        telefone: somenteDigitos_(item.telefone || ''),
+        email: String(item.email || '').trim().toLowerCase(),
+        timeVinculado: String(item.timeVinculado || '').trim(),
+        ativo: Boolean(item.ativo !== false)
+      };
+    });
+
+    gravarElencoComHistorico_(campeonatoId, 'comissao', validos);
+  }
+
+  function listarComissaoCampeonato() {
+    sessaoCampeonato_();
+
+    const campeonatos = campeonatosResumo_();
+
+    return {
+      campeonatos: campeonatos,
+      times: (function () {
+        const times = {};
+
+        campeonatos.forEach(function (campeonato) {
+          times[campeonato.id] = timesCampeonato_(campeonato.id) || [];
+        });
+
+        return times;
+      })(),
+      cargos: COMISSAO_CARGOS.map(function (cargo) {
+        return { id: cargo, nome: cargo };
+      }),
+      registros: campeonatos.map(function (campeonato) {
+        const comissao = comissaoCampeonato_(campeonato.id);
+        const times = timesCampeonato_(campeonato.id) || [];
+
+        return {
+          campeonatoId: campeonato.id,
+          campeonatoNome: campeonato.nome,
+          temporada: campeonato.temporada,
+          status: campeonato.status,
+          total: comissao.length,
+          membros: comissao,
+          times: times
+        };
+      })
+    };
+  }
+
+  /******************************************************
+   * SOLICITACOES DE INSCRICAO, REMOCAO E PORTABILIDADE
  *
  * Somente leitura. Quem escreve os arquivos e o formulario publico
  * (apps-scripts/inscricao-portabilidade), que grava o TXT em "Entrada";
@@ -1823,7 +3250,7 @@ function listarSolicitacoes() {
   const sessao = identificarUsuario_();
 
   if (!sessao.autorizado || !moduloLiberado_('solicitacoes', sessao.usuario.perfil)) {
-    throw new Error('Você não tem permissão para consultar as solicitações de inscrição.');
+    throw new Error('Você não tem permissão para consultar as solicitacoes de inscrição.');
   }
 
   const raiz = pastaSolicitacoes_();
@@ -1833,8 +3260,8 @@ function listarSolicitacoes() {
   SOLICITACOES_PASTAS.forEach(function (origem) {
     const pastas = raiz.getFoldersByName(origem.pasta);
 
-    // A pasta "Processados"/"Falhas" so existe depois que a automacao roda
-    // pela primeira vez; a ausencia dela nao e erro.
+    // A pasta tambem recebe PDFs e anexos; so os TXT das inscricoes interessam.
+    // O formulario nomeia o arquivo como "<EQUIPE>-<data>-<milissegundos>.txt"
     if (!pastas.hasNext()) {
       return;
     }
@@ -1845,8 +3272,8 @@ function listarSolicitacoes() {
       const arquivo = iterador.next();
       const nome = arquivo.getName();
 
-      // A pasta tambem recebe PDFs e anexos; so os TXT da sumula interessam.
-      if (!/^SUMULA_.+\.txt$/i.test(nome)) {
+      // Arquivo de solicitacao tem carimbo de millisegundos no final do nome
+      if (carimboDoNome_(nome) === 0) {
         continue;
       }
 
@@ -1866,7 +3293,7 @@ function listarSolicitacoes() {
     const arquivo = iteradorRaiz.next();
     const nome = arquivo.getName();
 
-    if (!/^SUMULA_.+\.txt$/i.test(nome) || nomesVistos[nome]) {
+    if (carimboDoNome_(nome) === 0 || nomesVistos[nome]) {
       continue;
     }
 
@@ -1914,7 +3341,7 @@ function pastaSolicitacoes_() {
   try {
     return DriveApp.getFolderById(CONFIG.solicitacoes.pastaRaizId);
   } catch (e) {
-    throw new Error('Não foi possível abrir a pasta das inscrições no Drive (id '
+    throw new Error('Não foi possível abrir a pasta das inscricoes no Drive (id '
       + CONFIG.solicitacoes.pastaRaizId + '). Verifique se o seu e-mail tem acesso a ela. '
       + 'Detalhe: ' + (e && e.message ? e.message : e));
   }
@@ -2399,7 +3826,7 @@ function interpretarSumula_(conteudo, achado) {
     const corte = texto.indexOf(':');
 
     if (corte === -1) {
-      // Na secao PARTIDA a linha sem ":" e o confronto "<time> x <time>".
+      // Na secao PARTIDA a linha sem ":" e o confronto "<time> x <time>"
       if (secao === 'partida' && !confronto) {
         confronto = texto;
       }
@@ -2967,7 +4394,7 @@ function situacaoCadastroAtleta_(ultimaMovimentacao, ultimaProcessada) {
   }
 
   if (ultimaProcessada.acao === 'Remocao') {
-    return 'Removido';
+    return 'Fora da competição';
   }
 
   if (ultimaProcessada.acao === 'Portabilidade') {
@@ -3246,11 +4673,6 @@ function interpretarNota_(conteudo, arquivo) {
     arbitro: arbitroAchado ? arbitroAchado[1].trim() : '',
     cidade: dataNotaAchada ? dataNotaAchada[1].trim() : '',
     dataNota: dataNotaAchada ? dataNotaAchada[2].trim() : '',
-
-    // Nota publicada deveria estar sempre fechada; o campo existe para a
-    // tela avisar caso um rascunho chegue ao Drive por engano. O aviso do
-    // topo cita "[A DEFINIR PELA COMISSÃO]" so como instrucao, por isso a
-    // busca e feita no corpo (mesmo criterio de nota_pdf.tem_pendencias).
     pendente: corpo.join('\n').indexOf('[A DEFINIR') !== -1,
     texto: aparar_(corpo).join('\n'),
     arquivoNome: arquivo.getName(),
@@ -3547,886 +4969,6 @@ const ASSOCIADOS_COLUNAS = [
   { id: 'atualizadoEm', titulo: 'Atualizado em' },
   { id: 'atualizadoPor', titulo: 'Atualizado por' }
 ];
-
-/**
- * Prepara o cadastro: cria (ou reaproveita) a planilha e a pasta de
- * documentos dentro da pasta raiz do projeto e guarda os ids.
- *
- * Execute UMA VEZ pelo editor, com a conta dona da pasta raiz.
- */
-function prepararAssociados() {
-  const planilha = planilhaAssociados_();
-  const pasta = pastaAssociados_();
-
-  Logger.log('PLANILHA ..........: %s', planilha.getUrl());
-  Logger.log('PASTA DE DOCUMENTOS: %s', pasta.getUrl());
-  Logger.log('Cadastro de associados pronto.');
-}
-
-/**
- * Publica as consultas individuais existentes sem compartilhar a planilha
- * geral. Execute como administrador apos prepararAssociados() ou apos editar
- * a planilha manualmente; novos cadastros pela tela sao publicados ao salvar.
- */
-function publicarCadastrosAssociados() {
-  const sessao = identificarUsuario_();
-
-  if (!sessao.autorizado || sessao.usuario.perfil !== 'admin') {
-    throw new Error('Apenas administradores podem publicar os cadastros de associados.');
-  }
-
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-
-  try {
-    const propriedades = PropertiesService.getScriptProperties();
-    const prefixo = CONFIG.associados.prefixoConsulta;
-    const antigos = Object.keys(propriedades.getProperties()).filter(function (chave) {
-      return chave.indexOf(prefixo) === 0;
-    });
-    const linhas = abaAssociados_().getDataRange().getValues().slice(1);
-    const atuais = {};
-
-    linhas.forEach(function (linha) {
-      const registro = linhaParaAssociado_(linha);
-
-      if (registro.equipe) {
-        const chave = chaveConsultaAssociado_(registro.equipe);
-        propriedades.setProperty(chave, JSON.stringify(registro));
-        atuais[chave] = true;
-      }
-    });
-
-    antigos.forEach(function (chave) {
-      if (!atuais[chave]) {
-        propriedades.deleteProperty(chave);
-      }
-    });
-
-    Logger.log('Cadastros individuais publicados: %s', Object.keys(atuais).length);
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/**
- * Chave deterministica para o cadastro de uma equipe nas propriedades.
- * @param {string} equipe
- * @return {string}
- */
-function chaveConsultaAssociado_(equipe) {
-  return CONFIG.associados.prefixoConsulta + chaveEquipe_(equipe);
-}
-
-/**
- * Devolve os dados necessarios para montar a tela de associados.
- * Chamada pelo cliente; refaz a verificacao de permissao no servidor.
- * @return {{registros: Array<Object>, equipes: Array<string>, status: Array<Object>,
- *           documentos: Array<Object>, podeEditar: boolean, planilhaUrl: string}}
- */
-function listarAssociados() {
-  const sessao = sessaoAssociados_();
-  const daEquipe = perfilDaEquipe_(sessao.usuario.perfil);
-  let registros;
-
-  if (daEquipe) {
-    if (!sessao.usuario.equipe) {
-      throw new Error('Sua conta não tem equipe vinculada. Solicite a correção ao administrador.');
-    }
-
-    // O associado nao le a planilha geral nem recebe dados de outras
-    // equipes: so consulta a copia publicada para a propria equipe.
-    const bruto = PropertiesService.getScriptProperties()
-      .getProperty(chaveConsultaAssociado_(sessao.usuario.equipe));
-
-    if (!bruto) {
-      throw new Error('O cadastro da sua equipe ainda não foi publicado. '
-        + 'Peça à administração para cadastrar a equipe ou executar publicarCadastrosAssociados().');
-    }
-
-    registros = [JSON.parse(bruto)];
-  } else {
-    registros = abaAssociados_().getDataRange().getValues().slice(1).map(function (linha) {
-      return linhaParaAssociado_(linha);
-    }).filter(function (registro) {
-      return Boolean(registro.equipe);
-    }).sort(function (a, b) {
-      return a.equipe.localeCompare(b.equipe, 'pt-BR');
-    });
-  }
-
-  return {
-    registros: registros,
-    equipes: daEquipe ? [sessao.usuario.equipe].filter(String) : obterEquipes_(),
-    status: ASSOCIADOS_STATUS,
-    documentos: ASSOCIADOS_DOCUMENTOS,
-    podeEditar: podeEditarAssociados_(sessao.usuario.perfil),
-    somenteMinhaEquipe: daEquipe,
-    minhaEquipe: daEquipe ? sessao.usuario.equipe : '',
-    planilhaUrl: !daEquipe && podeEditarAssociados_(sessao.usuario.perfil)
-      ? planilhaAssociados_().getUrl() : ''
-  };
-}
-
-/**
- * Grava um associado. Cria quando a equipe ainda nao tem cadastro e
- * atualiza quando ja tem: existe um registro por equipe.
- *
- * @param {Object} payload Campos da tela, com os anexos em base64.
- * @return {{sucesso: boolean, equipe: string, novo: boolean}}
- */
-function salvarAssociado(payload) {
-  const sessao = sessaoAssociados_();
-
-  if (!podeEditarAssociados_(sessao.usuario.perfil)) {
-    throw new Error('O seu perfil pode consultar os associados, mas não alterar o cadastro.');
-  }
-
-  const dados = validarAssociado_(payload);
-  const lock = LockService.getScriptLock();
-
-  // Sem a trava, dois cadastros simultaneos da mesma equipe criariam
-  // duas linhas em vez de uma.
-  lock.waitLock(30000);
-
-  try {
-    const aba = abaAssociados_();
-    const valores = aba.getDataRange().getValues();
-    const chave = chaveEquipe_(dados.equipe);
-
-    let linhaExistente = 0;
-    let anterior = null;
-
-    for (let i = 1; i < valores.length; i++) {
-      if (chaveEquipe_(valores[i][0]) === chave) {
-        linhaExistente = i + 1;
-        anterior = linhaParaAssociado_(valores[i]);
-        break;
-      }
-    }
-
-    const agora = new Date();
-    const registro = Object.assign({}, anterior || {}, dados);
-
-    ASSOCIADOS_DOCUMENTOS.forEach(function (documento) {
-      const enviado = payload.arquivos && payload.arquivos[documento.id];
-
-      if (enviado && enviado.base64) {
-        registro[documento.id] = salvarDocumento_(enviado, dados.equipe, documento);
-      } else if (!anterior) {
-        registro[documento.id] = '';
-      }
-    });
-
-    registro.criadoEm = (anterior && anterior.criadoEm) || formatarDataHora_(agora);
-    registro.atualizadoEm = formatarDataHora_(agora);
-    registro.atualizadoPor = sessao.email;
-
-    const linha = ASSOCIADOS_COLUNAS.map(function (coluna) {
-      return registro[coluna.id] || '';
-    });
-
-    if (linhaExistente) {
-      aba.getRange(linhaExistente, 1, 1, linha.length).setValues([linha]);
-    } else {
-      aba.appendRow(linha);
-    }
-
-    PropertiesService.getScriptProperties()
-      .setProperty(chaveConsultaAssociado_(dados.equipe), JSON.stringify(linhaParaAssociado_(linha)));
-
-    return { sucesso: true, equipe: dados.equipe, novo: !linhaExistente };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/**
- * Confere a sessao e o acesso ao modulo de associados.
- * @return {Object} Sessao do usuario.
- */
-function sessaoAssociados_() {
-  const sessao = identificarUsuario_();
-
-  if (!sessao.autorizado || !moduloLiberado_('associados', sessao.usuario.perfil)) {
-    throw new Error('Você não tem permissão para acessar o cadastro de associados.');
-  }
-
-  return sessao;
-}
-
-/**
- * Diz se o perfil pode cadastrar e editar.
- * @param {string} perfil
- * @return {boolean}
- */
-function podeEditarAssociados_(perfil) {
-  return ASSOCIADOS_PERFIS_EDICAO.indexOf(perfil) !== -1;
-}
-
-/**
- * Transforma uma linha da planilha em objeto.
- * @param {Array} linha
- * @return {Object}
- */
-function linhaParaAssociado_(linha) {
-  const registro = {};
-
-  ASSOCIADOS_COLUNAS.forEach(function (coluna, i) {
-    registro[coluna.id] = linha[i] === null || linha[i] === undefined ? '' : String(linha[i]).trim();
-  });
-
-  registro.pendencias = ASSOCIADOS_DOCUMENTOS.filter(function (documento) {
-    return !registro[documento.id];
-  }).length;
-
-  return registro;
-}
-
-/**
- * Normaliza o nome da equipe para comparacao, ignorando acentos,
- * espacos repetidos e maiusculas.
- * @param {string} equipe
- * @return {string}
- */
-function chaveEquipe_(equipe) {
-  return String(equipe || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(new RegExp('\\s+', 'g'), ' ')
-    .trim()
-    .toUpperCase();
-}
-
-/**
- * Valida e limpa os campos do formulario.
- * @param {Object} payload
- * @return {Object} Campos prontos para gravar.
- */
-function validarAssociado_(payload) {
-  const dados = payload || {};
-  const equipe = limparCampo_(dados.equipe, 120);
-
-  if (!equipe) {
-    throw new Error('Escolha a equipe associada.');
-  }
-
-  const status = ASSOCIADOS_STATUS.filter(function (item) {
-    return item.id === dados.status;
-  })[0];
-
-  if (!status) {
-    throw new Error('Escolha a situação do associado.');
-  }
-
-  const nome = limparCampo_(dados.nome, 150);
-
-  if (nome.split(' ').filter(Boolean).length < 2) {
-    throw new Error('Informe o nome completo do representante legal.');
-  }
-
-  const email = limparCampo_(dados.email, 150).toLowerCase();
-
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    throw new Error('Informe um e-mail válido para o representante legal.');
-  }
-
-  const telefone = somenteDigitos_(dados.telefone);
-
-  if (telefone.length < 10 || telefone.length > 11) {
-    throw new Error('Informe o telefone com DDD, com 10 ou 11 dígitos.');
-  }
-
-  const cpf = somenteDigitos_(dados.cpf);
-
-  if (!cpfValido_(cpf)) {
-    throw new Error('O CPF informado não é válido. Confira os números digitados.');
-  }
-
-  const rg = limparCampo_(dados.rg, 30);
-
-  if (!rg) {
-    throw new Error('Informe o RG do representante legal.');
-  }
-
-  const cep = somenteDigitos_(dados.cep);
-
-  if (cep.length !== 8) {
-    throw new Error('Informe o CEP com 8 dígitos.');
-  }
-
-  // Confere antes de cortar: "MGX" cortado viraria "MG" e gravaria uma UF
-  // que a pessoa nao escolheu.
-  const uf = limparCampo_(dados.uf, 10).toUpperCase();
-
-  if (!/^[A-Z]{2}$/.test(uf)) {
-    throw new Error('Informe a UF com duas letras (ex.: MG).');
-  }
-
-  return {
-    equipe: equipe,
-    status: status.id,
-    nome: nome,
-    nascimento: validarNascimento_(dados.nascimento),
-    email: email,
-    telefone: telefone,
-    cep: cep,
-    logradouro: exigirCampo_(dados.logradouro, 150, 'Informe o logradouro (rua, avenida).'),
-    numero: exigirCampo_(dados.numero, 20, 'Informe o número do endereço.'),
-    complemento: limparCampo_(dados.complemento, 60),
-    bairro: exigirCampo_(dados.bairro, 80, 'Informe o bairro.'),
-    cidade: exigirCampo_(dados.cidade, 80, 'Informe a cidade.'),
-    uf: uf,
-    rg: rg,
-    cpf: cpf
-  };
-}
-
-/**
- * Confere a data de nascimento e devolve no formato dd/mm/aaaa.
- * @param {string} valor Data no formato aaaa-mm-dd vinda do formulario.
- * @return {string}
- */
-function validarNascimento_(valor) {
-  const texto = limparCampo_(valor, 10);
-  const partes = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-
-  if (!partes) {
-    throw new Error('Informe a data de nascimento do representante legal.');
-  }
-
-  const ano = Number(partes[1]);
-  const mes = Number(partes[2]);
-  const dia = Number(partes[3]);
-  const data = new Date(ano, mes - 1, dia);
-
-  if (data.getFullYear() !== ano || data.getMonth() !== mes - 1 || data.getDate() !== dia) {
-    throw new Error('A data de nascimento informada não existe no calendário.');
-  }
-
-  const hoje = new Date();
-  const idade = (hoje - data) / (365.25 * 24 * 60 * 60 * 1000);
-
-  if (idade < 18) {
-    throw new Error('O representante legal precisa ser maior de 18 anos.');
-  }
-
-  if (idade > 110) {
-    throw new Error('Confira a data de nascimento: o ano informado está muito distante.');
-  }
-
-  return partes[3] + '/' + partes[2] + '/' + partes[1];
-}
-
-/**
- * Confere os digitos verificadores do CPF.
- * @param {string} cpf Somente digitos.
- * @return {boolean}
- */
-function cpfValido_(cpf) {
-  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) {
-    return false;
-  }
-
-  for (let posicao = 9; posicao <= 10; posicao++) {
-    let soma = 0;
-
-    for (let i = 0; i < posicao; i++) {
-      soma += Number(cpf.charAt(i)) * (posicao + 1 - i);
-    }
-
-    const resto = (soma * 10) % 11;
-    const digito = resto === 10 ? 0 : resto;
-
-    if (digito !== Number(cpf.charAt(posicao))) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/**
- * Guarda um anexo na pasta da equipe e devolve a URL.
- * @param {Object} arquivo Objeto com nome, tipo, tamanho e base64.
- * @param {string} equipe
- * @param {Object} documento Item de ASSOCIADOS_DOCUMENTOS.
- * @return {string} URL do arquivo no Drive.
- */
-function salvarDocumento_(arquivo, equipe, documento) {
-  const tipo = String(arquivo.tipo || '').toLowerCase();
-
-  if (ASSOCIADOS_TIPOS_ARQUIVO.indexOf(tipo) === -1) {
-    throw new Error('O arquivo "' + documento.nome + '" deve ser PDF, JPG, PNG ou WEBP.');
-  }
-
-  const bytes = Utilities.base64Decode(arquivo.base64);
-
-  if (bytes.length > CONFIG.associados.maxArquivoBytes) {
-    throw new Error('O arquivo "' + documento.nome + '" passa de 5 MB. Reduza o tamanho e tente de novo.');
-  }
-
-  const pastaEquipe = subpastaEquipe_(equipe);
-  const extensao = (String(arquivo.nome || '').match(/\.[a-zA-Z0-9]+$/) || [''])[0];
-  const nomeFinal = nomeSeguroAssociados_(equipe) + ' - ' + documento.nome + extensao;
-
-  // Remove a versao anterior do mesmo documento para a pasta nao acumular
-  // copias antigas e confundir quem consulta.
-  const antigos = pastaEquipe.getFilesByName(nomeFinal);
-
-  while (antigos.hasNext()) {
-    antigos.next().setTrashed(true);
-  }
-
-  return pastaEquipe
-    .createFile(Utilities.newBlob(bytes, tipo, nomeFinal))
-    .getUrl();
-}
-
-/**
- * Pasta da equipe dentro da pasta de documentos, criada quando faltar.
- * @param {string} equipe
- * @return {DriveApp.Folder}
- */
-function subpastaEquipe_(equipe) {
-  const raiz = pastaAssociados_();
-  const nome = nomeSeguroAssociados_(equipe);
-  const existentes = raiz.getFoldersByName(nome);
-
-  return existentes.hasNext() ? existentes.next() : raiz.createFolder(nome);
-}
-
-/**
- * Pasta de documentos dos associados, dentro da pasta raiz do projeto.
- * @return {DriveApp.Folder}
- */
-function pastaAssociados_() {
-  const propriedades = PropertiesService.getScriptProperties();
-  const guardado = propriedades.getProperty(CONFIG.associados.chavePasta);
-
-  if (guardado) {
-    try {
-      const pasta = DriveApp.getFolderById(guardado);
-
-      if (!pasta.isTrashed()) {
-        return pasta;
-      }
-    } catch (e) {
-      // Pasta removida ou sem acesso: procura de novo pelo nome.
-    }
-  }
-
-  const raiz = pastaRaizProjeto_();
-  const existentes = raiz.getFoldersByName(CONFIG.associados.pastaDocumentos);
-  const pasta = existentes.hasNext()
-    ? existentes.next()
-    : raiz.createFolder(CONFIG.associados.pastaDocumentos);
-
-  propriedades.setProperty(CONFIG.associados.chavePasta, pasta.getId());
-
-  return pasta;
-}
-
-/**
- * Planilha do cadastro, criada dentro da pasta raiz quando ainda nao existir.
- * @return {SpreadsheetApp.Spreadsheet}
- */
-function planilhaAssociados_() {
-  const propriedades = PropertiesService.getScriptProperties();
-  const guardado = propriedades.getProperty(CONFIG.associados.chavePlanilha);
-
-  if (guardado) {
-    try {
-      return SpreadsheetApp.openById(guardado);
-    } catch (e) {
-      // Planilha removida ou sem acesso: procura de novo pelo nome.
-    }
-  }
-
-  const raiz = pastaRaizProjeto_();
-  const existentes = raiz.getFilesByName(CONFIG.associados.planilha);
-  let planilha;
-
-  if (existentes.hasNext()) {
-    planilha = SpreadsheetApp.openById(existentes.next().getId());
-  } else {
-    planilha = SpreadsheetApp.create(CONFIG.associados.planilha);
-
-    // Uma planilha nova nasce na raiz do Meu Drive; movemos para a pasta
-    // do projeto para nao espalhar arquivos soltos.
-    DriveApp.getFileById(planilha.getId()).moveTo(raiz);
-  }
-
-  propriedades.setProperty(CONFIG.associados.chavePlanilha, planilha.getId());
-
-  return planilha;
-}
-
-/**
- * Aba do cadastro, com o cabecalho garantido.
- * @return {SpreadsheetApp.Sheet}
- */
-function abaAssociados_() {
-  const planilha = planilhaAssociados_();
-  const aba = planilha.getSheetByName(CONFIG.associados.aba)
-    || planilha.insertSheet(CONFIG.associados.aba);
-
-  const titulos = ASSOCIADOS_COLUNAS.map(function (coluna) {
-    return coluna.titulo;
-  });
-
-  const primeira = aba.getRange(1, 1, 1, titulos.length).getValues()[0];
-  const precisaCabecalho = titulos.some(function (titulo, i) {
-    return String(primeira[i] || '') !== titulo;
-  });
-
-  if (precisaCabecalho) {
-    aba.getRange(1, 1, 1, titulos.length).setValues([titulos]).setFontWeight('bold');
-    aba.setFrozenRows(1);
-  }
-
-  return aba;
-}
-
-/**
- * Pasta raiz do projeto no Drive.
- * @return {DriveApp.Folder}
- */
-function pastaRaizProjeto_() {
-  try {
-    return DriveApp.getFolderById(CONFIG.pastaRaizId);
-  } catch (e) {
-    throw new Error('Não foi possível abrir a pasta "AEUV - Automação" no Drive (id '
-      + CONFIG.pastaRaizId + '). Confirme que o seu e-mail tem acesso de edição a ela. '
-      + 'Detalhe: ' + (e && e.message ? e.message : e));
-  }
-}
-
-/**
- * Deixa o texto seguro para usar como nome de arquivo ou pasta.
- * @param {string} valor
- * @return {string}
- */
-function nomeSeguroAssociados_(valor) {
-  return String(valor || '').replace(/[\\/:*?"<>|]+/g, '-').trim().substring(0, 80);
-}
-
-/**
- * Corta espacos e limita o tamanho de um campo de texto.
- * @param {string} valor
- * @param {number} limite
- * @return {string}
- */
-function limparCampo_(valor, limite) {
-  return limparEspacos_(valor).substring(0, limite);
-}
-
-/**
- * Como limparCampo_, mas recusa valor vazio.
- * @param {string} valor
- * @param {number} limite
- * @param {string} mensagem Erro mostrado quando o campo vier vazio.
- * @return {string}
- */
-function exigirCampo_(valor, limite, mensagem) {
-  const limpo = limparCampo_(valor, limite);
-
-  if (!limpo) {
-    throw new Error(mensagem);
-  }
-
-  return limpo;
-}
-
-/**
- * Mantem apenas os digitos de um valor.
- * @param {string} valor
- * @return {string}
- */
-function somenteDigitos_(valor) {
-  return String(valor === null || valor === undefined ? '' : valor).replace(/\D+/g, '');
-}
-
-/**
- * Data e hora no formato usado na planilha.
- * @param {Date} data
- * @return {string}
- */
-function formatarDataHora_(data) {
-  return Utilities.formatDate(data, 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm');
-}
-
-/******************************************************
- * LOGO
- ******************************************************/
-
-/**
- * Converte o logo configurado em data URL para uso no HTML.
- * @return {string}
- */
-function obterLogo_() {
-  try {
-    const arquivo = DriveApp.getFileById(CONFIG.logoFileId);
-    const blob = arquivo.getBlob();
-
-    return 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes());
-  } catch (e) {
-    return CONFIG.faviconUrl;
-  }
-}
-
-/******************************************************
- * DIAGNOSTICO
- ******************************************************/
-
-/**
- * Mostra no log como o sistema esta enxergando o usuario atual.
- * Util para conferir se a implantacao esta no modo correto.
- */
-function diagnosticarAcesso() {
-  const sessao = identificarUsuario_();
-
-  Logger.log('E-mail lido .......: %s', sessao.email || '(vazio)');
-  Logger.log('Autorizado ........: %s', sessao.autorizado);
-  Logger.log('Motivo ............: %s', sessao.motivo || '-');
-  Logger.log('Autorizados ativos : %s', obterUsuarios_().length);
-
-  if (!sessao.email) {
-    Logger.log('ATENCAO: implante como "Executar como: Usuario que acessa o app da web".');
-  }
-}
-
-/**
- * Confere passo a passo a leitura do controle de punicoes.
- *
- * Execute esta funcao pelo editor quando a tela acusar falta de acesso. Alem de
- * mostrar onde a leitura parou, a execucao pelo editor pede o consentimento dos
- * servicos usados pelo codigo: se o app tiver sido autorizado antes de passar a
- * ler o Drive, e isso que restabelece a permissao.
- */
-function diagnosticarPunicoes() {
-  Logger.log('Usuario ...........: %s', obterEmailAtivo_() || '(vazio)');
-
-  let raiz;
-
-  try {
-    raiz = DriveApp.getFolderById(CONFIG.punicoes.pastaSumulasId);
-    Logger.log('Pasta das sumulas .: %s', raiz.getName());
-  } catch (e) {
-    Logger.log('FALHOU ao abrir a pasta das sumulas: %s', e && e.message ? e.message : e);
-    Logger.log('Confira o id em CONFIG.punicoes.pastaSumulasId e o seu acesso a essa pasta.');
-    return;
-  }
-
-  const pastas = raiz.getFoldersByName(CONFIG.punicoes.subpasta);
-
-  if (!pastas.hasNext()) {
-    Logger.log('FALHOU: subpasta "%s" nao encontrada.', CONFIG.punicoes.subpasta);
-    Logger.log('Subpastas existentes:');
-
-    const todas = raiz.getFolders();
-
-    while (todas.hasNext()) {
-      Logger.log(' - %s', todas.next().getName());
-    }
-
-    return;
-  }
-
-  const pasta = pastas.next();
-  const arquivos = pasta.getFilesByName(CONFIG.punicoes.arquivo);
-
-  if (!arquivos.hasNext()) {
-    Logger.log('FALHOU: arquivo "%s" nao encontrado na subpasta.', CONFIG.punicoes.arquivo);
-    Logger.log('Arquivos existentes:');
-
-    const todos = pasta.getFiles();
-
-    while (todos.hasNext()) {
-      Logger.log(' - %s', todos.next().getName());
-    }
-
-    return;
-  }
-
-  const registros = interpretarPunicoes_(arquivos.next().getBlob().getDataAsString('UTF-8'));
-
-  Logger.log('Leitura concluida .: %s punicao(oes) reconhecida(s).', registros.length);
-}
-
-/**
- * Confere a leitura das solicitacoes de inscricao.
- *
- * Execute pelo editor quando a tela acusar erro. Mostra quantos arquivos
- * existem em cada subpasta e o conteudo reconhecido no mais recente.
- */
-function diagnosticarSolicitacoes() {
-  Logger.log('Usuario ...........: %s', obterEmailAtivo_() || '(vazio)');
-
-  let raiz;
-
-  try {
-    raiz = pastaSolicitacoes_();
-    Logger.log('Pasta das inscricoes: %s', raiz.getName());
-  } catch (e) {
-    Logger.log('FALHOU: %s', e && e.message ? e.message : e);
-    return;
-  }
-
-  SOLICITACOES_PASTAS.forEach(function (origem) {
-    const pastas = raiz.getFoldersByName(origem.pasta);
-
-    if (!pastas.hasNext()) {
-      Logger.log('%s: subpasta nao encontrada (normal se a automacao ainda nao rodou).', origem.pasta);
-      return;
-    }
-
-    const arquivos = pastas.next().getFiles();
-    let total = 0;
-
-    while (arquivos.hasNext()) {
-      arquivos.next();
-      total++;
-    }
-
-    Logger.log('%s: %s arquivo(s).', origem.pasta, total);
-  });
-
-  const arquivosRaizSol = raiz.getFiles();
-  let totalRaizSol = 0;
-  while (arquivosRaizSol.hasNext()) {
-    if (arquivosRaizSol.next().getName().toLowerCase().slice(-4) === '.txt') {
-      totalRaizSol++;
-    }
-  }
-  Logger.log('Raiz (Aguardando) .: %s TXT(s).', totalRaizSol);
-
-  const resultados = indiceResultados_(raiz);
-
-  Logger.log('Resultados ........: %s solicitacao(oes) com resultado publicado pela automacao.',
-    Object.keys(resultados).length);
-
-  const dados = listarSolicitacoes();
-
-  Logger.log('Leitura concluida .: %s solicitacao(oes) reconhecida(s) de %s arquivo(s).',
-    dados.registros.length, dados.total);
-
-  if (dados.registros.length) {
-    const primeira = dados.registros[0];
-
-    Logger.log('Mais recente ......: %s | %s | %s | %s pessoa(s) | resultado: %s',
-      primeira.protocolo || '(sem protocolo)', primeira.equipe, primeira.situacao, primeira.quantidade,
-      primeira.resultadoPdfUrl || primeira.resultadoTxtUrl ? 'sim' : 'nao');
-  }
-}
-
-/**
- * Confere a leitura das sumulas digitais.
- *
- * Execute pelo editor quando a tela acusar erro. Mostra quantos arquivos
- * existem em cada subpasta e o que foi reconhecido no mais recente.
- */
-function diagnosticarSumulas() {
-  Logger.log('Usuario ...........: %s', obterEmailAtivo_() || '(vazio)');
-
-  let raiz;
-
-  try {
-    raiz = pastaSumulas_();
-    Logger.log('Pasta das sumulas .: %s', raiz.getName());
-  } catch (e) {
-    Logger.log('FALHOU: %s', e && e.message ? e.message : e);
-    return;
-  }
-
-  SUMULAS_PASTAS.forEach(function (origem) {
-    const pastas = raiz.getFoldersByName(origem.pasta);
-
-    if (!pastas.hasNext()) {
-      Logger.log('%s: subpasta nao encontrada (normal se a automacao ainda nao rodou).', origem.pasta);
-      return;
-    }
-
-    const arquivos = pastas.next().getFiles();
-    let total = 0;
-    let sumulas = 0;
-
-    while (arquivos.hasNext()) {
-      const arq = arquivos.next();
-      total++;
-
-      if (/^SUMULA_.+\.txt$/i.test(arq.getName())) {
-        sumulas++;
-      }
-    }
-
-    Logger.log('%s: %s arquivo(s), sendo %s sumula(s).', origem.pasta, total, sumulas);
-  });
-
-  const arquivosRaizSum = raiz.getFiles();
-  let totalRaizSum = 0;
-  while (arquivosRaizSum.hasNext()) {
-    if (/^SUMULA_.+\.txt$/i.test(arquivosRaizSum.next().getName())) {
-      totalRaizSum++;
-    }
-  }
-  Logger.log('Raiz (Aguardando) .: %s sumula(s).', totalRaizSum);
-
-  const dados = listarSumulas();
-
-  Logger.log('Leitura concluida .: %s sumula(s) reconhecida(s) de %s arquivo(s).',
-    dados.registros.length, dados.total);
-
-  if (dados.registros.length) {
-    const primeira = dados.registros[0];
-
-    Logger.log('Mais recente ......: %s | %s | %s | %s envolvido(s) | relato: %s caractere(s) | PDF: %s',
-      primeira.protocolo || '(sem protocolo)', primeira.confronto || '(sem partida)',
-      primeira.situacao, primeira.quantidade, primeira.fatos.length,
-      primeira.pdfUrl ? 'sim' : 'nao');
-  }
-}
-
-/**
- * Confere passo a passo o cadastro de associados.
- *
- * Execute pelo editor quando a tela acusar erro. Alem de mostrar onde parou,
- * a execucao pelo editor pede o consentimento dos servicos usados pelo codigo.
- */
-function diagnosticarAssociados() {
-  Logger.log('Usuario ...........: %s', obterEmailAtivo_() || '(vazio)');
-
-  let raiz;
-
-  try {
-    raiz = pastaRaizProjeto_();
-    Logger.log('Pasta raiz ........: %s', raiz.getName());
-  } catch (e) {
-    Logger.log('FALHOU: %s', e && e.message ? e.message : e);
-    return;
-  }
-
-  try {
-    const planilha = planilhaAssociados_();
-    Logger.log('Planilha ..........: %s', planilha.getUrl());
-  } catch (e) {
-    Logger.log('FALHOU ao abrir a planilha: %s', e && e.message ? e.message : e);
-    Logger.log('Confira se voce tem acesso de edicao a pasta raiz.');
-    return;
-  }
-
-  try {
-    Logger.log('Pasta documentos ..: %s', pastaAssociados_().getUrl());
-  } catch (e) {
-    Logger.log('FALHOU ao abrir a pasta de documentos: %s', e && e.message ? e.message : e);
-    return;
-  }
-
-  const aba = abaAssociados_();
-  const total = Math.max(0, aba.getLastRow() - 1);
-
-  Logger.log('Leitura concluida .: %s associado(s) cadastrado(s).', total);
-}
 
 /******************************************************
  * ATAS DE REUNIOES
@@ -5117,6 +5659,437 @@ function salvarComprovanteFinanceiro_(arquivo, dataMov, descricao) {
 }
 
 /**
+ * Prepara o cadastro: cria (ou reaproveita) a planilha e a pasta de
+ * documentos dentro da pasta raiz do projeto e guarda os ids.
+ *
+ * Execute UMA VEZ pelo editor, com a conta dona da pasta raiz.
+ */
+function prepararAssociados() {
+  const planilha = planilhaAssociados_();
+  const pasta = pastaAssociados_();
+
+  Logger.log('PLANILHA ..........: %s', planilha.getUrl());
+  Logger.log('PASTA DE DOCUMENTOS: %s', pasta.getUrl());
+  Logger.log('Cadastro de associados pronto.');
+}
+
+/**
+ * Publica as consultas individuais existentes sem compartilhar a planilha
+ * geral. Execute como administrador apos prepararAssociados() ou apos editar
+ * a planilha manualmente; novos cadastros pela tela sao publicados ao salvar.
+ */
+function publicarCadastrosAssociados() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || sessao.usuario.perfil !== 'admin') {
+    throw new Error('Apenas administradores podem publicar os cadastros de associados.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const propriedades = PropertiesService.getScriptProperties();
+    const prefixo = CONFIG.associados.prefixoConsulta;
+    const antigos = Object.keys(propriedades.getProperties()).filter(function (chave) {
+      return chave.indexOf(prefixo) === 0;
+    });
+    const linhas = abaAssociados_().getDataRange().getValues().slice(1);
+    const atuais = {};
+
+    linhas.forEach(function (linha) {
+      const registro = linhaParaAssociado_(linha);
+
+      if (registro.equipe) {
+        const chave = chaveConsultaAssociado_(registro.equipe);
+        propriedades.setProperty(chave, JSON.stringify(registro));
+        atuais[chave] = true;
+      }
+    });
+
+    antigos.forEach(function (chave) {
+      if (!atuais[chave]) {
+        propriedades.deleteProperty(chave);
+      }
+    });
+
+    Logger.log('Cadastros individuais publicados: %s', Object.keys(atuais).length);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Chave deterministica para o cadastro de uma equipe nas propriedades.
+ * @param {string} equipe
+ * @return {string}
+ */
+function chaveConsultaAssociado_(equipe) {
+  return CONFIG.associados.prefixoConsulta + chaveEquipe_(equipe);
+}
+
+/**
+ * Devolve os dados necessarios para montar a tela de associados.
+ * Chamada pelo cliente; refaz a verificacao de permissao no servidor.
+ * @return {{registros: Array<Object>, equipes: Array<string>, status: Array<Object>,
+ *           documentos: Array<Object>, podeEditar: boolean, planilhaUrl: string}}
+ */
+function listarAssociados() {
+  const sessao = sessaoAssociados_();
+  const daEquipe = perfilDaEquipe_(sessao.usuario.perfil);
+  let registros;
+
+  if (daEquipe) {
+    if (!sessao.usuario.equipe) {
+      throw new Error('Sua conta não tem equipe vinculada. Solicite a correção ao administrador.');
+    }
+
+    // O associado nao le a planilha geral nem recebe dados de outras
+    // equipes: so consulta a copia publicada para a propria equipe.
+    const bruto = PropertiesService.getScriptProperties()
+      .getProperty(chaveConsultaAssociado_(sessao.usuario.equipe));
+
+    if (!bruto) {
+      throw new Error('O cadastro da sua equipe ainda não foi publicado. '
+        + 'Peça à administração para cadastrar a equipe ou executar publicarCadastrosAssociados().');
+    }
+
+    registros = [JSON.parse(bruto)];
+  } else {
+    registros = abaAssociados_().getDataRange().getValues().slice(1).map(function (linha) {
+      return linhaParaAssociado_(linha);
+    }).filter(function (registro) {
+      return Boolean(registro.equipe);
+    }).sort(function (a, b) {
+      return a.equipe.localeCompare(b.equipe, 'pt-BR');
+    });
+  }
+
+  return {
+    registros: registros,
+    equipes: daEquipe ? [sessao.usuario.equipe].filter(String) : obterEquipes_(),
+    status: ASSOCIADOS_STATUS,
+    documentos: ASSOCIADOS_DOCUMENTOS,
+    podeEditar: podeEditarAssociados_(sessao.usuario.perfil),
+    somenteMinhaEquipe: daEquipe,
+    minhaEquipe: daEquipe ? sessao.usuario.equipe : '',
+    planilhaUrl: !daEquipe && podeEditarAssociados_(sessao.usuario.perfil)
+      ? planilhaAssociados_().getUrl() : ''
+  };
+}
+
+/**
+ * Grava um associado. Cria quando a equipe ainda nao tem cadastro e
+ * atualiza quando ja tem: existe um registro por equipe.
+ *
+ * @param {Object} payload Campos da tela, com os anexos em base64.
+ * @return {{sucesso: boolean, equipe: string, novo: boolean}}
+ */
+function salvarAssociado(payload) {
+  const sessao = sessaoAssociados_();
+
+  if (!podeEditarAssociados_(sessao.usuario.perfil)) {
+    throw new Error('O seu perfil pode consultar os associados, mas não alterar o cadastro.');
+  }
+
+  const dados = validarAssociado_(payload);
+  const lock = LockService.getScriptLock();
+
+  // Sem a trava, dois cadastros simultaneos da mesma equipe criariam
+  // duas linhas em vez de uma.
+  lock.waitLock(30000);
+
+  try {
+    const aba = abaAssociados_();
+    const valores = aba.getDataRange().getValues();
+    const chave = chaveEquipe_(dados.equipe);
+
+    let linhaExistente = 0;
+    let anterior = null;
+
+    for (let i = 1; i < valores.length; i++) {
+      if (chaveEquipe_(valores[i][0]) === chave) {
+        linhaExistente = i + 1;
+        anterior = linhaParaAssociado_(valores[i]);
+        break;
+      }
+    }
+
+    const agora = new Date();
+    const registro = Object.assign({}, anterior || {}, dados);
+
+    ASSOCIADOS_DOCUMENTOS.forEach(function (documento) {
+      const enviado = payload.arquivos && payload.arquivos[documento.id];
+
+      if (enviado && enviado.base64) {
+        registro[documento.id] = salvarDocumento_(enviado, dados.equipe, documento);
+      } else if (!anterior) {
+        registro[documento.id] = '';
+      }
+    });
+
+    registro.criadoEm = (anterior && anterior.criadoEm) || formatarDataHora_(agora);
+    registro.atualizadoEm = formatarDataHora_(agora);
+    registro.atualizadoPor = sessao.email;
+
+    const linha = ASSOCIADOS_COLUNAS.map(function (coluna) {
+      return registro[coluna.id] || '';
+    });
+
+    if (linhaExistente) {
+      aba.getRange(linhaExistente, 1, 1, linha.length).setValues([linha]);
+    } else {
+      aba.appendRow(linha);
+    }
+
+    PropertiesService.getScriptProperties()
+      .setProperty(chaveConsultaAssociado_(dados.equipe), JSON.stringify(linhaParaAssociado_(linha)));
+
+    return { sucesso: true, equipe: dados.equipe, novo: !linhaExistente };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Confere a sessao e o acesso ao modulo de associados.
+ * @return {Object} Sessao do usuario.
+ */
+function sessaoAssociados_() {
+  const sessao = identificarUsuario_();
+
+  if (!sessao.autorizado || !moduloLiberado_('associados', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para acessar o cadastro de associados.');
+  }
+
+  return sessao;
+}
+
+/**
+ * Diz se o perfil pode cadastrar e editar.
+ * @param {string} perfil
+ * @return {boolean}
+ */
+function podeEditarAssociados_(perfil) {
+  return ASSOCIADOS_PERFIS_EDICAO.indexOf(perfil) !== -1;
+}
+
+/**
+ * Transforma uma linha da planilha em objeto.
+ * @param {Array} linha
+ * @return {Object}
+ */
+function linhaParaAssociado_(linha) {
+  const registro = {};
+
+  ASSOCIADOS_COLUNAS.forEach(function (coluna, i) {
+    registro[coluna.id] = linha[i] === null || linha[i] === undefined ? '' : String(linha[i]).trim();
+  });
+
+  registro.pendencias = ASSOCIADOS_DOCUMENTOS.filter(function (documento) {
+    return !registro[documento.id];
+  }).length;
+
+  return registro;
+}
+
+/**
+ * Normaliza o nome da equipe para comparacao, ignorando acentos,
+ * espacos repetidos e maiusculas.
+ * @param {string} equipe
+ * @return {string}
+ */
+function chaveEquipe_(equipe) {
+  return String(equipe || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(new RegExp('\\s+', 'g'), ' ')
+    .trim()
+    .toUpperCase();
+}
+
+/**
+ * Valida e limpa os campos do formulario.
+ * @param {Object} payload
+ * @return {Object} Campos prontos para gravar.
+ */
+function validarAssociado_(payload) {
+  const dados = payload || {};
+  const equipe = limparCampo_(dados.equipe, 120);
+
+  if (!equipe) {
+    throw new Error('Escolha a equipe associada.');
+  }
+
+  const status = ASSOCIADOS_STATUS.filter(function (item) {
+    return item.id === dados.status;
+  })[0];
+
+  if (!status) {
+    throw new Error('Escolha a situação do associado.');
+  }
+
+  const nome = limparCampo_(dados.nome, 150);
+
+  if (nome.split(' ').filter(Boolean).length < 2) {
+    throw new Error('Informe o nome completo do representante legal.');
+  }
+
+  const email = limparCampo_(dados.email, 150).toLowerCase();
+
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new Error('Informe um e-mail válido para o representante legal.');
+  }
+
+  const telefone = somenteDigitos_(dados.telefone);
+
+  if (telefone.length < 10 || telefone.length > 11) {
+    throw new Error('Informe o telefone com DDD, com 10 ou 11 dígitos.');
+  }
+
+  const cpf = somenteDigitos_(dados.cpf);
+
+  if (!cpfValido_(cpf)) {
+    throw new Error('O CPF informado não é válido. Confira os números digitados.');
+  }
+
+  const rg = limparCampo_(dados.rg, 30);
+
+  if (!rg) {
+    throw new Error('Informe o RG do representante legal.');
+  }
+
+  const cep = somenteDigitos_(dados.cep);
+
+  if (cep.length !== 8) {
+    throw new Error('Informe o CEP com 8 dígitos.');
+  }
+
+  // Confere antes de cortar: "MGX" cortado viraria "MG" e gravaria uma UF
+  // que a pessoa nao escolheu.
+  const uf = limparCampo_(dados.uf, 10).toUpperCase();
+
+  if (!/^[A-Z]{2}$/.test(uf)) {
+    throw new Error('Informe a UF com duas letras (ex.: MG).');
+  }
+
+  return {
+    equipe: equipe,
+    status: status.id,
+    nome: nome,
+    nascimento: validarNascimento_(dados.nascimento),
+    email: email,
+    telefone: telefone,
+    cep: cep,
+    logradouro: exigirCampo_(dados.logradouro, 150, 'Informe o logradouro (rua, avenida).'),
+    numero: exigirCampo_(dados.numero, 20, 'Informe o número do endereço.'),
+    complemento: limparCampo_(dados.complemento, 60),
+    bairro: exigirCampo_(dados.bairro, 80, 'Informe o bairro.'),
+    cidade: exigirCampo_(dados.cidade, 80, 'Informe a cidade.'),
+    uf: uf,
+    rg: rg,
+    cpf: cpf
+  };
+}
+
+/**
+ * Confere a data de nascimento e devolve no formato dd/mm/aaaa.
+ * @param {string} valor Data no formato aaaa-mm-dd vinda do formulario.
+ * @return {string}
+ */
+function validarNascimento_(valor) {
+  const texto = limparCampo_(valor, 10);
+  const partes = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!partes) {
+    throw new Error('Informe a data de nascimento do representante legal.');
+  }
+
+  const ano = Number(partes[1]);
+  const mes = Number(partes[2]);
+  const dia = Number(partes[3]);
+  const data = new Date(ano, mes - 1, dia);
+
+  if (data.getFullYear() !== ano || data.getMonth() !== mes - 1 || data.getDate() !== dia) {
+    throw new Error('A data de nascimento informada não existe no calendário.');
+  }
+
+  const hoje = new Date();
+  const idade = (hoje - data) / (365.25 * 24 * 60 * 60 * 1000);
+
+  if (idade < 18) {
+    throw new Error('O representante legal precisa ser maior de 18 anos.');
+  }
+
+  if (idade > 110) {
+    throw new Error('Confira a data de nascimento: o ano informado está muito distante.');
+  }
+
+  return partes[3] + '/' + partes[2] + '/' + partes[1];
+}
+
+/**
+ * Confere os digitos verificadores do CPF.
+ * @param {string} cpf Somente digitos.
+ * @return {boolean}
+ */
+function cpfValido_(cpf) {
+  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) {
+    return false;
+  }
+
+  for (let posicao = 9; posicao <= 10; posicao++) {
+    let soma = 0;
+
+    for (let i = 0; i < posicao; i++) {
+      soma += Number(cpf.charAt(i)) * (posicao + 1 - i);
+    }
+
+    const resto = (soma * 10) % 11;
+    const digito = resto === 10 ? 0 : resto;
+
+    if (digito !== Number(cpf.charAt(posicao))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Guarda um anexo na pasta da equipe e devolve a URL.
+ * @param {Object} arquivo Objeto com nome, tipo, tamanho e base64.
+ * @param {string} equipe
+ * @param {Object} documento Item de ASSOCIADOS_DOCUMENTOS.
+ * @return {string} URL do arquivo no Drive.
+ */
+function salvarDocumento_(arquivo, equipe, documento) {
+  const tipo = String(arquivo.tipo || '').toLowerCase();
+
+  if (ASSOCIADOS_TIPOS_ARQUIVO.indexOf(tipo) === -1) {
+    throw new Error('O arquivo "' + documento.nome + '" deve ser PDF, JPG, PNG ou WEBP.');
+  }
+
+  const bytes = Utilities.base64Decode(arquivo.base64);
+
+  if (bytes.length > CONFIG.associados.maxArquivoBytes) {
+    throw new Error('O arquivo "' + documento.nome + '" passa de 5 MB. Reduza o tamanho e tente de novo.');
+  }
+
+  const dataLimpa = String(arquivo.data || '').replace(/[^\d]/g, '');
+  const descLimpa = String(documento.nome || 'comprovante').replace(/[\\/:*?"<>|]+/g, '-').substring(0, 30);
+  const ext = arquivo.nome && arquivo.nome.indexOf('.') !== -1 ? arquivo.nome.split('.').pop() : 'pdf';
+  const nomeArquivo = 'DOC-' + dataLimpa + '-' + descLimpa + '.' + ext;
+
+  const blob = Utilities.newBlob(bytes, arquivo.tipo || 'application/pdf', nomeArquivo);
+  const pasta = pastaAssociados_();
+  const file = pasta.createFile(blob);
+  file.setDescription('Documento do associado: ' + equipe + ' - ' + documento.nome);
+
+  return file.getUrl();
+}
+
+/**
  * Localiza ou cria a pasta Comprovantes - Financeiro no Drive.
  */
 function pastaComprovantesFinanceiro_() {
@@ -5191,4 +6164,542 @@ function abaFinanceiro_() {
   return aba;
 }
 
+/******************************************************
+ * GESTÃO DA COMISSÃO TÉCNICA DO CAMPEONATO
+ ******************************************************/
 
+  function chaveComissaoTecnicaCampeonato_(campeonatoId) {
+    return 'aeuv.comissaoTecnica.campeonato.' + String(campeonatoId || '').trim();
+  }
+
+  function comissaoTecnicaCampeonato_(campeonatoId, persistirIds) {
+    const lista = lerListaCadastroDrive_(
+      arquivoCadastroPessoasCampeonato_(campeonatoId, 'Comissao Tecnica'),
+      chaveComissaoTecnicaCampeonato_(campeonatoId)
+    );
+    garantirIdsHistoricoElenco_(campeonatoId, 'comissao', lista, persistirIds);
+
+      return lista.filter(function (item) {
+        return item && typeof item === 'object' && String(item.nome || '').trim();
+      }).map(function (item) {
+        return {
+          id: String(item.id || '').trim() || gerarIdUnico_(),
+          nome: limparCampo_(item.nome || '', 100),
+          cargo: String(item.cargo || '').trim() || 'Comissão Técnica',
+          telefone: String(item.telefone || '').trim(),
+          email: String(item.email || '').trim(),
+          cpf: somenteDigitos_(item.cpf || ''),
+          rg: limparCampo_(item.rg || '', 30),
+          foto: String(item.foto || '').trim(),
+          dataNascimento: String(item.dataNascimento || '').trim(),
+          timeVinculado: String(item.timeVinculado || '').trim()
+        };
+      });
+  }
+
+  function gravarComissaoTecnicaCampeonato_(campeonatoId, lista) {
+    const validos = (lista || []).filter(function (item) {
+      return item && typeof item === 'object' && String(item.nome || '').trim();
+    }).map(function (item) {
+      return {
+        id: String(item.id || '').trim() || gerarIdUnico_(),
+        nome: limparCampo_(item.nome || '', 100),
+        cargo: String(item.cargo || '').trim() || 'Comissão Técnica',
+        telefone: String(item.telefone || '').trim(),
+        email: String(item.email || '').trim(),
+        cpf: somenteDigitos_(item.cpf || ''),
+        rg: limparCampo_(item.rg || '', 30),
+        foto: String(item.foto || '').trim(),
+        dataNascimento: String(item.dataNascimento || '').trim(),
+        timeVinculado: String(item.timeVinculado || '').trim()
+      };
+    });
+
+    gravarElencoComHistorico_(campeonatoId, 'comissao', validos);
+  }
+
+  function listarComissaoTecnica() {
+    sessaoCampeonato_();
+
+    const campeonatos = campeonatosResumo_();
+
+    return {
+      campeonatos: campeonatos,
+      cargos: COMISSAO_CARGOS.slice(),
+      times: (function () {
+        const times = {};
+
+        campeonatos.forEach(function (campeonato) {
+          times[campeonato.id] = timesCampeonato_(campeonato.id) || [];
+        });
+
+        return times;
+      })(),
+      registros: campeonatos.map(function (campeonato) {
+        const comissao = comissaoTecnicaCampeonato_(campeonato.id);
+        const times = timesCampeonato_(campeonato.id) || [];
+
+        return {
+          campeonatoId: campeonato.id,
+          campeonatoNome: campeonato.nome,
+          temporada: campeonato.temporada,
+          status: campeonato.status,
+          total: comissao.length,
+          membros: comissao,
+          times: times
+        };
+      })
+    };
+  }
+
+  function salvarMembroComissao(payload) {
+    sessaoCampeonato_();
+    return salvarMembroComissaoInterno_(payload);
+  }
+
+  function salvarMembroComissaoInterno_(payload, contexto) {
+    const dados = payload || {};
+    const campeonatoId = String(dados.campeonatoId || '').trim();
+
+    if (!campeonatoId) {
+      throw new Error('Informe o campeonato válido.');
+    }
+
+    const nome = limparCampo_(dados.nome || '', 100);
+    const cargo = validarCargoComissao_(dados.cargo);
+    const rg = limparCampo_(dados.rg || '', 30);
+    const telefone = String(dados.telefone || '').trim();
+    const email = String(dados.email || '').trim();
+    const cpf = validarCpfCadastroCampeonato_(dados.cpf, 'da comissão técnica');
+    const foto = String(dados.foto || '').trim();
+    const dataNascimento = validarDataNascimentoCampeonato_(dados.dataNascimento, 'da comissão técnica');
+    const timeVinculado = validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'da comissão técnica');
+
+    if (!nome) {
+      throw new Error('Informe o nome do membro.');
+    }
+    if (!foto) {
+      throw new Error('Envie a foto do membro da comissão técnica.');
+    }
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+
+    try {
+      validarAlvoElenco_(contexto, 'comissao', '');
+      const lista = comissaoTecnicaCampeonato_(campeonatoId);
+      const validacaoDuplicata = validarDuplicataComissao_(nome, cpf, lista);
+
+      if (!validacaoDuplicata.ok) {
+        throw new Error(validacaoDuplicata.motivo);
+      }
+
+      validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'comissao');
+
+      lista.push({
+        id: gerarIdUnico_(),
+        nome: nome,
+        cargo: cargo,
+        rg: rg,
+        telefone: telefone,
+        email: email,
+        cpf: cpf,
+        foto: foto,
+        dataNascimento: dataNascimento,
+        timeVinculado: timeVinculado
+      });
+
+      gravarComissaoTecnicaCampeonato_(campeonatoId, lista);
+    } finally {
+      lock.releaseLock();
+    }
+
+    const tela = respostaCadastro_(contexto);
+    tela.recado = 'Membro ' + nome + ' adicionado à comissão técnica.';
+    return tela;
+  }
+
+  function atualizarMembroComissao(payload) {
+    sessaoCampeonato_();
+    return atualizarMembroComissaoInterno_(payload);
+  }
+
+  function atualizarMembroComissaoInterno_(payload, contexto) {
+    const dados = payload || {};
+    const campeonatoId = String(dados.campeonatoId || '').trim();
+    const membroId = String(dados.membroId || '').trim();
+
+    if (!campeonatoId || !membroId) {
+      throw new Error('Informe campeonato e membro válidos.');
+    }
+
+    const nome = limparCampo_(dados.nome || '', 100);
+    const cpf = validarCpfCadastroCampeonato_(dados.cpf, 'da comissão técnica');
+    const foto = String(dados.foto || '').trim();
+    const dataNascimento = validarDataNascimentoCampeonato_(dados.dataNascimento, 'da comissão técnica');
+    const timeVinculado = validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'da comissão técnica');
+
+    if (!nome) {
+      throw new Error('Informe o nome do membro.');
+    }
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+
+    try {
+      validarAlvoElenco_(contexto, 'comissao', membroId);
+      const existentes = comissaoTecnicaCampeonato_(campeonatoId);
+      const membroExistente = existentes.find(function (item) { return item.id === membroId; });
+
+      if (!membroExistente) {
+        throw new Error('Membro não encontrado neste campeonato.');
+      }
+      const cargo = validarCargoComissao_(dados.cargo, membroExistente);
+      const rg = Object.prototype.hasOwnProperty.call(dados, 'rg')
+        ? limparCampo_(dados.rg || '', 30) : membroExistente.rg;
+      const telefone = Object.prototype.hasOwnProperty.call(dados, 'telefone')
+        ? String(dados.telefone || '').trim() : membroExistente.telefone;
+      const email = Object.prototype.hasOwnProperty.call(dados, 'email')
+        ? String(dados.email || '').trim() : membroExistente.email;
+      if (!foto && !membroExistente.foto) {
+        throw new Error('Envie a foto do membro da comissão técnica.');
+      }
+      const duplicata = validarDuplicataComissao_(nome, cpf, existentes, membroId);
+      if (!duplicata.ok) throw new Error(duplicata.motivo);
+      validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'comissao');
+
+      const lista = existentes.map(function (item) {
+        if (item.id === membroId) {
+          return {
+            id: membroId,
+            nome: nome,
+            cargo: cargo,
+            rg: rg,
+            telefone: telefone,
+            email: email,
+            cpf: cpf,
+            foto: foto || item.foto,
+            dataNascimento: dataNascimento,
+            timeVinculado: timeVinculado
+          };
+        }
+
+        return item;
+      });
+
+      gravarComissaoTecnicaCampeonato_(campeonatoId, lista);
+    } finally {
+      lock.releaseLock();
+    }
+
+    const tela = respostaCadastro_(contexto);
+    tela.recado = 'Membro ' + nome + ' atualizado com sucesso.';
+    return tela;
+  }
+
+  function removerMembroComissao(campeonatoId, membroId) {
+    sessaoCampeonato_();
+    return removerMembroComissaoInterno_(campeonatoId, membroId);
+  }
+
+  function removerMembroComissaoInterno_(campeonatoId, membroId, contexto) {
+    const id = String(campeonatoId || '').trim();
+    const alvoId = String(membroId || '').trim();
+
+    if (!id || !alvoId) {
+      throw new Error('Informe o campeonato e o membro a remover.');
+    }
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+
+    try {
+      validarAlvoElenco_(contexto, 'comissao', alvoId);
+      const lista = comissaoTecnicaCampeonato_(id).filter(function (item) {
+        return item.id !== alvoId;
+      });
+
+      gravarComissaoTecnicaCampeonato_(id, lista);
+    } finally {
+      lock.releaseLock();
+    }
+
+    const tela = respostaCadastro_(contexto);
+    tela.recado = 'Membro removido da comissão técnica.';
+    return tela;
+  }
+
+  /**
+   * Detecta se um nome é similar a outro usando verificação simplificada.
+   * Retorna true se os nomes são muito parecidos (possível duplicata).
+   * @param {string} nome1
+   * @param {string} nome2
+   * @return {boolean}
+   */
+  function nomeSimilar_(nome1, nome2) {
+    const n1 = String(nome1 || '').toLowerCase().trim();
+    const n2 = String(nome2 || '').toLowerCase().trim();
+
+    if (!n1 || !n2) return false;
+
+    // Se um é substring do outro
+    if (n1.indexOf(n2) !== -1 || n2.indexOf(n1) !== -1) return true;
+
+    // Remover acentos, caracteres especiais e espaços extras
+    const limpar = function (s) {
+      return s.replace(/[àáäâãèéëêìíïîòóöôõùúüûç\s]/g, '').toLowerCase();
+    };
+
+    const l1 = limpar(n1);
+    const l2 = limpar(n2);
+
+    // Se forem iguais sem acentos
+    if (l1 === l2) return true;
+
+    // Se um é substring do outro (mesmo sem acentos)
+    if (l1.indexOf(l2) !== -1 || l2.indexOf(l1) !== -1) return true;
+
+    return false;
+  }
+
+  /**
+   * Valida duplicatas de atleta verificando CPF e nome similar.
+   * @param {string} nome
+   * @param {string} cpf
+   * @param {Array} lista
+   * @param {string} atletaIdExcluir (opcional, para edição)
+   * @return {Object} {ok: boolean, motivo: string}
+   */
+  function validarDuplicataAtleta_(nome, cpf, lista, atletaIdExcluir) {
+    const cpfLimpo = somenteDigitos_(cpf || '');
+
+    // Verificar CPF duplicado
+    const cpfDuplicado = lista.some(function (a) {
+      if (atletaIdExcluir && a.id === atletaIdExcluir) return false;
+      return somenteDigitos_(a.cpf || '') === cpfLimpo;
+    });
+
+    if (cpfDuplicado) {
+      return {
+        ok: false,
+        motivo: 'CPF já cadastrado: este CPF já pertence a outro atleta neste campeonato.'
+      };
+    }
+
+    // Verificar nome similar
+    const nomeSimilarEncontrado = lista.some(function (a) {
+      if (atletaIdExcluir && a.id === atletaIdExcluir) return false;
+      return nomeSimilar_(nome, a.nome);
+    });
+
+    if (nomeSimilarEncontrado) {
+      return {
+        ok: false,
+        motivo: 'Nome similar já cadastrado: existe um atleta com nome muito parecido. Verifique se não é duplicata.'
+      };
+    }
+
+    return { ok: true, motivo: '' };
+  }
+
+  /**
+   * Valida duplicatas de comissionado verificando CPF e nome similar.
+   * @param {string} nome
+   * @param {string} cpf
+   * @param {Array} lista
+   * @param {string} comissionadoIdExcluir (opcional, para edição)
+   * @return {Object} {ok: boolean, motivo: string}
+   */
+  function validarDuplicataComissao_(nome, cpf, lista, comissionadoIdExcluir) {
+    // Verificar CPF duplicado (se fornecido)
+    if (cpf) {
+      const cpfLimpo = somenteDigitos_(cpf);
+      const cpfDuplicado = lista.some(function (c) {
+        if (comissionadoIdExcluir && c.id === comissionadoIdExcluir) return false;
+        return somenteDigitos_(c.cpf || '') === cpfLimpo;
+      });
+
+      if (cpfDuplicado) {
+        return {
+          ok: false,
+          motivo: 'CPF já cadastrado: este CPF já pertence a outro comissionado neste campeonato.'
+        };
+      }
+    }
+
+    // Verificar nome similar
+    const nomeSimilarEncontrado = lista.some(function (c) {
+      if (comissionadoIdExcluir && c.id === comissionadoIdExcluir) return false;
+      return nomeSimilar_(nome, c.nome);
+    });
+
+    if (nomeSimilarEncontrado) {
+      return {
+        ok: false,
+        motivo: 'Nome similar já cadastrado: existe um comissionado com nome muito parecido. Verifique se não é duplicata.'
+      };
+    }
+
+    return { ok: true, motivo: '' };
+  }
+
+/******************************************************
+ * FUNÇÕES AUXILIARES
+ ******************************************************/
+
+/**
+ * Pasta raiz do projeto no Drive.
+ * @return {DriveApp.Folder}
+ */
+function pastaRaizProjeto_() {
+  try {
+    return DriveApp.getFolderById(CONFIG.pastaRaizId);
+  } catch (e) {
+    throw new Error('Não foi possível abrir a pasta raiz do projeto no Drive (id '
+      + CONFIG.pastaRaizId + '). Verifique se o seu e-mail tem acesso a ela.');
+  }
+}
+
+/**
+ * Gera um ID único baseado em UUID.
+ * @return {string}
+ */
+function gerarIdUnico_() {
+  return Utilities.getUuid();
+}
+
+/**
+ * Limpa um campo: remove espaços, limita tamanho.
+ * @param {string} valor
+ * @param {number} tamanhoMax
+ * @return {string}
+ */
+function limparCampo_(valor, tamanhoMax) {
+  const texto = String(valor === null || valor === undefined ? '' : valor)
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return tamanhoMax ? texto.substring(0, tamanhoMax) : texto;
+}
+
+/**
+ * Extrai somente dígitos de uma string.
+ * @param {string} valor
+ * @return {string}
+ */
+function somenteDigitos_(valor) {
+  return String(valor || '').replace(/\D/g, '');
+}
+
+/**
+ * Exige e valida um campo de formulário.
+ * @param {string} valor
+ * @param {number} tamanhoMax
+ * @param {string} mensagem Mensagem de erro.
+ * @return {string}
+ */
+function exigirCampo_(valor, tamanhoMax, mensagem) {
+  const texto = limparCampo_(valor, tamanhoMax);
+
+  if (!texto) {
+    throw new Error(mensagem || 'Este campo é obrigatório.');
+  }
+
+  return texto;
+}
+
+/**
+ * Formata a data e hora atual para string "AAAA-MM-DD HH:mm:ss".
+ * @param {Date} data
+ * @return {string}
+ */
+function formatarDataHora_(data) {
+  const d = data || new Date();
+
+  const ano = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  const hora = String(d.getHours()).padStart(2, '0');
+  const minuto = String(d.getMinutes()).padStart(2, '0');
+  const segundo = String(d.getSeconds()).padStart(2, '0');
+
+  return ano + '-' + mes + '-' + dia + ' ' + hora + ':' + minuto + ':' + segundo;
+}
+
+/**
+ * Localiza ou cria a planilha AEUV - Associados na pasta raiz do projeto.
+ * @return {SpreadsheetApp.Spreadsheet}
+ */
+function planilhaAssociados_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const guardado = propriedades.getProperty(CONFIG.associados.chavePlanilha);
+
+  if (guardado) {
+    try {
+      return SpreadsheetApp.openById(guardado);
+    } catch (e) {}
+  }
+
+  const raiz = pastaRaizProjeto_();
+  const existentes = raiz.getFilesByName(CONFIG.associados.planilha);
+  let planilha;
+
+  if (existentes.hasNext()) {
+    planilha = SpreadsheetApp.openById(existentes.next().getId());
+  } else {
+    planilha = SpreadsheetApp.create(CONFIG.associados.planilha);
+    DriveApp.getFileById(planilha.getId()).moveTo(raiz);
+  }
+
+  propriedades.setProperty(CONFIG.associados.chavePlanilha, planilha.getId());
+  return planilha;
+}
+
+/**
+ * Localiza ou cria a pasta de documentos dos associados.
+ * @return {DriveApp.Folder}
+ */
+function pastaAssociados_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const guardado = propriedades.getProperty(CONFIG.associados.chavePasta);
+
+  if (guardado) {
+    try {
+      const pasta = DriveApp.getFolderById(guardado);
+      if (!pasta.isTrashed()) {
+        return pasta;
+      }
+    } catch (e) {}
+  }
+
+  const raiz = pastaRaizProjeto_();
+  const existentes = raiz.getFoldersByName(CONFIG.associados.pastaDocumentos);
+  const pasta = existentes.hasNext()
+    ? existentes.next()
+    : raiz.createFolder(CONFIG.associados.pastaDocumentos);
+
+  propriedades.setProperty(CONFIG.associados.chavePasta, pasta.getId());
+  return pasta;
+}
+
+/**
+ * Retorna a aba de associados com cabeçalho garantido.
+ * @return {SpreadsheetApp.Sheet}
+ */
+function abaAssociados_() {
+  const planilha = planilhaAssociados_();
+  const aba = planilha.getSheetByName(CONFIG.associados.aba) || planilha.insertSheet(CONFIG.associados.aba);
+
+  const titulos = ASSOCIADOS_COLUNAS.map(function (c) { return c.titulo; });
+  const primeira = aba.getRange(1, 1, 1, titulos.length).getValues()[0];
+  const precisaCabecalho = titulos.some(function (titulo, i) {
+    return String(primeira[i] || '') !== titulo;
+  });
+
+  if (precisaCabecalho) {
+    aba.getRange(1, 1, 1, titulos.length).setValues([titulos]).setFontWeight('bold');
+    aba.setFrozenRows(1);
+  }
+
+  return aba;
+}

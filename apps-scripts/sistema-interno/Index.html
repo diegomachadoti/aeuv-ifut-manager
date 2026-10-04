@@ -769,6 +769,12 @@
     .campo input[type="file"] { padding: 7px; font-size: 12px; }
     .campo input:disabled, .campo select:disabled { background: var(--fundo); color: var(--apoio); }
 
+    .vinculo-equipe-form .campo { width: 100%; }
+    .vinculo-equipe-form select {
+      width: 100%; min-height: 44px; color: var(--texto); background: var(--fundo);
+    }
+    .vinculo-equipe-form select option { color: var(--texto); background: var(--fundo); }
+
     .documento {
       grid-column: span 6;
       border: 1px solid var(--borda);
@@ -915,7 +921,13 @@
         flex: 0 0 38%;
       }
 
+      .solicitacoes, .solicitacoes thead, .solicitacoes tbody, .solicitacoes tr, .solicitacoes th, .solicitacoes td { display: block; }
+
       .solicitacoes { min-width: 0; table-layout: auto; font-size: 14px; }
+
+      .solicitacoes thead { display: none; }
+
+      .solicitacoes tbody { display: block; }
 
       .solicitacoes tr.linha {
         border: 1px solid var(--borda);
@@ -923,6 +935,7 @@
         margin-bottom: 12px;
         padding: 6px 4px;
         background: #fff;
+        display: block;
       }
 
       .solicitacoes tr.linha td {
@@ -1520,6 +1533,46 @@
     .ata-editor .campo input { width: 100%; box-sizing: border-box; }
 
     /* ---------- Gestão do campeonato ---------- */
+    .campeonatos-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .campeonato-card {
+      min-width: 0;
+      padding: 18px;
+      border: 1px solid var(--borda);
+      border-radius: 12px;
+      background: var(--superficie, #fff);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .campeonato-card-topo { display: flex; align-items: center; gap: 12px; }
+    .campeonato-card-escudo {
+      flex: 0 0 64px;
+      width: 64px;
+      height: 64px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: var(--fundo);
+      font-size: 30px;
+    }
+    .campeonato-card-escudo img { width: 100%; height: 100%; object-fit: contain; }
+    .campeonato-card h3 { margin: 0 0 5px; overflow-wrap: anywhere; }
+    .campeonato-card-dados { margin: 0; display: grid; gap: 10px; }
+    .campeonato-card-dados dt { font-size: 12px; color: var(--apoio); }
+    .campeonato-card-dados dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+    .campeonato-card-acoes {
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px solid var(--borda);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
     .campeonatos { table-layout: fixed; font-size: 13px; }
     .campeonatos th, .campeonatos td { padding: 9px 10px; vertical-align: top; }
     .campeonatos th:nth-child(1) { width: 18%; }
@@ -1698,6 +1751,414 @@
     body.tema-escuro [style*="color:#b3261e"],
     body.tema-escuro [style*="color:#922b21"] { color: #f87171 !important; }
     body.tema-escuro [style*="color:#555"] { color: var(--apoio) !important; }
+
+    .abas-cadastro-pessoas {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 18px 0;
+    }
+
+    .abas-cadastro-pessoas button.ativo {
+      background: var(--fundo-forte, var(--azul));
+      border-color: var(--fundo-forte, var(--azul));
+      color: #fff;
+    }
+
+    .elenco-cabecalho { display: flex; align-items: center; gap: 16px; margin: 18px 0; }
+    .elenco-cabecalho > div { min-width: 0; }
+    .elenco-cabecalho h3, .elenco-lista h4 { margin: 0 0 8px; }
+    .elenco-cabecalho h3, .elenco-contexto { overflow-wrap: anywhere; }
+    .elenco-escudo { width: 64px; height: 64px; object-fit: contain; flex: 0 0 64px; }
+    .elenco-cabecalho-titulo { flex: 1 1 auto; }
+    .elenco-link-acoes .botao-apoio, .elenco-link-acoes .botao-link {
+      display: inline-flex; align-items: center; justify-content: center;
+      box-sizing: border-box; min-height: 38px; margin: 0; padding: 8px 12px;
+      border: 1px solid var(--borda); font-size: 12px; line-height: 18px;
+    }
+    .elenco-abas {
+      display: flex; gap: 4px; overflow-x: auto; margin-top: 22px;
+      border-bottom: 1px solid var(--borda); scrollbar-width: thin;
+    }
+    .elenco-abas .elenco-aba {
+      display: inline-flex; flex: 0 0 auto; min-height: 44px; align-items: center;
+      padding: 10px 16px; border: 1px solid transparent; border-bottom: 0;
+      border-radius: 8px 8px 0 0; background: transparent; color: var(--apoio);
+      white-space: nowrap;
+    }
+    .elenco-abas .elenco-aba[aria-selected="true"] {
+      position: relative; margin-bottom: -1px; background: var(--superficie);
+      border-color: var(--borda); color: var(--texto); font-weight: 700;
+      box-shadow: inset 0 3px 0 var(--dourado);
+    }
+    body.tema-escuro .elenco-abas .elenco-aba {
+      background: transparent; border-color: transparent; color: var(--apoio);
+    }
+    body.tema-escuro .elenco-abas .elenco-aba[aria-selected="true"] {
+      background: var(--superficie); border-color: var(--borda); color: var(--texto);
+    }
+    .elenco-abas .elenco-aba:disabled { opacity: 1; cursor: not-allowed; }
+    .elenco-abas .elenco-aba:focus-visible { outline: 2px solid var(--dourado); outline-offset: 3px; }
+    .elenco-painel[hidden], .elenco-form [hidden] { display: none; }
+    .elenco-lista {
+      padding: 20px; border: 1px solid var(--borda); border-top: 0;
+      border-radius: 0 0 10px 10px;
+    }
+    .elenco-lista .elenco-lista-cabecalho {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 16px;
+    }
+    .elenco-lista .elenco-lista-cabecalho h4 { margin: 0; }
+    .elenco-lista .elenco-lista-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+    .elenco-lista .elenco-vazio { border: 1px dashed var(--borda); border-radius: 8px; padding: 20px; }
+    .elenco-pessoas-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+      gap: 14px;
+    }
+    .elenco-pessoa-card {
+      min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 14px;
+      border: 1px solid var(--borda); border-radius: 12px; background: var(--superficie);
+    }
+    .elenco-pessoa-resumo { min-width: 0; display: flex; align-items: center; gap: 12px; }
+    .elenco-pessoa-foto {
+      flex: 0 0 64px; width: 64px; height: 76px; border: 1px solid var(--borda);
+      display: grid; place-items: center; overflow: hidden;
+      border-radius: 9px; background: var(--fundo);
+    }
+    .elenco-pessoa-foto img.cadastro-foto-mini { width: 100%; height: 100%; border: 0; border-radius: 0; object-fit: cover; }
+    .elenco-pessoa-foto .cadastro-foto-placeholder { width: 100%; height: 100%; border: 0; border-radius: 0; }
+    .elenco-pessoa-identidade { min-width: 0; overflow-wrap: anywhere; }
+    .elenco-pessoa-identidade h5 { margin: 0 0 5px; font-size: 15px; }
+    .elenco-pessoa-identidade p { margin: 0; line-height: 1.5; }
+    .elenco-pessoa-acoes { display: flex; flex-wrap: wrap; gap: 7px; margin-top: auto; }
+    .elenco-pessoa-acoes button { min-height: 36px; padding: 7px 10px; font-size: 12px; }
+    .elenco-link-acoes {
+      display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center;
+      gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--borda);
+    }
+    .elenco-link-acoes #elencoAvisoLink { margin-right: auto; overflow-wrap: anywhere; }
+    .elenco-detalhes-dialog {
+      width: min(620px, calc(100% - 32px)); max-width: 620px; max-height: min(85vh, 760px);
+      padding: 0; border: 1px solid var(--borda); border-radius: 14px;
+      overflow: auto; background: var(--superficie, #fff); color: var(--texto);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, .35);
+    }
+    .elenco-detalhes-dialog::backdrop { background: rgba(8, 15, 28, .68); }
+    .elenco-detalhes-conteudo { padding: 20px; }
+    .elenco-detalhes-marca {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--borda);
+      color: var(--azul);
+      font-weight: bold;
+    }
+    .elenco-detalhes-marca img { width: 48px; height: 48px; object-fit: contain; }
+    body.tema-escuro .elenco-detalhes-marca { color: var(--texto); }
+    .elenco-detalhes-topo {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      margin-bottom: 16px;
+    }
+    .elenco-detalhes-topo h3 { margin: 0; overflow-wrap: anywhere; }
+    .elenco-detalhes-fechar { flex: 0 0 38px; width: 38px; min-height: 38px; padding: 0; }
+    .elenco-detalhes-pessoa { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 18px; }
+    .elenco-detalhes-foto {
+      width: 150px; height: 180px; object-fit: contain; background: var(--fundo);
+      border: 1px solid var(--borda); border-radius: 10px;
+    }
+    .elenco-detalhes-foto img.cadastro-foto-mini { width: 100%; height: 100%; border: 0; border-radius: 0; object-fit: contain; }
+    .elenco-detalhes-foto .cadastro-foto-placeholder { width: 100%; height: 100%; border: 0; border-radius: 0; font-size: 48px; }
+    .elenco-detalhes-placeholder { display: grid; place-items: center; color: var(--apoio); font-size: 48px; }
+    .elenco-detalhes-dados { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin: 0; }
+    .elenco-detalhes-dados div { min-width: 0; overflow-wrap: anywhere; }
+    .elenco-detalhes-dados dt { color: var(--apoio); font-size: 12px; }
+    .elenco-detalhes-dados dd { margin: 2px 0 0; }
+    .elenco-detalhes-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    body.tema-escuro .elenco-pessoa-card { background: var(--superficie-2); }
+    body.tema-escuro .elenco-pessoa-foto,
+    body.tema-escuro .elenco-detalhes-foto { background: var(--fundo); border-color: #33425f; }
+    .elenco-form .campos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .elenco-form .campo,
+    .elenco-form .campo.curto,
+    .elenco-form .campo.mini { grid-column: span 1; min-width: 0; }
+    .elenco-form .campo.largo, .elenco-form .campo.cheio { grid-column: 1 / -1; }
+    .elenco-form .campo input, .elenco-form .campo select {
+      width: 100%; max-width: 100%; min-width: 0; min-height: 42px; box-sizing: border-box;
+    }
+    .elenco-form .grupo h4 { font-size: 14px; text-transform: none; letter-spacing: normal; }
+    .elenco-form .elenco-contexto {
+      padding: 14px; margin-bottom: 20px; border: 1px solid var(--borda);
+      border-radius: 8px; background: var(--fundo); line-height: 1.6;
+    }
+    .elenco-foto-preview {
+      width: 120px; height: 120px; background: var(--fundo); border: 2px dashed var(--borda);
+      border-radius: 8px; display: grid; place-items: center; font-size: 40px; overflow: hidden;
+    }
+    .elenco-foto-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .elenco-form .acoes-formulario { flex-wrap: wrap; }
+    .elenco-form #avisoCadastroPessoa { overflow-wrap: anywhere; }
+    @media (max-width: 760px) {
+      .elenco-cabecalho { align-items: flex-start; flex-wrap: wrap; }
+      .elenco-cabecalho-titulo { flex: 1 1 calc(100% - 84px); }
+      .elenco-abas .elenco-aba { padding-right: 12px; padding-left: 12px; }
+      .elenco-form .campos { grid-template-columns: minmax(0, 1fr); }
+      .elenco-form .campo, .elenco-form .campo.largo, .elenco-form .campo.cheio,
+      .elenco-form .campo.curto, .elenco-form .campo.mini { grid-column: 1 / -1; }
+      .elenco-form { padding: 16px; }
+      .elenco-lista .elenco-lista-cabecalho { align-items: flex-start; }
+      .elenco-lista .elenco-lista-acoes { width: 100%; }
+      .elenco-link-acoes { justify-content: flex-start; }
+      .elenco-link-acoes #elencoAvisoLink { flex: 1 1 100%; }
+      .elenco-detalhes-pessoa { grid-template-columns: minmax(0, 1fr); }
+      .elenco-detalhes-foto { width: min(100%, 220px); height: 220px; }
+    }
+
+    .cadastro-resumo-obrigatoriedade {
+      margin-top: 10px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #f7f9fd;
+      border: 1px solid var(--borda);
+      color: var(--apoio);
+      font-size: 13px;
+    }
+
+    .cadastro-foto-mini {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      object-fit: cover;
+      border: 1px solid var(--borda);
+      background: var(--fundo);
+    }
+
+    .cadastro-foto-placeholder {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--apoio);
+      background: var(--fundo);
+      border: 1px dashed var(--borda);
+    }
+
+    .time-cards-campeonato {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+      gap: 14px;
+    }
+
+    .time-card-campeonato {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--borda);
+      border-radius: 14px;
+      padding: 14px;
+      background: var(--superficie);
+    }
+
+    .elenco-importacao > h4 { margin-bottom: 16px; }
+    .elenco-importacao > p { margin: 0 0 20px; line-height: 1.65; }
+    .elenco-importacao #importacaoAviso { margin: 16px 0; line-height: 1.6; }
+    .elenco-importacao .importacao-selecionar-todos {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 18px 0;
+      line-height: 1.5;
+    }
+    .elenco-importacao #importacaoContagem { margin: 18px 0; }
+    .elenco-importacao .carregando { padding: 20px 12px; }
+
+    .participantes-acoes {
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 16px;
+      margin-bottom: 20px;
+    }
+
+    .participantes-acoes button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      padding: 8px 14px;
+      font-size: 13px;
+      line-height: 1.2;
+    }
+
+    .campeonato-card .participante-card-acoes {
+      display: flex;
+      width: 100%;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px solid var(--borda);
+    }
+
+    .campeonato-card .participante-card-acoes button {
+      flex: 0 1 auto;
+      padding: 6px 8px;
+      font-size: 12px;
+    }
+
+    .time-card-cabecalho {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .time-card-cabecalho strong {
+      display: block;
+      font-size: 15px;
+    }
+
+    .time-atletas-lista {
+      display: grid;
+      gap: 10px;
+    }
+
+    .time-atleta-item {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border-radius: 12px;
+      background: var(--fundo);
+      border: 1px solid var(--borda);
+    }
+
+    .time-atleta-item strong,
+    .time-atleta-item span {
+      display: block;
+    }
+
+    body.tema-escuro .cadastro-resumo-obrigatoriedade,
+    body.tema-escuro .time-card-campeonato,
+    body.tema-escuro .time-atleta-item {
+      background: var(--superficie-2);
+      border-color: #33425f;
+    }
+
+    body.tema-escuro .cadastro-foto-placeholder {
+      background: var(--superficie-2);
+      border-color: #33425f;
+      color: var(--apoio);
+    }
+
+    .campeonatos-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .campeonato-card {
+      border: 1px solid var(--borda);
+      border-radius: 12px;
+      padding: 16px;
+      background: var(--superficie);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .campeonato-card:hover {
+      border-color: var(--fundo-forte);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .campeonato-escudo {
+      width: 80px;
+      height: 80px;
+      border-radius: 8px;
+      object-fit: contain;
+      background: var(--fundo);
+      border: 1px solid var(--borda);
+      padding: 4px;
+    }
+
+    .campeonato-escudo-placeholder {
+      width: 80px;
+      height: 80px;
+      border-radius: 8px;
+      background: var(--fundo);
+      border: 2px dashed var(--borda);
+      display: grid;
+      place-items: center;
+      font-size: 32px;
+      color: var(--apoio);
+    }
+
+    .campeonato-nome {
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.3;
+      color: var(--texto);
+    }
+
+    .campeonato-temporada {
+      font-size: 12px;
+      color: var(--apoio);
+    }
+
+    .campeonato-status {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .campeonato-status-badge {
+      padding: 4px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .campeonato-card-acoes {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .campeonato-card-acoes button {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    body.tema-escuro .campeonato-card {
+      background: var(--superficie-2);
+      border-color: #33425f;
+    }
+
+    body.tema-escuro .campeonato-card:hover {
+      border-color: var(--fundo-forte);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    body.tema-escuro .campeonato-escudo-placeholder {
+      background: var(--fundo);
+      border-color: #33425f;
+    }
   </style>
 </head>
 <body>
@@ -1742,7 +2203,7 @@
   </main>
 
   <script>
-    const CONFIG = <?!= JSON.stringify(config) ?>;
+    const CONFIG = <?!= JSON.stringify(config).replace(/</g, '\\u003c') ?>;
     const MODULOS = CONFIG.modulos;
 
     (function configurarAlternanciaTema() {
@@ -1973,6 +2434,16 @@
         return;
       }
 
+      if (elencoAtual) {
+        const formulario = document.getElementById('cadastroPessoasFormArea');
+        const descartar = formulario && !formulario.hidden;
+        if (elencoAtual.salvando || (descartar && !window.confirm('Sair do elenco? As alterações e seleções não salvas serão descartadas.'))) {
+          if (window.location.hash !== '#' + moduloAtual) window.location.hash = moduloAtual;
+          return;
+        }
+        importacaoElencoAtual = null;
+      }
+
       moduloAtual = id;
 
       // Sempre reatribuido: abrir a tela sem termo tem de limpar o que
@@ -1994,6 +2465,8 @@
      * Desenha a tela de um modulo. Novas funcionalidades entram aqui.
      */
     function renderizarModulo(modulo) {
+      fecharDetalhesPessoaElenco(false);
+      elencoAtual = null;
       const cabecalho = '<div class="cabecalho-modulo">'
         + '<span class="icone">' + escapar(modulo.icone) + '</span>'
         + '<h2>' + escapar(modulo.nome) + '</h2>'
@@ -2019,14 +2492,21 @@
         return;
       }
 
-      if (modulo.id === 'grupos-rodadas') {
-        conteudo.innerHTML = cabecalho
-          + '<div id="areaGruposRodadas">' + blocoCarregando('statusGruposRodadas') + '</div>';
-        carregarGruposRodadas();
-        return;
-      }
+       if (modulo.id === 'times-campeonato') {
+         conteudo.innerHTML = cabecalho
+           + '<div id="areaTimesCampeonato">' + blocoCarregando('statusTimesCampeonato') + '</div>';
+         carregarTimesCampeonato();
+         return;
+       }
 
-      if (modulo.tipo === 'usuarios') {
+       if (modulo.id === 'atletas-campeonato' || modulo.id === 'comissao-campeonato') {
+          conteudo.innerHTML = cabecalho
+            + '<div id="areaCadastroPessoasCampeonato">' + blocoCarregando('statusCadastroPessoasCampeonato') + '</div>';
+          carregarCadastroPessoasCampeonato(modulo.id === 'comissao-campeonato' ? 'comissao' : 'atletas');
+          return;
+        }
+
+        if (modulo.tipo === 'usuarios') {
         conteudo.innerHTML = cabecalho
           + '<div id="areaUsuarios">' + blocoCarregando('statusUsuarios') + '</div>';
         carregarUsuarios();
@@ -2412,7 +2892,7 @@
           : '<span class="apoio">-</span>';
 
         return '<tr>'
-          + '<td data-rotulo="Equipe">' + escapar(item.nome) + '</td>'
+          + '<td data-rotulo="Equipe">' + (item.escudo ? '<img src="' + escapar(item.escudo) + '" alt="" width="48" height="48" style="object-fit:contain;vertical-align:middle;margin-right:10px;">' : '') + escapar(item.nome) + '</td>'
           + '<td data-rotulo="Em uso">' + (uso ? escapar(uso) : '<span class="apoio">nenhum cadastro ainda</span>') + '</td>'
           + '<td class="acoes-linha" data-rotulo="Ações">' + acoes + '</td>'
           + '</tr>';
@@ -2470,6 +2950,10 @@
         + '<h3>' + (registro ? 'Renomear equipe' : 'Incluir equipe') + '</h3>'
         + '<div class="grupo"><div class="campos">'
         + campoTexto('eNome', 'Nome da equipe', registro ? registro.nome : '', 'largo', '', 'text')
+        + '<div class="campo largo"><label for="eEscudo">Escudo (PNG, JPEG ou WebP, até 1,5 MB)</label>'
+        + '<input type="file" id="eEscudo" accept="image/png,image/jpeg,image/webp">'
+        + '<input type="hidden" id="eEscudoAtual" value="' + escapar(registro ? registro.escudo || '' : '') + '">'
+        + '<div id="eEscudoPreview">' + (registro && registro.escudo ? '<img src="' + escapar(registro.escudo) + '" alt="Escudo atual" width="80" height="80" style="object-fit:contain">' : '') + '</div></div>'
         + '</div></div>'
         + '<div class="acoes-formulario">'
         + '<button type="button" class="botao-principal" id="gravarEquipe">'
@@ -2486,6 +2970,15 @@
       document.getElementById('gravarEquipe').addEventListener('click', function () {
         gravarEquipe(registro ? registro.nome : '');
       });
+      document.getElementById('eEscudo').addEventListener('change', function () {
+        const arquivo = this.files && this.files[0];
+        if (!arquivo) return;
+        const leitor = new FileReader();
+        leitor.onload = function () {
+          document.getElementById('eEscudoPreview').innerHTML = '<img src="' + escapar(leitor.result) + '" alt="Prévia do escudo" width="80" height="80" style="object-fit:contain">';
+        };
+        leitor.readAsDataURL(arquivo);
+      });
     }
 
     /**
@@ -2499,7 +2992,11 @@
       botao.disabled = true;
       aviso.textContent = 'Gravando...';
 
-      google.script.run
+      const payload = {
+        nomeOriginal: nomeOriginal, nome: document.getElementById('eNome').value,
+        escudo: document.getElementById('eEscudoAtual').value
+      };
+      const enviar = function () { google.script.run
         .withSuccessHandler(function (dados) {
           equipes = dados;
           montarTelaEquipes(dados.recado);
@@ -2509,10 +3006,18 @@
           aviso.innerHTML = '<span class="alerta">'
             + escapar(erro && erro.message ? erro.message : erro) + '</span>';
         })
-        .salvarEquipe({
-          nomeOriginal: nomeOriginal,
-          nome: document.getElementById('eNome').value
-        });
+        .salvarEquipe(payload); };
+      const arquivo = document.getElementById('eEscudo').files[0];
+      if (!arquivo) return enviar();
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(arquivo.type) || arquivo.size > 1.5 * 1024 * 1024) {
+        botao.disabled = false;
+        aviso.textContent = 'Envie um escudo PNG, JPEG ou WebP de até 1,5 MB.';
+        return;
+      }
+      const leitor = new FileReader();
+      leitor.onload = function () { payload.escudo = leitor.result; enviar(); };
+      leitor.onerror = leitor.onabort = function () { botao.disabled = false; aviso.textContent = 'Não foi possível ler o escudo.'; };
+      leitor.readAsDataURL(arquivo);
     }
 
     /**
@@ -2543,7 +3048,7 @@
     /**
      * Gestão do campeonato: primeiro bloco funcional do MVP.
      */
-    let campeonatos = { registros: [], status: [], modalidades: [], visibilidades: [], podeEditar: false, podeExcluir: false };
+    let campeonatos = { registros: [], status: [], modalidades: [], visibilidades: [], formatos: [], podeEditar: false, podeExcluir: false };
 
     function carregarCampeonatos() {
       google.script.run
@@ -2590,6 +3095,27 @@
       }).join('');
     }
 
+    /**
+     * Cria um campo de entrada de texto HTML com label e classes de estilo.
+     * @param {string} id ID do elemento
+     * @param {string} label Texto do label
+     * @param {string} valor Valor inicial do campo
+     * @param {string} tamanho Classe de tamanho ('mini', 'curto', 'largo', 'cheio')
+     * @param {string} desabilitado Atributo 'disabled' se !=''
+     * @param {string} tipo Tipo do input ('text', 'email', 'number', 'date', etc)
+     * @return {string} HTML do campo
+     */
+    function campoTexto(id, label, valor, tamanho, desabilitado, tipo, classeExtra) {
+      tipo = tipo || 'text';
+      return '<div class="campo ' + (tamanho || 'largo') + (classeExtra ? ' ' + classeExtra : '') + '">'
+        + '<label for="' + escapar(id) + '">' + escapar(label) + '</label>'
+        + '<input type="' + escapar(tipo) + '" id="' + escapar(id) + '" '
+        + 'value="' + escapar(valor) + '" '
+        + (desabilitado ? 'disabled ' : '')
+        + '>'
+        + '</div>';
+    }
+
     function montarTelaCampeonatos(recado) {
       const registros = campeonatos.registros || [];
       const soma = { rascunho: 0, ativo: 0, encerrado: 0 };
@@ -2607,15 +3133,24 @@
             + (campeonatos.podeExcluir ? ' <button type="button" class="botao-apoio perigo" data-remover-campeonato="' + escapar(item.id) + '">Remover</button>' : '')
           : '<span class="apoio">-</span>';
 
-        return '<tr>'
-          + '<td data-rotulo="Nome">' + escapar(item.nome || '-') + '<div class="equipe-dado">' + escapar(item.temporada || '') + '</div></td>'
-          + '<td data-rotulo="Modalidade">' + escapar(item.modalidade || '-') + '</td>'
-          + '<td data-rotulo="Status"><span class="' + classeCampeonatoStatus(item.status || '') + '">' + escapar(item.status || '-') + '</span></td>'
-          + '<td data-rotulo="Visibilidade">' + escapar(item.visibilidade || '-') + '</td>'
-          + '<td data-rotulo="Período">' + escapar(periodo) + '</td>'
-          + '<td data-rotulo="Responsável">' + escapar(item.responsavel || '-') + '</td>'
-          + '<td class="acoes-linha" data-rotulo="Ações">' + acoes + '</td>'
-          + '</tr>';
+        return '<article class="campeonato-card">'
+          + '<div class="campeonato-card-topo"><div class="campeonato-card-escudo">'
+          + (item.escudo ? '<img src="' + escapar(item.escudo) + '" alt="Escudo do campeonato">' : '🏆')
+          + '</div><div><h3>' + escapar(item.nome || '-') + '</h3>'
+          + '<div class="apoio">' + escapar(item.temporada || '') + '</div></div></div>'
+          + '<div><span class="' + classeCampeonatoStatus(item.status || '') + '">' + escapar(item.status || '-') + '</span></div>'
+          + '<dl class="campeonato-card-dados">'
+          + '<div><dt>Modalidade</dt><dd>' + escapar(item.modalidade || '-') + '</dd></div>'
+          + '<div><dt>Visibilidade</dt><dd>' + escapar(item.visibilidade || '-') + '</dd></div>'
+          + '<div><dt>Período</dt><dd>' + escapar(periodo) + '</dd></div>'
+          + '<div><dt>Responsável</dt><dd>' + escapar(item.responsavel || '-') + '</dd></div>'
+          + '<div><dt>Forma de disputa</dt><dd>' + (item.estrutura
+            ? escapar(item.estrutura.faseNome + ' · ' + item.estrutura.formato)
+              + '<br>' + escapar(item.estrutura.grupos + ' grupo(s) · ' + item.estrutura.vagasPorGrupo
+                + ' vaga(s) por grupo · ' + item.estrutura.rodadas + ' rodada(s)' + (item.estrutura.idaVolta ? ' · ida e volta' : ''))
+            : 'Ainda não configurada') + '</dd></div>'
+          + '</dl><div class="campeonato-card-acoes">' + acoes + '</div>'
+          + '</article>';
       }).join('');
 
       const sucesso = recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '';
@@ -2641,12 +3176,10 @@
         + resumo
         + barra
         + (registros.length
-          ? '<div class="tabela-rolagem"><table class="campeonatos"><thead><tr>'
-            + '<th>Nome</th><th>Modalidade</th><th>Status</th><th>Visibilidade</th><th>Período</th><th>Responsável</th><th>Ações</th>'
-            + '</tr></thead><tbody>' + linhas + '</tbody></table></div>'
+          ? '<div class="campeonatos-cards">' + linhas + '</div>'
           : vazio)
         + '<div id="campeonatoFormArea"></div>'
-        + '<div class="aviso">Este é o ponto de partida do MVP da gestão do campeonato. A partir daqui, o próximo passo é ligar grupos, rodadas, jogos, disciplina e súmula.</div>';
+        + '<div class="aviso">Cadastre o campeonato e sua forma de disputa no mesmo formulário. Depois, organize times, atletas, jogos, disciplina e súmula.</div>';
 
       if (campeonatos.podeEditar) {
         document.getElementById('novoCampeonato').addEventListener('click', function () {
@@ -2681,28 +3214,59 @@
       const statusAtual = registro ? registro.status : 'rascunho';
       const modalidadeAtual = registro ? registro.modalidade : (campeonatos.modalidades[0] ? campeonatos.modalidades[0].id : 'Futsal');
       const visibilidadeAtual = registro ? registro.visibilidade : (campeonatos.visibilidades[0] ? campeonatos.visibilidades[0].id : 'Interno');
+      const estrutura = registro && registro.estrutura ? registro.estrutura : {
+        faseNome: 'Classificação',
+        formato: campeonatos.formatos[0] ? campeonatos.formatos[0].id : '',
+        grupos: 2,
+        vagasPorGrupo: 4,
+        rodadas: 3,
+        idaVolta: false,
+        observacoes: ''
+      };
 
-      document.getElementById('campeonatoFormArea').innerHTML = '<div class="formulario campeonato-form">'
-        + '<h3>' + (registro ? 'Editar campeonato' : 'Novo campeonato') + '</h3>'
-        + '<p class="apoio">Cadastre a edição, organize o começo da competição e deixe a base pronta para grupos, rodadas e jogos.</p>'
+       document.getElementById('campeonatoFormArea').innerHTML = '<div class="formulario campeonato-form">'
+         + '<h3>' + (registro ? 'Editar campeonato' : 'Novo campeonato') + '</h3>'
+         + '<p class="apoio">Cadastre os dados e a forma de disputa do campeonato em uma única gravação.</p>'
+         + '<h4>Dados do campeonato</h4>'
+         + '<div class="grupo"><div class="campos">'
+         + campoTexto('cNome', 'Nome do campeonato', registro ? registro.nome : '', 'largo', '', 'text')
+         + campoTexto('cTemporada', 'Temporada / Edição', registro ? registro.temporada : '', 'curto', '', 'text')
+         + '<div class="campo curto"><label for="cModalidade">Modalidade</label><select id="cModalidade">'
+         + opcoesSelect(campeonatos.modalidades, modalidadeAtual, '')
+         + '</select></div>'
+         + '<div class="campo curto"><label for="cStatus">Status</label><select id="cStatus">'
+         + opcoesSelect(campeonatos.status, statusAtual, '')
+         + '</select></div>'
+         + '<div class="campo curto"><label for="cVisibilidade">Visibilidade</label><select id="cVisibilidade">'
+         + opcoesSelect(campeonatos.visibilidades, visibilidadeAtual, '')
+         + '</select></div>'
+         + campoTexto('cResponsavel', 'Organização responsável', registro ? registro.responsavel : '', 'largo', '', 'text')
+         + campoTexto('cInicio', 'Data de início', registro ? registro.dataInicio : '', 'curto', '', 'date')
+         + campoTexto('cFim', 'Data de fim', registro ? registro.dataFim : '', 'curto', '', 'date')
+         + '<div class="campo cheio"><label for="cEscudo">Escudo do campeonato</label>'
+         + '<input type="file" id="cEscudo" accept="image/*" style="margin-bottom:10px;">'
+         + '<div id="cEscudoPreview" style="width:100px;height:100px;background:var(--fundo);border:2px dashed var(--borda);border-radius:8px;display:grid;place-items:center;font-size:40px;margin-top:10px;overflow:hidden;">'
+         + (registro && registro.escudo ? '<img src="' + escapar(registro.escudo) + '" style="width:100%;height:100%;object-fit:contain;" alt="Escudo">' : '🏆')
+         + '</div></div>'
+         + '<div class="campo cheio"><label for="cDescricao">Descrição</label>'
+         + '<textarea id="cDescricao" placeholder="Descreva a competição, formato, observações e regras específicas">'
+         + escapar(registro ? registro.descricao : '') + '</textarea></div>'
+         + '</div></div>'
+        + '<h4>Forma de disputa</h4>'
         + '<div class="grupo"><div class="campos">'
-        + campoTexto('cNome', 'Nome do campeonato', registro ? registro.nome : '', 'largo', '', 'text')
-        + campoTexto('cTemporada', 'Temporada / Edição', registro ? registro.temporada : '', 'curto', '', 'text')
-        + '<div class="campo curto"><label for="cModalidade">Modalidade</label><select id="cModalidade">'
-        + opcoesSelect(campeonatos.modalidades, modalidadeAtual, '')
+        + campoTexto('cFaseNome', 'Nome da fase', estrutura.faseNome, 'curto', '', 'text')
+        + '<div class="campo largo"><label for="cFormato">Formato</label><select id="cFormato">'
+        + opcoesSelect(campeonatos.formatos, estrutura.formato, '') + '</select></div>'
+        + campoTexto('cGrupos', 'Quantidade de grupos (1 a 32)', estrutura.grupos, 'mini', '', 'number')
+        + campoTexto('cVagas', 'Vagas por grupo (2 a 64)', estrutura.vagasPorGrupo, 'mini', '', 'number')
+        + campoTexto('cRodadas', 'Quantidade de rodadas (1 a 99)', estrutura.rodadas, 'mini', '', 'number')
+        + '<div class="campo curto"><label for="cIdaVolta">Ida e volta</label><select id="cIdaVolta">'
+        + '<option value="nao"' + (estrutura.idaVolta ? '' : ' selected') + '>Não</option>'
+        + '<option value="sim"' + (estrutura.idaVolta ? ' selected' : '') + '>Sim</option>'
         + '</select></div>'
-        + '<div class="campo curto"><label for="cStatus">Status</label><select id="cStatus">'
-        + opcoesSelect(campeonatos.status, statusAtual, '')
-        + '</select></div>'
-        + '<div class="campo curto"><label for="cVisibilidade">Visibilidade</label><select id="cVisibilidade">'
-        + opcoesSelect(campeonatos.visibilidades, visibilidadeAtual, '')
-        + '</select></div>'
-        + campoTexto('cResponsavel', 'Organização responsável', registro ? registro.responsavel : '', 'largo', '', 'text')
-        + campoTexto('cInicio', 'Data de início', registro ? registro.dataInicio : '', 'curto', '', 'date')
-        + campoTexto('cFim', 'Data de fim', registro ? registro.dataFim : '', 'curto', '', 'date')
-        + '<div class="campo cheio"><label for="cDescricao">Descrição</label>'
-        + '<textarea id="cDescricao" placeholder="Descreva a competição, formato, observações e regras específicas">'
-        + escapar(registro ? registro.descricao : '') + '</textarea></div>'
+        + '<div class="campo cheio"><label for="cObservacoes">Observações da forma de disputa</label>'
+        + '<textarea id="cObservacoes" placeholder="Critérios de classificação e observações da fase">'
+        + escapar(estrutura.observacoes) + '</textarea></div>'
         + '</div></div>'
         + '<div class="acoes-formulario">'
         + '<button type="button" class="botao-principal" id="gravarCampeonato">'
@@ -2713,45 +3277,91 @@
         + '</div>'
         + '</div>';
 
-      document.getElementById('voltarCampeonatos').addEventListener('click', function () {
-        document.getElementById('campeonatoFormArea').innerHTML = '';
-      });
+       document.getElementById('voltarCampeonatos').addEventListener('click', function () {
+         document.getElementById('campeonatoFormArea').innerHTML = '';
+       });
 
-      document.getElementById('gravarCampeonato').addEventListener('click', function () {
-        gravarCampeonato(registro ? registro.id : '');
-      });
+       // Listener para preview do escudo em tempo real
+       const inputEscudo = document.getElementById('cEscudo');
+       const previewEscudo = document.getElementById('cEscudoPreview');
+
+       if (inputEscudo && previewEscudo) {
+         inputEscudo.addEventListener('change', function () {
+           if (this.files && this.files[0]) {
+             const leitor = new FileReader();
+             leitor.onload = function (e) {
+               previewEscudo.innerHTML = '<img src="' + e.target.result + '" style="width:100%;height:100%;object-fit:contain;" alt="Escudo">';
+             };
+             leitor.readAsDataURL(this.files[0]);
+           }
+         });
+       }
+
+       document.getElementById('gravarCampeonato').addEventListener('click', function () {
+         gravarCampeonato(registro ? registro.id : '');
+       });
     }
 
-    function gravarCampeonato(idOriginal) {
-      const botao = document.getElementById('gravarCampeonato');
-      const aviso = document.getElementById('avisoCampeonato');
+     function gravarCampeonato(idOriginal) {
+       const botao = document.getElementById('gravarCampeonato');
+       const aviso = document.getElementById('avisoCampeonato');
 
-      botao.disabled = true;
-      aviso.textContent = 'Gravando...';
+       botao.disabled = true;
+       aviso.textContent = 'Gravando...';
 
-      google.script.run
-        .withSuccessHandler(function (dados) {
-          campeonatos = dados;
-          montarTelaCampeonatos(dados.recado);
-        })
-        .withFailureHandler(function (erro) {
-          botao.disabled = false;
-          aviso.innerHTML = '<span class="alerta">'
-            + escapar(erro && erro.message ? erro.message : erro) + '</span>';
-        })
-        .salvarCampeonato({
-          idOriginal: idOriginal,
-          nome: document.getElementById('cNome').value,
-          temporada: document.getElementById('cTemporada').value,
-          modalidade: document.getElementById('cModalidade').value,
-          status: document.getElementById('cStatus').value,
-          visibilidade: document.getElementById('cVisibilidade').value,
-          responsavel: document.getElementById('cResponsavel').value,
-          dataInicio: document.getElementById('cInicio').value,
-          dataFim: document.getElementById('cFim').value,
-          descricao: document.getElementById('cDescricao').value
-        });
-    }
+       const payload = {
+         idOriginal: idOriginal,
+         nome: document.getElementById('cNome').value,
+         temporada: document.getElementById('cTemporada').value,
+         modalidade: document.getElementById('cModalidade').value,
+         status: document.getElementById('cStatus').value,
+         visibilidade: document.getElementById('cVisibilidade').value,
+         responsavel: document.getElementById('cResponsavel').value,
+         dataInicio: document.getElementById('cInicio').value,
+         dataFim: document.getElementById('cFim').value,
+         descricao: document.getElementById('cDescricao').value,
+         estrutura: {
+           faseNome: document.getElementById('cFaseNome').value,
+           formato: document.getElementById('cFormato').value,
+           grupos: document.getElementById('cGrupos').value,
+           vagasPorGrupo: document.getElementById('cVagas').value,
+           rodadas: document.getElementById('cRodadas').value,
+           idaVolta: document.getElementById('cIdaVolta').value === 'sim',
+           observacoes: document.getElementById('cObservacoes').value
+         },
+         escudo: ''
+       };
+
+       const inputEscudo = document.getElementById('cEscudo');
+       if (inputEscudo && inputEscudo.files && inputEscudo.files[0]) {
+         const leitor = new FileReader();
+         leitor.onload = function (e) {
+           payload.escudo = e.target.result;
+           enviarPayload();
+         };
+         leitor.onerror = function () {
+           botao.disabled = false;
+           aviso.textContent = 'Não foi possível ler o escudo. Selecione o arquivo novamente.';
+         };
+         leitor.readAsDataURL(inputEscudo.files[0]);
+       } else {
+         enviarPayload();
+       }
+
+       function enviarPayload() {
+         google.script.run
+           .withSuccessHandler(function (dados) {
+             campeonatos = dados;
+             montarTelaCampeonatos(dados.recado);
+           })
+           .withFailureHandler(function (erro) {
+             botao.disabled = false;
+             aviso.innerHTML = '<span class="alerta">'
+               + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+           })
+           .salvarCampeonato(payload);
+       }
+     }
 
     function removerCampeonatoDoSistema(id) {
       if (!window.confirm('Remover este campeonato?')) {
@@ -2774,149 +3384,1060 @@
         .removerCampeonato(id);
     }
 
-    let gruposRodadas = { campeonatos: [], formatos: [], registros: [], podeEditar: false };
+    let timesCampeonato = { campeonatos: [], equipesGlobais: [], registros: [], podeEditar: false };
+    let campeonatoParticipantesAtual = '';
+    let elencoAtual = null;
+    let dialogoDetalhesElencoAtual = null;
+    let rotaElencoPendente = Boolean(CONFIG.elenco && (CONFIG.elenco.campeonatoId || CONFIG.elenco.equipeId));
 
-    function carregarGruposRodadas() {
-      google.script.run
-        .withSuccessHandler(function (dados) {
-          if (moduloAtual !== 'grupos-rodadas') {
-            return;
-          }
-
-          gruposRodadas = dados;
-          montarTelaGruposRodadas();
-        })
-        .withFailureHandler(function (erro) {
-          if (moduloAtual !== 'grupos-rodadas') {
-            return;
-          }
-
-          document.getElementById('statusGruposRodadas').outerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
-        })
-        .listarGruposRodadas();
+    function fecharDetalhesPessoaElenco(restaurarFoco) {
+      const dialogo = dialogoDetalhesElencoAtual;
+      if (!dialogo) return;
+      const origem = dialogo._elencoOrigemFoco;
+      dialogoDetalhesElencoAtual = null;
+      if (dialogo.open && typeof dialogo.close === 'function') {
+        dialogo.dataset.naoRestaurarFoco = 'true';
+        dialogo.close();
+      } else dialogo.removeAttribute('open');
+      if (restaurarFoco) {
+        if (origem && origem.isConnected) origem.focus();
+      }
+      dialogo._elencoOrigemFoco = null;
+      const conteudo = dialogo.querySelector('[data-elenco-detalhes-conteudo]');
+      if (conteudo) conteudo.replaceChildren();
     }
 
-    function montarTelaGruposRodadas(recado) {
-      const registros = gruposRodadas.registros || [];
-      const sucesso = recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '';
-
-      if (!(gruposRodadas.campeonatos || []).length) {
-        document.getElementById('areaGruposRodadas').innerHTML = sucesso
-          + '<div class="aviso"><strong>Cadastre um campeonato primeiro.</strong> A configuração de grupos e rodadas depende de pelo menos um campeonato criado na etapa anterior.</div>';
+    function carregarTimesCampeonato() {
+      if (rotaElencoPendente) {
+        rotaElencoPendente = false;
+        abrirElenco(CONFIG.elenco.campeonatoId, CONFIG.elenco.equipeId);
         return;
       }
-
-      const linhas = registros.map(function (item) {
-        const estrutura = item.grupos
-          ? item.grupos + ' grupo(s) · ' + item.vagasPorGrupo + ' vaga(s) · ' + item.rodadas + ' rodada(s)'
-          : 'Ainda não configurado';
-
-        return '<tr>'
-          + '<td data-rotulo="Campeonato">' + escapar(item.campeonatoNome || '-') + '<div class="equipe-dado">' + escapar(item.temporada || '') + '</div></td>'
-          + '<td data-rotulo="Fase">' + escapar(item.faseNome || '—') + '</td>'
-          + '<td data-rotulo="Formato">' + escapar(item.formato || '—') + '</td>'
-          + '<td data-rotulo="Estrutura">' + escapar(estrutura) + (item.idaVolta ? '<div class="equipe-dado">ida e volta</div>' : '') + '</td>'
-          + '<td class="acoes-linha" data-rotulo="Ações"><button type="button" class="botao-apoio" data-editar-estrutura="' + escapar(item.campeonatoId) + '">Configurar</button></td>'
-          + '</tr>';
-      }).join('');
-
-      document.getElementById('areaGruposRodadas').innerHTML = sucesso
-        + '<div class="barra-acoes">'
-        + '<button type="button" class="botao-principal" id="novaEstruturaCampeonato">Nova configuração</button>'
-        + '<button type="button" class="botao-apoio" id="recarregarEstruturasCampeonato">Atualizar</button>'
-        + '</div>'
-        + '<div class="tabela-rolagem"><table class="campeonatos"><thead><tr>'
-        + '<th>Campeonato</th><th>Fase</th><th>Formato</th><th>Estrutura</th><th>Ações</th>'
-        + '</tr></thead><tbody>' + linhas + '</tbody></table></div>'
-        + '<div id="gruposRodadasFormArea"></div>'
-        + '<div class="aviso">Nesta etapa do MVP você define a estrutura base da fase: quantidade de grupos, vagas por grupo, rodadas e se a fase terá ida e volta.</div>';
-
-      document.getElementById('novaEstruturaCampeonato').addEventListener('click', function () {
-        abrirFormularioGruposRodadas('');
-      });
-
-      document.getElementById('recarregarEstruturasCampeonato').addEventListener('click', function () {
-        abrirModulo('grupos-rodadas');
-      });
-
-      document.querySelectorAll('[data-editar-estrutura]').forEach(function (botao) {
-        botao.addEventListener('click', function () {
-          abrirFormularioGruposRodadas(botao.dataset.editarEstrutura);
-        });
-      });
-    }
-
-    function abrirFormularioGruposRodadas(campeonatoId) {
-      const selecionado = campeonatoId || ((gruposRodadas.campeonatos[0] && gruposRodadas.campeonatos[0].id) || '');
-      const registro = (gruposRodadas.registros || []).filter(function (item) {
-        return item.campeonatoId === selecionado;
-      })[0] || null;
-
-      document.getElementById('gruposRodadasFormArea').innerHTML = '<div class="formulario campeonato-form">'
-        + '<h3>Configurar grupos e rodadas</h3>'
-        + '<p class="apoio">Defina a fase inicial do campeonato para preparar o caminho das próximas telas do MVP.</p>'
-        + '<div class="grupo"><div class="campos">'
-        + '<div class="campo largo"><label for="grCampeonato">Campeonato</label><select id="grCampeonato">'
-        + opcoesSelect(gruposRodadas.campeonatos, selecionado, '') + '</select></div>'
-        + campoTexto('grFaseNome', 'Nome da fase', registro ? registro.faseNome : 'Classificação', 'curto', '', 'text')
-        + '<div class="campo largo"><label for="grFormato">Formato</label><select id="grFormato">'
-        + opcoesSelect(gruposRodadas.formatos, registro ? registro.formato : (gruposRodadas.formatos[0] ? gruposRodadas.formatos[0].id : ''), '') + '</select></div>'
-        + campoTexto('grGrupos', 'Quantidade de grupos', registro && registro.grupos ? registro.grupos : '2', 'mini', '', 'number')
-        + campoTexto('grVagas', 'Vagas por grupo', registro && registro.vagasPorGrupo ? registro.vagasPorGrupo : '4', 'mini', '', 'number')
-        + campoTexto('grRodadas', 'Quantidade de rodadas', registro && registro.rodadas ? registro.rodadas : '3', 'mini', '', 'number')
-        + '<div class="campo curto"><label for="grIdaVolta">Ida e volta</label><select id="grIdaVolta">'
-        + '<option value="nao"' + (registro && registro.idaVolta ? '' : ' selected') + '>Não</option>'
-        + '<option value="sim"' + (registro && registro.idaVolta ? ' selected' : '') + '>Sim</option>'
-        + '</select></div>'
-        + '<div class="campo cheio"><label for="grObservacoes">Observações</label>'
-        + '<textarea id="grObservacoes" placeholder="Ex.: classificação por pontos corridos, sorteio posterior do mata-mata, critérios especiais de desempate">'
-        + escapar(registro ? registro.observacoes : '') + '</textarea></div>'
-        + '</div></div>'
-        + '<div class="acoes-formulario">'
-        + '<button type="button" class="botao-principal" id="gravarGruposRodadas">Salvar configuração</button>'
-        + '<button type="button" class="botao-apoio" id="voltarGruposRodadas">Voltar à lista</button>'
-        + '<span class="espaco"></span>'
-        + '<span class="apoio" id="avisoGruposRodadas"></span>'
-        + '</div></div>';
-
-      document.getElementById('voltarGruposRodadas').addEventListener('click', function () {
-        document.getElementById('gruposRodadasFormArea').innerHTML = '';
-      });
-
-      document.getElementById('gravarGruposRodadas').addEventListener('click', function () {
-        gravarGruposRodadas();
-      });
-    }
-
-    function gravarGruposRodadas() {
-      const botao = document.getElementById('gravarGruposRodadas');
-      const aviso = document.getElementById('avisoGruposRodadas');
-
-      botao.disabled = true;
-      aviso.textContent = 'Gravando...';
-
+      elencoAtual = null;
+      document.getElementById('areaTimesCampeonato').innerHTML = blocoCarregando('statusTimesCampeonato');
       google.script.run
         .withSuccessHandler(function (dados) {
-          gruposRodadas = dados;
-          montarTelaGruposRodadas(dados.recado);
+          if (moduloAtual !== 'times-campeonato' || elencoAtual) {
+            return;
+          }
+
+          timesCampeonato = dados;
+          montarTelaTimesCampeonato();
         })
         .withFailureHandler(function (erro) {
-          botao.disabled = false;
-          aviso.innerHTML = '<span class="alerta">'
-            + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+          if (moduloAtual !== 'times-campeonato' || elencoAtual) {
+            return;
+          }
+
+          document.getElementById('statusTimesCampeonato').outerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
         })
-        .salvarGruposRodadas({
-          campeonatoId: document.getElementById('grCampeonato').value,
-          faseNome: document.getElementById('grFaseNome').value,
-          formato: document.getElementById('grFormato').value,
-          grupos: document.getElementById('grGrupos').value,
-          vagasPorGrupo: document.getElementById('grVagas').value,
-          rodadas: document.getElementById('grRodadas').value,
-          idaVolta: document.getElementById('grIdaVolta').value === 'sim',
-          observacoes: document.getElementById('grObservacoes').value
-        });
+        .listarEquipesParticipantes();
     }
+
+    function montarTelaTimesCampeonato(recado) {
+      montarEquipesParticipantes(recado);
+    }
+
+    function montarEquipesParticipantes(recado) {
+      elencoAtual = null;
+      const area = document.getElementById('areaTimesCampeonato');
+      const campeonatos = timesCampeonato.campeonatos || [];
+      if (!campeonatos.length) {
+        area.innerHTML = '<div class="aviso">Nenhum campeonato com equipe vinculada disponível. A diretoria deve cadastrar o campeonato e vincular a equipe.</div>';
+        return;
+      }
+      if (!campeonatos.some(function (item) { return item.id === campeonatoParticipantesAtual; })) campeonatoParticipantesAtual = campeonatos[0].id;
+      const registro = (timesCampeonato.registros || []).find(function (item) { return item.campeonatoId === campeonatoParticipantesAtual; }) || {};
+      const times = registro.timesDetalhados || [];
+      area.innerHTML = (recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '')
+        + '<div class="campo largo"><label for="epCampeonato">Campeonato</label><select id="epCampeonato">'
+        + opcoesSelect(campeonatos, campeonatoParticipantesAtual, '') + '</select></div>'
+        + '<div class="barra-acoes participantes-acoes">' + (timesCampeonato.podeEditar ? '<button type="button" class="botao-principal" id="epVincular">Vincular equipe existente</button>' : '')
+        + '<button type="button" class="botao-apoio" id="epAtualizar">Atualizar</button></div>'
+        + '<div class="campeonatos-cards">' + times.map(function (time) {
+          return '<article class="campeonato-card"><div class="campeonato-card-topo">'
+            + '<div class="campeonato-card-escudo">'
+            + (time.escudo ? '<img src="' + escapar(time.escudo) + '" alt="Escudo de ' + escapar(time.nome) + '">' : '<span aria-hidden="true">🛡️</span>')
+            + '</div><div><h3>' + escapar(time.nome) + '</h3><div class="apoio">' + escapar(registro.campeonatoNome || (campeonatos.find(function (item) { return item.id === campeonatoParticipantesAtual; }) || {}).nome || '') + '</div></div></div>'
+            + '<dl class="campeonato-card-dados">'
+            + '<div><dt>Atletas</dt><dd>' + escapar(time.totalAtletas) + '</dd></div>'
+            + '<div><dt>Comissão técnica</dt><dd>' + escapar(time.totalComissao) + '</dd></div>'
+            + '<div><dt>Acesso do associado</dt><dd>' + (time.bloqueado ? 'Somente leitura' : 'Elenco liberado') + '</dd></div>'
+            + '</dl>'
+            + '<div class="barra-acoes participante-card-acoes"><button type="button" class="botao-principal" data-elenco="' + escapar(time.id) + '">Gerenciar elenco</button>'
+            + (timesCampeonato.podeEditar ? '<button type="button" class="botao-apoio perigo" data-ep-remover="' + escapar(time.nome) + '">Desvincular</button>' : '')
+            + '</div></article>';
+        }).join('') + '</div>' + (!times.length ? '<div class="aviso">Nenhuma equipe vinculada neste campeonato.</div>' : '')
+        + '<div id="timesFormArea"></div>';
+      document.getElementById('epCampeonato').addEventListener('change', function () {
+        campeonatoParticipantesAtual = this.value; montarEquipesParticipantes();
+      });
+      document.getElementById('epAtualizar').addEventListener('click', carregarTimesCampeonato);
+      if (timesCampeonato.podeEditar) document.getElementById('epVincular').addEventListener('click', abrirVinculoEquipeParticipante);
+      area.querySelectorAll('[data-elenco]').forEach(function (botao) {
+        botao.addEventListener('click', function () { abrirElenco(campeonatoParticipantesAtual, botao.dataset.elenco); });
+      });
+      area.querySelectorAll('[data-ep-remover]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          if (!window.confirm('Desvincular ' + botao.dataset.epRemover + '?')) return;
+          botao.disabled = true;
+          google.script.run.withSuccessHandler(function () { carregarTimesCampeonato(); })
+            .withFailureHandler(function (erro) { botao.disabled = false; area.insertAdjacentHTML('afterbegin', '<div class="erro">' + escapar(erro.message || erro) + '</div>'); })
+            .removerTimeCampeonato(campeonatoParticipantesAtual, botao.dataset.epRemover);
+        });
+      });
+    }
+
+    function abrirVinculoEquipeParticipante() {
+      const registro = (timesCampeonato.registros || []).find(function (item) { return item.campeonatoId === campeonatoParticipantesAtual; }) || {};
+      const vinculados = (registro.timesDetalhados || []).map(function (item) { return item.id; });
+      const disponiveis = (timesCampeonato.equipesGlobais || []).filter(function (item) {
+        return !vinculados.includes(item.id) && !(registro.times || []).includes(item.nome);
+      });
+      document.getElementById('timesFormArea').innerHTML = '<section class="formulario campeonato-form vinculo-equipe-form"><h3>Vincular equipe existente</h3>'
+        + '<div class="grupo"><h4>Equipe participante</h4><div class="campo cheio"><label for="epEquipe">Equipe do Banco de Dados de Equipes</label><select id="epEquipe">'
+        + '<option value="">Selecione uma equipe disponível</option>'
+        + disponiveis.map(function (item) { return '<option value="' + escapar(item.id) + '">' + escapar(item.nome) + '</option>'; }).join('')
+        + '</select></div></div><div class="barra-acoes"><button type="button" class="botao-principal" id="epSalvar" disabled>Vincular</button>'
+        + '<button type="button" class="botao-apoio" id="epCancelar">Cancelar</button></div><span id="epAviso" class="apoio">'
+        + (!disponiveis.length ? 'Nenhuma equipe disponível. Cadastre no Banco de Dados de Equipes.' : 'Selecione uma equipe; equipes já vinculadas não aparecem nesta lista.') + '</span></section>';
+      document.getElementById('epEquipe').addEventListener('change', function () {
+        document.getElementById('epSalvar').disabled = !this.value;
+      });
+      document.getElementById('epCancelar').addEventListener('click', function () { document.getElementById('timesFormArea').innerHTML = ''; });
+      document.getElementById('epSalvar').addEventListener('click', function () {
+        if (!document.getElementById('epEquipe').value) return;
+        const botao = this;
+        botao.disabled = true;
+        document.getElementById('epAviso').textContent = 'Vinculando...';
+        google.script.run.withSuccessHandler(function (dados) { timesCampeonato = dados; montarEquipesParticipantes('Equipe vinculada.'); })
+          .withFailureHandler(function (erro) { botao.disabled = false; document.getElementById('epAviso').textContent = erro.message || erro; })
+          .vincularEquipeParticipante({ campeonatoId: campeonatoParticipantesAtual, equipeId: document.getElementById('epEquipe').value });
+      });
+    }
+
+    function abrirElenco(campeonatoId, equipeId) {
+      const contexto = { campeonatoId: campeonatoId, equipeId: equipeId };
+      elencoAtual = contexto;
+      abaElencoAtiva = 'atletas';
+      campeonatoParticipantesAtual = campeonatoId;
+      document.getElementById('areaTimesCampeonato').innerHTML = blocoCarregando();
+      google.script.run.withSuccessHandler(function (dados) {
+        if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+        cadastroPessoasCampeonato = dados;
+        montarElenco();
+      }).withFailureHandler(function (erro) {
+        if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+        document.getElementById('areaTimesCampeonato').innerHTML = '<div class="erro">' + escapar(erro.message || erro) + '</div><button type="button" class="botao-apoio" id="elencoErroVoltar">Voltar às equipes</button>';
+        document.getElementById('elencoErroVoltar').addEventListener('click', function () { elencoAtual = null; carregarTimesCampeonato(); });
+      }).listarElenco(campeonatoId, equipeId);
+    }
+
+    function montarElenco(recado) {
+      fecharDetalhesPessoaElenco(false);
+      importacaoElencoAtual = null;
+      const dados = cadastroPessoasCampeonato;
+      if (elencoAtual) elencoAtual.salvando = false;
+      const editavel = dados.podeEditar === true;
+      const registro = dados.registros[0];
+      const abas = [
+        { tipo: 'atletas', id: 'elencoAbaAtletas', nome: 'Atletas', total: registro.atletas.length },
+        { tipo: 'comissao', id: 'elencoAbaComissao', nome: 'Comissão técnica', total: registro.comissao.length },
+        { tipo: 'jogos', id: 'elencoAbaJogos', nome: 'Jogos' },
+        { tipo: 'estatisticas', id: 'elencoAbaEstatisticas', nome: 'Estatísticas' }
+      ];
+      const aba = abas.find(function (item) { return item.tipo === abaElencoAtiva; }) || abas[0];
+      abaElencoAtiva = aba.tipo;
+      const cadastro = aba.tipo === 'atletas' || aba.tipo === 'comissao';
+      const comissao = aba.tipo === 'comissao';
+      const pessoas = cadastro ? (comissao ? registro.comissao : registro.atletas) : [];
+      const contexto = elencoAtual;
+      const area = document.getElementById('areaTimesCampeonato');
+      area.innerHTML = '<section class="elenco">'
+        + (recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '')
+        + '<div class="elenco-contexto apoio">Equipes participantes / ' + escapar(registro.campeonatoNome) + ' / Elenco</div>'
+        + '<div class="elenco-cabecalho">'
+        + (dados.equipe.escudo ? '<img class="elenco-escudo" src="' + escapar(dados.equipe.escudo) + '" alt="Escudo de ' + escapar(dados.equipe.nome) + '">' : '<span class="elenco-escudo" aria-hidden="true">🛡️</span>')
+        + '<div class="elenco-cabecalho-titulo"><h3>Elenco da equipe — ' + escapar(dados.equipe.nome) + '</h3><span class="apoio">' + escapar(registro.campeonatoNome) + '</span></div>'
+        + '<button type="button" class="botao-apoio" id="elencoVoltar">‹ Equipes participantes</button></div>'
+        + '<div class="barra-acoes"><span class="apoio" id="elencoBloqueioAviso" role="status" aria-live="polite">'
+        + (dados.bloqueado ? (editavel ? 'Elenco bloqueado para o associado. Administração pode editar.' : 'Somente leitura — elenco bloqueado pela administração.') : 'Elenco desbloqueado.')
+        + '</span>' + (dados.podeBloquear ? '<button type="button" class="botao-apoio" id="elencoBloqueio">' + (dados.bloqueado ? 'Desbloquear elenco' : 'Bloquear elenco') + '</button>' : '') + '</div>'
+        + '<div class="elenco-abas" role="tablist" aria-label="Elenco e informações da equipe">'
+        + abas.map(function (item) {
+          const selecionada = item.tipo === aba.tipo;
+          return '<button type="button" class="botao-apoio elenco-aba" id="' + item.id + '" role="tab" aria-controls="elencoLista" aria-selected="' + selecionada + '" tabindex="' + (selecionada ? '0' : '-1') + '" data-elenco-aba="' + item.tipo + '">' + item.nome + (item.total !== undefined ? ' (' + item.total + ')' : '') + '</button>';
+        }).join('') + '</div>'
+        + '<div id="elencoLista" class="elenco-painel elenco-lista" role="tabpanel" aria-labelledby="' + aba.id + '">'
+        + (cadastro ? '<div class="elenco-lista-cabecalho"><h4>' + (comissao ? 'Comissão técnica da equipe' : 'Atletas da equipe') + ' (' + pessoas.length + ')</h4>'
+        + (editavel ? '<div class="elenco-lista-acoes"><button type="button" class="botao-principal" id="elencoNovo">' + (comissao ? 'Adicionar membro da comissão' : 'Adicionar atleta') + '</button>'
+        + '<button type="button" class="botao-apoio" id="elencoImportar">' + (comissao ? 'Importar comissão' : 'Importar atletas') + '</button></div>' : '') + '</div>'
+        + (pessoas.length ? '<div class="elenco-pessoas-grid">' + pessoas.map(function (pessoa) {
+          const descricao = comissao ? pessoa.cargo : pessoa.posicao;
+          const adicionais = [];
+          if (!comissao && pessoa.apelido) adicionais.push('“' + escapar(pessoa.apelido) + '”');
+          if (!comissao && pessoa.numero !== null && pessoa.numero !== undefined && String(pessoa.numero).trim()) adicionais.push('Camisa ' + escapar(pessoa.numero));
+          return '<article class="elenco-pessoa-card"><div class="elenco-pessoa-resumo"><div class="elenco-pessoa-foto">' + fotoCadastroPessoa_(pessoa) + '</div>'
+            + '<div class="elenco-pessoa-identidade"><h5>' + escapar(pessoa.nome) + '</h5>'
+            + (descricao ? '<p class="apoio">' + escapar(descricao) + '</p>' : '')
+            + (adicionais.length ? '<p class="apoio">' + adicionais.join(' · ') + '</p>' : '')
+            + '</div></div><div class="elenco-pessoa-acoes"><button type="button" class="botao-apoio" aria-label="Ver detalhes de ' + escapar(pessoa.nome) + '" data-elenco-detalhes="' + escapar(pessoa.id) + '">Ver detalhes</button>'
+            + (editavel ? '<button type="button" class="botao-apoio" aria-label="Editar ' + escapar(pessoa.nome) + '" data-elenco-editar="' + escapar(pessoa.id) + '">Editar</button>'
+            + '<button type="button" class="botao-apoio perigo" aria-label="Remover ' + escapar(pessoa.nome) + '" data-elenco-remover="' + escapar(pessoa.id) + '">Remover</button>' : '') + '</div></article>';
+        }).join('') + '</div>'
+        : '<div class="elenco-vazio apoio">' + (comissao ? 'Nenhum membro da comissão técnica cadastrado nesta equipe.' : 'Nenhum atleta cadastrado nesta equipe.') + (editavel ? ' Use o botão Adicionar para começar.' : '') + '</div>')
+        + (dados.linkInscricao ? '<div class="elenco-link-acoes"><span id="elencoAvisoLink" class="apoio" role="status" aria-live="polite"></span>'
+          + '<button type="button" class="botao-apoio" id="elencoCopiar">Copiar link</button>'
+          + '<a class="botao-link" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent('Cadastre novos atletas e comissão de ' + dados.equipe.nome + ' em ' + registro.campeonatoNome + '. Acesse com sua Conta Google autorizada: ' + dados.linkInscricao) + '">WhatsApp</a></div>' : '')
+          : '<div class="elenco-vazio apoio">' + aba.nome + ' de ' + escapar(dados.equipe.nome) + ' em ' + escapar(registro.campeonatoNome) + ': área reservada para uma etapa futura. ' + (aba.tipo === 'jogos' ? 'A consulta e a operação dos jogos ainda não estão disponíveis nesta aba.' : 'As estatísticas ainda não estão disponíveis nesta aba.') + '</div>')
+        + '</div>' + (cadastro ? '<div id="cadastroPessoasFormArea" class="elenco-painel" hidden></div>'
+          + '<dialog class="elenco-detalhes-dialog" role="dialog" aria-modal="true" aria-labelledby="elencoDetalhesTitulo">'
+          + '<div class="elenco-detalhes-conteudo"><div class="elenco-detalhes-marca">'
+          + (CONFIG.logoUrl ? '<img src="' + escapar(CONFIG.logoUrl) + '" alt="Logo da AEUV">' : '')
+          + '<span>AEUV — Identificação do elenco</span></div>'
+          + '<div class="elenco-detalhes-topo"><h3 id="elencoDetalhesTitulo">Detalhes do cadastro</h3>'
+          + '<button type="button" class="botao-apoio elenco-detalhes-fechar" data-elenco-fechar aria-label="Fechar detalhes">×</button></div>'
+          + '<div class="elenco-detalhes-pessoa" data-elenco-detalhes-conteudo></div>'
+          + (editavel ? '<div class="elenco-detalhes-acoes"><button type="button" class="botao-apoio" data-elenco-editar>Editar</button>'
+          + '<button type="button" class="botao-apoio perigo" data-elenco-remover>Remover</button></div>' : '') + '</div></dialog>' : '') + '</section>';
+      const dialogo = cadastro ? area.querySelector('.elenco-detalhes-dialog') : null;
+      if (dialogo) {
+        dialogo.addEventListener('keydown', function (evento) {
+          if (typeof dialogo.showModal === 'function' || evento.key !== 'Escape') return;
+          evento.preventDefault();
+          fecharDetalhesPessoaElenco(true);
+        });
+        dialogo.addEventListener('close', function () {
+          if (dialogo.dataset.naoRestaurarFoco === 'true') delete dialogo.dataset.naoRestaurarFoco;
+          else if (dialogo._elencoOrigemFoco && dialogo._elencoOrigemFoco.isConnected) dialogo._elencoOrigemFoco.focus();
+          dialogo._elencoOrigemFoco = null;
+          if (dialogoDetalhesElencoAtual === dialogo) dialogoDetalhesElencoAtual = null;
+          const conteudo = dialogo.querySelector('[data-elenco-detalhes-conteudo]');
+          if (conteudo) conteudo.replaceChildren();
+        });
+        dialogo.addEventListener('click', function (evento) {
+          if (evento.target === dialogo) fecharDetalhesPessoaElenco(true);
+        });
+        dialogo.querySelector('[data-elenco-fechar]').addEventListener('click', function () { fecharDetalhesPessoaElenco(true); });
+      }
+      document.getElementById('elencoVoltar').addEventListener('click', voltarEquipesElenco_);
+      if (dados.podeBloquear) document.getElementById('elencoBloqueio').addEventListener('click', alternarBloqueioElenco_);
+      if (cadastro && editavel) document.getElementById('elencoNovo').addEventListener('click', function () { abrirFormularioCadastroPessoa(elencoAtual.campeonatoId, abaElencoAtiva, ''); });
+      if (cadastro && editavel) document.getElementById('elencoImportar').addEventListener('click', abrirImportacaoElenco);
+      area.querySelectorAll('[data-elenco-aba]').forEach(function (botao) {
+        botao.addEventListener('click', function () { if (botao.disabled) return; abaElencoAtiva = botao.dataset.elencoAba; montarElenco(); document.getElementById(botao.id).focus(); });
+        botao.addEventListener('keydown', function (evento) {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(evento.key) || botao.disabled) return;
+          evento.preventDefault();
+          const indice = abas.findIndex(function (item) { return item.tipo === abaElencoAtiva; });
+          const proxima = evento.key === 'Home' ? 0 : evento.key === 'End' ? abas.length - 1
+            : (indice + (evento.key === 'ArrowRight' ? 1 : -1) + abas.length) % abas.length;
+          abaElencoAtiva = abas[proxima].tipo;
+          montarElenco();
+          document.getElementById(abas[proxima].id).focus();
+        });
+      });
+      area.querySelectorAll('[data-elenco-detalhes]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          const pessoa = pessoas.find(function (item) { return item.id === botao.dataset.elencoDetalhes; });
+          if (!pessoa || elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+          const conteudo = dialogo.querySelector('[data-elenco-detalhes-conteudo]');
+          const foto = document.createElement('div');
+          foto.className = 'elenco-detalhes-foto';
+          foto.appendChild(document.createElement('span'));
+          foto.firstChild.className = 'elenco-detalhes-placeholder';
+          foto.firstChild.textContent = (String(pessoa.nome || '?').trim().charAt(0).toUpperCase() || '?');
+          if (pessoa.foto) {
+            const imagem = document.createElement('img');
+            imagem.className = 'cadastro-foto-mini';
+            imagem.src = pessoa.foto;
+            imagem.alt = 'Foto de ' + String(pessoa.nome || 'cadastro');
+            foto.replaceChildren(imagem);
+          }
+          const dadosPessoa = document.createElement('dl');
+          dadosPessoa.className = 'elenco-detalhes-dados';
+          const campos = [
+            ['Nome', pessoa.nome],
+            ['Nascimento', pessoa.dataNascimento ? formatarDataBr(String(pessoa.dataNascimento)) : ''],
+            ['CPF', pessoa.cpf ? formatarCpf(pessoa.cpf) : ''],
+            ['RG', pessoa.rg],
+            [comissao ? 'Cargo' : 'Posição', comissao ? pessoa.cargo : pessoa.posicao],
+            ['Apelido', comissao ? '' : pessoa.apelido],
+            ['Número da camisa', comissao ? '' : pessoa.numero],
+            ['Equipe', dados.equipe.nome],
+            ['Campeonato', registro.campeonatoNome]
+          ];
+          campos.forEach(function (campo) {
+            if (campo[1] === null || campo[1] === undefined || String(campo[1]).trim() === '') return;
+            const item = document.createElement('div');
+            const rotulo = document.createElement('dt');
+            const valor = document.createElement('dd');
+            rotulo.textContent = campo[0];
+            valor.textContent = String(campo[1]);
+            item.appendChild(rotulo);
+            item.appendChild(valor);
+            dadosPessoa.appendChild(item);
+          });
+          conteudo.replaceChildren(foto, dadosPessoa);
+          dialogo.querySelector('#elencoDetalhesTitulo').textContent = 'Detalhes de ' + String(pessoa.nome || 'cadastro');
+          const botaoEditar = dialogo.querySelector('[data-elenco-editar]');
+          const botaoRemover = dialogo.querySelector('[data-elenco-remover]');
+          if (botaoEditar) {
+            botaoEditar.dataset.elencoEditar = pessoa.id;
+            botaoEditar.setAttribute('aria-label', 'Editar ' + String(pessoa.nome || 'cadastro'));
+          }
+          if (botaoRemover) {
+            botaoRemover.dataset.elencoRemover = pessoa.id;
+            botaoRemover.setAttribute('aria-label', 'Remover ' + String(pessoa.nome || 'cadastro'));
+          }
+          dialogo._elencoOrigemFoco = botao;
+          dialogoDetalhesElencoAtual = dialogo;
+          if (typeof dialogo.showModal === 'function') dialogo.showModal();
+          else {
+            dialogo.setAttribute('open', '');
+          }
+          dialogo.querySelector('[data-elenco-fechar]').focus();
+        });
+      });
+      area.querySelectorAll('[data-elenco-editar]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          const pessoaId = botao.dataset.elencoEditar;
+          if (!pessoas.some(function (item) { return item.id === pessoaId; }) || elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+          fecharDetalhesPessoaElenco(false);
+          abrirFormularioCadastroPessoa(elencoAtual.campeonatoId, abaElencoAtiva, pessoaId);
+        });
+      });
+      area.querySelectorAll('[data-elenco-remover]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          const pessoaId = botao.dataset.elencoRemover;
+          if (!pessoas.some(function (item) { return item.id === pessoaId; }) || elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+          removerCadastroPessoa(abaElencoAtiva, elencoAtual.campeonatoId, pessoaId);
+        });
+      });
+      if (dados.linkInscricao && cadastro) document.getElementById('elencoCopiar').addEventListener('click', function () {
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(dados.linkInscricao).then(function () { document.getElementById('elencoAvisoLink').textContent = 'Link copiado. O destinatário precisa de acesso autorizado à equipe.'; })
+            .catch(function () { window.prompt('Copie o link de inscrição:', dados.linkInscricao); });
+        } else window.prompt('Copie o link de inscrição:', dados.linkInscricao);
+      });
+    }
+
+    function permitirEdicaoElenco_() {
+      if (!elencoAtual) return true;
+      if (elencoAtual.salvando) return false;
+      if (cadastroPessoasCampeonato.podeEditar === true) return true;
+      document.getElementById('elencoBloqueioAviso').textContent = 'Somente leitura — elenco bloqueado. Não é possível alterar ou importar cadastros.';
+      return false;
+    }
+
+    function marcarElencoPendente_(pendente) {
+      if (!elencoAtual) return;
+      elencoAtual.salvando = pendente;
+      document.getElementById('elencoVoltar').disabled = pendente;
+      const bloqueio = document.getElementById('elencoBloqueio');
+      if (bloqueio) bloqueio.disabled = pendente || document.getElementById('elencoLista').hidden;
+      document.getElementById('areaTimesCampeonato').querySelectorAll('[data-elenco-aba]').forEach(function (botao) {
+        botao.disabled = pendente || document.getElementById('elencoLista').hidden;
+      });
+    }
+
+    function voltarEquipesElenco_() {
+      if (!elencoAtual || elencoAtual.salvando) return;
+      const formulario = document.getElementById('cadastroPessoasFormArea');
+      if (formulario && !formulario.hidden && !window.confirm('Voltar às equipes participantes? As alterações e seleções não salvas serão descartadas.')) return;
+      campeonatoParticipantesAtual = elencoAtual.campeonatoId;
+      importacaoElencoAtual = null;
+      elencoAtual = null;
+      fecharDetalhesPessoaElenco(false);
+      carregarTimesCampeonato();
+    }
+
+    function alternarBloqueioElenco_() {
+      if (!elencoAtual || elencoAtual.salvando || !cadastroPessoasCampeonato.podeBloquear) return;
+      if (document.getElementById('elencoLista').hidden) return;
+      const contexto = elencoAtual;
+      const bloqueado = !cadastroPessoasCampeonato.bloqueado;
+      marcarElencoPendente_(true);
+      document.getElementById('areaTimesCampeonato').querySelectorAll('button').forEach(function (botao) { botao.disabled = true; });
+      document.getElementById('elencoBloqueioAviso').textContent = 'Salvando bloqueio…';
+      google.script.run.withSuccessHandler(function (dados) {
+        if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+        cadastroPessoasCampeonato = dados;
+        montarElenco(bloqueado ? 'Elenco bloqueado para o associado.' : 'Elenco desbloqueado.');
+      }).withFailureHandler(function (erro) {
+        if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+        montarElenco();
+        document.getElementById('elencoBloqueioAviso').textContent = 'Não foi possível salvar o bloqueio: ' + (erro.message || erro) + ' Atualize o elenco antes de tentar novamente.';
+      }).definirBloqueioElenco({ campeonatoId: contexto.campeonatoId, equipeId: contexto.equipeId, bloqueado: bloqueado });
+    }
+
+    function alternarFormularioElenco(aberto) {
+      fecharDetalhesPessoaElenco(false);
+      document.getElementById('elencoLista').hidden = aberto;
+      document.getElementById('cadastroPessoasFormArea').hidden = !aberto;
+      document.getElementById('elencoVoltar').disabled = !!(elencoAtual && elencoAtual.salvando);
+      const bloqueio = document.getElementById('elencoBloqueio');
+      if (bloqueio) bloqueio.disabled = aberto || !!(elencoAtual && elencoAtual.salvando);
+      document.getElementById('areaTimesCampeonato').querySelectorAll('[data-elenco-aba]').forEach(function (botao) { botao.disabled = aberto; });
+    }
+
+    let importacaoElencoAtual = null;
+
+    function abrirImportacaoElenco() {
+      if (!elencoAtual || !permitirEdicaoElenco_() || !['atletas', 'comissao'].includes(abaElencoAtiva)) return;
+      const estado = { contexto: elencoAtual, tipo: abaElencoAtiva, requisicao: 0, salvando: false };
+      importacaoElencoAtual = estado;
+      alternarFormularioElenco(true);
+      document.getElementById('cadastroPessoasFormArea').innerHTML =
+        '<section class="grupo elenco-form elenco-importacao"><h4>' + (estado.tipo === 'comissao' ? 'Importar comissão técnica' : 'Importar atletas') + '</h4>'
+        + '<p class="apoio">Destino: ' + escapar(cadastroPessoasCampeonato.equipe.nome) + ' — ' + escapar(cadastroPessoasCampeonato.registros[0].campeonatoNome) + '. '
+        + 'Escolha uma competição em que esta mesma equipe esteve inscrita, mesmo sem jogos. Os dados serão copiados sem alterar a origem.</p>'
+        + '<label class="campo">Competição de origem<select id="importacaoOrigem" disabled><option value="">Carregando histórico…</option></select></label>'
+        + '<div id="importacaoAviso" role="status" aria-live="polite"></div><div id="importacaoLoading" role="status" aria-label="Operação em andamento" hidden></div><div id="importacaoCandidatos" aria-busy="false"></div>'
+        + '<p id="importacaoContagem" class="apoio" aria-live="polite">0 selecionados</p>'
+        + '<div class="barra-acoes"><button type="button" class="botao-principal" id="importacaoSalvar" disabled>Importar selecionados</button>'
+        + '<button type="button" class="botao-apoio" id="importacaoCancelar">Cancelar e voltar à lista</button></div></section>';
+      document.getElementById('importacaoCancelar').addEventListener('click', function () {
+        if (estado.salvando || !importacaoElencoVigente_(estado)) return;
+        importacaoElencoAtual = null;
+        if (estado.recarregar) {
+          abrirElenco(estado.contexto.campeonatoId, estado.contexto.equipeId);
+          abaElencoAtiva = estado.tipo;
+        } else montarElenco();
+      });
+      document.getElementById('importacaoOrigem').addEventListener('change', function () { carregarOrigemImportacaoElenco_(estado, false); });
+      document.getElementById('importacaoSalvar').addEventListener('click', function () { salvarImportacaoElenco_(estado); });
+      carregarOrigemImportacaoElenco_(estado, true);
+    }
+
+    function importacaoElencoVigente_(estado) {
+      return importacaoElencoAtual === estado && elencoAtual === estado.contexto && moduloAtual === 'times-campeonato';
+    }
+
+    function atualizarContagemImportacaoElenco_() {
+      const quantidade = document.querySelectorAll('[data-importacao-id]:checked').length;
+      document.getElementById('importacaoContagem').textContent = quantidade + ' selecionado(s)';
+      document.getElementById('importacaoSalvar').disabled = !quantidade;
+    }
+
+    function mostrarLoadingImportacaoElenco_(ativo) {
+      const loading = document.getElementById('importacaoLoading');
+      loading.hidden = !ativo;
+      loading.innerHTML = ativo ? blocoCarregando() : '';
+      document.getElementById('importacaoCandidatos').setAttribute('aria-busy', String(ativo));
+    }
+
+    function carregarOrigemImportacaoElenco_(estado, inicial) {
+      if (!importacaoElencoVigente_(estado) || estado.salvando) return;
+      const origem = document.getElementById('importacaoOrigem');
+      const origemId = inicial ? '' : origem.value;
+      const requisicao = ++estado.requisicao;
+      document.getElementById('importacaoSalvar').disabled = true;
+      document.getElementById('importacaoContagem').textContent = '0 selecionados';
+      document.getElementById('importacaoCandidatos').innerHTML = '';
+      document.getElementById('importacaoAviso').textContent = 'Carregando histórico…';
+      mostrarLoadingImportacaoElenco_(true);
+      google.script.run.withSuccessHandler(function (dados) {
+        if (!importacaoElencoVigente_(estado) || requisicao !== estado.requisicao) return;
+        mostrarLoadingImportacaoElenco_(false);
+        if (inicial) {
+          origem.innerHTML = '<option value="">Selecione a competição de origem</option>' + dados.origens.map(function (item) {
+            return '<option value="' + escapar(item.campeonatoId) + '">' + escapar(item.nome) + ' — ' + escapar(item.equipeNome) + '</option>';
+          }).join('');
+          origem.disabled = !dados.origens.length;
+        }
+        document.getElementById('importacaoAviso').textContent = !dados.origens.length
+          ? 'Não há outras competições registradas para esta equipe. O histórico não reconstrói inscrições excluídas antes de sua ativação.'
+          : origemId && !dados.candidatos.length ? 'Nenhuma inscrição deste tipo na origem selecionada.'
+            : origemId ? 'Inscrições atuais e anteriores. Cadastros inválidos ou já inscritos no destino ficam indisponíveis.' : 'Selecione uma origem para consultar as inscrições.';
+        document.getElementById('importacaoCandidatos').innerHTML = dados.candidatos.length
+          ? '<label class="importacao-selecionar-todos"><input type="checkbox" id="importacaoTodos"> Selecionar todos os disponíveis</label>'
+            + '<div class="tabela-rolagem"><table class="usuarios"><thead><tr><th>Selecionar</th><th>Nome / CPF</th><th>Função na origem</th><th>Inscrição na origem / impedimento</th></tr></thead><tbody>'
+            + dados.candidatos.map(function (item) {
+              return '<tr><td><input type="checkbox" data-importacao-id="' + escapar(item.id) + '" aria-label="Selecionar ' + escapar(item.nome) + '"' + (item.motivo ? ' disabled' : '') + '></td>'
+                + '<td>' + escapar(item.nome) + '<br>' + escapar(formatarCpf(item.cpf)) + '</td><td>' + escapar(item.funcao) + '</td>'
+                + '<td>' + escapar(item.situacao) + (item.motivo ? '<br><span class="erro">' + escapar(item.motivo) + '</span>' : '') + '</td></tr>';
+            }).join('') + '</tbody></table></div>' : '';
+        document.querySelectorAll('[data-importacao-id]').forEach(function (checkbox) {
+          checkbox.addEventListener('change', atualizarContagemImportacaoElenco_);
+        });
+        const todos = document.getElementById('importacaoTodos');
+        if (todos) todos.addEventListener('change', function () {
+          document.querySelectorAll('[data-importacao-id]:not(:disabled)').forEach(function (checkbox) { checkbox.checked = todos.checked; });
+          atualizarContagemImportacaoElenco_();
+        });
+      }).withFailureHandler(function (erro) {
+        if (!importacaoElencoVigente_(estado) || requisicao !== estado.requisicao) return;
+        mostrarLoadingImportacaoElenco_(false);
+        document.getElementById('importacaoAviso').textContent = 'Não foi possível consultar o histórico: ' + (erro.message || erro) + ' Cancele e tente novamente.';
+      }).listarImportacaoElenco({
+        campeonatoId: estado.contexto.campeonatoId, equipeId: estado.contexto.equipeId, tipo: estado.tipo, origemId: origemId
+      });
+    }
+
+    function salvarImportacaoElenco_(estado) {
+      if (!importacaoElencoVigente_(estado) || estado.salvando) return;
+      const ids = Array.from(document.querySelectorAll('[data-importacao-id]:checked:not(:disabled)')).map(function (item) { return item.dataset.importacaoId; });
+      if (!ids.length) return;
+      const origemId = document.getElementById('importacaoOrigem').value;
+      estado.salvando = true;
+      marcarElencoPendente_(true);
+      document.getElementById('cadastroPessoasFormArea').querySelectorAll('button, input, select').forEach(function (item) { item.disabled = true; });
+      document.getElementById('importacaoAviso').textContent = 'Validando e importando ' + ids.length + ' cadastro(s)…';
+      mostrarLoadingImportacaoElenco_(true);
+      google.script.run.withSuccessHandler(function (resultado) {
+        if (!importacaoElencoVigente_(estado)) return;
+        document.getElementById('importacaoAviso').textContent = resultado.recado + ' Atualizando lista…';
+        google.script.run.withSuccessHandler(function (dados) {
+          if (!importacaoElencoVigente_(estado)) return;
+          cadastroPessoasCampeonato = dados;
+          montarElenco(resultado.recado);
+        }).withFailureHandler(function (erro) {
+          if (!importacaoElencoVigente_(estado)) return;
+          falhaImportacaoElenco_(estado, 'A importação foi salva, mas a lista não pôde ser atualizada. ' + (erro.message || erro));
+        }).listarElenco(estado.contexto.campeonatoId, estado.contexto.equipeId);
+      }).withFailureHandler(function (erro) {
+        if (!importacaoElencoVigente_(estado)) return;
+        falhaImportacaoElenco_(estado, erro.message || erro);
+      }).importarCadastrosElenco({
+        campeonatoId: estado.contexto.campeonatoId, equipeId: estado.contexto.equipeId,
+        tipo: estado.tipo, origemId: origemId, inscricaoIds: ids
+      });
+    }
+
+    function falhaImportacaoElenco_(estado, mensagem) {
+      estado.salvando = false;
+      marcarElencoPendente_(false);
+      estado.recarregar = true;
+      mostrarLoadingImportacaoElenco_(false);
+      document.getElementById('importacaoAviso').textContent = 'Erro: ' + mensagem + ' Volte à lista e atualize o elenco antes de tentar novamente.';
+      document.getElementById('importacaoCancelar').disabled = false;
+      // Do not offer an automatic retry after an uncertain Drive write.
+    }
+
+     /********* ATLETAS E COMISSÃO TÉCNICA *********/
+     let cadastroPessoasCampeonato = { campeonatos: [], times: {}, registros: [], posicoes: [], podeEditar: false };
+     let abaCadastroPessoasAtiva = 'atletas';
+     let abaElencoAtiva = 'atletas';
+     let modoEdicaoCadastroPessoas = false;
+
+     function carregarCadastroPessoasCampeonato(abaInicial) {
+       abaCadastroPessoasAtiva = abaInicial === 'comissao' ? 'comissao' : 'atletas';
+
+       google.script.run
+         .withSuccessHandler(function (dados) {
+           if (moduloAtual !== 'atletas-campeonato' && moduloAtual !== 'comissao-campeonato') {
+             return;
+           }
+
+           cadastroPessoasCampeonato = dados;
+           montarTelaCadastroPessoasCampeonato();
+         })
+         .withFailureHandler(function (erro) {
+           if (moduloAtual !== 'atletas-campeonato' && moduloAtual !== 'comissao-campeonato') {
+             return;
+           }
+
+           document.getElementById('statusCadastroPessoasCampeonato').outerHTML =
+             '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+         })
+         .listarCadastroPessoasCampeonato();
+     }
+
+     function carregarComissaoTecnica() {
+       carregarCadastroPessoasCampeonato('comissao');
+     }
+
+     function carregarAtletasCampeonato() {
+       carregarCadastroPessoasCampeonato('atletas');
+     }
+
+     function rotuloAbaCadastroPessoa() {
+       return abaCadastroPessoasAtiva === 'comissao' ? 'Comissão técnica' : 'Atletas';
+     }
+
+     function colecaoCadastroPessoaAtual() {
+       return abaCadastroPessoasAtiva === 'comissao' ? 'comissao' : 'atletas';
+     }
+
+     function fotoCadastroPessoa_(pessoa) {
+       if (pessoa && pessoa.foto) {
+         return '<img class="cadastro-foto-mini" src="' + escapar(pessoa.foto) + '" alt="' + escapar(pessoa.nome || 'Foto') + '">';
+       }
+
+       const inicial = escapar(((pessoa && pessoa.nome) || '?').trim().charAt(0).toUpperCase() || '?');
+       return '<div class="cadastro-foto-placeholder">' + inicial + '</div>';
+     }
+
+     function listarRegistrosCadastroPessoa(tipo) {
+       const chave = tipo === 'comissao' ? 'comissao' : 'atletas';
+       const linhas = [];
+
+       (cadastroPessoasCampeonato.registros || []).forEach(function (registro) {
+         (registro[chave] || []).forEach(function (pessoa) {
+           linhas.push({
+             campeonatoId: registro.campeonatoId,
+             campeonatoNome: registro.campeonatoNome,
+             pessoa: pessoa
+           });
+         });
+       });
+
+       return linhas.sort(function (a, b) {
+         return String((a.pessoa && a.pessoa.nome) || '').localeCompare(String((b.pessoa && b.pessoa.nome) || ''), 'pt-BR');
+       });
+     }
+
+     function montarTelaCadastroPessoasCampeonato(recado) {
+       if (elencoAtual) {
+         montarElenco(recado);
+         return;
+       }
+       const area = document.getElementById('areaCadastroPessoasCampeonato');
+       const registros = cadastroPessoasCampeonato.registros || [];
+       const sucesso = recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '';
+
+       if (!(cadastroPessoasCampeonato.campeonatos || []).length) {
+         area.innerHTML = sucesso
+           + '<div class="aviso"><strong>Cadastre um campeonato primeiro.</strong> Vincule times e depois cadastre atletas ou comissão técnica.</div>';
+         return;
+       }
+
+       const resumoCampeonatos = registros.map(function (item) {
+         return '<tr>'
+           + '<td data-rotulo="Campeonato">' + escapar(item.campeonatoNome || '-') + '</td>'
+           + '<td data-rotulo="Atletas">' + ((item.atletas || []).length) + '</td>'
+           + '<td data-rotulo="Comissão">' + ((item.comissao || []).length) + '</td>'
+           + '<td class="acoes-linha" data-rotulo="Ações"><button type="button" class="botao-apoio" data-gerenciar-cadastro="' + escapar(item.campeonatoId) + '">Gerenciar</button></td>'
+           + '</tr>';
+       }).join('');
+
+       const linhasCadastro = listarRegistrosCadastroPessoa(colecaoCadastroPessoaAtual()).map(function (item) {
+         const pessoa = item.pessoa || {};
+         const apelidoColuna = abaCadastroPessoasAtiva === 'atletas'
+           ? '<td data-rotulo="Apelido">' + escapar(pessoa.apelido || '—') + '</td>'
+           : '';
+         const acoes = modoEdicaoCadastroPessoas
+           ? '<button type="button" class="botao-apoio" data-editar-cadastro data-tipo-cadastro="' + escapar(abaCadastroPessoasAtiva) + '" data-campeonato-id="' + escapar(item.campeonatoId) + '" data-registro-id="' + escapar(pessoa.id) + '">Editar</button>'
+             + ' <button type="button" class="botao-apoio perigo" data-remover-cadastro data-tipo-cadastro="' + escapar(abaCadastroPessoasAtiva) + '" data-campeonato-id="' + escapar(item.campeonatoId) + '" data-registro-id="' + escapar(pessoa.id) + '">Remover</button>'
+           : '<span class="apoio">Ative o modo edição</span>';
+
+         return '<tr>'
+           + '<td data-rotulo="Foto">' + fotoCadastroPessoa_(pessoa) + '</td>'
+           + '<td data-rotulo="Nome">' + escapar(pessoa.nome || '-') + '</td>'
+           + apelidoColuna
+           + '<td data-rotulo="CPF">' + escapar(formatarCpf(pessoa.cpf) || '—') + '</td>'
+           + '<td data-rotulo="Nascimento">' + escapar(formatarDataBr(pessoa.dataNascimento) || '—') + '</td>'
+           + '<td data-rotulo="Campeonato">' + escapar(item.campeonatoNome || '-') + '</td>'
+           + '<td data-rotulo="Time">' + escapar(pessoa.timeVinculado || '—') + '</td>'
+           + '<td class="acoes-linha" data-rotulo="Ações">' + acoes + '</td>'
+           + '</tr>';
+       }).join('');
+
+       area.innerHTML = sucesso
+         + '<div class="barra-acoes">'
+         + '<button type="button" class="botao-principal" id="novoCadastroPessoa">Adicionar ' + escapar(abaCadastroPessoasAtiva === 'comissao' ? 'comissão' : 'atleta') + '</button>'
+         + '<button type="button" class="botao-apoio' + (modoEdicaoCadastroPessoas ? ' destaque' : '') + '" id="alternarModoEdicaoCadastro">' + (modoEdicaoCadastroPessoas ? 'Sair do modo edição' : 'Modo edição') + '</button>'
+         + '<button type="button" class="botao-apoio" id="recarregarCadastroPessoas">Atualizar</button>'
+         + '</div>'
+         + '<div class="tabela-rolagem"><table class="campeonatos"><thead><tr>'
+         + '<th>Campeonato</th><th>Atletas</th><th>Comissão</th><th>Ações</th>'
+         + '</tr></thead><tbody>' + resumoCampeonatos + '</tbody></table></div>'
+         + '<div class="abas-cadastro-pessoas">'
+         + '<button type="button" class="botao-apoio' + (abaCadastroPessoasAtiva === 'atletas' ? ' ativo' : '') + '" data-aba-cadastro="atletas">Atletas</button>'
+         + '<button type="button" class="botao-apoio' + (abaCadastroPessoasAtiva === 'comissao' ? ' ativo' : '') + '" data-aba-cadastro="comissao">Comissão técnica</button>'
+         + '</div>'
+         + '<div id="cadastroPessoasFormArea"></div>'
+         + '<div class="grupo"><h4>' + escapar(rotuloAbaCadastroPessoa()) + ' cadastrados</h4>'
+         + '<div class="tabela-rolagem"><table class="usuarios"><thead><tr>'
+         + '<th>Foto</th><th>Nome</th>' + (abaCadastroPessoasAtiva === 'atletas' ? '<th>Apelido</th>' : '')
+         + '<th>CPF</th><th>Data de nascimento</th><th>Campeonato</th><th>Time</th><th>Ações</th>'
+         + '</tr></thead><tbody>'
+         + (linhasCadastro || '<tr><td colspan="' + (abaCadastroPessoasAtiva === 'atletas' ? '8' : '7') + '" class="apoio">Nenhum cadastro encontrado nesta aba.</td></tr>')
+         + '</tbody></table></div></div>'
+         + '<div class="cadastro-resumo-obrigatoriedade">'
+         + (abaCadastroPessoasAtiva === 'atletas'
+           ? 'No cadastro de atleta, todos os campos são obrigatórios, exceto <strong>Apelido</strong> e <strong>Número da camisa</strong>.'
+           : 'No cadastro da comissão técnica, os campos obrigatórios são <strong>Foto</strong>, <strong>Nome</strong>, <strong>Time</strong>, <strong>Data de nascimento</strong>, <strong>CPF</strong> e <strong>Cargo</strong>.')
+         + '</div>'
+         + '<div class="aviso">Atletas e comissão técnica agora compartilham a mesma tela. Escolha a aba e o tipo de cadastro para gerenciar os vínculos por campeonato.</div>';
+
+       document.getElementById('novoCadastroPessoa').addEventListener('click', function () {
+         abrirFormularioCadastroPessoa('', abaCadastroPessoasAtiva, '');
+       });
+
+       document.getElementById('alternarModoEdicaoCadastro').addEventListener('click', function () {
+         modoEdicaoCadastroPessoas = !modoEdicaoCadastroPessoas;
+         montarTelaCadastroPessoasCampeonato();
+       });
+
+       document.getElementById('recarregarCadastroPessoas').addEventListener('click', function () {
+         carregarCadastroPessoasCampeonato(abaCadastroPessoasAtiva);
+       });
+
+       document.querySelectorAll('[data-gerenciar-cadastro]').forEach(function (botao) {
+         botao.addEventListener('click', function () {
+           abrirFormularioCadastroPessoa(botao.dataset.gerenciarCadastro, abaCadastroPessoasAtiva, '');
+         });
+       });
+
+       document.querySelectorAll('[data-aba-cadastro]').forEach(function (botao) {
+         botao.addEventListener('click', function () {
+           abaCadastroPessoasAtiva = botao.dataset.abaCadastro;
+           montarTelaCadastroPessoasCampeonato();
+         });
+       });
+
+       document.querySelectorAll('[data-editar-cadastro]').forEach(function (botao) {
+         botao.addEventListener('click', function () {
+           abrirFormularioCadastroPessoa(botao.dataset.campeonatoId, botao.dataset.tipoCadastro, botao.dataset.registroId);
+         });
+       });
+
+       document.querySelectorAll('[data-remover-cadastro]').forEach(function (botao) {
+         botao.addEventListener('click', function () {
+           removerCadastroPessoa(botao.dataset.tipoCadastro, botao.dataset.campeonatoId, botao.dataset.registroId);
+         });
+       });
+     }
+
+     function abrirFormularioAtleta(campeonatoId, atletaId) {
+       abrirFormularioCadastroPessoa(campeonatoId, 'atletas', atletaId);
+     }
+
+     function abrirFormularioMembroComissao(campeonatoId, membroId) {
+       abrirFormularioCadastroPessoa(campeonatoId, 'comissao', membroId);
+     }
+
+     function abrirFormularioCadastroPessoa(campeonatoId, tipo, registroId) {
+       if (!permitirEdicaoElenco_()) return;
+       if (elencoAtual && tipo !== 'atletas' && tipo !== 'comissao') return;
+       const tipoAtual = tipo === 'comissao' ? 'comissao' : 'atletas';
+       const selecionado = campeonatoId || ((cadastroPessoasCampeonato.campeonatos[0] && cadastroPessoasCampeonato.campeonatos[0].id) || '');
+       const registroCampeonato = (cadastroPessoasCampeonato.registros || []).filter(function (item) {
+         return item.campeonatoId === selecionado;
+       })[0] || null;
+       const pessoaEmEdicao = registroId
+         ? (registroCampeonato && ((tipoAtual === 'comissao' ? registroCampeonato.comissao : registroCampeonato.atletas) || []).filter(function (item) {
+           return item.id === registroId;
+         })[0])
+         : null;
+       const posicoes = cadastroPessoasCampeonato.posicoes || [];
+       const cargos = cadastroPessoasCampeonato.cargos || [];
+       const cargoAtual = tipoAtual === 'comissao' && pessoaEmEdicao ? pessoaEmEdicao.cargo : '';
+       const cargoAnterior = cargoAtual && !cargos.includes(cargoAtual)
+         ? '<option value="' + escapar(cargoAtual) + '" selected>' + escapar(cargoAtual) + ' (cargo anterior)</option>' : '';
+       const trava = pessoaEmEdicao ? ' disabled' : '';
+       const titulo = pessoaEmEdicao
+         ? 'Editar ' + (tipoAtual === 'comissao' ? 'membro da comissão' : 'atleta')
+         : (tipoAtual === 'comissao' ? 'Adicionar membro da comissão' : 'Adicionar atleta');
+
+       document.getElementById('cadastroPessoasFormArea').innerHTML = '<div class="formulario campeonato-form elenco-form">'
+         + '<h3 id="elencoFormTitulo" tabindex="-1">' + escapar(titulo) + '</h3>'
+         + (elencoAtual
+           ? '<div class="elenco-contexto"><strong>' + (tipoAtual === 'comissao' ? 'Comissão técnica' : 'Atleta') + '</strong><br>'
+             + escapar(registroCampeonato.campeonatoNome) + ' · ' + escapar(cadastroPessoasCampeonato.equipe.nome)
+             + '<br><span class="apoio">Equipe e campeonato fixos. Salve ou cancele para voltar à lista e trocar de aba.</span></div>'
+             + '<input type="hidden" id="cpTipo" value="' + tipoAtual + '">'
+             + '<input type="hidden" id="cpCampeonato" value="' + escapar(selecionado) + '">'
+             + '<input type="hidden" id="cpTime" value="' + escapar(cadastroPessoasCampeonato.equipe.nome) + '">'
+           : '<div class="grupo"><h4>Vínculo do cadastro</h4><div class="campos">'
+         + '<div class="campo curto"><label for="cpTipo">Tipo de cadastro</label><select id="cpTipo"' + trava + '>'
+         + '<option value="atletas"' + (tipoAtual === 'atletas' ? ' selected' : '') + '>Atleta</option>'
+         + '<option value="comissao"' + (tipoAtual === 'comissao' ? ' selected' : '') + '>Comissão técnica</option>'
+         + '</select></div>'
+         + '<div class="campo largo"><label for="cpCampeonato">Campeonato</label><select id="cpCampeonato"' + trava + '>'
+         + opcoesSelect(cadastroPessoasCampeonato.campeonatos, selecionado, '') + '</select></div>'
+             + '<div class="campo largo"><label for="cpTime">Time vinculado *</label><select id="cpTime"></select><span class="apoio" id="cpAvisoTime"></span></div>'
+             + '</div></div>')
+         + '<div class="grupo"><h4>Dados pessoais</h4><div class="campos">'
+         + campoTexto('cpNome', 'Nome *', pessoaEmEdicao ? pessoaEmEdicao.nome : '', 'largo', '', 'text')
+         + campoTexto('cpCpf', 'CPF *', formatarCpf(pessoaEmEdicao ? pessoaEmEdicao.cpf : ''), 'curto', '', 'text')
+         + campoTexto('cpNascimento', 'Data de nascimento *', pessoaEmEdicao ? pessoaEmEdicao.dataNascimento : '', 'curto', '', 'date')
+         + campoTexto('cpRg', 'RG (opcional)', pessoaEmEdicao ? pessoaEmEdicao.rg : '', 'curto', '', 'text')
+         + '</div></div>'
+         + '<div class="grupo cadastro-campo-atleta"><h4>Dados do atleta</h4><div class="campos">'
+         + '<div class="campo curto"><label for="cpPosicao">Posição *</label><select id="cpPosicao">'
+         + posicoes.map(function (pos) {
+           const selecionada = pessoaEmEdicao && pessoaEmEdicao.posicao === pos;
+           return '<option value="' + escapar(pos) + '"' + (selecionada ? ' selected' : '') + '>' + escapar(pos) + '</option>';
+         }).join('') + '</select></div>'
+         + campoTexto('cpApelido', 'Apelido (opcional)', pessoaEmEdicao ? pessoaEmEdicao.apelido : '', 'curto', '', 'text')
+         + campoTexto('cpNumero', 'Número da camisa (opcional)', pessoaEmEdicao ? pessoaEmEdicao.numero : '', 'curto', '', 'number')
+         + '</div></div>'
+         + '<div class="grupo cadastro-campo-comissao"><h4>Dados do membro da comissão</h4><div class="campos">'
+         + '<div class="campo curto"><label for="cpCargo">Cargo *</label><select id="cpCargo">'
+         + '<option value="">Selecione um cargo</option>' + cargoAnterior
+         + cargos.map(function (cargo) {
+           return '<option value="' + escapar(cargo) + '"' + (cargoAtual === cargo ? ' selected' : '') + '>' + escapar(cargo) + '</option>';
+         }).join('') + '</select></div>'
+         + '</div></div>'
+         + '<div class="grupo"><h4>Foto</h4><div class="campos">'
+         + '<div class="campo cheio"><label for="cpFoto">Foto *</label>'
+         + '<input type="hidden" id="cpFotoAtual" value="' + escapar(pessoaEmEdicao ? (pessoaEmEdicao.foto || '') : '') + '">'
+         + '<input type="file" id="cpFoto" accept="image/*" aria-describedby="cpFotoAjuda">'
+         + '<span id="cpFotoAjuda" class="apoio">' + (pessoaEmEdicao ? 'Selecione uma imagem somente para substituir a foto atual.' : 'Selecione uma imagem para identificar a pessoa no elenco.') + '</span>'
+         + '<div id="cpFotoPreview" class="elenco-foto-preview">'
+         + (pessoaEmEdicao && pessoaEmEdicao.foto ? '<img src="' + escapar(pessoaEmEdicao.foto) + '" alt="Foto de ' + escapar(pessoaEmEdicao.nome) + '">' : '<span aria-label="Nenhuma foto selecionada">📷</span>')
+         + '</div></div>'
+         + '</div></div>'
+         + '<p class="apoio">* Campos obrigatórios. ' + (tipoAtual === 'atletas' ? 'Apelido e número da camisa são opcionais.' : 'Selecione o cargo do membro da comissão técnica.') + '</p>'
+         + '<div class="acoes-formulario">'
+         + '<button type="button" class="botao-principal" id="gravarCadastroPessoa">' + (pessoaEmEdicao ? 'Salvar alterações' : (tipoAtual === 'comissao' ? 'Adicionar membro da comissão' : 'Adicionar atleta')) + '</button>'
+         + '<button type="button" class="botao-apoio" id="voltarCadastroPessoa">Cancelar e voltar à lista</button>'
+         + '<span class="espaco"></span>'
+         + '<span class="apoio" id="avisoCadastroPessoa" role="status" aria-live="polite"></span>'
+         + '</div></div>';
+
+       if (!elencoAtual) preencherTimesCadastroPessoa(selecionado, pessoaEmEdicao ? pessoaEmEdicao.timeVinculado : '');
+       atualizarCamposTipoCadastroPessoa();
+       configurarMascaraCpfCadastroPessoa();
+       configurarPreviewFotoCadastroPessoa();
+       if (elencoAtual) alternarFormularioElenco(true);
+       document.getElementById('elencoFormTitulo').focus();
+
+       document.getElementById('voltarCadastroPessoa').addEventListener('click', function () {
+         if (elencoAtual && elencoAtual.salvando) return;
+         document.getElementById('cadastroPessoasFormArea').innerHTML = '';
+         if (elencoAtual) {
+           alternarFormularioElenco(false);
+           document.getElementById('elencoNovo').focus();
+         }
+       });
+
+       document.getElementById('gravarCadastroPessoa').addEventListener('click', function () {
+         gravarCadastroPessoa(registroId);
+       });
+
+       if (!pessoaEmEdicao && !elencoAtual) {
+         document.getElementById('cpCampeonato').addEventListener('change', function () {
+           preencherTimesCadastroPessoa(this.value, '');
+         });
+
+         document.getElementById('cpTipo').addEventListener('change', function () {
+           atualizarCamposTipoCadastroPessoa();
+         });
+       }
+     }
+
+     function preencherTimesCadastroPessoa(campeonatoId, selecionado) {
+       const campo = document.getElementById('cpTime');
+       const aviso = document.getElementById('cpAvisoTime');
+       const times = (cadastroPessoasCampeonato.times || {})[campeonatoId] || [];
+       campo.innerHTML = '<option value="">Selecione um time</option>' + times.map(function (time) {
+         return '<option value="' + escapar(time) + '"' + (String(time) === String(selecionado) ? ' selected' : '') + '>' + escapar(time) + '</option>';
+       }).join('');
+       if (aviso) {
+         aviso.textContent = times.length ? '' : 'Vincule um time neste campeonato antes de salvar o cadastro.';
+       }
+     }
+
+     function atualizarCamposTipoCadastroPessoa() {
+       const tipo = document.getElementById('cpTipo').value;
+       document.querySelectorAll('.cadastro-campo-atleta').forEach(function (campo) {
+         campo.style.display = tipo === 'atletas' ? '' : 'none';
+       });
+       document.querySelectorAll('.cadastro-campo-comissao').forEach(function (campo) {
+         campo.style.display = tipo === 'comissao' ? '' : 'none';
+       });
+     }
+
+     function configurarMascaraCpfCadastroPessoa() {
+       const campo = document.getElementById('cpCpf');
+       if (!campo) return;
+
+       campo.addEventListener('input', function (e) {
+         let valor = e.target.value.replace(/\D/g, '');
+         if (valor.length > 11) valor = valor.substring(0, 11);
+         if (valor.length > 9) {
+           valor = valor.substring(0, 3) + '.' + valor.substring(3, 6) + '.' + valor.substring(6, 9) + '-' + valor.substring(9);
+         } else if (valor.length > 6) {
+           valor = valor.substring(0, 3) + '.' + valor.substring(3, 6) + '.' + valor.substring(6);
+         } else if (valor.length > 3) {
+           valor = valor.substring(0, 3) + '.' + valor.substring(3);
+         }
+         e.target.value = valor;
+       });
+     }
+
+     function configurarPreviewFotoCadastroPessoa() {
+       const input = document.getElementById('cpFoto');
+       const preview = document.getElementById('cpFotoPreview');
+       if (!input || !preview) return;
+
+       input.addEventListener('change', function (e) {
+         const arquivo = e.target.files && e.target.files[0];
+         if (!arquivo) return;
+
+         const leitor = new FileReader();
+         leitor.onload = function (evento) {
+           preview.innerHTML = '<img src="' + escapar(evento.target.result) + '" alt="Prévia da foto selecionada">';
+         };
+         leitor.onerror = leitor.onabort = function () {
+           exibirErroCadastroPessoa('Não foi possível ler a foto. Selecione o arquivo novamente.',
+             document.getElementById('gravarCadastroPessoa'), document.getElementById('avisoCadastroPessoa'));
+         };
+         leitor.readAsDataURL(arquivo);
+       });
+     }
+
+     function gravarCadastroPessoa(registroId) {
+       if (!permitirEdicaoElenco_()) return;
+       const contextoSalvar = elencoAtual;
+       const botao = document.getElementById('gravarCadastroPessoa');
+       const aviso = document.getElementById('avisoCadastroPessoa');
+       const tipo = document.getElementById('cpTipo').value === 'comissao' ? 'comissao' : 'atletas';
+       const campeonatoId = document.getElementById('cpCampeonato').value;
+       const payload = {
+         campeonatoId: campeonatoId,
+         nome: document.getElementById('cpNome').value,
+         cpf: document.getElementById('cpCpf').value.replace(/\D/g, ''),
+         rg: document.getElementById('cpRg').value,
+         dataNascimento: document.getElementById('cpNascimento').value,
+         timeVinculado: document.getElementById('cpTime').value,
+         foto: document.getElementById('cpFotoAtual').value || ''
+       };
+
+       if (tipo === 'atletas') {
+         payload.apelido = document.getElementById('cpApelido').value;
+         payload.numero = document.getElementById('cpNumero').value;
+         payload.posicao = document.getElementById('cpPosicao').value;
+         if (registroId) payload.atletaId = registroId;
+       } else {
+         payload.cargo = document.getElementById('cpCargo').value;
+         if (registroId) payload.membroId = registroId;
+       }
+
+       botao.disabled = true;
+       marcarElencoPendente_(true);
+       document.getElementById('voltarCadastroPessoa').disabled = true;
+       aviso.textContent = 'Gravando...';
+
+       const inputFoto = document.getElementById('cpFoto');
+       if (inputFoto && inputFoto.files && inputFoto.files[0]) {
+         const leitor = new FileReader();
+         leitor.onload = function (e) {
+           payload.foto = e.target.result;
+           enviarCadastroPessoa(tipo, registroId, payload, botao, aviso, contextoSalvar);
+         };
+         leitor.onerror = leitor.onabort = function () {
+           exibirErroCadastroPessoa('Não foi possível ler a foto. Selecione o arquivo novamente.', botao, aviso);
+         };
+         leitor.readAsDataURL(inputFoto.files[0]);
+       } else {
+         enviarCadastroPessoa(tipo, registroId, payload, botao, aviso, contextoSalvar);
+       }
+     }
+
+     function exibirErroCadastroPessoa(erro, botao, aviso) {
+       if (botao && botao !== document.getElementById('gravarCadastroPessoa')) return;
+       marcarElencoPendente_(false);
+       if (botao) botao.disabled = false;
+       const cancelar = document.getElementById('voltarCadastroPessoa');
+       if (cancelar && botao === document.getElementById('gravarCadastroPessoa')) cancelar.disabled = false;
+       if (aviso) {
+         aviso.innerHTML = '<span class="alerta">'
+           + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+       }
+     }
+
+     function enviarCadastroPessoa(tipo, registroId, payload, botao, aviso, contextoSalvar) {
+       if (contextoSalvar !== elencoAtual) return;
+       if (elencoAtual) {
+         if (moduloAtual !== 'times-campeonato') return;
+         const contexto = elencoAtual;
+         payload.campeonatoId = contexto.campeonatoId;
+         payload.equipeId = contexto.equipeId;
+         payload.tipo = tipo;
+         payload.registroId = registroId || '';
+         google.script.run.withSuccessHandler(function (dados) {
+           if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+           cadastroPessoasCampeonato = dados;
+           abaElencoAtiva = tipo;
+           montarElenco(dados.recado);
+         }).withFailureHandler(function (erro) {
+           if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+           exibirErroCadastroPessoa(erro, botao, aviso);
+         })
+           .salvarCadastroElenco(payload);
+         return;
+       }
+       const funcao = tipo === 'comissao'
+         ? (registroId ? 'atualizarMembroComissao' : 'salvarMembroComissao')
+         : (registroId ? 'atualizarAtletaCampeonato' : 'salvarAtletaCampeonato');
+       const moduloSalvar = moduloAtual;
+
+       google.script.run
+         .withSuccessHandler(function (dados) {
+           if (elencoAtual !== contextoSalvar || moduloAtual !== moduloSalvar) return;
+           cadastroPessoasCampeonato = dados;
+           abaCadastroPessoasAtiva = tipo;
+           montarTelaCadastroPessoasCampeonato(dados.recado);
+         })
+         .withFailureHandler(function (erro) {
+           if (elencoAtual !== contextoSalvar || moduloAtual !== moduloSalvar) return;
+           exibirErroCadastroPessoa(erro, botao, aviso);
+         })[funcao](payload);
+     }
+
+     function gravarAtleta(campeonatoId, atletaId) {
+       abrirFormularioCadastroPessoa(campeonatoId, 'atletas', atletaId);
+     }
+
+     function gravarMembroComissao(campeonatoId, membroId) {
+       abrirFormularioCadastroPessoa(campeonatoId, 'comissao', membroId);
+     }
+
+     function removerCadastroPessoa(tipo, campeonatoId, registroId) {
+       if (!permitirEdicaoElenco_()) return;
+       const mensagem = tipo === 'comissao' ? 'Remover este membro da comissão?' : 'Remover este atleta?';
+       if (!window.confirm(mensagem)) {
+         return;
+       }
+       if (elencoAtual) {
+         const contexto = elencoAtual;
+         marcarElencoPendente_(true);
+         document.getElementById('areaTimesCampeonato').querySelectorAll('[data-elenco-remover]').forEach(function (botao) { botao.disabled = true; });
+         google.script.run.withSuccessHandler(function (dados) {
+           if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+           cadastroPessoasCampeonato = dados;
+           abaElencoAtiva = tipo;
+           montarElenco(dados.recado);
+         }).withFailureHandler(function (erro) {
+           if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
+           montarElenco();
+           document.getElementById('areaTimesCampeonato').insertAdjacentHTML('afterbegin', '<div class="erro">' + escapar(erro.message || erro) + '</div>');
+         }).removerCadastroElenco({
+           campeonatoId: contexto.campeonatoId, equipeId: contexto.equipeId,
+           tipo: tipo, registroId: registroId
+         });
+         return;
+       }
+
+       const funcao = tipo === 'comissao' ? 'removerMembroComissao' : 'removerAtletaCampeonato';
+       const moduloRemover = moduloAtual;
+
+       google.script.run
+         .withSuccessHandler(function (dados) {
+           if (elencoAtual || moduloAtual !== moduloRemover) return;
+           cadastroPessoasCampeonato = dados;
+           abaCadastroPessoasAtiva = tipo;
+           montarTelaCadastroPessoasCampeonato(dados.recado);
+         })
+         .withFailureHandler(function (erro) {
+           if (elencoAtual || moduloAtual !== moduloRemover) return;
+           alert('Erro: ' + (erro && erro.message ? erro.message : erro));
+         })[funcao](campeonatoId, registroId);
+     }
+
+     function removerMembroComissao(campeonatoId, membroId) {
+       removerCadastroPessoa('comissao', campeonatoId, membroId);
+     }
+
+     function removerAtletaCampeonato(campeonatoId, atletaId) {
+       removerCadastroPessoa('atletas', campeonatoId, atletaId);
+     }
 
     /**
      * Estado da tela de punicoes: o arquivo e lido uma vez e os filtros
@@ -4720,8 +6241,8 @@
     /**
      * Monta um campo de texto do formulario.
      */
-    function campoTexto(id, rotulo, valor, largura, trava, tipo) {
-      return '<div class="campo ' + largura + '">'
+    function campoTexto(id, rotulo, valor, largura, trava, tipo, classeExtra) {
+      return '<div class="campo ' + largura + (classeExtra ? ' ' + classeExtra : '') + '">'
         + '<label for="' + id + '">' + escapar(rotulo) + '</label>'
         + '<input type="' + tipo + '" id="' + id + '" value="' + escapar(valor || '') + '"' + trava + '>'
         + '</div>';
@@ -6158,7 +7679,7 @@
 
     montarUsuario();
     montarMenu();
-    abrirModulo(window.location.hash.replace('#', '') || MODULOS[0].id);
+    abrirModulo(rotaElencoPendente ? 'times-campeonato' : (window.location.hash.replace('#', '') || MODULOS[0].id));
   </script>
 </body>
 </html>
