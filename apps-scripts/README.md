@@ -427,6 +427,16 @@ gravadas e confirme o nome da aba de envolvidos.
 um só lugar as funcionalidades internas da AEUV, com menu lateral e controle de
 acesso por Conta Google.
 
+Os campos de data do sistema interno usam **DD/MM/AAAA**, inclusive nos
+cadastros de atletas, comissão técnica e associados, campeonatos, jogos, atas
+e financeiro. A digitação e a colagem recebem uma máscara numérica; datas
+inexistentes, como 31/02, são rejeitadas. O horário dos jogos usa **HH:mm no
+formato de 24 horas** (por exemplo, 15:30), sem AM/PM. Esses formatos de tela
+não alteram os contratos de gravação nem as regras do servidor: as datas
+continuam sendo enviadas em ISO onde já eram ISO, e o financeiro mantém seu
+formato brasileiro. Os calendários auxiliares dos filtros financeiros
+continuam disponíveis.
+
 ### Arquivos do projeto
 
 | Arquivo | Conteúdo |

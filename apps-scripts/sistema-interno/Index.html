@@ -3440,7 +3440,7 @@
         + tabelaSelect_('sumulasCampeonato', 'Campeonato', dados.campeonatos.map(function (item) { return { id: item.id, nome: item.nome + (item.temporada ? ' · ' + item.temporada : '') }; }), sumulasEstado.campeonato, 'Todos os campeonatos')
         + tabelaSelect_('sumulasRodada', 'Rodada', rodadas, sumulasEstado.rodada, 'Todas as rodadas')
         + tabelaSelect_('sumulasEquipe', 'Equipe', dados.equipes, sumulasEstado.equipe, 'Todas as equipes')
-        + '<div class="campo"><label for="sumulasData">Data do jogo</label><input type="date" id="sumulasData" value="' + escapar(sumulasEstado.data) + '"></div>'
+        + '<div class="campo"><label for="sumulasData">Data do jogo</label><input id="sumulasData" ' + atributosDataHora_('date', sumulasEstado.data) + '></div>'
         + '<button type="button" class="botao-apoio" id="sumulasLimpar">Limpar filtros</button>'
         + '<button type="button" class="botao-apoio" id="sumulasAtualizar">Atualizar</button></div>'
         + '<div id="tabelaLoading"></div><div id="tabelaMensagem" aria-live="polite">'
@@ -3461,7 +3461,8 @@
         }).join('') + '</div>' : '<div class="vazio">Nenhuma súmula finalizada encontrada para os filtros selecionados.</div>');
       ['Campeonato', 'Rodada', 'Equipe', 'Data'].forEach(function (nome) {
         document.getElementById('sumulas' + nome).onchange = function (evento) {
-          const valor = evento.target.value;
+          if (nome === 'Data' && !validarCamposDataHora_(['sumulasData'])) return;
+          const valor = nome === 'Data' ? lerDataFormulario_('sumulasData') : evento.target.value;
           tabelaNavegar_(function () { sumulasEstado[nome.toLowerCase()] = valor; montarSumulasCampeonato_(); });
         };
       });
@@ -3871,7 +3872,7 @@
                 + (decisao ? 'Desempate da organização registrado' : 'Empate aguardando definição da organização')
                 + '</strong></p><' + lista + '>' + tabelaOrdemEmpate_(empate).map(function (equipe) { return '<li>' + escapar(equipe.nome) + '</li>'; }).join('') + '</' + lista + '>'
                 + (decisao ? '<p><strong>Motivo:</strong> ' + escapar(decisao.motivo) + '</p><p class="apoio">Registrado por '
-                  + escapar(decisao.registradoPor || '—') + ' · ' + escapar(decisao.registradoEm || '—') + '</p>' : '')
+                  + escapar(decisao.registradoPor || '—') + ' · ' + escapar(formatarDataHoraBr_(decisao.registradoEm) || '—') + '</p>' : '')
                 + (dados.podeEditar ? '<div class="tabela-acoes">' + tabelaBotao_('Definir desempate da organização', 'editar-desempate-organizacao', String(indice))
                   + (decisao ? tabelaBotao_('Remover decisão', 'remover-desempate-organizacao', String(indice), true) : '') + '</div>' : '') + '</article>';
             }).join('') + '</div>';
@@ -4004,11 +4005,11 @@
             if (!valor('tjMandante') || !valor('tjVisitante')) throw new Error('Selecione os dois times.');
             if (valor('tjMandante') === valor('tjVisitante')) throw new Error('Mandante e visitante devem ser diferentes.');
           }
-          if (!valor('tjCampo') || !valor('tjData') || !valor('tjHora')) throw new Error('Informe o campo, a data e o horário do jogo.');
+          if (!valor('tjCampo') || !valor('tjData').trim() || !valor('tjHora').trim()) throw new Error('Informe o campo, a data e o horário do jogo.');
           tabelaExecutar_('salvarJogoCampeonato', {
             id: jogo.id, faseId: jogo.status === 'encerrado' ? jogo.faseId : fase.id, grupoId: grupoId, rodada: Number(valor('tjRodada')),
             mandanteId: jogo.status === 'encerrado' ? jogo.mandanteId : valor('tjMandante'), visitanteId: jogo.status === 'encerrado' ? jogo.visitanteId : valor('tjVisitante'), campoId: valor('tjCampo'),
-            data: valor('tjData'), hora: valor('tjHora'), status: jogo.status === 'encerrado' ? 'encerrado' : valor('tjStatus')
+            data: lerDataFormulario_('tjData'), hora: lerHorarioFormulario_('tjHora'), status: jogo.status === 'encerrado' ? 'encerrado' : valor('tjStatus')
           });
         });
       function valor(campo) { return document.getElementById(campo).value; }
@@ -4615,6 +4616,103 @@
       }).join('');
     }
 
+    function dataBrParaIso_(valor) {
+      const texto = String(valor || '').trim();
+      if (!texto) return '';
+      const partes = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (!partes) throw new Error('Informe uma data válida no formato DD/MM/AAAA.');
+      const dia = Number(partes[1]), mes = Number(partes[2]), ano = Number(partes[3]);
+      const bissexto = ano % 4 === 0 && (ano % 100 !== 0 || ano % 400 === 0);
+      const dias = [31, bissexto ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      if (ano < 1 || mes < 1 || mes > 12 || dia < 1 || dia > dias[mes - 1]) {
+        throw new Error('Informe uma data válida no formato DD/MM/AAAA.');
+      }
+      return partes[3] + '-' + partes[2] + '-' + partes[1];
+    }
+
+    function horario24h_(valor) {
+      const texto = String(valor || '').trim();
+      if (!texto) return '';
+      if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(texto)) {
+        throw new Error('Informe um horário válido no formato HH:mm (24h), de 00:00 a 23:59.');
+      }
+      return texto;
+    }
+
+    function atributosDataHora_(tipo, valor) {
+      const data = tipo === 'date';
+      return 'type="text" data-formato="' + (data ? 'data-br' : 'hora-24') + '" inputmode="numeric" autocomplete="off"'
+        + ' maxlength="' + (data ? '10' : '5') + '" placeholder="' + (data ? 'DD/MM/AAAA' : 'HH:mm (24h)') + '"'
+        + ' pattern="' + (data ? '[0-9]{2}/[0-9]{2}/[0-9]{4}' : '([01][0-9]|2[0-3]):[0-5][0-9]') + '"'
+        + ' value="' + escapar(data ? formatarDataBr(String(valor || '')) : valor || '') + '"';
+    }
+
+    function lerDataFormulario_(id) {
+      return dataBrParaIso_(document.getElementById(id).value);
+    }
+
+    function lerHorarioFormulario_(id) {
+      return horario24h_(document.getElementById(id).value);
+    }
+
+    function validarCampoDataHora_(campo) {
+      let mensagem = '';
+      try {
+        if (campo.required && !campo.value.trim()) throw new Error('Preencha este campo.');
+        if (campo.dataset.formato === 'hora-24') horario24h_(campo.value);
+        else dataBrParaIso_(campo.value);
+      } catch (erro) {
+        mensagem = erro.message;
+      }
+      campo.setCustomValidity(mensagem);
+      return mensagem;
+    }
+
+    function validarCamposDataHora_(ids, aviso) {
+      for (const id of ids) {
+        const campo = document.getElementById(id);
+        const mensagem = validarCampoDataHora_(campo);
+        if (mensagem) {
+          if (aviso) aviso.textContent = mensagem;
+          campo.reportValidity();
+          campo.focus();
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function mascararDataHora_(campo) {
+      const data = campo.dataset.formato === 'data-br';
+      const original = campo.value;
+      const cursor = campo.selectionStart;
+      const digitosAntes = cursor == null ? null : original.slice(0, cursor).replace(/\D/g, '').length;
+      const iso = data && original.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const digitos = (iso ? iso[3] + iso[2] + iso[1] : original.replace(/\D/g, '')).slice(0, data ? 8 : 4);
+      campo.value = digitos.slice(0, 2)
+        + (digitos.length > 2 ? (data ? '/' : ':') + digitos.slice(2, 4) : '')
+        + (data && digitos.length > 4 ? '/' + digitos.slice(4) : '');
+      if (!iso && digitosAntes != null && typeof campo.setSelectionRange === 'function') {
+        let posicao = 0, contagem = 0;
+        while (posicao < campo.value.length && contagem < digitosAntes) {
+          if (/\d/.test(campo.value.charAt(posicao))) contagem++;
+          posicao++;
+        }
+        campo.setSelectionRange(posicao, posicao);
+      }
+      validarCampoDataHora_(campo);
+    }
+
+    // Delegação única: os formulários são recriados ao navegar entre os módulos.
+    document.addEventListener('input', function (evento) {
+      const campo = evento.target;
+      if (campo.dataset && /^(data-br|hora-24)$/.test(campo.dataset.formato || '')) mascararDataHora_(campo);
+    }, true);
+    document.addEventListener('change', function (evento) {
+      const campo = evento.target;
+      if (campo.dataset && /^(data-br|hora-24)$/.test(campo.dataset.formato || '')) validarCampoDataHora_(campo);
+    }, true);
+
     /**
      * Cria um campo de entrada de texto HTML com label e classes de estilo.
      * @param {string} id ID do elemento
@@ -4629,8 +4727,9 @@
       tipo = tipo || 'text';
       return '<div class="campo ' + (tamanho || 'largo') + (classeExtra ? ' ' + classeExtra : '') + '">'
         + '<label for="' + escapar(id) + '">' + escapar(label) + '</label>'
-        + '<input type="' + escapar(tipo) + '" id="' + escapar(id) + '" '
-        + 'value="' + escapar(valor) + '" '
+        + '<input id="' + escapar(id) + '" '
+        + (tipo === 'date' || (tipo === 'time' && id === 'tjHora') ? atributosDataHora_(tipo, valor)
+          : 'type="' + escapar(tipo) + '" value="' + escapar(valor) + '"') + ' '
         + (desabilitado ? 'disabled ' : '')
         + '>'
         + '</div>';
@@ -4826,6 +4925,7 @@
      function gravarCampeonato(idOriginal) {
        const botao = document.getElementById('gravarCampeonato');
        const aviso = document.getElementById('avisoCampeonato');
+       if (!validarCamposDataHora_(['cInicio', 'cFim'], aviso)) return;
 
        botao.disabled = true;
        aviso.textContent = 'Gravando...';
@@ -4838,8 +4938,8 @@
          status: document.getElementById('cStatus').value,
          visibilidade: document.getElementById('cVisibilidade').value,
          responsavel: document.getElementById('cResponsavel').value,
-         dataInicio: document.getElementById('cInicio').value,
-         dataFim: document.getElementById('cFim').value,
+         dataInicio: lerDataFormulario_('cInicio'),
+         dataFim: lerDataFormulario_('cFim'),
          descricao: document.getElementById('cDescricao').value,
          estrutura: {
            faseNome: document.getElementById('cFaseNome').value,
@@ -6096,6 +6196,7 @@
        const contextoSalvar = elencoAtual;
        const botao = document.getElementById('gravarCadastroPessoa');
        const aviso = document.getElementById('avisoCadastroPessoa');
+       if (!validarCamposDataHora_(['cpNascimento'], aviso)) return;
        const tipo = document.getElementById('cpTipo').value === 'comissao' ? 'comissao' : 'atletas';
        const campeonatoId = document.getElementById('cpCampeonato').value;
        const payload = {
@@ -6103,7 +6204,7 @@
          nome: document.getElementById('cpNome').value,
          cpf: document.getElementById('cpCpf').value.replace(/\D/g, ''),
          rg: document.getElementById('cpRg').value,
-         dataNascimento: document.getElementById('cpNascimento').value,
+         dataNascimento: lerDataFormulario_('cpNascimento'),
          timeVinculado: document.getElementById('cpTime').value,
          foto: document.getElementById('cpFotoAtual').value || ''
        };
@@ -8567,7 +8668,9 @@
     function campoTexto(id, rotulo, valor, largura, trava, tipo, classeExtra) {
       return '<div class="campo ' + largura + (classeExtra ? ' ' + classeExtra : '') + '">'
         + '<label for="' + id + '">' + escapar(rotulo) + '</label>'
-        + '<input type="' + tipo + '" id="' + id + '" value="' + escapar(valor || '') + '"' + trava + '>'
+        + '<input id="' + id + '" '
+        + (tipo === 'date' || (tipo === 'time' && id === 'tjHora') ? atributosDataHora_(tipo, valor)
+          : 'type="' + tipo + '" value="' + escapar(valor || '') + '"') + (trava || '') + '>'
         + '</div>';
     }
 
@@ -8621,6 +8724,7 @@
     function gravarAssociado(registro) {
       const botao = document.getElementById('gravarAssociado');
       const aviso = document.getElementById('avisoAssociado');
+      if (!validarCamposDataHora_(['fNascimento'], aviso)) return;
 
       botao.disabled = true;
       aviso.textContent = 'Enviando...';
@@ -8630,7 +8734,7 @@
         equipeOriginal: registro ? registro.equipe : '',
         status: document.getElementById('fStatus').value,
         nome: document.getElementById('fNome').value,
-        nascimento: document.getElementById('fNascimento').value,
+        nascimento: lerDataFormulario_('fNascimento'),
         email: document.getElementById('fEmail').value,
         telefone: document.getElementById('fTelefone').value,
         cep: document.getElementById('fCep').value,
@@ -8927,9 +9031,9 @@
         + '<div class="campo curto"><label for="ataTipo">Reunião *</label><select id="ataTipo">'
         + '<option value="associacao"' + (ata && ata.tipo === 'campeonato' ? '' : ' selected') + '>Associação</option>'
         + '<option value="campeonato"' + (ata && ata.tipo === 'campeonato' ? ' selected' : '') + '>Campeonato</option></select></div>'
-        + '<div class="campo curto"><label for="ataData">Data *</label><input type="date" id="ataData" required value="'
-        + escapar(ata ? ata.data : new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-          .toISOString().slice(0, 10)) + '"></div>'
+        + '<div class="campo curto"><label for="ataData">Data *</label><input id="ataData" required '
+        + atributosDataHora_('date', ata ? ata.data : new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+          .toISOString().slice(0, 10)) + '></div>'
         + '<div class="campo largo" id="ataCampoCompeticao"'
         + (ata && ata.tipo === 'campeonato' ? '' : ' hidden')
         + '><label for="ataCompeticao">Competição *</label><select id="ataCompeticao">'
@@ -8983,13 +9087,14 @@
     function salvarAtaDaTela(evento) {
       evento.preventDefault();
       if (ataOcupada) return;
+      if (!validarCamposDataHora_(['ataData'], document.getElementById('statusAta'))) return;
       const payload = {
         id: ataEmEdicao ? ataEmEdicao.id : '',
         revisao: ataEmEdicao ? ataEmEdicao.revisao : '',
         tipo: document.getElementById('ataTipo').value,
         competicao: document.getElementById('ataCompeticao').value,
         titulo: document.getElementById('ataTitulo').value,
-        data: document.getElementById('ataData').value,
+        data: lerDataFormulario_('ataData'),
         local: document.getElementById('ataLocal').value,
         participantes: document.getElementById('ataParticipantes').value,
         texto: document.getElementById('ataTexto').value
@@ -9127,28 +9232,23 @@
     // evita que Date.parse interprete valores parciais como datas erradas.
     function ymdFiltroDigitadoFin(val) {
       var s = String(val || '').trim();
-      var mBr = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-      if (mBr) return mBr[3] + mBr[2] + mBr[1];
       var mIso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (mIso) return mIso[1] + mIso[2] + mIso[3];
-      return '';
+      try {
+        return dataBrParaIso_(mIso ? formatarDataBr(s) : s).replace(/-/g, '');
+      } catch (erro) {
+        return '';
+      }
     }
 
     function aplicarMascaraDataBr(input, onValChange) {
       if (!input) return;
       input.addEventListener('input', function() {
-        var v = this.value.replace(/\D/g, '').slice(0, 8);
-        if (v.length >= 5) {
-          this.value = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4);
-        } else if (v.length >= 3) {
-          this.value = v.slice(0, 2) + '/' + v.slice(2);
-        } else {
-          this.value = v;
-        }
-        if (onValChange) onValChange(this.value);
+        if (!validarCampoDataHora_(this) && onValChange) onValChange(this.value);
       });
       input.addEventListener('change', function() {
-        if (onValChange) onValChange(this.value);
+        if (!validarCampoDataHora_(this)) {
+          if (onValChange) onValChange(this.value);
+        } else this.reportValidity();
       });
     }
 
@@ -9175,6 +9275,7 @@
       picker.addEventListener('change', function() {
         if (this.value) {
           txt.value = formatarDataBr(this.value);
+          validarCampoDataHora_(txt);
           if (onValChange) onValChange(txt.value);
         }
       });
@@ -9236,13 +9337,13 @@
         + '  <span style="font-weight:600;color:var(--azul);">📅 Intervalo Personalizado:</span>'
         + '  <div class="fin-grupo-data">'
         + '    <span style="color:var(--apoio);font-size:12px;font-weight:600;">De:</span>'
-        + '    <input type="text" id="filtroFinDataInicio" placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric" title="Data inicial (dd/mm/aaaa)">'
+        + '    <input id="filtroFinDataInicio" ' + atributosDataHora_('date', '') + ' title="Data inicial (DD/MM/AAAA)">'
         + '    <input type="date" id="filtroFinPickerInicio" tabindex="-1" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">'
         + '    <button type="button" class="btn-calendario-icone" id="btnPickerInicio" title="Selecionar no calendário">📅</button>'
         + '  </div>'
         + '  <div class="fin-grupo-data">'
         + '    <span style="color:var(--apoio);font-size:12px;font-weight:600;">Até:</span>'
-        + '    <input type="text" id="filtroFinDataFim" placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric" title="Data final (dd/mm/aaaa)">'
+        + '    <input id="filtroFinDataFim" ' + atributosDataHora_('date', '') + ' title="Data final (DD/MM/AAAA)">'
         + '    <input type="date" id="filtroFinPickerFim" tabindex="-1" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">'
         + '    <button type="button" class="btn-calendario-icone" id="btnPickerFim" title="Selecionar no calendário">📅</button>'
         + '  </div>'
@@ -9296,6 +9397,7 @@
         // Qualquer troca de periodo descarta o intervalo anterior e refaz a consulta.
         inputDataInicio.value = '';
         inputDataFim.value = '';
+        [inputDataInicio, inputDataFim].forEach(validarCampoDataHora_);
         financeiroFiltros.dataInicio = '';
         financeiroFiltros.dataFim = '';
         var pkIni = document.getElementById('filtroFinPickerInicio');
@@ -9331,6 +9433,7 @@
         var dtHoje = pad2Fin(agora.getDate()) + '/' + pad2Fin(agora.getMonth() + 1) + '/' + agora.getFullYear();
         inputDataInicio.value = dtHoje;
         inputDataFim.value = dtHoje;
+        [inputDataInicio, inputDataFim].forEach(validarCampoDataHora_);
         financeiroFiltros.dataInicio = dtHoje;
         financeiroFiltros.dataFim = dtHoje;
         renderizarLinhasFinanceiro();
@@ -9344,6 +9447,7 @@
         var dtFim = pad2Fin(diaFim) + '/' + mesStr + '/' + agora.getFullYear();
         inputDataInicio.value = dtIni;
         inputDataFim.value = dtFim;
+        [inputDataInicio, inputDataFim].forEach(validarCampoDataHora_);
         financeiroFiltros.dataInicio = dtIni;
         financeiroFiltros.dataFim = dtFim;
         renderizarLinhasFinanceiro();
@@ -9352,6 +9456,7 @@
       document.getElementById('btnFinLimparDatas').addEventListener('click', function() {
         inputDataInicio.value = '';
         inputDataFim.value = '';
+        [inputDataInicio, inputDataFim].forEach(validarCampoDataHora_);
         financeiroFiltros.dataInicio = '';
         financeiroFiltros.dataFim = '';
         renderizarLinhasFinanceiro();
@@ -9394,8 +9499,8 @@
       if (elTipo) elTipo.value = '';
       if (elOrigem) elOrigem.value = '';
       if (elCat) elCat.value = '';
-      if (elIni) elIni.value = '';
-      if (elFim) elFim.value = '';
+      if (elIni) { elIni.value = ''; validarCampoDataHora_(elIni); }
+      if (elFim) { elFim.value = ''; validarCampoDataHora_(elFim); }
       if (containerDatas) containerDatas.style.display = 'none';
       renderizarLinhasFinanceiro();
     }
@@ -9576,7 +9681,7 @@
         + '    <div class="fin-linha-2">'
         + '      <div class="fin-campo">'
         + '        <label for="finData">Data da Movimentação *</label>'
-        + '        <input type="date" id="finData" value="' + hoje + '" required>'
+        + '        <input id="finData" ' + atributosDataHora_('date', hoje) + ' required>'
         + '      </div>'
         + '      <div class="fin-campo">'
         + '        <label for="finTipo">Tipo de Movimentação *</label>'
@@ -9731,6 +9836,8 @@
 
         var statusDiv = document.getElementById('finStatusEnvio');
         statusDiv.innerHTML = '';
+        if (!validarCamposDataHora_(['finData'], statusDiv)) return;
+        var dataMovimentacao = formatarDataBr(lerDataFormulario_('finData'));
 
         // Extrai valor numerico da mascara de moeda
         var valorLimpo = inputValor.value.replace(/[^\d]/g, '');
@@ -9748,7 +9855,7 @@
         var arquivoInput = document.getElementById('finArquivo');
         var processarEnvio = function(compObj) {
           var payload = {
-            dataMovimentacao: formatarDataBr(document.getElementById('finData').value),
+            dataMovimentacao: dataMovimentacao,
             tipo: selTipo.value,
             origem: document.getElementById('finOrigem').value,
             categoria: selCat.value,
@@ -9805,6 +9912,18 @@
       if (!isoDate) return '';
       var p = isoDate.split('-');
       return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : isoDate;
+    }
+
+    function formatarDataHoraBr_(valor) {
+      if (!valor) return '';
+      const texto = String(valor);
+      if (!/^\d{4}-\d{2}-\d{2}T/.test(texto)) return texto;
+      const data = new Date(texto);
+      if (isNaN(data.getTime())) return texto;
+      return new Intl.DateTimeFormat('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+      }).format(data);
     }
 
     function emitirRelatorioPrompt(tipo) {
