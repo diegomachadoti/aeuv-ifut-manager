@@ -1,4 +1,4 @@
-# Gestão do Campeonato — MVP Fase 1
+# Gestão do Campeonato — MVP
 
 ## Objetivo
 
@@ -9,7 +9,11 @@ de inscrições anteriores da mesma equipe). Admin/diretoria envia o link de ins
 por e-mail autorizado só acessa sua equipe em campeonatos vinculados.
 Consulte [armazenamento e permissões](../../README.md#equipes-participantes-e-meu-elenco).
 
-Criar uma área inicial para operar campeonatos dentro do `sistema-interno`, seguindo o mesmo padrão visual e estrutural já usado no projeto.
+**Operação de jogos:** **Tabela e Classificação** reúne jogos e rodadas,
+classificação, manutenção dos grupos e fases, cadastro de campos e critérios
+de pontuação/desempate no contexto do campeonato selecionado.
+
+Criar uma área para operar campeonatos dentro do `sistema-interno`, seguindo o mesmo padrão visual e estrutural já usado no projeto.
 
 Este MVP deve permitir começar uma competição com o básico necessário para operação:
 
@@ -150,17 +154,137 @@ elencos persistidos. Se a confirmação da própria gravação falhar, o erro pe
 recarregar antes de repetir; a interface não oferece repetição automática.
 Mantenha backup dos JSONs no Drive. Não há promessa de atomicidade multiarquivo.
 
-### 5. Jogos
-Operação básica dos jogos do campeonato:
+### 5. Tabela e Classificação
 
-- gerar confrontos
-- vincular mandante e visitante
-- definir rodada
-- lançar resultado
-- atualizar status do jogo
+O submenu mantém o ID `jogos-campeonato`, com acesso de admin/diretoria.
+As abas mantêm o campeonato selecionado e se adaptam a telas menores, sem
+comprimir jogos e classificação em duas colunas fixas.
+As abas seguem o padrão do elenco, em uma faixa horizontal com rolagem no
+celular e indicação da seleção em dourado. Classificação e lançamento de
+resultados mantêm as colunas alinhadas, com rolagem horizontal dentro da tabela,
+sem transformar cada célula em um bloco vertical.
+Em **Jogos e rodadas**, cada rodada tem seção e cabeçalho próprios. Ao selecionar
+uma fase, use as setas anterior/próxima para mostrar uma rodada por vez, ou
+escolha **Todas as rodadas** no filtro para voltar à visão completa.
+
+Em **Campeonatos → Forma de disputa**, selecione explicitamente as fases
+eliminatórias: **Oitavas de final**, **Quartas de final**, **Semifinal** e
+**Final**, quando o formato tiver mata-mata. A quantidade de grupos não
+determina essas fases. Campeonatos antigos não recebem fases eliminatórias
+presumidas: edite a configuração para escolhê-las.
+
+Em **Grupos e fases**, os espaços são apresentados conforme a configuração
+salva. Distribua manualmente as equipes participantes nos grupos após o
+sorteio. Equipes podem permanecer sem grupo enquanto a distribuição não
+estiver concluída. O MVP não realiza sorteio, não escolhe classificados e
+não monta cruzamentos automaticamente.
+
+Em **Jogos e rodadas**, cadastre mandante, visitante, fase, grupo quando
+aplicável, rodada, campo, data e hora. Os confrontos são cadastrados
+manualmente. É possível editar, excluir com confirmação e gerar a súmula
+em PDF. **Editar jogo** altera somente os dados do confronto e agendamento;
+não lança nem apaga resultados. Jogos ainda sem resultado podem ficar
+**Agendados**, **Adiados** ou **Cancelados**. Em jogos encerrados, equipes,
+fase e grupo ficam protegidos; rodada, campo, data e hora podem ser corrigidos.
+
+#### Lançamento do resultado e participação
+
+**Lançar resultado** abre uma tela própria, preenchida manualmente com base
+na súmula do árbitro. Jogos já encerrados apresentam **Editar resultado**,
+incluindo resultados antigos cadastrados antes deste fluxo.
+
+O placar fica no topo, com identificação das duas equipes. As abas mantêm os
+dados de ambos os times durante o preenchimento. Para atletas, registre
+**participação**, **gols**, **gols contra**, **amarelos (0 a 2)** e
+**cartão vermelho**. Para comissão técnica, registre amarelos e vermelho.
+Marcar ou desmarcar todas as participações não apaga os gols ou cartões.
+Não há campos de assistência, defesa difícil, defesa de pênalti ou cartão azul.
+Assistências registradas em resultados anteriores continuam armazenadas,
+mas não aparecem nem são alteradas por esta tela.
+
+Adicionar ou retirar gols de um atleta atualiza o placar da sua equipe pela
+diferença informada. Gols contra atualizam o placar da equipe adversária,
+sem contar como gols a favor do atleta. Alterar o placar diretamente continua
+permitido para gols administrativos, autoria desconhecida ou WO; esses ajustes
+são mantidos ao lançar mais gols individuais. O placar não é recalculado do
+zero ao abrir um resultado antigo. Diferenças entre os gols atribuídos
+(incluindo gols contra do adversário) e o placar geram aviso, sem bloquear.
+**WO** identifica a equipe ausente, mas não calcula um placar automaticamente.
+**Prorrogação** é informativa; o placar principal deve incluir seus gols.
+Quando houver **pênaltis**, informe o placar da disputa separadamente: ele
+não é somado aos gols da classificação. Observações complementam o registro.
+
+Finalizar grava o resultado e encerra a partida. Não há suspensão automática,
+avanço de classificados nem interpretação das regras de WO nesta etapa.
+O registro de amarelos não marca automaticamente um vermelho, e os eventos
+não alteram automaticamente a participação indicada. Os gols contra já estão
+incluídos no placar principal ao salvar, sem nova soma na classificação.
+
+O servidor usa os IDs dos cadastros e conserva os dados de identificação
+registrados no resultado. Atletas e comissão já registrados na partida
+continuam disponíveis para correção histórica mesmo após remoção ou inativação
+no elenco, identificados como cadastros anteriores. A tela não inscreve novas
+pessoas: use **Gerenciar elenco** antes do lançamento. Alterações simultâneas
+do elenco ou resultado exigem recarregar antes de salvar novamente.
+
+Em **Classificação**, consulte a visão geral ou por grupo. Somente jogos
+**Encerrados** da fase de classificação entram no cálculo; mata-mata,
+partidas agendadas, adiadas e canceladas não contam. Salvar, corrigir ou
+excluir um resultado recalcula a tabela da tela. Não há sincronização
+automática com a súmula digital nem atualização contínua entre navegadores:
+use **Atualizar** para consultar alterações feitas por outra pessoa.
+
+Em **Critérios**, configure a pontuação e uma lista ordenada de desempates
+por campeonato. Adicione, retire e reordene os critérios sem precisar preencher
+três posições fixas. Estão disponíveis: **mais vitórias**, **melhor saldo de
+gols**, **mais gols pró**, **menos gols sofridos**, **confronto direto**,
+**menos amarelos** e **menos vermelhos**. Pontos sempre são comparados primeiro.
+O padrão permanece **vitória 3, empate 1, derrota 0**, com desempate por
+**vitórias, saldo de gols e gols pró**, preservando configurações já salvas.
+Alterar os critérios recalcula os resultados encerrados, sem mudar os placares.
+
+O **confronto direto** só é aplicado quando restarem exatamente duas equipes
+empatadas no momento desse critério e elas tiverem se enfrentado na primeira
+fase. Se forem três ou mais, ou não houver confronto, passa ao critério seguinte.
+Com mais de um confronto, compara a soma de pontos nesses jogos usando a
+pontuação configurada; permanecendo empate, segue ao próximo critério.
+Pênaltis não alteram esse cálculo.
+
+Os critérios de cartões somam **atletas e comissão técnica**, somente nos jogos
+encerrados da fase de classificação. Resultados antigos sem eventos detalhados
+contribuem com zero cartões registrados; isso não comprova ausência de cartões
+na súmula original. Preencha os resultados para ter um desempate completo.
+
+#### Desempate final da organização
+
+Se todos os critérios esportivos empatarem, registre a ordem definida pela
+Comissão Organizadora (por exemplo, após sorteio externo), com **motivo
+obrigatório**. O sistema registra autor e data, sem realizar sorteio sozinho.
+Essa ordem só separa as equipes daquele empate residual, nunca ultrapassa
+equipes melhor classificadas pelos critérios esportivos.
+
+A decisão é específica da **classificação geral** ou do **grupo** selecionado:
+uma não substitui automaticamente a outra. Pode ser corrigida ou removida com
+confirmação. Sem decisão válida, equipes empatadas mantêm a mesma posição;
+a ordem alfabética de apresentação não decide classificação esportiva.
+Alterações nos resultados, critérios ou participantes podem invalidar a
+decisão, exigindo novo registro para a situação atual do empate.
+
+A visão geral usa os mesmos critérios,
+sem normalizar resultados de grupos com números diferentes de jogos.
+O aproveitamento é relativo aos pontos por vitória: com vitória valendo zero,
+aparece como zero; configurações em que empate ou derrota valem mais que
+vitória podem produzir percentuais acima de 100%.
+
+Em **Campos**, cadastre nome, endereço e situação. Esse cadastro é
+compartilhado entre campeonatos. Campos inativos não são oferecidos para
+novas marcações. Referências de jogos existentes são protegidas contra
+exclusões e alterações de estrutura que tornariam a tabela inconsistente.
 
 ### 6. Disciplina
-Controle inicial de eventos disciplinares:
+Cartões por atleta e comissão são registrados no lançamento do resultado.
+O módulo específico de disciplina e as regras automáticas abaixo permanecem
+planejados, não aplicados pelo lançamento:
 
 - cartões amarelos
 - cartões vermelhos
@@ -168,27 +292,53 @@ Controle inicial de eventos disciplinares:
 - suspensão manual
 - zeragem de cartões por regra configurada
 
-### 7. Súmula
-Geração da súmula básica do jogo:
+### 7. Súmula básica em PDF
 
-- dados da partida
-- times
-- atletas relacionados
-- árbitros / responsáveis
-- placar
-- eventos principais
-- impressão ou visualização
+A ação **Gerar súmula** fica no jogo em **Tabela e Classificação**. O PDF
+usa A4 paisagem, com identificação e logo da AEUV, escudos disponíveis,
+campeonato, temporada, fase/grupo/rodada, local, data e horário da partida.
+A data/hora de geração fica no canto superior direito, no fuso do script.
+As duas equipes aparecem lado a lado, com comissão acima dos atletas e CPF
+parcialmente mascarado em ambas (somente quatro dígitos centrais; ausente ou
+inválido aparece como `—`). Há no mínimo 22 linhas de atletas e quatro de
+comissão por equipe/folha. Elencos maiores continuam em folhas adicionais,
+sem truncar inscritos nem diminuir a fonte. Placar, cartões, gols,
+substituições, pedidos de tempo, gols contra, arbitragem, assinaturas,
+relatório e horários de início/fim ficam para preenchimento manual.
+Não há campos de faltas acumuladas ou defesa difícil.
+
+Os elencos ativos e as suspensões são consultados **no momento da emissão**,
+não historicamente na data da partida. Uma pessoa aparece com a linha inteira
+em vermelho e a indicação **SUSPENSO** somente quando o **Controle de punições**
+traz status `DEFINIDA`, situação iniciada por `A CUMPRIR` e correspondência
+exata de competição, equipe, tipo (`Atleta` ou `Comissão técnica`) e nome,
+ignorando acentos, maiúsculas e espaços repetidos. Punições pendentes,
+rascunhos, cumpridas ou de equipe não marcam pessoas; flags manuais do elenco
+e cartões de jogos não são usados. A data de atualização do controle aparece
+no rodapé. Falta do arquivo, erro de leitura ou permissão bloqueiam a geração:
+não são interpretados como ausência de suspensão.
+
+**Limite da fonte:** o controle não fornece CPF nem ID/temporada da competição;
+a correspondência é pelo nome completo do campeonato, não por trecho ou ID.
+Identifique a edição exatamente no nome da competição no controle e no
+cadastro, especialmente quando o nome é reutilizado em temporadas diferentes.
+Homônimos na mesma equipe/tipo não podem ser distinguidos por essa fonte.
+Não registra eventos, não envia a súmula digital e não lança resultados.
+Não aplica nem decrementa punições. O submenu separado de súmula e a
+disciplina automática continuam fora desta etapa. O download não exige tornar
+os cadastros, o logo ou o controle públicos no Drive.
 
 ---
 
 ## O que fica pendente para próximas fases
 
 - estatísticas avançadas por atleta
-- classificação automática completa
-- relatórios e PDFs
+- avanço automático de classificados e cruzamentos do mata-mata
+- critérios adicionais de regulamento além dos disponíveis e punições em pontos
+- integração dos resultados com a súmula digital
+- relatórios e PDFs além da súmula básica
 - portal público
 - carteirinha
-- seleção da rodada
 - artes e divulgação
 - regras avançadas de disciplina
 
@@ -202,7 +352,7 @@ Geração da súmula básica do jogo:
 ### Submenus
 - **Campeonatos** (dados do campeonato e forma de disputa)
 - **Equipes participantes** (elenco por equipe e campeonato)
-- **Jogos**
+- **Tabela e Classificação** (jogos, rodadas, grupos, campos e critérios)
 - **Disciplina**
 - **Súmula**
 
@@ -301,6 +451,22 @@ continuam compatíveis e usam essa mesma fonte canônica, sem gravações separa
 da configuração. Chamadas antigas a `salvarCampeonato` sem o campo `estrutura`
 preservam a configuração existente, inclusive a legada. A exclusão do campeonato
 continua removendo sua propriedade legada de estrutura.
+
+### Persistência da tabela e dos campos
+
+Jogos, atribuições de grupos e critérios ficam em
+`AEUV - Campeonato - <id> - Tabela.json`. O cadastro compartilhado de campos
+fica em `AEUV - Campos.json`. Ambos usam documentos versionados dentro de uma
+lista com um único objeto, na pasta raiz configurada no Drive. Não substitua
+um documento existente por `[]`: isso é tratado como cadastro inválido, não
+como uma tabela nova.
+
+As gravações usam lock e revisão para rejeitar formulários desatualizados.
+Se outra pessoa alterar a tabela, os campos ou a configuração do campeonato,
+recarregue antes de salvar novamente. Fases e rodadas vazias são derivadas
+da forma de disputa; não correspondem a jogos gerados automaticamente.
+Excluir o campeonato envia seu arquivo de tabela para a lixeira, sem excluir
+o cadastro compartilhado de campos nem o histórico permanente das inscrições.
 
 ### Persistência dos atletas e da comissão técnica
 

@@ -1173,6 +1173,56 @@ Capturas com a antiga tabela/toolbar não representam o markup local atual
 **ambos** os arquivos e publique uma **nova versão** da implantação; atualizar
 somente o backend ou somente o frontend não disponibiliza o fluxo completo.
 
+### Tabela e Classificação
+
+O submenu `jogos-campeonato` deixa de ser um espaço reservado e reúne a
+operação de jogos para admin/diretoria, mantendo a autenticação Google e as
+permissões atuais. Selecione o campeonato para consultar rodadas, classificação,
+grupos e fases, cadastrar campos e parametrizar pontuação/desempates.
+
+Os jogos são cadastrados manualmente, com mandante, visitante, fase, rodada,
+campo, data e hora. **Editar jogo** altera o agendamento; **Lançar resultado**
+abre uma tela separada com placar, participação, gols, gols contra e cartões
+dos atletas, além de cartões da comissão técnica, nas abas dos dois times.
+WO, prorrogação e placar de pênaltis são informados manualmente, sem aplicar
+suspensões nem avanço automático. Gols dos atletas atualizam o placar da equipe;
+gols contra atualizam o placar do adversário. Ajustes diretos no placar permitem
+gols administrativos ou sem autoria. Diferenças entre gols atribuídos e placar
+geram aviso, não bloqueio. A coluna de assistências foi removida, preservando
+os dados antigos armazenados. Resultados conservam a identificação das pessoas
+para correções posteriores mesmo se saírem do elenco.
+
+Somente placares principais de jogos **Encerrados** da fase de
+classificação contam para a tabela geral e por grupo. O padrão é **3/1/0**
+e desempate inicial por **vitórias, saldo de gols e gols pró**, configurável por
+campeonato. A lista permite incluir, retirar e reordenar também **menos gols
+sofridos**, **confronto direto entre duas equipes** e **menos amarelos/vermelhos**
+(atletas e comissão dos jogos encerrados da primeira fase).
+Empates residuais permitem registrar uma ordem final da organização, com motivo,
+autor e data, separada por classificação geral ou grupo. Não há sorteio automático;
+mudanças na situação esportiva podem exigir uma nova decisão.
+Salvar, corrigir ou excluir recalcula a classificação; alterações
+de outro navegador são consultadas pelo botão **Atualizar**.
+
+As fases eliminatórias são selecionadas no cadastro do campeonato, sem
+dedução pela quantidade de grupos. Distribuição de equipes e cruzamentos
+continuam manuais neste MVP. Cada jogo permite baixar uma súmula básica em
+PDF A4 paisagem, com logo AEUV, escudos disponíveis e painéis paralelos de
+comissão e atletas ativos atuais, CPFs parcialmente mascarados e campos
+manuais em branco. Elencos maiores continuam em folhas adicionais.
+A emissão consulta obrigatoriamente o Controle de punições atual e marca
+**SUSPENSO** em vermelho somente para pessoas com `DEFINIDA` / `A CUMPRIR`
+da mesma competição, equipe, tipo e nome; falha de acesso bloqueia o PDF.
+O controle não tem CPF ou ID de edição: nomes de competição reutilizados
+exigem cuidado, e a consulta não representa o histórico na data da partida
+([critérios e limites](sistema-interno/campeonato/README.md#7-súmula-básica-em-pdf)).
+Não há avanço automático, aplicação de punições em pontos nem integração do
+placar com a súmula digital.
+
+Consulte o [fluxo e limites do MVP](sistema-interno/campeonato/README.md#5-tabela-e-classificação).
+Atualize **WebApp.gs e Index.html** no projeto interno e publique uma nova
+versão da implantação para disponibilizar a funcionalidade.
+
 ### Cadastro de associados
 
 Reúne num só lugar quem são as equipes associadas, quem responde legalmente por

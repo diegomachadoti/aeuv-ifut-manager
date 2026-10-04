@@ -1600,6 +1600,96 @@
 
     .pilula.rascunho { background: #fff2d8; color: #8a5a00; font-weight: bold; }
     .pilula.encerrado { background: #e6e8ec; color: #3b4254; font-weight: bold; }
+    /* Mantém as colunas esportivas legíveis com rolagem em telas estreitas. */
+    body.modulo-tabela .container { max-width: 1500px; }
+    .tabela-campeonato { min-width: 0; }
+    .tabela-barra, .tabela-abas, .tabela-acoes { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 16px 0; }
+    .tabela-barra .campo { flex: 1 1 200px; min-width: 0; }
+    .tabela-abas { flex-wrap: nowrap; align-items: stretch; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--borda); scrollbar-width: thin; padding-top: 4px; margin-bottom: 0; }
+    .tabela-abas button { flex: 0 0 auto; min-height: 44px; padding: 10px 16px; white-space: nowrap; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; background: transparent; color: var(--apoio); }
+    .tabela-abas button[aria-pressed="true"] { background: var(--superficie, #fff); color: var(--texto); border-color: var(--borda); font-weight: bold; box-shadow: inset 0 3px 0 var(--dourado); }
+    .tabela-abas button:focus-visible { outline: 2px solid var(--dourado); outline-offset: -2px; }
+    body.tema-escuro .tabela-abas button { background: transparent; color: var(--apoio); }
+    body.tema-escuro .tabela-abas button[aria-pressed="true"] { background: var(--superficie-2, #1b2940); color: var(--texto); border-color: var(--borda); }
+    #tabelaPainel { border: 1px solid var(--borda); border-top: 0; padding: 16px; min-width: 0; }
+    .tabela-rodada { border: 1px solid var(--borda); border-radius: 10px; padding: 14px; margin-top: 18px; }
+    .tabela-rodada-cabecalho { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 2px solid var(--dourado); padding-bottom: 12px; margin-bottom: 14px; }
+    .tabela-rodada-cabecalho h4 { margin: 0; }
+    .tabela-rodada-navegacao { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 14px 0; }
+    .tabela-rodada-navegacao strong { text-align: center; }
+    .tabela-rodada-navegacao button { min-width: 44px; min-height: 44px; flex: 0 0 auto; }
+    .tabela-painel { border: 1px solid var(--borda); background: var(--superficie, #fff); border-radius: 12px; padding: 18px; margin-top: 16px; min-width: 0; }
+    .tabela-painel h3, .tabela-painel h4 { margin: 0 0 12px; }
+    .tabela-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px; }
+    .tabela-jogo { border: 1px solid var(--borda); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: var(--superficie, #fff); min-width: 0; }
+    .tabela-jogo-times { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; text-align: center; font-weight: bold; }
+    .tabela-jogo-times span { overflow-wrap: anywhere; }
+    .tabela-jogo-cabecalho { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .tabela-jogo-status { border: 1px solid var(--borda); border-radius: 999px; padding: 4px 9px; font-size: .8rem; white-space: nowrap; }
+    .tabela-jogo-local { line-height: 1.6; overflow-wrap: anywhere; }
+    .tabela-jogo-confronto { padding: 12px 0; gap: 12px; }
+    .tabela-jogo-time { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; }
+    .tabela-jogo-escudo { width: 64px; height: 64px; display: grid; place-items: center; flex: 0 0 auto; }
+    .tabela-jogo-escudo img { width: 100%; height: 100%; object-fit: contain; }
+    .tabela-jogo-sem-escudo { display: grid; place-items: center; width: 52px; height: 52px; border: 1px solid var(--borda); border-radius: 50%; color: var(--texto); font-size: 1.1rem; }
+    .tabela-jogo-time-nome { font-size: .9rem; line-height: 1.4; }
+    .tabela-jogo-placar { display: flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; }
+    .tabela-jogo-gols { font-size: 1.8rem; font-weight: bold; font-variant-numeric: tabular-nums; }
+    .tabela-jogo-versus { font-size: 1rem; font-weight: normal; }
+    .tabela-jogo .tabela-acoes { justify-content: center; margin: auto 0 0; padding-top: 10px; }
+    .tabela-jogo-partida .tabela-acoes { border-top: 1px solid var(--borda); padding-top: 14px; }
+    .tabela-jogo .tabela-acoes button { flex: 1 1 90px; }
+    .tabela-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--borda); border-radius: 8px; }
+    .tabela-classificacao { width: 100%; min-width: 780px; border-collapse: collapse; table-layout: auto; }
+    .tabela-campeonato table { display: table; }
+    .tabela-campeonato caption { display: table-caption; }
+    .tabela-campeonato thead { display: table-header-group; }
+    .tabela-campeonato tbody { display: table-row-group; }
+    .tabela-campeonato tr { display: table-row; }
+    .tabela-campeonato th, .tabela-campeonato td { display: table-cell; }
+    .tabela-classificacao th, .tabela-classificacao td { padding: 12px 10px; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--borda); }
+    .tabela-classificacao th:nth-child(2), .tabela-classificacao td:nth-child(2) { text-align: left; min-width: 180px; white-space: normal; }
+    .tabela-classificacao caption { text-align: left; padding: 12px; font-weight: bold; }
+    .tabela-escudo { width: 26px; height: 26px; object-fit: contain; vertical-align: middle; margin-right: 8px; }
+    .tabela-form { margin-top: 18px; }
+    .tabela-form .campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 14px; }
+    .tabela-form .campo { width: auto; min-width: 0; grid-column: auto; }
+    .tabela-form .campo.cheio { grid-column: 1 / -1; }
+    .tabela-form input, .tabela-form select, .tabela-barra select { width: 100%; box-sizing: border-box; }
+    .tabela-grupo-equipe { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 1fr); gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--borda); }
+    .tabela-grupo-equipe label { overflow-wrap: anywhere; }
+    .tabela-fases-checks { display: flex; flex-wrap: wrap; gap: 14px; }
+    .tabela-fases-checks label { display: flex; gap: 8px; align-items: center; }
+    .resultado-placar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 14px; align-items: center; text-align: center; }
+    .resultado-time { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+    .resultado-time img { width: 64px; height: 64px; object-fit: contain; }
+    .resultado-time input { max-width: 110px; font-size: 1.6rem; text-align: center; }
+    .resultado-flags { display: flex; flex-wrap: wrap; gap: 20px; margin: 20px 0; }
+    .resultado-flags label { display: flex; align-items: center; gap: 8px; }
+    .tabela-form input[type="checkbox"] { width: 22px; height: 22px; flex: 0 0 auto; }
+    .resultado-tabela { width: 100%; min-width: 860px; border-collapse: collapse; }
+    .resultado-tabela th, .resultado-tabela td { padding: 12px; border-bottom: 1px solid var(--borda); text-align: center; }
+    .resultado-tabela th:first-child, .resultado-tabela td:first-child { text-align: left; min-width: 200px; }
+    .resultado-tabela input[type="number"], .resultado-tabela select { width: 82px; min-height: 42px; }
+    .resultado-tabela caption { text-align: left; padding: 12px; font-weight: bold; }
+    .resultado-resumo { margin: 16px 0; }
+    .resultado-contexto { overflow-wrap: anywhere; }
+    .tabela-campeonato [hidden], #cEliminatorias[hidden] { display: none !important; }
+    body.tema-escuro .tabela-painel, body.tema-escuro .tabela-jogo { background: var(--superficie-2, #1b2940); }
+    @media (max-width: 600px) {
+      .tabela-painel { padding: 12px; }
+      #tabelaPainel { padding: 10px; }
+      .tabela-abas button { padding: 10px 12px; }
+      .tabela-rodada { padding: 10px; }
+      .tabela-classificacao th, .tabela-classificacao td { padding: 10px 8px; font-size: 13px; }
+      .resultado-tabela th, .resultado-tabela td { padding: 10px 8px; font-size: 13px; }
+      .resultado-tabela input[type="number"], .resultado-tabela select { font-size: 16px; }
+      .resultado-placar { gap: 8px; }
+      .resultado-time img { width: 48px; height: 48px; }
+      .resultado-time input { font-size: 1.4rem; }
+      .tabela-barra > button { flex: 1 1 120px; }
+      .tabela-grupo-equipe { grid-template-columns: 1fr; gap: 6px; }
+    }
   </style>
   <style>
     /* ---------- Botao discreto de tema (claro / escuro) ---------- */
@@ -2287,7 +2377,8 @@
      *   substitui-lo depois que os dados chegam.
      */
     function blocoCarregando(id) {
-      return '<div class="carregando"' + (id ? ' id="' + escapar(id) + '"' : '') + '>'
+      return '<div class="carregando" tabindex="-1" role="status" aria-label="Carregando, aguarde"'
+        + (id ? ' id="' + escapar(id) + '"' : '') + '>'
         + '<div class="marca">'
         + (CONFIG.logoUrl
           ? '<img src="' + escapar(CONFIG.logoUrl) + '" alt="">'
@@ -2296,6 +2387,31 @@
         + '<p class="rotulo">Carregando</p>'
         + '<div class="barra"><span></span></div>'
         + '</div>';
+    }
+
+    function acompanharFocoCarregamento() {
+      let visiveis = new Set();
+      let agendado = false;
+      function atualizar() {
+        agendado = false;
+        const atuais = Array.from(conteudo.querySelectorAll('.carregando')).filter(function (bloco) {
+          return !bloco.closest('[hidden]') && bloco.getClientRects().length > 0;
+        });
+        const novo = atuais.find(function (bloco) { return !visiveis.has(bloco); });
+        visiveis = new Set(atuais);
+        if (!novo) return;
+        novo.focus({ preventScroll: true });
+        novo.scrollIntoView({
+          block: 'center',
+          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+        });
+      }
+      const observador = new MutationObserver(function () {
+        if (agendado) return;
+        agendado = true;
+        window.requestAnimationFrame(atualizar);
+      });
+      observador.observe(conteudo, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
     }
 
     /**
@@ -2546,6 +2662,12 @@
         return;
       }
 
+      if (moduloAtual === 'jogos-campeonato' && (tabelaEstado.ocupado || tabelaEstado.sujo)) {
+        if (window.location.hash !== '#jogos-campeonato') window.location.hash = 'jogos-campeonato';
+        tabelaNavegar_(function () { abrirModulo(id, busca); });
+        return;
+      }
+
       if (moduloAtual === 'atas' && !podeSairDaAta()) {
         if (window.location.hash !== '#atas') window.location.hash = 'atas';
         return;
@@ -2593,6 +2715,7 @@
      * Desenha a tela de um modulo. Novas funcionalidades entram aqui.
      */
     function renderizarModulo(modulo) {
+      document.body.classList.toggle('modulo-tabela', modulo.id === 'jogos-campeonato');
       fecharDetalhesPessoaElenco(false);
       elencoAtual = null;
       const cabecalho = '<div class="cabecalho-modulo">'
@@ -2617,6 +2740,12 @@
         conteudo.innerHTML = cabecalho
           + '<div id="areaCampeonatos">' + blocoCarregando('statusCampeonatos') + '</div>';
         carregarCampeonatos();
+        return;
+      }
+
+      if (modulo.id === 'jogos-campeonato') {
+        conteudo.innerHTML = cabecalho + '<div id="areaTabelaCampeonato" class="tabela-campeonato"></div>';
+        carregarTabelaCampeonato_(tabelaEstado.campeonatoId);
         return;
       }
 
@@ -3192,6 +3321,1014 @@
      */
     let campeonatos = { registros: [], status: [], modalidades: [], visibilidades: [], formatos: [], podeEditar: false, podeExcluir: false };
 
+    const tabelaEstado = {
+      dados: null, campeonatoId: '', aba: 'jogos', fase: '', grupo: '', rodada: '',
+      ocupado: false, sujo: false, formulario: '', requisicao: 0, resultado: null
+    };
+    try {
+      const selecaoTabela = JSON.parse(sessionStorage.getItem('aeuv-tabela-selecao') || '{}');
+      if (typeof selecaoTabela.campeonatoId === 'string') tabelaEstado.campeonatoId = selecaoTabela.campeonatoId;
+      if (['jogos', 'classificacao', 'grupos', 'campos', 'criterios'].indexOf(selecaoTabela.aba) >= 0) tabelaEstado.aba = selecaoTabela.aba;
+    } catch (erro) {
+      console.warn('Não foi possível recuperar a seleção anterior da tabela.', erro);
+    }
+
+    function tabelaFecharFormulario_() {
+      tabelaEstado.sujo = false;
+      tabelaEstado.formulario = '';
+      tabelaEstado.resultado = null;
+      const formulario = document.getElementById('tabelaFormArea');
+      if (formulario) formulario.innerHTML = '';
+    }
+
+    function tabelaNavegar_(acao) {
+      if (tabelaEstado.ocupado || confirmacaoElencoAtual) return;
+      if (!tabelaEstado.sujo) {
+        tabelaFecharFormulario_();
+        acao();
+        return;
+      }
+      const requisicao = tabelaEstado.requisicao;
+      confirmarDescarteElenco_({ titulo: 'Descartar alterações da tabela?', confirmar: 'Descartar e continuar' }).then(function (confirmado) {
+        if (!confirmado || tabelaEstado.ocupado || requisicao !== tabelaEstado.requisicao || moduloAtual !== 'jogos-campeonato') return;
+        tabelaFecharFormulario_();
+        acao();
+      });
+    }
+
+    function tabelaErro_(erro) {
+      const area = document.getElementById('tabelaMensagem');
+      if (area) {
+        area.innerHTML = '<div class="erro" role="alert">' + escapar(erro && erro.message ? erro.message : erro)
+          + '<p>Suas alterações não foram descartadas. Se os dados estiverem desatualizados, use Atualizar e confirme o descarte antes de tentar novamente.</p>'
+          + '<button type="button" class="botao-apoio" id="tabelaRecarregarLista">'
+          + (tabelaEstado.resultado ? 'Recarregar resultado' : 'Recarregar lista de campeonatos') + '</button></div>';
+        document.getElementById('tabelaRecarregarLista').onclick = function () {
+          const resultadoId = tabelaEstado.resultado && tabelaEstado.resultado.jogo.id;
+          tabelaNavegar_(function () { if (resultadoId) abrirTabelaResultado_(resultadoId); else carregarTabelaCampeonato_(''); });
+        };
+      }
+    }
+
+    function tabelaOcupada_(ativo) {
+      tabelaEstado.ocupado = ativo;
+      const area = document.getElementById('areaTabelaCampeonato');
+      if (!area) return;
+      const loading = document.getElementById('tabelaLoading');
+      if (loading) loading.innerHTML = ativo ? blocoCarregando('statusTabelaCampeonato') : '';
+      area.setAttribute('aria-busy', ativo ? 'true' : 'false');
+      area.querySelectorAll('button,input,select,textarea').forEach(function (elemento) {
+        if (ativo) {
+          elemento.dataset.tabelaDisabled = elemento.disabled ? 'sim' : 'nao';
+          elemento.disabled = true;
+        } else if (elemento.dataset.tabelaDisabled) {
+          elemento.disabled = elemento.dataset.tabelaDisabled === 'sim';
+          delete elemento.dataset.tabelaDisabled;
+        }
+      });
+    }
+
+    function carregarTabelaCampeonato_(id) {
+      if (tabelaEstado.ocupado) return;
+      const area = document.getElementById('areaTabelaCampeonato');
+      if (!area) return;
+      const requisicao = ++tabelaEstado.requisicao;
+      area.innerHTML = '<div id="tabelaLoading"></div><div id="tabelaMensagem"></div>';
+      tabelaOcupada_(true);
+      google.script.run.withSuccessHandler(function (dados) {
+        if (requisicao !== tabelaEstado.requisicao || moduloAtual !== 'jogos-campeonato') return;
+        tabelaOcupada_(false);
+        if (tabelaEstado.campeonatoId !== dados.campeonatoId) {
+          tabelaEstado.fase = ''; tabelaEstado.grupo = ''; tabelaEstado.rodada = '';
+        }
+        tabelaEstado.dados = dados;
+        tabelaEstado.campeonatoId = dados.campeonatoId || '';
+        tabelaEstado.sujo = false;
+        tabelaEstado.formulario = '';
+        tabelaEstado.resultado = null;
+        montarTabelaCampeonato_();
+      }).withFailureHandler(function (erro) {
+        if (requisicao !== tabelaEstado.requisicao || moduloAtual !== 'jogos-campeonato') return;
+        tabelaOcupada_(false);
+        if (tabelaEstado.dados) montarTabelaCampeonato_();
+        else area.innerHTML = '<div id="tabelaLoading"></div><div id="tabelaMensagem"></div><button type="button" class="botao-apoio" id="tabelaTentar">Tentar novamente</button>';
+        const tentar = document.getElementById('tabelaTentar');
+        if (tentar) tentar.onclick = function () { carregarTabelaCampeonato_(id); };
+        tabelaErro_(erro);
+      }).listarTabelaCampeonato(id || '');
+    }
+
+    function tabelaExecutar_(metodo, payload, pdf) {
+      const salvandoResultado = metodo === 'salvarResultadoJogoCampeonato';
+      if (tabelaEstado.ocupado || !tabelaEstado.dados || (!pdf && !(salvandoResultado
+        ? tabelaEstado.resultado && tabelaEstado.resultado.podeEditar : tabelaEstado.dados.podeEditar))) return;
+      payload.campeonatoId = tabelaEstado.campeonatoId;
+      if (!pdf && !Object.prototype.hasOwnProperty.call(payload, 'revisao')) payload.revisao = tabelaEstado.dados.revisao;
+      const requisicao = ++tabelaEstado.requisicao;
+      const campeonatoId = tabelaEstado.campeonatoId;
+      document.getElementById('tabelaMensagem').innerHTML = '';
+      tabelaOcupada_(true);
+      google.script.run.withSuccessHandler(function (dados) {
+        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== 'jogos-campeonato') return;
+        tabelaOcupada_(false);
+        if (pdf) {
+          try {
+            if (!dados || dados.mimeType !== 'application/pdf' || !dados.base64) throw new Error('A súmula PDF não foi retornada. Tente novamente.');
+            const binario = atob(dados.base64);
+            const bytes = new Uint8Array(binario.length);
+            for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+            const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+            const link = document.createElement('a');
+            link.href = url; link.download = dados.nome || 'sumula.pdf'; link.target = '_self';
+            document.body.appendChild(link); link.click(); link.remove();
+            window.setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+            document.getElementById('tabelaMensagem').innerHTML = '<div class="sucesso" role="status">Súmula PDF gerada com os elencos atuais. Download iniciado.</div>';
+          } catch (erro) { tabelaErro_(erro); }
+          return;
+        }
+        tabelaEstado.dados = dados;
+        tabelaEstado.campeonatoId = dados.campeonatoId || campeonatoId;
+        tabelaEstado.sujo = false;
+        tabelaEstado.formulario = '';
+        tabelaEstado.resultado = null;
+        montarTabelaCampeonato_(dados.recado || 'Alterações salvas.');
+      }).withFailureHandler(function (erro) {
+        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== 'jogos-campeonato') return;
+        tabelaOcupada_(false);
+        tabelaErro_(erro);
+      })[metodo](payload);
+    }
+
+    function tabelaBotao_(texto, acao, id, perigo) {
+      return '<button type="button" class="botao-apoio' + (perigo ? ' perigo' : '') + '" data-tabela-acao="' + acao
+        + '" data-id="' + escapar(id || '') + '">' + escapar(texto) + '</button>';
+    }
+
+    function tabelaSelect_(id, rotulo, lista, valor, vazio) {
+      return '<div class="campo"><label for="' + id + '">' + escapar(rotulo) + '</label><select id="' + id + '">'
+        + opcoesSelect(lista, valor, vazio) + '</select></div>';
+    }
+
+    function tabelaRodadas_(fase) {
+      const quantidade = Math.max(1, Math.min(99, Number(fase && fase.rodadas) || 1));
+      return Array.from({ length: quantidade }, function (_, i) { return { id: String(i + 1), nome: 'Rodada ' + (i + 1) }; });
+    }
+
+    function tabelaNormalizarFiltros_() {
+      const dados = tabelaEstado.dados;
+      const fases = dados.fases || [];
+      if (!fases.some(function (fase) { return fase.id === tabelaEstado.fase; })) tabelaEstado.fase = '';
+      const fase = fases.find(function (item) { return item.id === tabelaEstado.fase; });
+      if (!dados.grupos.some(function (grupo) { return grupo.id === tabelaEstado.grupo; }) || (fase && fase.tipo === 'eliminatoria')) tabelaEstado.grupo = '';
+      const rodadas = fase ? tabelaRodadas_(fase) : [];
+      if (!rodadas.some(function (rodada) { return rodada.id === tabelaEstado.rodada; })) tabelaEstado.rodada = '';
+    }
+
+    function montarTabelaCampeonato_(recado) {
+      const dados = tabelaEstado.dados;
+      const area = document.getElementById('areaTabelaCampeonato');
+      if (!area || !dados) return;
+      tabelaNormalizarFiltros_();
+      try {
+        sessionStorage.setItem('aeuv-tabela-selecao', JSON.stringify({ campeonatoId: tabelaEstado.campeonatoId, aba: tabelaEstado.aba }));
+      } catch (erro) {
+        console.warn('Não foi possível guardar a seleção da tabela neste navegador.', erro);
+      }
+      const abas = [['jogos', 'Jogos e rodadas'], ['classificacao', 'Classificação'], ['grupos', 'Grupos e fases'], ['campos', 'Campos'], ['criterios', 'Critérios']];
+      area.innerHTML = '<div class="tabela-barra">'
+        + tabelaSelect_('tabelaCampeonato', 'Campeonato', (dados.campeonatos || []).map(function (item) { return { id: item.id, nome: item.nome + (item.temporada ? ' · ' + item.temporada : '') }; }), tabelaEstado.campeonatoId, dados.campeonatos.length ? '' : 'Nenhum campeonato')
+        + tabelaBotao_('Atualizar', 'atualizar') + '</div><div id="tabelaLoading"></div><div id="tabelaMensagem" aria-live="polite">'
+        + (recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '') + tabelaAvisosHTML_(dados.avisos || []) + '</div>'
+        + (dados.campeonato ? '<div class="tabela-abas" aria-label="Seções da tabela">' + abas.map(function (aba) {
+          return '<button type="button" class="botao-apoio" data-tabela-aba="' + aba[0] + '" aria-pressed="' + (tabelaEstado.aba === aba[0] ? 'true' : 'false') + '">' + aba[1] + '</button>';
+        }).join('') + '</div><div id="tabelaPainel"></div><div id="tabelaFormArea" class="tabela-form"></div>'
+          : '<div class="vazio">Nenhum campeonato cadastrado. Cadastre um campeonato e vincule os times para começar.</div>'
+            + (moduloDisponivel('campeonatos') ? tabelaBotao_('Cadastrar campeonato', 'campeonatos') : ''));
+      area.querySelector('#tabelaCampeonato').onchange = function (evento) {
+        const id = evento.target.value;
+        evento.target.value = tabelaEstado.campeonatoId;
+        tabelaNavegar_(function () { carregarTabelaCampeonato_(id); });
+      };
+      area.querySelectorAll('[data-tabela-aba]').forEach(function (botao) {
+        botao.onclick = function () { tabelaNavegar_(function () { tabelaEstado.aba = botao.dataset.tabelaAba; montarTabelaCampeonato_(); }); };
+      });
+      tabelaLigarTecladoAbas_(area, '[data-tabela-aba]');
+      const abaSelecionada = area.querySelector('[data-tabela-aba="' + tabelaEstado.aba + '"]');
+      if (abaSelecionada) abaSelecionada.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (dados.campeonato) {
+        const painel = document.getElementById('tabelaPainel');
+        if (tabelaEstado.aba === 'jogos') painel.innerHTML = tabelaJogosHTML_();
+        if (tabelaEstado.aba === 'classificacao') painel.innerHTML = tabelaClassificacaoHTML_();
+        if (tabelaEstado.aba === 'grupos') painel.innerHTML = tabelaGruposHTML_();
+        if (tabelaEstado.aba === 'campos') painel.innerHTML = tabelaCamposHTML_();
+        if (tabelaEstado.aba === 'criterios') painel.innerHTML = tabelaCriteriosHTML_();
+      }
+      tabelaLigarAcoes_(area);
+      ['Fase', 'Grupo', 'Rodada'].forEach(function (nome) {
+        const select = document.getElementById('tabelaFiltro' + nome);
+        if (select) select.onchange = function () {
+          const valor = select.value;
+          tabelaNavegar_(function () {
+            tabelaEstado[nome.toLowerCase()] = valor;
+            if (nome === 'Fase') { tabelaEstado.grupo = ''; tabelaEstado.rodada = ''; }
+            montarTabelaCampeonato_();
+          });
+          if (tabelaEstado.sujo) select.value = tabelaEstado[nome.toLowerCase()];
+        };
+      });
+    }
+
+    function tabelaJogosHTML_() {
+      const dados = tabelaEstado.dados;
+      const faseSelecionada = dados.fases.find(function (fase) { return fase.id === tabelaEstado.fase; });
+      let html = '<div class="tabela-barra">'
+        + tabelaSelect_('tabelaFiltroFase', 'Fase', dados.fases, tabelaEstado.fase, 'Todas as fases')
+        + tabelaSelect_('tabelaFiltroGrupo', 'Grupo', faseSelecionada && faseSelecionada.tipo === 'eliminatoria' ? [] : dados.grupos, tabelaEstado.grupo, 'Todos os grupos')
+        + tabelaSelect_('tabelaFiltroRodada', 'Rodada', faseSelecionada ? tabelaRodadas_(faseSelecionada) : [], tabelaEstado.rodada, faseSelecionada ? 'Todas as rodadas' : 'Selecione uma fase')
+        + (dados.podeEditar && dados.fases.length && dados.equipes.length >= 2 ? tabelaBotao_('Novo jogo', 'novo-jogo') : '') + '</div>';
+      if (!dados.estrutura || !dados.fases.length) html += '<div class="aviso">Configure a forma de disputa e selecione suas fases no cadastro do campeonato. Nenhum jogo é gerado automaticamente.</div>'
+        + (moduloDisponivel('campeonatos') ? tabelaBotao_('Configurar campeonato', 'campeonatos') : '');
+      if (dados.equipes.length < 2) html += '<div class="aviso">Vincule pelo menos dois times ao campeonato para cadastrar jogos.</div>'
+        + (moduloDisponivel('times-campeonato') ? tabelaBotao_('Vincular times', 'times-campeonato') : '');
+      if (!dados.campos.some(function (campo) { return campo.ativo; })) html += '<div class="aviso">Nenhum campo ativo. Cadastre um local na aba Campos antes de agendar jogos.</div>' + tabelaBotao_('Ir para Campos', 'ir-campos');
+      html += '<p class="apoio">Cadastre os confrontos manualmente após o sorteio externo. Só jogos encerrados da fase de classificação entram na classificação; fases eliminatórias não geram avanço automático.</p>';
+      if (faseSelecionada) {
+        const rodadaAtual = Number(tabelaEstado.rodada || 0);
+        html += '<nav class="tabela-rodada-navegacao" aria-label="Navegação das rodadas">'
+          + '<button type="button" class="botao-apoio" data-tabela-acao="rodada-anterior" aria-label="Rodada anterior"' + (rodadaAtual <= 1 ? ' disabled' : '') + '>&lsaquo;</button>'
+          + '<strong>' + escapar(rodadaAtual ? 'Rodada ' + rodadaAtual + ' de ' + faseSelecionada.rodadas : 'Todas as rodadas') + '</strong>'
+          + '<button type="button" class="botao-apoio" data-tabela-acao="rodada-proxima" aria-label="Próxima rodada"' + (rodadaAtual >= faseSelecionada.rodadas ? ' disabled' : '') + '>&rsaquo;</button></nav>';
+      } else {
+        html += '<p class="apoio">Selecione uma fase para navegar pelas rodadas com as setas.</p>';
+      }
+      dados.fases.filter(function (fase) { return !tabelaEstado.fase || fase.id === tabelaEstado.fase; }).forEach(function (fase) {
+        html += '<section class="tabela-painel"><h3>' + escapar(fase.nome) + '</h3><p class="apoio">'
+          + (fase.tipo === 'eliminatoria' ? 'Eliminatória · cruzamentos manuais' : 'Fase de classificação') + ' · ' + fase.rodadas + ' rodada(s)</p>';
+        tabelaRodadas_(fase).filter(function (rodada) { return !tabelaEstado.rodada || rodada.id === tabelaEstado.rodada; }).forEach(function (rodada) {
+          const jogos = dados.jogos.filter(function (jogo) {
+            return jogo.faseId === fase.id && String(jogo.rodada) === rodada.id && (!tabelaEstado.grupo || jogo.grupoId === tabelaEstado.grupo);
+          }).slice().sort(function (a, b) { return (a.data + a.hora).localeCompare(b.data + b.hora); });
+          html += '<section class="tabela-rodada"><header class="tabela-rodada-cabecalho"><h4>' + escapar(rodada.nome) + '</h4><span class="apoio">'
+            + jogos.length + ' jogo(s)</span></header>' + (jogos.length ? '<div class="tabela-grade">' + jogos.map(tabelaJogoHTML_).join('') + '</div>' : '<div class="vazio">Nenhum jogo cadastrado nesta rodada.</div>') + '</section>';
+        });
+        html += '</section>';
+      });
+      return html;
+    }
+
+    function tabelaJogoHTML_(jogo) {
+      const dados = tabelaEstado.dados;
+      function nome(lista, id, vazio) { return (lista.find(function (item) { return item.id === id; }) || {}).nome || vazio; }
+      function time(id) {
+        const equipe = dados.equipes.find(function (item) { return item.id === id; });
+        const equipeNome = equipe ? equipe.nome : 'Time não encontrado';
+        const iniciais = equipeNome.trim().split(/\s+/).slice(0, 2).map(function (parte) { return parte.charAt(0); }).join('').toUpperCase();
+        return '<div class="tabela-jogo-time"><div class="tabela-jogo-escudo">'
+          + (equipe && equipe.escudo
+            ? '<img src="' + escapar(equipe.escudo) + '" alt="Escudo de ' + escapar(equipeNome) + '" loading="lazy">'
+            : '<span class="tabela-jogo-sem-escudo" aria-hidden="true">' + escapar(iniciais) + '</span>')
+          + '</div><span class="tabela-jogo-time-nome">' + escapar(equipeNome) + '</span></div>';
+      }
+      const encerrado = jogo.status === 'encerrado';
+      const placar = (encerrado ? '<span class="tabela-jogo-gols">' + escapar(jogo.golsMandante) + '</span>' : '')
+        + '<span class="tabela-jogo-versus">×</span>'
+        + (encerrado ? '<span class="tabela-jogo-gols">' + escapar(jogo.golsVisitante) + '</span>' : '');
+      const status = { agendado: 'Agendado', encerrado: 'Encerrado', adiado: 'Adiado', cancelado: 'Cancelado' };
+      return '<article class="tabela-jogo tabela-jogo-partida"><div class="tabela-jogo-cabecalho">'
+        + '<strong class="apoio">' + escapar(nome(dados.grupos, jogo.grupoId, 'Sem grupo')) + '</strong>'
+        + '<span class="tabela-jogo-status">' + escapar(status[jogo.status] || jogo.status) + '</span></div>'
+        + '<div class="apoio tabela-jogo-local">' + escapar(jogo.data ? formatarDataBr(jogo.data) : 'Data a definir') + (jogo.hora ? ' · ' + escapar(jogo.hora) : '')
+        + '<br>' + escapar(nome(dados.campos, jogo.campoId, 'Campo a definir')) + '</div>'
+        + '<div class="tabela-jogo-times tabela-jogo-confronto">' + time(jogo.mandanteId)
+        + '<div class="tabela-jogo-placar" aria-label="' + escapar(encerrado ? 'Placar: ' + jogo.golsMandante + ' a ' + jogo.golsVisitante : 'Partida sem placar') + '">' + placar + '</div>'
+        + time(jogo.visitanteId) + '</div><div class="tabela-acoes">'
+        + tabelaBotao_('Súmula PDF', 'pdf', jogo.id)
+        + tabelaBotao_(dados.podeEditar ? (jogo.status === 'encerrado' ? 'Editar resultado' : 'Lançar resultado') : 'Ver resultado', 'resultado-jogo', jogo.id)
+        + (dados.podeEditar ? tabelaBotao_('Editar', 'editar-jogo', jogo.id) + tabelaBotao_('Remover', 'remover-jogo', jogo.id, true) : '') + '</div></article>';
+    }
+
+    function tabelaClassificacaoHTML_() {
+      const classificacao = tabelaEstado.dados.classificacao || { geral: [], grupos: [] };
+      return '<div class="aviso">Somente jogos encerrados da primeira fase de classificação, com placar final, pontuam. Eliminatórias não entram. Empates após os critérios esportivos, sem decisão da organização, compartilham a posição; não há desempate alfabético nem classificação automática para outra fase. Consulte as decisões na aba Critérios.</div>'
+        + tabelaRankingHTML_('Classificação geral', classificacao.geral || [])
+        + (classificacao.grupos || []).map(function (grupo) { return tabelaRankingHTML_(grupo.nome, grupo.linhas || []); }).join('')
+        + '<p class="apoio">P: pontos · J: jogos · V: vitórias · E: empates · D: derrotas · GP/GC: gols pró/contra · SG: saldo · %: aproveitamento · CA/CV: cartões amarelos/vermelhos de atletas e comissão em jogos encerrados da primeira fase de classificação.</p>';
+    }
+
+    function tabelaRankingHTML_(titulo, linhas) {
+      return '<section class="tabela-painel"><div class="tabela-scroll" tabindex="0" role="region" aria-label="' + escapar(titulo) + ' — role horizontalmente para ver todas as colunas"><table class="tabela-classificacao"><caption>' + escapar(titulo) + '</caption>'
+        + '<thead><tr>' + ['Pos.', 'Equipe', 'P', 'J', 'V', 'E', 'D', 'GP', 'GC', 'SG', '%', 'CA', 'CV'].map(function (coluna) { return '<th scope="col">' + coluna + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + (linhas.length ? linhas.map(function (linha) {
+          return '<tr><td>' + escapar(linha.posicao) + '</td><td>'
+            + (linha.escudo ? '<img class="tabela-escudo" src="' + escapar(linha.escudo) + '" alt="" loading="lazy">' : '') + escapar(linha.equipeNome) + '</td>'
+            + ['pontos', 'jogos', 'vitorias', 'empates', 'derrotas', 'golsPro', 'golsContra', 'saldoGols', 'aproveitamento', 'amarelos', 'vermelhos'].map(function (chave) {
+              return '<td>' + escapar(linha[chave] == null ? '—' : linha[chave]) + (chave === 'aproveitamento' && linha[chave] != null ? '%' : '') + '</td>';
+            }).join('') + '</tr>';
+        }).join('') : '<tr><td colspan="13">Nenhuma equipe nesta classificação.</td></tr>') + '</tbody></table></div></section>';
+    }
+
+    function tabelaGruposHTML_() {
+      const dados = tabelaEstado.dados;
+      return '<div class="tabela-painel"><h3>Grupos e fases configurados</h3><p class="apoio">A estrutura é configurada no cadastro do campeonato. Sorteios, cruzamentos e participantes das eliminatórias são mantidos manualmente; não há avanço automático.</p>'
+        + (dados.fases.length ? '<ul>' + dados.fases.map(function (fase) { return '<li>' + escapar(fase.nome) + ' · ' + (fase.tipo === 'eliminatoria' ? 'Eliminatória' : 'Classificação') + ' · ' + fase.rodadas + ' rodada(s)</li>'; }).join('') + '</ul>' : '<div class="vazio">Nenhuma fase configurada.</div>')
+        + (dados.grupos.length ? '<div class="tabela-grade">' + dados.grupos.map(function (grupo) {
+          const nomes = dados.equipes.filter(function (equipe) { return grupo.equipeIds.indexOf(equipe.id) >= 0; }).map(function (equipe) { return escapar(equipe.nome); });
+          return '<section class="tabela-jogo"><h4>' + escapar(grupo.nome) + '</h4>' + (nomes.length ? '<ul><li>' + nomes.join('</li><li>') + '</li></ul>' : '<p class="apoio">Nenhum time atribuído.</p>') + '</section>';
+        }).join('') + '</div>' : '<p class="apoio">Este campeonato não utiliza grupos de classificação.</p>')
+        + (dados.grupos.length ? '<p class="apoio">Sem grupo: ' + escapar(dados.equipes.filter(function (equipe) {
+          return !dados.grupos.some(function (grupo) { return grupo.equipeIds.indexOf(equipe.id) >= 0; });
+        }).map(function (equipe) { return equipe.nome; }).join(', ') || 'nenhum') + '</p>' : '')
+        + '<div class="tabela-acoes">' + (dados.podeEditar && dados.grupos.length && dados.equipes.length ? tabelaBotao_('Distribuir times nos grupos', 'editar-grupos') : '')
+        + (moduloDisponivel('campeonatos') ? tabelaBotao_('Configurar fases', 'campeonatos') : '') + '</div></div>';
+    }
+
+    function tabelaCamposHTML_() {
+      const dados = tabelaEstado.dados;
+      return '<p class="apoio">Cadastro global de locais, compartilhado por todos os campeonatos. Campos inativos não podem ser escolhidos para novos jogos.</p>'
+        + (dados.podeEditar ? '<div class="tabela-acoes">' + tabelaBotao_('Cadastrar campo', 'novo-campo') + '</div>' : '')
+        + (dados.campos.length ? '<div class="tabela-grade">' + dados.campos.map(function (campo) {
+          return '<article class="tabela-jogo"><h3>' + escapar(campo.nome) + '</h3><div class="apoio">' + escapar(campo.endereco || 'Endereço não informado') + '<br>' + (campo.ativo ? 'Ativo' : 'Inativo') + '</div>'
+            + (dados.podeEditar ? '<div class="tabela-acoes">' + tabelaBotao_('Editar', 'editar-campo', campo.id) + tabelaBotao_('Remover', 'remover-campo', campo.id, true) + '</div>' : '') + '</article>';
+        }).join('') + '</div>' : '<div class="vazio">Nenhum campo cadastrado. Cadastre o primeiro local para organizar os jogos.</div>');
+    }
+
+    const tabelaDesempates = [
+      { id: 'vitorias', nome: 'Vitórias (mais)' },
+      { id: 'saldoGols', nome: 'Saldo de gols (maior)' },
+      { id: 'golsPro', nome: 'Gols pró (mais)' },
+      { id: 'golsContra', nome: 'Gols sofridos (menos)' },
+      { id: 'confrontoDireto', nome: 'Confronto direto' },
+      { id: 'amarelos', nome: 'Cartões amarelos (menos)' },
+      { id: 'vermelhos', nome: 'Cartões vermelhos (menos)' }
+    ];
+
+    function tabelaRegrasCriteriosHTML_() {
+      return '<p class="apoio">Pontos sempre vêm primeiro. Escolha de zero a sete critérios esportivos, sem repetir, na ordem desejada. Opções: '
+        + tabelaDesempates.map(function (item) { return escapar(item.nome); }).join(' · ')
+        + '. Somente jogos encerrados da primeira fase de classificação contam. Confronto direto só se aplica quando restam exatamente dois times empatados que se enfrentaram nessa fase: soma os pontos de todos os encontros, pela pontuação configurada, sem pênaltis. Cartões somam atletas e comissão. Resultados antigos que contêm somente o placar, sem eventos registrados, somam zero cartões nesta tabela; isso não comprova ausência de cartões na partida.</p>'
+        + '<p class="apoio">Se todos os critérios esportivos empatarem, a organização pode registrar a ordem final e o motivo, sem sorteio automático. Até essa decisão, os times compartilham a posição. Decisões da classificação geral e dos grupos são independentes. Se resultados/critério/grupos mudarem, a decisão precisa ser registrada novamente; atualize a tabela para consultar os empates atuais.</p>'
+        + '<p class="apoio">O aproveitamento é relativo aos pontos por vitória: zero por vitória resulta em 0%; empate ou derrota com pontuação maior que vitória pode resultar em mais de 100%.</p>';
+    }
+
+    function tabelaOrdemEmpate_(empate) {
+      const equipes = empate.equipes || [];
+      const ids = empate.decisao && empate.decisao.equipeIds;
+      if (!Array.isArray(ids) || ids.length !== equipes.length || new Set(ids).size !== equipes.length
+        || !ids.every(function (id) { return equipes.some(function (equipe) { return equipe.id === id; }); })) return equipes.slice();
+      return ids.map(function (id) { return equipes.find(function (equipe) { return equipe.id === id; }); });
+    }
+
+    function tabelaEmpatesOrganizacaoHTML_() {
+      const dados = tabelaEstado.dados;
+      const empates = dados.empatesOrganizacao || [];
+      const escopos = [];
+      empates.forEach(function (empate) {
+        if (empate && Array.isArray(empate.equipes) && empate.equipes.length >= 2 && escopos.indexOf(empate.escopo) < 0) escopos.push(empate.escopo);
+      });
+      return '<section class="tabela-painel"><h3>Desempates da organização</h3>'
+        + (escopos.length ? escopos.map(function (escopo) {
+          const primeiro = empates.find(function (empate) { return empate && empate.escopo === escopo; });
+          return '<h4>' + escapar(primeiro.escopoNome || escopo) + '</h4><div class="tabela-grade">'
+            + empates.map(function (empate, indice) {
+              if (!empate || empate.escopo !== escopo || !Array.isArray(empate.equipes) || empate.equipes.length < 2) return '';
+              const decisao = empate.decisao;
+              const lista = decisao ? 'ol' : 'ul';
+              return '<article class="tabela-jogo"><p><strong>'
+                + (decisao ? 'Desempate da organização registrado' : 'Empate aguardando definição da organização')
+                + '</strong></p><' + lista + '>' + tabelaOrdemEmpate_(empate).map(function (equipe) { return '<li>' + escapar(equipe.nome) + '</li>'; }).join('') + '</' + lista + '>'
+                + (decisao ? '<p><strong>Motivo:</strong> ' + escapar(decisao.motivo) + '</p><p class="apoio">Registrado por '
+                  + escapar(decisao.registradoPor || '—') + ' · ' + escapar(decisao.registradoEm || '—') + '</p>' : '')
+                + (dados.podeEditar ? '<div class="tabela-acoes">' + tabelaBotao_('Definir desempate da organização', 'editar-desempate-organizacao', String(indice))
+                  + (decisao ? tabelaBotao_('Remover decisão', 'remover-desempate-organizacao', String(indice), true) : '') + '</div>' : '') + '</article>';
+            }).join('') + '</div>';
+        }).join('') : '<p class="apoio">Nenhum empate residual aguardando ou com decisão da organização.</p>') + '</section>';
+    }
+
+    function tabelaCriteriosHTML_() {
+      const criterios = tabelaEstado.dados.criterios;
+      return '<section class="tabela-painel"><h3>Pontuação e desempates</h3><p>Vitória: <strong>' + escapar(criterios.pontosVitoria) + '</strong> · Empate: <strong>' + escapar(criterios.pontosEmpate) + '</strong> · Derrota: <strong>' + escapar(criterios.pontosDerrota) + '</strong></p>'
+        + '<p>Ordem de desempate: ' + criterios.desempates.map(function (chave) {
+          return escapar((tabelaDesempates.find(function (item) { return item.id === chave; }) || {}).nome || chave);
+        }).join(' → ') + (criterios.desempates.length ? '' : 'Nenhum — somente pontos') + '</p>' + tabelaRegrasCriteriosHTML_()
+        + (tabelaEstado.dados.podeEditar ? tabelaBotao_('Editar critérios', 'editar-criterios') : '') + '</section>' + tabelaEmpatesOrganizacaoHTML_();
+    }
+
+    function tabelaLigarAcoes_(area) {
+      area.querySelectorAll('[data-tabela-acao]').forEach(function (botao) {
+        botao.onclick = function () {
+          if (tabelaEstado.ocupado || confirmacaoElencoAtual) return;
+          const acao = botao.dataset.tabelaAcao, id = botao.dataset.id;
+          if (acao === 'rodada-anterior' || acao === 'rodada-proxima') {
+            const fase = tabelaEstado.dados.fases.find(function (item) { return item.id === tabelaEstado.fase; });
+            const destino = Number(tabelaEstado.rodada || 0) + (acao === 'rodada-proxima' ? 1 : -1);
+            if (!fase || destino < 1 || destino > fase.rodadas) return;
+            return tabelaNavegar_(function () { tabelaEstado.rodada = String(destino); montarTabelaCampeonato_(); });
+          }
+          if (acao === 'atualizar') return tabelaNavegar_(function () { carregarTabelaCampeonato_(tabelaEstado.campeonatoId); });
+          if (acao === 'campeonatos' || acao === 'times-campeonato') return abrirModulo(acao);
+          if (acao === 'ir-campos') return tabelaNavegar_(function () { tabelaEstado.aba = 'campos'; montarTabelaCampeonato_(); });
+          if (acao === 'pdf') return tabelaExecutar_('gerarSumulaJogoCampeonato', { id: id }, true);
+          if (acao === 'resultado-jogo') return tabelaNavegar_(function () { abrirTabelaResultado_(id); });
+          if (!tabelaEstado.dados.podeEditar) return;
+          if (acao === 'editar-desempate-organizacao' || acao === 'remover-desempate-organizacao') {
+            const dados = tabelaEstado.dados;
+            const indice = Number(id);
+            if (!/^\d+$/.test(id) || !Number.isSafeInteger(indice) || !(dados.empatesOrganizacao || [])[indice]) return;
+            return tabelaNavegar_(function () {
+              if (dados !== tabelaEstado.dados) return;
+              if (acao === 'editar-desempate-organizacao') abrirTabelaDesempateOrganizacao_(indice);
+              else removerTabelaDesempateOrganizacao_(indice);
+            });
+          }
+          if (acao === 'remover-jogo' || acao === 'remover-campo') {
+            return tabelaNavegar_(function () {
+              confirmarDescarteElenco_({
+                titulo: acao === 'remover-jogo' ? 'Remover este jogo?' : 'Remover este campo global?',
+                mensagem: acao === 'remover-jogo' ? 'O jogo será excluído e a classificação recalculada. Esta ação não pode ser desfeita.' : 'Este local será removido de todos os campeonatos. Campos utilizados em jogos não podem ser removidos.',
+                confirmar: 'Remover', cancelar: 'Cancelar'
+              }).then(function (confirmado) {
+                if (confirmado && moduloAtual === 'jogos-campeonato' && !tabelaEstado.ocupado) tabelaExecutar_(acao === 'remover-jogo' ? 'removerJogoCampeonato' : 'removerCampoCampeonato', { id: id });
+              });
+            });
+          }
+          tabelaNavegar_(function () {
+            if (acao === 'novo-jogo' || acao === 'editar-jogo') abrirTabelaJogo_(id);
+            if (acao === 'novo-campo' || acao === 'editar-campo') abrirTabelaCampo_(id);
+            if (acao === 'editar-grupos') abrirTabelaGrupos_();
+            if (acao === 'editar-criterios') abrirTabelaCriterios_();
+          });
+        };
+      });
+    }
+
+    function tabelaMontarFormulario_(titulo, html, salvar) {
+      tabelaEstado.formulario = titulo;
+      tabelaEstado.sujo = false;
+      const area = document.getElementById('tabelaFormArea');
+      area.innerHTML = '<form id="tabelaFormulario" class="formulario tabela-painel"><h3>' + escapar(titulo) + '</h3>'
+        + html + '<div class="tabela-acoes"><button type="submit" class="botao-principal">Salvar</button>'
+        + '<button type="button" class="botao-apoio" id="tabelaCancelar">Cancelar</button></div><div id="tabelaFormErro" role="alert"></div></form>';
+      const form = document.getElementById('tabelaFormulario');
+      form.oninput = form.onchange = function () { tabelaEstado.sujo = true; };
+      form.onsubmit = function (evento) {
+        evento.preventDefault();
+        if (tabelaEstado.ocupado || !form.reportValidity()) return;
+        document.getElementById('tabelaFormErro').innerHTML = '';
+        try { salvar(); } catch (erro) { document.getElementById('tabelaFormErro').innerHTML = '<div class="erro">' + escapar(erro.message) + '</div>'; }
+      };
+      document.getElementById('tabelaCancelar').onclick = function () {
+        tabelaNavegar_(function () { area.innerHTML = ''; });
+      };
+      area.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const primeiro = form.querySelector('input,select');
+      if (primeiro) primeiro.focus({ preventScroll: true });
+    }
+
+    function tabelaLigarTecladoAbas_(area, seletor) {
+      const abas = Array.from(area.querySelectorAll(seletor));
+      abas.forEach(function (aba, indice) {
+        aba.onkeydown = function (evento) {
+          if (tabelaEstado.ocupado || confirmacaoElencoAtual) return;
+          let destino;
+          if (evento.key === 'ArrowRight') destino = (indice + 1) % abas.length;
+          else if (evento.key === 'ArrowLeft') destino = (indice + abas.length - 1) % abas.length;
+          else if (evento.key === 'Home') destino = 0;
+          else if (evento.key === 'End') destino = abas.length - 1;
+          else return;
+          evento.preventDefault();
+          abas[destino].focus({ preventScroll: true });
+          abas[destino].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        };
+      });
+    }
+
+    function abrirTabelaJogo_(id) {
+      const dados = tabelaEstado.dados;
+      const jogo = dados.jogos.find(function (item) { return item.id === id; }) || {
+        id: '', faseId: tabelaEstado.fase || (dados.fases[0] || {}).id || '', grupoId: tabelaEstado.grupo,
+        rodada: tabelaEstado.rodada || 1, mandanteId: '', visitanteId: '', campoId: '', data: '', hora: '', status: 'agendado'
+      };
+      if (!dados.fases.length || dados.equipes.length < 2) return;
+      tabelaMontarFormulario_(id ? 'Editar jogo' : 'Novo jogo',
+        '<div class="campos">' + tabelaSelect_('tjFase', 'Fase', dados.fases, jogo.faseId, '')
+        + tabelaSelect_('tjGrupo', 'Grupo', dados.grupos, jogo.grupoId, 'Selecione o grupo')
+        + tabelaSelect_('tjRodada', 'Rodada', [], '', '')
+        + tabelaSelect_('tjMandante', 'Mandante', [], '', 'Selecione')
+        + tabelaSelect_('tjVisitante', 'Visitante', [], '', 'Selecione')
+        + tabelaSelect_('tjCampo', 'Campo', dados.campos.filter(function (campo) { return campo.ativo || campo.id === jogo.campoId; }).map(function (campo) {
+          return { id: campo.id, nome: campo.nome + (campo.ativo ? '' : ' (inativo)') };
+        }), jogo.campoId, 'Selecione o campo')
+        + campoTexto('tjData', 'Data', jogo.data, '', '', 'date') + campoTexto('tjHora', 'Horário', jogo.hora, '', '', 'time')
+        + tabelaSelect_('tjStatus', 'Status', jogo.status === 'encerrado' ? [{ id: 'encerrado', nome: 'Encerrado — altere o placar em Editar resultado' }]
+          : [{ id: 'agendado', nome: 'Agendado' }, { id: 'adiado', nome: 'Adiado' }, { id: 'cancelado', nome: 'Cancelado' }], jogo.status, '') + '</div>'
+        + '<p class="apoio" id="tjAjudaTimes"></p><p class="apoio">Esta tela altera somente o agendamento. Use Lançar resultado para finalizar a partida. Grupos limitam os participantes na classificação; eliminatórias são preenchidas manualmente.</p>',
+        function () {
+          const fase = dados.fases.find(function (item) { return item.id === valor('tjFase'); });
+          const grupoId = jogo.status === 'encerrado' ? jogo.grupoId : (fase.tipo === 'classificacao' && dados.grupos.length ? valor('tjGrupo') : '');
+          if (jogo.status !== 'encerrado') {
+            if (fase.tipo === 'classificacao' && dados.grupos.length && !grupoId) throw new Error('Selecione um grupo para a fase de classificação.');
+            if (!valor('tjMandante') || !valor('tjVisitante')) throw new Error('Selecione os dois times.');
+            if (valor('tjMandante') === valor('tjVisitante')) throw new Error('Mandante e visitante devem ser diferentes.');
+          }
+          if (!valor('tjCampo') || !valor('tjData') || !valor('tjHora')) throw new Error('Informe o campo, a data e o horário do jogo.');
+          tabelaExecutar_('salvarJogoCampeonato', {
+            id: jogo.id, faseId: jogo.status === 'encerrado' ? jogo.faseId : fase.id, grupoId: grupoId, rodada: Number(valor('tjRodada')),
+            mandanteId: jogo.status === 'encerrado' ? jogo.mandanteId : valor('tjMandante'), visitanteId: jogo.status === 'encerrado' ? jogo.visitanteId : valor('tjVisitante'), campoId: valor('tjCampo'),
+            data: valor('tjData'), hora: valor('tjHora'), status: jogo.status === 'encerrado' ? 'encerrado' : valor('tjStatus')
+          });
+        });
+      function valor(campo) { return document.getElementById(campo).value; }
+      ['tjCampo', 'tjData', 'tjHora'].forEach(function (campo) { document.getElementById(campo).required = true; });
+      function atualizarTimes() {
+        const fase = dados.fases.find(function (item) { return item.id === valor('tjFase'); });
+        const usaGrupo = fase.tipo === 'classificacao' && dados.grupos.length > 0;
+        const selectGrupo = document.getElementById('tjGrupo');
+        selectGrupo.parentElement.hidden = !usaGrupo;
+        selectGrupo.disabled = !usaGrupo;
+        selectGrupo.required = usaGrupo;
+        const grupo = dados.grupos.find(function (item) { return item.id === selectGrupo.value; });
+        const equipes = jogo.status === 'encerrado' ? dados.equipes.slice()
+          : (usaGrupo ? dados.equipes.filter(function (equipe) { return grupo && grupo.equipeIds.indexOf(equipe.id) >= 0; }) : dados.equipes);
+        if (jogo.status === 'encerrado') [jogo.mandanteId, jogo.visitanteId].forEach(function (equipeId) {
+          if (!equipes.some(function (equipe) { return equipe.id === equipeId; })) equipes.push({ id: equipeId, nome: 'Equipe anterior (' + equipeId + ')' });
+        });
+        ['tjMandante', 'tjVisitante'].forEach(function (campo) {
+          const select = document.getElementById(campo);
+          const atual = select.value;
+          select.innerHTML = opcoesSelect(equipes, atual, 'Selecione');
+          select.required = true;
+        });
+        document.getElementById('tjAjudaTimes').textContent = usaGrupo && equipes.length < 2
+          ? 'Selecione um grupo com pelo menos dois times. Distribua os times na aba Grupos e fases antes de cadastrar este confronto.' : '';
+      }
+      function atualizarFase() {
+        const fase = dados.fases.find(function (item) { return item.id === valor('tjFase'); });
+        const select = document.getElementById('tjRodada'), atual = select.value;
+        select.innerHTML = opcoesSelect(tabelaRodadas_(fase), atual, '');
+        atualizarTimes();
+      }
+      atualizarFase();
+      document.getElementById('tjRodada').value = String(jogo.rodada);
+      document.getElementById('tjMandante').value = jogo.mandanteId;
+      document.getElementById('tjVisitante').value = jogo.visitanteId;
+      document.getElementById('tjFase').addEventListener('change', atualizarFase);
+      document.getElementById('tjGrupo').addEventListener('change', atualizarTimes);
+      if (jogo.status === 'encerrado') {
+        ['tjFase', 'tjGrupo', 'tjMandante', 'tjVisitante', 'tjStatus'].forEach(function (campo) { document.getElementById(campo).disabled = true; });
+      }
+    }
+
+    function tabelaInteiro_(valor, maximo) {
+      if (!/^\d+$/.test(String(valor)) || !Number.isInteger(Number(valor)) || Number(valor) > maximo) throw new Error('Informe um número inteiro entre 0 e ' + maximo + '.');
+      return Number(valor);
+    }
+
+    function tabelaAvisosHTML_(avisos) {
+      return avisos.length ? '<div class="aviso" role="status"><ul>' + avisos.map(function (aviso) {
+        return '<li>' + escapar(aviso) + '</li>';
+      }).join('') + '</ul></div>' : '';
+    }
+
+    function abrirTabelaResultado_(id) {
+      if (tabelaEstado.ocupado || !tabelaEstado.dados) return;
+      const area = document.getElementById('areaTabelaCampeonato');
+      if (!area) return;
+      const campeonatoId = tabelaEstado.campeonatoId, requisicao = ++tabelaEstado.requisicao;
+      tabelaEstado.resultado = null;
+      tabelaEstado.formulario = 'Resultado da partida';
+      area.innerHTML = '<div class="tabela-barra">'
+        + tabelaSelect_('tabelaCampeonato', 'Campeonato', tabelaEstado.dados.campeonatos, campeonatoId, '')
+        + '<button type="button" class="botao-apoio" id="trVoltar">Voltar para a tabela</button>'
+        + '<button type="button" class="botao-apoio" id="trRecarregar">Atualizar resultado</button></div>'
+        + '<div id="tabelaLoading"></div><div id="tabelaMensagem" aria-live="polite"></div><div id="tabelaResultadoArea" class="tabela-form"></div>';
+      document.getElementById('trVoltar').onclick = function () { tabelaNavegar_(montarTabelaCampeonato_); };
+      document.getElementById('trRecarregar').onclick = function () { tabelaNavegar_(function () { abrirTabelaResultado_(id); }); };
+      document.getElementById('tabelaCampeonato').onchange = function (evento) {
+        const selecionado = evento.target.value;
+        evento.target.value = campeonatoId;
+        tabelaNavegar_(function () { carregarTabelaCampeonato_(selecionado); });
+      };
+      tabelaOcupada_(true);
+      google.script.run.withSuccessHandler(function (dados) {
+        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== 'jogos-campeonato') return;
+        tabelaOcupada_(false);
+        tabelaEstado.resultado = JSON.parse(JSON.stringify(dados));
+        tabelaEstado.sujo = false;
+        montarTabelaResultado_();
+      }).withFailureHandler(function (erro) {
+        if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== 'jogos-campeonato') return;
+        tabelaOcupada_(false);
+        tabelaErro_(erro);
+      }).listarResultadoJogoCampeonato({ campeonatoId: campeonatoId, id: id });
+    }
+
+    function tabelaResultadoNumeroHTML_(id, valor, rotulo, atributos) {
+      return '<input id="' + id + '" type="number" min="0" max="999" step="1" required value="'
+        + escapar(valor == null ? 0 : valor) + '" aria-label="' + escapar(rotulo) + '" ' + atributos + '>';
+    }
+
+    function tabelaResultadoEquipeHTML_(equipe, indice) {
+      function controle(pessoa, tipo, posicao, campo) {
+        const id = 'tr-' + indice + '-' + tipo + '-' + posicao + '-' + campo;
+        const atributos = 'data-tr-equipe="' + indice + '" data-tr-tipo="' + tipo + '" data-tr-pessoa="' + posicao + '" data-tr-estat="' + campo + '"';
+        const rotulo = pessoa.nome + ' · ' + ({ participou: 'Participação', gols: 'Gols', golsContra: 'Gols contra', amarelos: 'Cartões amarelos (0, 1 ou 2)', vermelho: 'Cartão vermelho' })[campo];
+        if (campo === 'participou' || campo === 'vermelho') return '<input id="' + id + '" type="checkbox" ' + atributos
+          + (pessoa[campo] ? ' checked' : '') + ' aria-label="' + escapar(rotulo) + '">';
+        if (campo === 'amarelos') return '<select id="' + id + '" ' + atributos + ' aria-label="' + escapar(rotulo) + '">'
+          + [0, 1, 2].map(function (numero) { return '<option value="' + numero + '"' + (Number(pessoa[campo]) === numero ? ' selected' : '') + '>' + numero + '</option>'; }).join('') + '</select>';
+        return tabelaResultadoNumeroHTML_(id, pessoa[campo], rotulo, atributos);
+      }
+      function nome(pessoa) {
+        return escapar(pessoa.nome) + (pessoa.disponivel === false ? '<br><span class="apoio">Cadastro anterior</span>' : '');
+      }
+      return '<section id="trEquipe' + indice + '"' + (indice ? ' hidden' : '') + ' aria-label="' + escapar(equipe.nome) + '">'
+        + '<h3>' + escapar(equipe.nome) + '</h3><div class="tabela-acoes">'
+        + '<button type="button" class="botao-apoio" data-tr-participacao="' + indice + '" data-tr-marcar="sim">Marcar todas as participações</button>'
+        + '<button type="button" class="botao-apoio" data-tr-participacao="' + indice + '" data-tr-marcar="nao">Remover participações</button></div>'
+        + '<div class="tabela-scroll" tabindex="0" role="region" aria-label="Atletas de ' + escapar(equipe.nome) + ' — role horizontalmente"><table class="resultado-tabela"><caption>Atletas</caption>'
+        + '<thead><tr><th scope="col">Nome</th><th scope="col">Nº</th><th scope="col">Nasc.</th><th scope="col">Participação</th><th scope="col">Gols</th><th scope="col">Gols contra</th><th scope="col">Amarelos (0–2)</th><th scope="col">Vermelho</th></tr></thead><tbody>'
+        + equipe.atletas.map(function (pessoa, posicao) {
+          return '<tr><td>' + nome(pessoa) + '</td><td>' + escapar(pessoa.numero == null ? '—' : pessoa.numero) + '</td><td>'
+            + escapar(pessoa.dataNascimento ? formatarDataBr(pessoa.dataNascimento) : '—') + '</td>'
+            + ['participou', 'gols', 'golsContra', 'amarelos', 'vermelho'].map(function (campo) { return '<td>' + controle(pessoa, 'atletas', posicao, campo) + '</td>'; }).join('') + '</tr>';
+        }).join('') + (equipe.atletas.length ? '' : '<tr><td colspan="8">Nenhum atleta no elenco.</td></tr>') + '</tbody></table></div>'
+        + '<div class="tabela-scroll" tabindex="0" role="region" aria-label="Comissão de ' + escapar(equipe.nome) + ' — role horizontalmente"><table class="resultado-tabela"><caption>Comissão técnica</caption>'
+        + '<thead><tr><th scope="col">Nome</th><th scope="col">Cargo</th><th scope="col">Amarelos (0–2)</th><th scope="col">Vermelho</th></tr></thead><tbody>'
+        + equipe.comissao.map(function (pessoa, posicao) { return '<tr><td>' + nome(pessoa) + '</td><td>' + escapar(pessoa.cargo || '—')
+          + '</td><td>' + controle(pessoa, 'comissao', posicao, 'amarelos') + '</td><td>' + controle(pessoa, 'comissao', posicao, 'vermelho') + '</td></tr>'; }).join('')
+        + (equipe.comissao.length ? '' : '<tr><td colspan="4">Nenhum integrante na comissão.</td></tr>') + '</tbody></table></div></section>';
+    }
+
+    function montarTabelaResultado_() {
+      const draft = tabelaEstado.resultado;
+      if (!draft) return;
+      const jogo = draft.jogo, resultado = draft.resultado;
+      const equipes = ['mandante', 'visitante'].map(function (lado) { return draft.equipes.find(function (equipe) { return equipe.lado === lado; }); });
+      if (equipes.some(function (equipe) { return !equipe; })) { tabelaErro_(new Error('As duas equipes da partida não foram retornadas. Atualize o resultado.')); return; }
+      draft.equipes = equipes;
+      equipes.forEach(function (equipe) {
+        equipe.atletas.forEach(function (atleta) {
+          if (atleta.golsContra === undefined) atleta.golsContra = 0;
+          atleta.placarGolsAnterior = Number(atleta.gols);
+          atleta.placarGolsContraAnterior = Number(atleta.golsContra);
+        });
+      });
+      function placar(equipe, lado) {
+        return '<div class="resultado-time">' + (equipe.escudo ? '<img src="' + escapar(equipe.escudo) + '" alt="Escudo de ' + escapar(equipe.nome) + '">' : '<span aria-hidden="true">🛡️</span>')
+          + '<strong>' + escapar(equipe.nome) + '</strong><label for="trGols' + lado + '">' + (lado === 'Mandante' ? 'Mandante' : 'Visitante') + '</label>'
+          + tabelaResultadoNumeroHTML_('trGols' + lado, jogo['gols' + lado], 'Placar de ' + equipe.nome, 'data-tr-jogo="gols' + lado + '"') + '</div>';
+      }
+      function flag(campo, rotulo) {
+        return '<label for="tr' + campo + '"><input type="checkbox" id="tr' + campo + '" data-tr-resultado="' + campo + '"' + (resultado[campo] ? ' checked' : '') + '> ' + rotulo + '</label>';
+      }
+      const area = document.getElementById('tabelaResultadoArea');
+      area.innerHTML = '<form id="tabelaResultadoFormulario" class="formulario tabela-painel"><h3>'
+        + (jogo.status === 'encerrado' ? 'Editar resultado' : 'Lançar resultado') + '</h3><p class="apoio resultado-contexto">'
+        + escapar(draft.campeonato.nome) + (draft.campeonato.temporada ? ' · ' + escapar(draft.campeonato.temporada) : '')
+        + ' · ' + escapar(draft.fase.nome) + ' · Rodada ' + escapar(jogo.rodada) + '</p>'
+        + (draft.podeEditar ? '' : '<div class="aviso">Consulta somente. Você não tem permissão para alterar este resultado.</div>')
+        + '<div class="resultado-placar">' + placar(equipes[0], 'Mandante') + '<strong aria-hidden="true">×</strong>' + placar(equipes[1], 'Visitante') + '</div>'
+        + '<p class="apoio">Gols dos atletas atualizam o placar; gols contra são creditados ao adversário. Você também pode ajustar o placar diretamente para gols administrativos ou sem autoria. O placar inclui a prorrogação; pênaltis ficam separados. Finalizar encerra a partida.</p>'
+        + '<div class="resultado-flags">' + flag('wo', 'WO') + flag('prorrogacao', 'Prorrogação') + flag('penaltis', 'Disputa de pênaltis') + '</div>'
+        + '<div class="campos"><div class="campo" id="trWoCampo"><label for="trWoEquipe">Equipe ausente no WO</label><select id="trWoEquipe" data-tr-resultado="woEquipeId">'
+        + opcoesSelect(equipes, resultado.woEquipeId || '', 'Selecione a equipe ausente') + '</select></div>'
+        + '<div class="campo" id="trPenMandante"><label for="trPenGolsMandante">Pênaltis · ' + escapar(equipes[0].nome) + '</label>'
+        + tabelaResultadoNumeroHTML_('trPenGolsMandante', resultado.golsPenaltisMandante, 'Pênaltis de ' + equipes[0].nome, 'data-tr-resultado="golsPenaltisMandante"') + '</div>'
+        + '<div class="campo" id="trPenVisitante"><label for="trPenGolsVisitante">Pênaltis · ' + escapar(equipes[1].nome) + '</label>'
+        + tabelaResultadoNumeroHTML_('trPenGolsVisitante', resultado.golsPenaltisVisitante, 'Pênaltis de ' + equipes[1].nome, 'data-tr-resultado="golsPenaltisVisitante"') + '</div></div>'
+        + '<p class="apoio">WO, prorrogação e pênaltis não aplicam regras automaticamente. Participação e cartões são independentes; cartões não geram suspensão ou vermelho automático.</p>'
+        + '<div id="trResumo" class="resultado-resumo" aria-live="polite"></div>'
+        + '<div class="tabela-abas" aria-label="Equipe do resultado">' + equipes.map(function (equipe, indice) {
+          return '<button type="button" class="botao-apoio" data-tr-aba="' + indice + '" aria-pressed="' + (indice === 0) + '" aria-controls="trEquipe' + indice + '">' + escapar(equipe.nome) + '</button>';
+        }).join('') + '</div>' + equipes.map(tabelaResultadoEquipeHTML_).join('')
+        + '<div class="campo cheio"><label for="trObservacoes">Observações (até 2.000 caracteres)</label><textarea id="trObservacoes" maxlength="2000" rows="4" data-tr-resultado="observacoes">'
+        + escapar(resultado.observacoes || '') + '</textarea></div><div class="tabela-acoes">'
+        + (draft.podeEditar ? '<button type="submit" class="botao-principal">' + (jogo.status === 'encerrado' ? 'Salvar resultado' : 'Finalizar partida') + '</button>' : '')
+        + '</div><div id="tabelaFormErro" role="alert"></div></form>';
+      const form = document.getElementById('tabelaResultadoFormulario');
+      form.oninput = form.onchange = function (evento) {
+        if (tabelaEstado.ocupado || !draft.podeEditar) return;
+        const input = evento.target, data = input.dataset;
+        const valor = input.type === 'checkbox' ? input.checked : input.value;
+        if (data.trJogo) draft.jogo[data.trJogo] = valor;
+        else if (data.trResultado) draft.resultado[data.trResultado] = valor;
+        else if (data.trEstat) {
+          const pessoa = draft.equipes[Number(data.trEquipe)][data.trTipo][Number(data.trPessoa)];
+          if (data.trTipo === 'atletas' && (data.trEstat === 'gols' || data.trEstat === 'golsContra')) {
+            const anterior = data.trEstat === 'gols' ? 'placarGolsAnterior' : 'placarGolsContraAnterior';
+            if (/^\d+$/.test(String(valor)) && Number.isInteger(Number(valor)) && Number(valor) <= 999) {
+              const equipe = draft.equipes[Number(data.trEquipe)];
+              const lado = (data.trEstat === 'gols') === (equipe.lado === 'mandante') ? 'Mandante' : 'Visitante';
+              const campo = document.getElementById('trGols' + lado);
+              const atual = campo.value;
+              const placar = Number(atual) + Number(valor) - pessoa[anterior];
+              if (!/^\d+$/.test(String(atual)) || !Number.isInteger(placar) || placar < 0 || placar > 999) {
+                input.value = String(pessoa[anterior]);
+                pessoa[data.trEstat] = pessoa[anterior];
+                document.getElementById('tabelaFormErro').innerHTML = '<div class="erro">Confira o placar: esta alteração deve manter o total entre 0 e 999.</div>';
+                return;
+              }
+              draft.jogo['gols' + lado] = placar;
+              campo.value = String(placar);
+              pessoa[anterior] = Number(valor);
+              document.getElementById('tabelaFormErro').innerHTML = '';
+            }
+          }
+          pessoa[data.trEstat] = valor;
+        }
+        else return;
+        tabelaEstado.sujo = true;
+        tabelaResultadoResumo_();
+      };
+      form.querySelectorAll('[data-tr-aba]').forEach(function (botao) {
+        botao.onclick = function () {
+          if (tabelaEstado.ocupado) return;
+          form.querySelectorAll('[data-tr-aba]').forEach(function (aba) {
+            const ativo = aba === botao;
+            aba.setAttribute('aria-pressed', String(ativo));
+            document.getElementById('trEquipe' + aba.dataset.trAba).hidden = !ativo;
+          });
+        };
+      });
+      form.querySelectorAll('[data-tr-participacao]').forEach(function (botao) {
+        botao.disabled = !draft.podeEditar;
+        botao.onclick = function () { tabelaResultadoParticipacoes_(Number(botao.dataset.trParticipacao), botao.dataset.trMarcar === 'sim'); };
+      });
+      tabelaLigarTecladoAbas_(form, '[data-tr-aba]');
+      if (!draft.podeEditar) form.querySelectorAll('input,select,textarea').forEach(function (input) { input.disabled = true; });
+      form.onsubmit = function (evento) {
+        evento.preventDefault();
+        if (tabelaEstado.ocupado || !draft.podeEditar) return;
+        document.getElementById('tabelaFormErro').innerHTML = '';
+        try {
+          const payload = tabelaResultadoPayload_();
+          if (form.reportValidity()) tabelaExecutar_('salvarResultadoJogoCampeonato', payload);
+        }
+        catch (erro) { document.getElementById('tabelaFormErro').innerHTML = '<div class="erro">' + escapar(erro.message) + '</div>'; }
+      };
+      document.getElementById('tabelaMensagem').innerHTML = tabelaAvisosHTML_(draft.avisos || []);
+      tabelaResultadoResumo_();
+      area.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('trGolsMandante').focus({ preventScroll: true });
+    }
+
+    function tabelaResultadoParticipacoes_(indice, marcou) {
+      const draft = tabelaEstado.resultado;
+      if (tabelaEstado.ocupado || !draft || !draft.podeEditar) return;
+      draft.equipes[indice].atletas.forEach(function (atleta, posicao) {
+        atleta.participou = marcou;
+        document.getElementById('tr-' + indice + '-atletas-' + posicao + '-participou').checked = marcou;
+      });
+      tabelaEstado.sujo = true;
+      tabelaResultadoResumo_();
+    }
+
+    function tabelaResultadoResumo_() {
+      const draft = tabelaEstado.resultado;
+      if (!draft) return;
+      const resultado = draft.resultado;
+      document.getElementById('trWoCampo').hidden = !resultado.wo;
+      document.getElementById('trWoEquipe').required = !!resultado.wo;
+      document.getElementById('trWoEquipe').disabled = !draft.podeEditar || !resultado.wo;
+      ['Mandante', 'Visitante'].forEach(function (lado) {
+        document.getElementById('trPen' + lado).hidden = !resultado.penaltis;
+        const input = document.getElementById('trPenGols' + lado);
+        input.required = !!resultado.penaltis;
+        input.disabled = !draft.podeEditar || !resultado.penaltis;
+      });
+      const avisos = [], totais = [];
+      draft.equipes.forEach(function (equipe) {
+        const gols = equipe.atletas.reduce(function (total, atleta) { return total + (Number(atleta.gols) || 0); }, 0);
+        const golsContra = equipe.atletas.reduce(function (total, atleta) { return total + (Number(atleta.golsContra) || 0); }, 0);
+        const adversaria = draft.equipes.find(function (item) { return item.id !== equipe.id; });
+        const recebidos = adversaria.atletas.reduce(function (total, atleta) { return total + (Number(atleta.golsContra) || 0); }, 0);
+        totais.push(equipe.nome + ': ' + equipe.atletas.filter(function (atleta) { return atleta.participou; }).length + ' participação(ões), ' + gols + ' gol(s), ' + golsContra + ' gol(s) contra.');
+        const placar = document.getElementById(equipe.lado === 'mandante' ? 'trGolsMandante' : 'trGolsVisitante').value;
+        if (gols + recebidos !== Number(placar)) avisos.push(equipe.nome + ': gols atribuídos, incluindo gols contra do adversário (' + (gols + recebidos) + '), diferem do placar (' + placar + '). Ajustes administrativos ou sem autoria são permitidos.');
+      });
+      document.getElementById('trResumo').innerHTML = totais.map(function (texto) { return '<p>' + escapar(texto) + '</p>'; }).join('') + tabelaAvisosHTML_(avisos);
+    }
+
+    function tabelaResultadoPayload_() {
+      const draft = tabelaEstado.resultado, resultado = draft.resultado;
+      if (resultado.wo && !draft.equipes.some(function (equipe) { return equipe.id === resultado.woEquipeId; })) throw new Error('Selecione a equipe ausente no WO.');
+      if ((resultado.observacoes || '').length > 2000) throw new Error('As observações devem ter até 2.000 caracteres.');
+      return {
+        campeonatoId: draft.campeonatoId, id: draft.jogo.id, revisao: draft.revisao, revisaoElencos: draft.revisaoElencos,
+        golsMandante: tabelaInteiro_(draft.jogo.golsMandante == null ? 0 : draft.jogo.golsMandante, 999),
+        golsVisitante: tabelaInteiro_(draft.jogo.golsVisitante == null ? 0 : draft.jogo.golsVisitante, 999),
+        resultado: {
+          wo: !!resultado.wo, woEquipeId: resultado.wo ? resultado.woEquipeId : '', prorrogacao: !!resultado.prorrogacao, penaltis: !!resultado.penaltis,
+          golsPenaltisMandante: resultado.penaltis ? tabelaInteiro_(resultado.golsPenaltisMandante == null ? 0 : resultado.golsPenaltisMandante, 999) : null,
+          golsPenaltisVisitante: resultado.penaltis ? tabelaInteiro_(resultado.golsPenaltisVisitante == null ? 0 : resultado.golsPenaltisVisitante, 999) : null,
+          observacoes: resultado.observacoes || ''
+        },
+        equipes: draft.equipes.map(function (equipe) {
+          return { id: equipe.id, atletas: equipe.atletas.map(function (atleta) {
+            return { id: atleta.id, participou: !!atleta.participou, gols: tabelaInteiro_(atleta.gols, 999), golsContra: tabelaInteiro_(atleta.golsContra, 999),
+              amarelos: tabelaInteiro_(atleta.amarelos, 2), vermelho: !!atleta.vermelho };
+          }), comissao: equipe.comissao.map(function (pessoa) {
+            return { id: pessoa.id, amarelos: tabelaInteiro_(pessoa.amarelos, 2), vermelho: !!pessoa.vermelho };
+          }) };
+        })
+      };
+    }
+
+    function abrirTabelaCampo_(id) {
+      const campo = tabelaEstado.dados.campos.find(function (item) { return item.id === id; }) || { id: '', nome: '', endereco: '', ativo: true };
+      tabelaMontarFormulario_(id ? 'Editar campo global' : 'Cadastrar campo global',
+        '<div class="campos">' + campoTexto('tcNome', 'Nome', campo.nome, '', '', 'text')
+        + campoTexto('tcEndereco', 'Endereço', campo.endereco, '', '', 'text')
+        + tabelaSelect_('tcAtivo', 'Situação', [{ id: 'sim', nome: 'Ativo' }, { id: 'nao', nome: 'Inativo' }], campo.ativo ? 'sim' : 'nao', '') + '</div>'
+        + '<p class="apoio">Este cadastro é compartilhado entre todos os campeonatos.</p>', function () {
+          const nome = document.getElementById('tcNome').value.trim();
+          if (!nome) throw new Error('Informe o nome do campo.');
+          tabelaExecutar_('salvarCampoCampeonato', { id: campo.id, nome: nome, endereco: document.getElementById('tcEndereco').value.trim(), ativo: document.getElementById('tcAtivo').value === 'sim' });
+        });
+      document.getElementById('tcNome').required = true;
+      document.getElementById('tcNome').maxLength = 120;
+      document.getElementById('tcEndereco').maxLength = 300;
+    }
+
+    function abrirTabelaGrupos_() {
+      const dados = tabelaEstado.dados;
+      tabelaMontarFormulario_('Distribuir times nos grupos', '<p class="apoio">Cada time pode pertencer a um único grupo ou ficar sem grupo. Alterações incompatíveis com jogos existentes serão recusadas: edite ou remova os confrontos antes de mover seus times.</p>'
+        + dados.equipes.map(function (equipe, i) {
+          const grupo = dados.grupos.find(function (item) { return item.equipeIds.indexOf(equipe.id) >= 0; });
+          return '<div class="tabela-grupo-equipe"><label for="tgEquipe' + i + '">' + escapar(equipe.nome) + '</label><select id="tgEquipe' + i + '" data-tabela-equipe="' + escapar(equipe.id) + '">' + opcoesSelect(dados.grupos, grupo ? grupo.id : '', 'Sem grupo') + '</select></div>';
+        }).join(''), function () {
+          const grupos = dados.grupos.map(function (grupo) { return { id: grupo.id, equipeIds: [] }; });
+          document.querySelectorAll('[data-tabela-equipe]').forEach(function (select) {
+            const grupo = grupos.find(function (item) { return item.id === select.value; });
+            if (grupo) grupo.equipeIds.push(select.dataset.tabelaEquipe);
+          });
+          tabelaExecutar_('salvarGruposTabelaCampeonato', { grupos: grupos });
+        });
+    }
+
+    function abrirTabelaCriterios_() {
+      const dados = tabelaEstado.dados;
+      if (!dados || !dados.podeEditar || tabelaEstado.ocupado) return;
+      const campeonatoId = tabelaEstado.campeonatoId, revisao = dados.revisao;
+      const criterios = dados.criterios;
+      const ordem = criterios.desempates.slice();
+      tabelaMontarFormulario_('Editar critérios do campeonato', '<div class="campos">'
+        + ['Vitoria', 'Empate', 'Derrota'].map(function (tipo) {
+          return '<div class="campo"><label for="tcr' + tipo + '">Pontos por ' + ({ Vitoria: 'vitória', Empate: 'empate', Derrota: 'derrota' })[tipo] + '</label><input type="number" id="tcr' + tipo + '" min="0" max="999" step="1" required value="' + escapar(criterios['pontos' + tipo]) + '"></div>';
+        }).join('') + '</div><p class="apoio">Pontuação: inteiros de 0 a 999. Pontos sempre são o primeiro critério.</p>'
+        + '<div id="tcrOrdem"></div><div id="tcrAdicionarArea" class="tabela-acoes"></div><p id="tcrAviso" role="status" aria-live="polite"></p>'
+        + tabelaRegrasCriteriosHTML_(), function () {
+          if (!contextoAtual()) throw new Error('O contexto da tabela mudou. Atualize antes de salvar.');
+          if (ordem.length > tabelaDesempates.length || new Set(ordem).size !== ordem.length
+            || !ordem.every(function (id) { return tabelaDesempates.some(function (item) { return item.id === id; }); })) throw new Error('Escolha critérios disponíveis, sem repetir.');
+          tabelaExecutar_('salvarCriteriosTabelaCampeonato', { revisao: revisao, criterios: {
+            pontosVitoria: tabelaInteiro_(document.getElementById('tcrVitoria').value, 999),
+            pontosEmpate: tabelaInteiro_(document.getElementById('tcrEmpate').value, 999),
+            pontosDerrota: tabelaInteiro_(document.getElementById('tcrDerrota').value, 999), desempates: ordem.slice()
+          } });
+        });
+      const form = document.getElementById('tabelaFormulario');
+      function contextoAtual() {
+        return moduloAtual === 'jogos-campeonato' && dados === tabelaEstado.dados && campeonatoId === tabelaEstado.campeonatoId
+          && revisao === tabelaEstado.dados.revisao && form === document.getElementById('tabelaFormulario');
+      }
+      function aviso(texto) { document.getElementById('tcrAviso').textContent = texto; }
+      function renderizar(foco) {
+        const area = document.getElementById('tcrOrdem');
+        const escolhaAnterior = (document.getElementById('tcrNovoCriterio') || {}).value || '';
+        area.innerHTML = ordem.length ? ordem.map(function (chave, i) {
+          return '<div class="tabela-grupo-equipe" data-tcr-linha="' + i + '"><div class="campo"><label for="tcrDesempate' + i + '">' + (i + 1) + 'º desempate</label>'
+            + '<select id="tcrDesempate' + i + '">' + tabelaDesempates.map(function (item) {
+              return '<option value="' + item.id + '"' + (item.id === chave ? ' selected' : '')
+                + (item.id !== chave && ordem.indexOf(item.id) >= 0 ? ' disabled' : '') + '>' + escapar(item.nome) + '</option>';
+            }).join('') + '</select></div><div class="tabela-acoes">'
+            + '<button type="button" class="botao-apoio" id="tcrSubir' + i + '" data-tcr-mover="' + i + '" data-passo="-1" aria-label="Subir o ' + (i + 1) + 'º critério"' + (i === 0 ? ' disabled' : '') + '>Subir</button>'
+            + '<button type="button" class="botao-apoio" id="tcrDescer' + i + '" data-tcr-mover="' + i + '" data-passo="1" aria-label="Descer o ' + (i + 1) + 'º critério"' + (i === ordem.length - 1 ? ' disabled' : '') + '>Descer</button>'
+            + '<button type="button" class="botao-apoio" data-tcr-remover="' + i + '" aria-label="Remover o ' + (i + 1) + 'º critério">Remover</button></div></div>';
+        }).join('') : '<p class="apoio">Nenhum critério esportivo selecionado: somente pontos, seguidos da decisão da organização em caso de empate.</p>';
+        const disponiveis = tabelaDesempates.filter(function (item) { return ordem.indexOf(item.id) < 0; });
+        document.getElementById('tcrAdicionarArea').innerHTML = tabelaSelect_('tcrNovoCriterio', 'Critério disponível para adicionar', disponiveis, escolhaAnterior, 'Selecione um critério')
+          + '<button type="button" class="botao-apoio" id="tcrAdicionar" disabled>Adicionar critério</button>';
+        const novo = document.getElementById('tcrNovoCriterio'), adicionar = document.getElementById('tcrAdicionar');
+        novo.disabled = !disponiveis.length;
+        adicionar.disabled = !novo.value;
+        novo.onchange = function () { if (contextoAtual() && !tabelaEstado.ocupado) adicionar.disabled = !novo.value; };
+        adicionar.onclick = function () {
+          if (!contextoAtual() || tabelaEstado.ocupado) return;
+          if (!disponiveis.some(function (item) { return item.id === novo.value; }) || ordem.indexOf(novo.value) >= 0) return aviso('Selecione um critério disponível, sem repetir.');
+          ordem.push(novo.value); tabelaEstado.sujo = true; renderizar('tcrDesempate' + (ordem.length - 1)); aviso('Critério adicionado. Salve para aplicar.');
+        };
+        ordem.forEach(function (chave, i) {
+          document.getElementById('tcrDesempate' + i).onchange = function (evento) {
+            if (!contextoAtual() || tabelaEstado.ocupado) { evento.target.value = chave; return; }
+            const valor = evento.target.value;
+            if (!tabelaDesempates.some(function (item) { return item.id === valor; }) || (valor !== chave && ordem.indexOf(valor) >= 0)) {
+              evento.target.value = chave; return aviso('Os critérios devem ser diferentes. Escolha uma opção disponível.');
+            }
+            ordem[i] = valor; tabelaEstado.sujo = true; renderizar('tcrDesempate' + i); aviso('Critério alterado. Salve para aplicar.');
+          };
+        });
+        area.querySelectorAll('[data-tcr-mover]').forEach(function (botao) {
+          botao.onclick = function () {
+            if (!contextoAtual() || tabelaEstado.ocupado) return;
+            const i = Number(botao.dataset.tcrMover), destino = i + Number(botao.dataset.passo);
+            if (destino < 0 || destino >= ordem.length) return;
+            const chave = ordem[i]; ordem[i] = ordem[destino]; ordem[destino] = chave;
+            tabelaEstado.sujo = true; renderizar('tcrDesempate' + destino); aviso('Ordem alterada. Salve para aplicar.');
+          };
+        });
+        area.querySelectorAll('[data-tcr-remover]').forEach(function (botao) {
+          botao.onclick = function () {
+            if (!contextoAtual() || tabelaEstado.ocupado) return;
+            const i = Number(botao.dataset.tcrRemover);
+            if (!Number.isInteger(i) || i < 0 || i >= ordem.length) return;
+            ordem.splice(i, 1); tabelaEstado.sujo = true;
+            renderizar(ordem.length ? 'tcrDesempate' + Math.min(i, ordem.length - 1) : 'tcrNovoCriterio'); aviso('Critério removido. Salve para aplicar.');
+          };
+        });
+        if (foco) document.getElementById(foco).focus({ preventScroll: true });
+      }
+      renderizar();
+    }
+
+    function abrirTabelaDesempateOrganizacao_(indice) {
+      const dados = tabelaEstado.dados;
+      const empate = dados && (dados.empatesOrganizacao || [])[indice];
+      if (!dados || !dados.podeEditar || tabelaEstado.ocupado || !empate || !Array.isArray(empate.equipes) || empate.equipes.length < 2) return;
+      const campeonatoId = tabelaEstado.campeonatoId, revisao = dados.revisao;
+      const escopo = empate.escopo, assinaturaEmpate = empate.assinaturaEmpate;
+      const membros = empate.equipes.map(function (equipe) { return { id: equipe.id, nome: equipe.nome }; });
+      const ordem = tabelaOrdemEmpate_(empate).map(function (equipe) { return equipe.id; });
+      tabelaMontarFormulario_('Definir desempate da organização',
+        '<p><strong>' + escapar(empate.escopoNome || escopo) + '</strong></p><p class="apoio">Decisão final, somente entre estes times ainda empatados após todos os critérios esportivos. Use Subir e Descer para definir a ordem; não há sorteio automático. Esta decisão se aplica somente a este empate e escopo; outras decisões permanecem independentes.</p>'
+        + '<div id="tdoOrdem"></div><p id="tdoAviso" role="status" aria-live="polite"></p>'
+        + '<div class="campo"><label for="tdoMotivo">Motivo da decisão (obrigatório, até 1000 caracteres)</label><textarea id="tdoMotivo" required maxlength="1000" rows="4">' + escapar(empate.decisao ? empate.decisao.motivo : '') + '</textarea></div>'
+        + '<p class="apoio">Se resultados/critério/grupos mudarem, a decisão precisa ser registrada novamente. Autor e data serão registrados pelo sistema ao salvar.</p>',
+        function () {
+          if (!contextoAtual()) throw new Error('O contexto da tabela mudou. Atualize antes de registrar a decisão.');
+          const motivo = document.getElementById('tdoMotivo').value.trim();
+          if (!motivo || motivo.length > 1000) throw new Error('Informe um motivo de 1 a 1000 caracteres.');
+          if (ordem.length !== membros.length || new Set(ordem).size !== membros.length
+            || !ordem.every(function (id) { return membros.some(function (equipe) { return equipe.id === id; }); })) throw new Error('A ordem deve conter todos os times deste empate, sem repetir.');
+          tabelaExecutar_('salvarDesempateOrganizacaoTabela', {
+            revisao: revisao, escopo: escopo, assinaturaEmpate: assinaturaEmpate, equipeIds: ordem.slice(), motivo: motivo
+          });
+        });
+      const form = document.getElementById('tabelaFormulario');
+      function contextoAtual() {
+        return moduloAtual === 'jogos-campeonato' && dados === tabelaEstado.dados && campeonatoId === tabelaEstado.campeonatoId
+          && revisao === tabelaEstado.dados.revisao && form === document.getElementById('tabelaFormulario')
+          && (tabelaEstado.dados.empatesOrganizacao || [])[indice] === empate;
+      }
+      function renderizar(foco) {
+        const area = document.getElementById('tdoOrdem');
+        area.innerHTML = '<ol>' + ordem.map(function (id, i) {
+          const equipe = membros.find(function (item) { return item.id === id; });
+          return '<li><span>' + escapar(equipe.nome) + '</span><div class="tabela-acoes">'
+            + '<button type="button" class="botao-apoio" id="tdoSubir' + i + '" data-tdo-mover="' + i + '" data-passo="-1" aria-label="Subir ' + escapar(equipe.nome) + '"' + (i === 0 ? ' disabled' : '') + '>Subir</button>'
+            + '<button type="button" class="botao-apoio" id="tdoDescer' + i + '" data-tdo-mover="' + i + '" data-passo="1" aria-label="Descer ' + escapar(equipe.nome) + '"' + (i === ordem.length - 1 ? ' disabled' : '') + '>Descer</button></div></li>';
+        }).join('') + '</ol>';
+        area.querySelectorAll('[data-tdo-mover]').forEach(function (botao) {
+          botao.onclick = function () {
+            if (!contextoAtual() || tabelaEstado.ocupado) return;
+            const i = Number(botao.dataset.tdoMover), passo = Number(botao.dataset.passo), destino = i + passo;
+            if (destino < 0 || destino >= ordem.length) return;
+            const id = ordem[i]; ordem[i] = ordem[destino]; ordem[destino] = id;
+            tabelaEstado.sujo = true;
+            renderizar('tdo' + (destino === 0 ? 'Descer' : 'Subir') + destino);
+            document.getElementById('tdoAviso').textContent = 'Ordem alterada. Registre um motivo e salve para aplicar.';
+          };
+        });
+        if (foco) document.getElementById(foco).focus({ preventScroll: true });
+      }
+      renderizar();
+      document.getElementById('tdoMotivo').focus({ preventScroll: true });
+    }
+
+    function removerTabelaDesempateOrganizacao_(indice) {
+      const dados = tabelaEstado.dados;
+      const empate = dados && (dados.empatesOrganizacao || [])[indice];
+      if (!dados || !dados.podeEditar || tabelaEstado.ocupado || !empate || !empate.decisao) return;
+      const campeonatoId = tabelaEstado.campeonatoId, revisao = dados.revisao, requisicao = tabelaEstado.requisicao;
+      const payload = { revisao: revisao, escopo: empate.escopo, assinaturaEmpate: empate.assinaturaEmpate };
+      confirmarDescarteElenco_({
+        titulo: 'Remover decisão da organização?',
+        mensagem: 'A decisão de ' + (empate.escopoNome || empate.escopo) + ' será removida. Os times voltarão a compartilhar a posição até uma nova decisão. Apenas este empate neste escopo será alterado; decisões de outros empates e escopos serão preservadas.',
+        confirmar: 'Remover decisão', cancelar: 'Cancelar'
+      }).then(function (confirmado) {
+        if (!confirmado || moduloAtual !== 'jogos-campeonato' || tabelaEstado.ocupado || dados !== tabelaEstado.dados
+          || campeonatoId !== tabelaEstado.campeonatoId || revisao !== tabelaEstado.dados.revisao || requisicao !== tabelaEstado.requisicao
+          || (tabelaEstado.dados.empatesOrganizacao || [])[indice] !== empate) return;
+        tabelaExecutar_('removerDesempateOrganizacaoTabela', payload);
+      });
+    }
+
+    window.addEventListener('beforeunload', function (evento) {
+      if (moduloAtual !== 'jogos-campeonato' || (!tabelaEstado.sujo && !tabelaEstado.ocupado)) return;
+      evento.preventDefault();
+      evento.returnValue = '';
+    });
+
     function carregarCampeonatos() {
       google.script.run
         .withSuccessHandler(function (dados) {
@@ -3407,6 +4544,13 @@
         + '<option value="nao"' + (estrutura.idaVolta ? '' : ' selected') + '>Não</option>'
         + '<option value="sim"' + (estrutura.idaVolta ? ' selected' : '') + '>Sim</option>'
         + '</select></div>'
+        + '<div class="campo cheio" id="cEliminatorias"><h4>Fases eliminatórias</h4>'
+        + '<p class="apoio">Selecione explicitamente as fases utilizadas. Os cruzamentos e participantes serão cadastrados manualmente após o sorteio externo; não há avanço automático.</p>'
+        + '<div class="tabela-fases-checks">'
+        + [['oitavas', 'Oitavas de final'], ['quartas', 'Quartas de final'], ['semifinal', 'Semifinal'], ['final', 'Final']].map(function (fase) {
+          return '<label><input type="checkbox" name="cFaseEliminatoria" value="' + fase[0] + '"'
+            + ((estrutura.fasesEliminatorias || []).indexOf(fase[0]) >= 0 ? ' checked' : '') + '> ' + fase[1] + '</label>';
+        }).join('') + '</div></div>'
         + '<div class="campo cheio"><label for="cObservacoes">Observações da forma de disputa</label>'
         + '<textarea id="cObservacoes" placeholder="Critérios de classificação e observações da fase">'
         + escapar(estrutura.observacoes) + '</textarea></div>'
@@ -3431,6 +4575,11 @@
        document.getElementById('gravarCampeonato').addEventListener('click', function () {
          gravarCampeonato(registro ? registro.id : '');
        });
+       function atualizarFasesEliminatorias() {
+         document.getElementById('cEliminatorias').hidden = !/mata/i.test(document.getElementById('cFormato').value);
+       }
+       document.getElementById('cFormato').addEventListener('change', atualizarFasesEliminatorias);
+       atualizarFasesEliminatorias();
     }
 
      function gravarCampeonato(idOriginal) {
@@ -3458,6 +4607,8 @@
            vagasPorGrupo: document.getElementById('cVagas').value,
            rodadas: document.getElementById('cRodadas').value,
            idaVolta: document.getElementById('cIdaVolta').value === 'sim',
+           fasesEliminatorias: /mata/i.test(document.getElementById('cFormato').value)
+             ? Array.from(document.querySelectorAll('[name="cFaseEliminatoria"]:checked')).map(function (item) { return item.value; }) : [],
            observacoes: document.getElementById('cObservacoes').value
          },
          escudo: ''
@@ -8011,6 +9162,7 @@
       }
     });
 
+    acompanharFocoCarregamento();
     montarUsuario();
     montarMenu();
     abrirModulo(rotaElencoPendente ? 'times-campeonato' : (window.location.hash.replace('#', '') || MODULOS[0].id));

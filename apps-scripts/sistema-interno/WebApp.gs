@@ -277,6 +277,14 @@ const MODULOS = [
     perfis: ['admin', 'diretoria']
   },
   {
+    id: 'equipes',
+    nome: 'Banco de Dados de Equipes',
+    icone: '📟',
+    tipo: 'equipes',
+    descricao: 'Equipes participantes. A lista alimenta o cadastro, os acessos e os dois formulários.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
     id: 'associados',
     nome: 'Associados',
     icone: '🤝',
@@ -304,11 +312,11 @@ const MODULOS = [
   },
   {
     id: 'jogos-campeonato',
-    nome: 'Jogos',
+    nome: 'Tabela e Classificação',
     icone: '⚽',
     tipo: 'campeonato',
     grupo: 'campeonato',
-    descricao: 'Geração de confrontos e lançamentos de resultado.',
+    descricao: 'Tabela de jogos, resultados manuais, classificação e súmulas para impressão.',
     perfis: ['admin', 'diretoria']
   },
   {
@@ -345,14 +353,6 @@ const MODULOS = [
     descricao: 'Redação, consulta e exportação das atas da associação e dos campeonatos.',
     perfis: ['admin', 'diretoria']
   },
-   {
-    id: 'equipes',
-    nome: 'Banco de Dados de Equipes',
-    icone: '📟',
-    tipo: 'equipes',
-    descricao: 'Equipes participantes. A lista alimenta o cadastro, os acessos e os dois formulários.',
-    perfis: ['admin', 'diretoria']
-  },
   {
     id: 'atletas',
     nome: 'Banco de Dados de Atletas',
@@ -382,6 +382,23 @@ const CAMPEONATO_TIMES_CHAVE = 'CAMPEONATO_TIMES_';
 const CAMPEONATO_ATLETAS_CHAVE = 'CAMPEONATO_ATLETAS_';
 const CAMPEONATO_COMISSAO_CHAVE = 'CAMPEONATO_COMISSAO_';
 const CAMPEONATO_FORMATOS_FASE = ['Grupos corridos', 'Mata-mata', 'Grupos + mata-mata', 'Pontos corridos'];
+const TABELA_FASES_ELIMINATORIAS = ['oitavas', 'quartas', 'semifinal', 'final'];
+const TABELA_CAMPOS_ARQUIVO = 'AEUV - Campos.json';
+const TABELA_CAMPOS_CHAVE = 'aeuv.tabela.campos';
+const TABELA_DESEMPATES = [
+  'vitorias', 'saldoGols', 'golsPro', 'golsContra',
+  'confrontoDireto', 'amarelos', 'vermelhos'
+];
+const TABELA_DESEMPATES_ASC = ['golsContra', 'amarelos', 'vermelhos'];
+const TABELA_CRITERIO_OPCOES = [
+  { id: 'vitorias', nome: 'Vitórias' },
+  { id: 'saldoGols', nome: 'Saldo de gols' },
+  { id: 'golsPro', nome: 'Gols pró' },
+  { id: 'golsContra', nome: 'Gols sofridos (menos)' },
+  { id: 'confrontoDireto', nome: 'Confronto direto' },
+  { id: 'amarelos', nome: 'Cartões amarelos' },
+  { id: 'vermelhos', nome: 'Cartões vermelhos' }
+];
 
 /******************************************************
  * ABERTURA DO SISTEMA
@@ -1650,6 +1667,7 @@ function removerEquipe(nome) {
 function removerEquipeInterno_(nome) {
   const sessao = exigirEdicaoEquipes_();
   const alvo = chaveEquipe_(nome);
+  impedirRemocaoEquipeTabela_('', alvo);
 
   // Remover um time que tem cadastro ou acesso deixaria os dois orfaos:
   // o cadastro sem opcao no combo e o associado sem equipe valida.
@@ -2187,7 +2205,7 @@ function salvarCampeonato(payload) {
 
 function salvarCampeonatoValidado_(dados, sessao, apenasEstrutura) {
   const temEstrutura = Object.prototype.hasOwnProperty.call(dados, 'estrutura');
-  const estruturaNova = temEstrutura ? validarEstruturaCampeonato_(dados.estrutura, '') : null;
+  let estruturaNova = temEstrutura ? validarEstruturaCampeonato_(dados.estrutura, '') : null;
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
@@ -2203,6 +2221,15 @@ function salvarCampeonatoValidado_(dados, sessao, apenasEstrutura) {
 
     if (idOriginal && !existente) {
       throw new Error('Este campeonato não está mais na lista. Recarregue a página.');
+    }
+
+    if (temEstrutura && existente && dados.estrutura.fasesEliminatorias === undefined) {
+      const estruturaAnterior = estruturaCampeonato_(existente.item.id, existente.item);
+      if (estruturaAnterior && estruturaAnterior.formato === estruturaNova.formato) {
+        estruturaNova = validarEstruturaCampeonato_(Object.assign({}, dados.estrutura, {
+          fasesEliminatorias: estruturaAnterior.fasesEliminatorias
+        }), existente.item.id);
+      }
     }
 
     const campos = apenasEstrutura ? existente.item : dados;
@@ -2236,6 +2263,8 @@ function salvarCampeonatoValidado_(dados, sessao, apenasEstrutura) {
       estrutura.campeonatoId = registro.id;
       registro.estrutura = estrutura;
     }
+
+    if (existente) validarAlteracaoEstruturaTabela_(registro);
 
     if (existente) {
       lista[existente.indice] = registro;
@@ -2286,6 +2315,7 @@ function removerCampeonato(id) {
       PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_ESTRUTURA_CHAVE + idAlvo);
       PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_TIMES_CHAVE + idAlvo);
       removerCadastroPessoasCampeonato_(idAlvo);
+      removerCadastroTabelaCampeonato_(idAlvo);
       PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_COMISSAO_CHAVE + idAlvo);
 
      const tela = montarTelaCampeonatos_(restante, sessao);
@@ -2358,6 +2388,7 @@ function montarTelaGruposRodadas_(lista) {
       vagasPorGrupo: estrutura ? estrutura.vagasPorGrupo : 0,
       rodadas: estrutura ? estrutura.rodadas : 0,
       idaVolta: estrutura ? estrutura.idaVolta : false,
+      fasesEliminatorias: estrutura ? estrutura.fasesEliminatorias : [],
       observacoes: estrutura ? estrutura.observacoes : '',
       atualizadoEm: estrutura ? estrutura.atualizadoEm : '',
       atualizadoPor: estrutura ? estrutura.atualizadoPor : ''
@@ -2409,16 +2440,26 @@ function validarEstruturaCampeonato_(dados, campeonatoId) {
     throw new Error('Escolha um formato válido para a fase.');
   }
 
-  if (!Number.isFinite(grupos) || grupos < 1 || grupos > 32) {
+  if (!Number.isInteger(grupos) || grupos < 1 || grupos > 32) {
     throw new Error('A quantidade de grupos deve ficar entre 1 e 32.');
   }
 
-  if (!Number.isFinite(vagasPorGrupo) || vagasPorGrupo < 2 || vagasPorGrupo > 64) {
+  if (!Number.isInteger(vagasPorGrupo) || vagasPorGrupo < 2 || vagasPorGrupo > 64) {
     throw new Error('As vagas por grupo devem ficar entre 2 e 64.');
   }
 
-  if (!Number.isFinite(rodadas) || rodadas < 1 || rodadas > 99) {
+  if (!Number.isInteger(rodadas) || rodadas < 1 || rodadas > 99) {
     throw new Error('A quantidade de rodadas deve ficar entre 1 e 99.');
+  }
+
+  const fasesEliminatorias = dados.fasesEliminatorias === undefined ? [] : dados.fasesEliminatorias;
+  if (!Array.isArray(fasesEliminatorias) || fasesEliminatorias.some(function (fase, indice) {
+    return TABELA_FASES_ELIMINATORIAS.indexOf(fase) === -1 || fasesEliminatorias.indexOf(fase) !== indice;
+  })) {
+    throw new Error('Escolha somente oitavas, quartas, semifinal e final, sem repetir fases.');
+  }
+  if (['Grupos corridos', 'Pontos corridos'].indexOf(formato) !== -1 && fasesEliminatorias.length) {
+    throw new Error('Este formato não admite fases eliminatórias.');
   }
 
   return {
@@ -2429,10 +2470,1119 @@ function validarEstruturaCampeonato_(dados, campeonatoId) {
       vagasPorGrupo: vagasPorGrupo,
       rodadas: rodadas,
       idaVolta: Boolean(dados.idaVolta),
+      fasesEliminatorias: TABELA_FASES_ELIMINATORIAS.filter(function (fase) {
+        return fasesEliminatorias.indexOf(fase) !== -1;
+      }),
       observacoes: observacoes,
       atualizadoEm: String(dados.atualizadoEm || ''),
       atualizadoPor: String(dados.atualizadoPor || '')
   };
+}
+
+ /******************************************************
+  * TABELA E CLASSIFICAÇÃO
+  ******************************************************/
+
+function arquivoTabelaCampeonato_(id) {
+  return arquivoCadastroPessoasCampeonato_(id, 'Tabela');
+}
+
+function chaveTabelaCampeonato_(id) {
+  return 'aeuv.tabela.campeonato.' + id;
+}
+
+function criteriosPadraoTabela_() {
+  return { pontosVitoria: 3, pontosEmpate: 1, pontosDerrota: 0, desempates: TABELA_DESEMPATES.slice(0, 3) };
+}
+
+function inteiroTabela_(valor, minimo, maximo, nome) {
+  if ((typeof valor !== 'number' && typeof valor !== 'string')
+      || String(valor).trim() === '' || !Number.isInteger(Number(valor))
+      || Number(valor) < minimo || Number(valor) > maximo) {
+    throw new Error(nome + ' deve ser um inteiro entre ' + minimo + ' e ' + maximo + '.');
+  }
+  return Number(valor);
+}
+
+function validarCriteriosTabela_(dados) {
+  if (!dados || !Array.isArray(dados.desempates) || dados.desempates.some(function (item, indice) {
+    return TABELA_DESEMPATES.indexOf(item) === -1 || dados.desempates.indexOf(item) !== indice;
+  }) || dados.desempates.length > TABELA_DESEMPATES.length) {
+    throw new Error('Informe uma ordem de desempates válida, sem critérios repetidos.');
+  }
+  return {
+    pontosVitoria: inteiroTabela_(dados.pontosVitoria, 0, 999, 'Pontos por vitória'),
+    pontosEmpate: inteiroTabela_(dados.pontosEmpate, 0, 999, 'Pontos por empate'),
+    pontosDerrota: inteiroTabela_(dados.pontosDerrota, 0, 999, 'Pontos por derrota'),
+    desempates: dados.desempates.slice()
+  };
+}
+
+function lerDocumentoTabela_(arquivo, chave, padrao) {
+  const lista = lerListaCadastroDrive_(arquivo, chave);
+  if (!lista.length) {
+    // Uma lista vazia já armazenada indica corrupção, não uma tabela ainda não criada.
+    const arquivos = pastaRaizProjeto_().getFilesByName(arquivo);
+    if (arquivos.hasNext() || PropertiesService.getScriptProperties().getProperty(chave) !== null) {
+      throw new Error('O cadastro ' + arquivo + ' está inválido. Restaure os dados antes de continuar.');
+    }
+    return padrao;
+  }
+  const doc = lista[0];
+  if (lista.length !== 1 || !doc || doc.schema !== 'aeuv.tabela' || doc.versao !== 1
+      || typeof doc.revisao !== 'string' || !doc.revisao) {
+    throw new Error('O cadastro ' + arquivo + ' tem uma versão ou estrutura inválida.');
+  }
+  return doc;
+}
+
+function idsUnicosTabela_(lista, nome) {
+  if (!Array.isArray(lista)) throw new Error('O cadastro de ' + nome + ' está inválido.');
+  const ids = {};
+  lista.forEach(function (item) {
+    if (!item || typeof item.id !== 'string' || !item.id || ids[item.id]) {
+      throw new Error('O cadastro de ' + nome + ' contém identificadores inválidos ou repetidos.');
+    }
+    ids[item.id] = true;
+  });
+}
+
+function lerTabelaCampeonato_(id) {
+  const doc = lerDocumentoTabela_(arquivoTabelaCampeonato_(id), chaveTabelaCampeonato_(id), {
+    schema: 'aeuv.tabela', versao: 1, revisao: 'inicial', campeonatoId: id,
+    grupos: [], jogos: [], criterios: criteriosPadraoTabela_()
+  });
+  if (doc.campeonatoId !== id) throw new Error('A tabela pertence a outro campeonato.');
+  idsUnicosTabela_(doc.grupos, 'grupos');
+  idsUnicosTabela_(doc.jogos, 'jogos');
+  doc.grupos.forEach(function (grupo) {
+    if (!Array.isArray(grupo.equipeIds) || grupo.equipeIds.some(function (equipeId) {
+      return typeof equipeId !== 'string' || !equipeId;
+    })) throw new Error('As equipes dos grupos estão inválidas.');
+  });
+  doc.criterios = validarCriteriosTabela_(doc.criterios);
+  if (!Object.prototype.hasOwnProperty.call(doc, 'desempatesOrganizacao')) doc.desempatesOrganizacao = [];
+  if (!Array.isArray(doc.desempatesOrganizacao)) throw new Error('As decisões de organização da tabela estão inválidas.');
+  const decisoes = new Set();
+  doc.desempatesOrganizacao.forEach(function (decisao) {
+    if (!decisao || typeof decisao.escopo !== 'string' || !decisao.escopo.trim()
+        || typeof decisao.assinaturaEmpate !== 'string' || !decisao.assinaturaEmpate
+        || !Array.isArray(decisao.equipeIds) || !decisao.equipeIds.length
+        || decisao.equipeIds.some(function (equipeId) {
+          return typeof equipeId !== 'string' || !equipeId || equipeId !== equipeId.trim();
+        })
+        || new Set(decisao.equipeIds).size !== decisao.equipeIds.length
+        || typeof decisao.motivo !== 'string' || !decisao.motivo.trim() || decisao.motivo.length > 1000
+        || typeof decisao.registradoEm !== 'string'
+        || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(decisao.registradoEm)
+        || !Number.isFinite(Date.parse(decisao.registradoEm))
+        || typeof decisao.registradoPor !== 'string' || !decisao.registradoPor.trim()) {
+      throw new Error('As decisões de organização da tabela estão inválidas.');
+    }
+    const chave = JSON.stringify([decisao.escopo, decisao.assinaturaEmpate]);
+    if (decisoes.has(chave)) throw new Error('As decisões de organização da tabela contêm duplicatas.');
+    decisoes.add(chave);
+  });
+  return doc;
+}
+
+function lerCamposTabela_() {
+  const doc = lerDocumentoTabela_(TABELA_CAMPOS_ARQUIVO, TABELA_CAMPOS_CHAVE, {
+    schema: 'aeuv.tabela', versao: 1, revisao: 'inicial', campos: []
+  });
+  idsUnicosTabela_(doc.campos, 'campos');
+  doc.campos.forEach(function (campo) {
+    if (typeof campo.nome !== 'string' || !campo.nome.trim()
+        || typeof campo.endereco !== 'string' || typeof campo.ativo !== 'boolean') {
+      throw new Error('O cadastro de campos está inválido.');
+    }
+  });
+  return doc;
+}
+
+function esqueletoTabela_(estrutura) {
+  const grupos = [];
+  const fases = [];
+  if (!estrutura) return { grupos: grupos, fases: fases };
+  if (estrutura.formato !== 'Mata-mata') {
+    fases.push({ id: 'fase-classificacao', nome: estrutura.faseNome, tipo: 'classificacao', rodadas: estrutura.rodadas });
+  }
+  if (estrutura.formato.indexOf('Grupos') === 0) {
+    for (let i = 1; i <= estrutura.grupos; i++) {
+      grupos.push({ id: 'grupo-' + i, nome: 'Grupo ' + i, equipeIds: [] });
+    }
+  }
+  if (['Mata-mata', 'Grupos + mata-mata'].indexOf(estrutura.formato) !== -1) {
+    const nomes = { oitavas: 'Oitavas de final', quartas: 'Quartas de final', semifinal: 'Semifinal', final: 'Final' };
+    TABELA_FASES_ELIMINATORIAS.forEach(function (chave) {
+      if (estrutura.fasesEliminatorias.indexOf(chave) !== -1) {
+        fases.push({ id: 'fase-' + chave, nome: nomes[chave], tipo: 'eliminatoria', rodadas: estrutura.idaVolta ? 2 : 1 });
+      }
+    });
+  }
+  return { grupos: grupos, fases: fases };
+}
+
+function equipesTabela_(id, lockJaAdquirido) {
+  const nomes = timesCampeonato_(id).map(chaveEquipe_);
+  const ativas = obterEquipes_().map(chaveEquipe_);
+  return equipesRegistro_(lockJaAdquirido).filter(function (item) {
+    return nomes.indexOf(chaveEquipe_(item.nome)) !== -1 && ativas.indexOf(chaveEquipe_(item.nome)) !== -1;
+  }).map(function (item) { return { id: item.id, nome: item.nome, escudo: item.escudo || '' }; });
+}
+
+function gruposTabela_(doc, esqueleto, equipes, estrutura) {
+  const usados = {};
+  doc.grupos.forEach(function (grupo) {
+    if (!esqueleto.grupos.some(function (item) { return item.id === grupo.id; }) && grupo.equipeIds.length) {
+      throw new Error('A nova configuração removeria grupos com equipes. Esvazie os grupos antes de alterar o formato.');
+    }
+  });
+  return esqueleto.grupos.map(function (grupo) {
+    const salvo = doc.grupos.find(function (item) { return item.id === grupo.id; });
+    const ids = salvo ? salvo.equipeIds.slice() : [];
+    if (ids.length > estrutura.vagasPorGrupo) throw new Error('O grupo excede as vagas configuradas.');
+    ids.forEach(function (id) {
+      if (usados[id] || !equipes.some(function (item) { return item.id === id; })) {
+        throw new Error('As equipes dos grupos devem estar vinculadas e não podem repetir.');
+      }
+      usados[id] = true;
+    });
+    return { id: grupo.id, nome: grupo.nome, equipeIds: ids };
+  });
+}
+
+function validarJogoTabela_(dados, contexto, existente) {
+  const fase = contexto.fases.find(function (item) { return item.id === dados.faseId; });
+  if (!fase) throw new Error('Escolha uma fase configurada no campeonato.');
+  const rodada = inteiroTabela_(dados.rodada, 1, fase.rodadas, 'Rodada');
+  if (typeof dados.mandanteId !== 'string' || typeof dados.visitanteId !== 'string'
+      || dados.mandanteId === dados.visitanteId || !contexto.equipes.some(function (item) { return item.id === dados.mandanteId; })
+      || !contexto.equipes.some(function (item) { return item.id === dados.visitanteId; })) {
+    throw new Error('Escolha duas equipes distintas, ativas e vinculadas ao campeonato.');
+  }
+  const grupoId = String(dados.grupoId || '');
+  if (fase.tipo === 'classificacao' && contexto.grupos.length) {
+    const grupo = contexto.grupos.find(function (item) { return item.id === grupoId; });
+    if (!grupo || grupo.equipeIds.indexOf(dados.mandanteId) === -1 || grupo.equipeIds.indexOf(dados.visitanteId) === -1) {
+      throw new Error('As duas equipes devem pertencer ao grupo escolhido.');
+    }
+  } else if (grupoId) throw new Error('Esta fase não admite grupo.');
+  const campo = contexto.campos.find(function (item) { return item.id === dados.campoId; });
+  if (!campo || (!campo.ativo && (!existente || existente.campoId !== campo.id))) {
+    throw new Error('Escolha um campo ativo do cadastro.');
+  }
+  const data = typeof dados.data === 'string' ? dataIsoValida_(dados.data) : '';
+  const hora = typeof dados.hora === 'string' ? dados.hora : '';
+  if (!data || data !== dados.data || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) {
+    throw new Error('Informe uma data real (AAAA-MM-DD) e horário válido (HH:mm).');
+  }
+  if (['agendado', 'encerrado', 'adiado', 'cancelado'].indexOf(dados.status) === -1) {
+    throw new Error('Escolha um status válido para o jogo.');
+  }
+  const golsMandante = dados.status === 'encerrado' ? inteiroTabela_(dados.golsMandante, 0, 999, 'Gols do mandante') : null;
+  const golsVisitante = dados.status === 'encerrado' ? inteiroTabela_(dados.golsVisitante, 0, 999, 'Gols do visitante') : null;
+  if (contexto.jogos.some(function (item) {
+    return item.id !== (existente ? existente.id : '') && item.faseId === fase.id && item.grupoId === grupoId
+      && item.rodada === rodada && item.mandanteId === dados.mandanteId && item.visitanteId === dados.visitanteId;
+  })) throw new Error('Este confronto já existe nesta fase, grupo e rodada.');
+  const jogo = {
+    id: existente ? existente.id : Utilities.getUuid(), faseId: fase.id, grupoId: grupoId, rodada: rodada,
+    mandanteId: dados.mandanteId, visitanteId: dados.visitanteId, campoId: campo.id,
+    data: data, hora: hora, status: dados.status, golsMandante: golsMandante, golsVisitante: golsVisitante
+  };
+  if (Object.prototype.hasOwnProperty.call(dados, 'resultado')) {
+    validarResultadoSalvoTabela_(dados.resultado, jogo);
+    jogo.resultado = dados.resultado;
+  }
+  return jogo;
+}
+
+function contextoTabela_(id, lista, lockJaAdquirido) {
+  const campeonato = lista.find(function (item) { return item.id === id; });
+  if (!campeonato) throw new Error('Campeonato não encontrado.');
+  const estrutura = estruturaCampeonato_(id, campeonato);
+  const doc = lerTabelaCampeonato_(id);
+  const camposDoc = lerCamposTabela_();
+  const equipes = equipesTabela_(id, lockJaAdquirido);
+  const esqueleto = esqueletoTabela_(estrutura);
+  const contexto = {
+    campeonato: campeonato, estrutura: estrutura, doc: doc, camposDoc: camposDoc,
+    equipes: equipes, fases: esqueleto.fases,
+    grupos: gruposTabela_(doc, esqueleto, equipes, estrutura), campos: camposDoc.campos,
+    jogos: doc.jogos, criterios: doc.criterios
+  };
+  doc.jogos.forEach(function (jogo) {
+    const normalizado = validarJogoTabela_(jogo, contexto, jogo);
+    Object.keys(normalizado).forEach(function (chave) {
+      if (chave !== 'resultado' && normalizado[chave] !== jogo[chave]) {
+        throw new Error('O cadastro do jogo ' + jogo.id + ' está inválido.');
+      }
+    });
+  });
+  return contexto;
+}
+
+function revisaoTabela_(contexto) {
+  // Invalida formulários abertos após alterações globais de campos, estrutura ou participantes.
+  return JSON.stringify([
+    contexto.doc.revisao, contexto.camposDoc.revisao, contexto.campeonato.revisao || '',
+    contexto.estrutura, contexto.equipes.map(function (equipe) { return equipe.id; })
+  ]);
+}
+
+function assinaturaEmpateTabela_(escopo, equipeIds, jogos, criterios) {
+  const partidas = jogos.filter(function (jogo) {
+    return jogo.faseId === 'fase-classificacao' && jogo.status === 'encerrado'
+      && (escopo.id === 'geral' || jogo.grupoId === escopo.id);
+  }).map(function (jogo) {
+    const eventos = jogo.resultado && Array.isArray(jogo.resultado.equipes) ? jogo.resultado.equipes : [];
+    const snapshots = eventos.map(function (equipe) {
+      return {
+        id: equipe.id,
+        atletas: (equipe.atletas || []).map(function (pessoa) {
+          return [pessoa.id, pessoa.gols || 0, pessoa.golsContra || 0, pessoa.amarelos || 0, pessoa.vermelho === true];
+        }).sort(function (a, b) { return String(a[0]).localeCompare(String(b[0])); }),
+        comissao: (equipe.comissao || []).map(function (pessoa) {
+          return [pessoa.id, pessoa.amarelos || 0, pessoa.vermelho === true];
+        }).sort(function (a, b) { return String(a[0]).localeCompare(String(b[0])); })
+      };
+    }).sort(function (a, b) { return a.id.localeCompare(b.id); });
+    return [jogo.id, jogo.grupoId || '', jogo.mandanteId, jogo.visitanteId,
+      jogo.golsMandante, jogo.golsVisitante, snapshots];
+  }).sort(function (a, b) { return String(a[0]).localeCompare(String(b[0])); });
+  const material = JSON.stringify(['aeuv-empate-v1', escopo.id,
+    (escopo.equipeIds || []).slice().sort(), escopo.contexto || null,
+    equipeIds.slice().sort(), criterios, partidas]);
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, material);
+  return 'sha256:' + digest.map(function (byte) {
+    const valor = byte < 0 ? byte + 256 : byte;
+    return (valor < 16 ? '0' : '') + valor.toString(16);
+  }).join('');
+}
+
+function resultadoClassificacaoTabela_(equipes, jogos, criterios, escopo, decisoes) {
+  const linhas = equipes.map(function (equipe) {
+    return { posicao: 0, equipeId: equipe.id, equipeNome: equipe.nome, escudo: equipe.escudo,
+      pontos: 0, jogos: 0, vitorias: 0, empates: 0, derrotas: 0, golsPro: 0, golsContra: 0,
+      saldoGols: 0, amarelos: 0, vermelhos: 0, aproveitamento: 0 };
+  });
+  const porId = {};
+  linhas.forEach(function (linha) { porId[linha.equipeId] = linha; });
+  const jogosClassificacao = [];
+  jogos.forEach(function (jogo) {
+    if (jogo.faseId !== 'fase-classificacao' || jogo.status !== 'encerrado'
+        || (escopo.id !== 'geral' && jogo.grupoId !== escopo.id)) return;
+    const mandante = porId[jogo.mandanteId];
+    const visitante = porId[jogo.visitanteId];
+    if (!mandante || !visitante) return;
+    jogosClassificacao.push(jogo);
+    [[mandante, jogo.golsMandante, jogo.golsVisitante], [visitante, jogo.golsVisitante, jogo.golsMandante]].forEach(function (item) {
+      const linha = item[0];
+      linha.jogos++;
+      linha.golsPro += item[1];
+      linha.golsContra += item[2];
+      if (item[1] > item[2]) { linha.vitorias++; linha.pontos += criterios.pontosVitoria; }
+      else if (item[1] === item[2]) { linha.empates++; linha.pontos += criterios.pontosEmpate; }
+      else { linha.derrotas++; linha.pontos += criterios.pontosDerrota; }
+    });
+    [jogo.mandanteId, jogo.visitanteId].forEach(function (id) {
+      const linha = porId[id];
+      const equipe = jogo.resultado && Array.isArray(jogo.resultado.equipes)
+        ? jogo.resultado.equipes.find(function (item) { return item.id === id; }) : null;
+      ['atletas', 'comissao'].forEach(function (tipo) {
+        (equipe && Array.isArray(equipe[tipo]) ? equipe[tipo] : []).forEach(function (pessoa) {
+          linha.amarelos += Number.isInteger(pessoa.amarelos) ? pessoa.amarelos : 0;
+          if (pessoa.vermelho === true) linha.vermelhos++;
+        });
+      });
+    });
+  });
+  linhas.forEach(function (linha) {
+    linha.saldoGols = linha.golsPro - linha.golsContra;
+    linha.aproveitamento = linha.jogos && criterios.pontosVitoria
+      ? Math.round(linha.pontos * 10000 / (linha.jogos * criterios.pontosVitoria)) / 100 : 0;
+  });
+  let buckets = [];
+  const porPontos = {};
+  linhas.forEach(function (linha) {
+    const chave = String(linha.pontos);
+    (porPontos[chave] = porPontos[chave] || []).push(linha);
+  });
+  Object.keys(porPontos).sort(function (a, b) { return Number(b) - Number(a); })
+    .forEach(function (chave) { buckets.push(porPontos[chave]); });
+  criterios.desempates.forEach(function (criterio) {
+    buckets = buckets.reduce(function (resultado, bucket) {
+      if (criterio === 'confrontoDireto') {
+        if (bucket.length !== 2) { resultado.push(bucket); return resultado; }
+        const ids = bucket.map(function (linha) { return linha.equipeId; });
+        const confrontos = jogosClassificacao.filter(function (jogo) {
+          return ids.indexOf(jogo.mandanteId) !== -1 && ids.indexOf(jogo.visitanteId) !== -1;
+        });
+        if (!confrontos.length) { resultado.push(bucket); return resultado; }
+        const diretos = {};
+        ids.forEach(function (id) { diretos[id] = 0; });
+        confrontos.forEach(function (jogo) {
+          if (jogo.golsMandante > jogo.golsVisitante) {
+            diretos[jogo.mandanteId] += criterios.pontosVitoria;
+            diretos[jogo.visitanteId] += criterios.pontosDerrota;
+          } else if (jogo.golsMandante < jogo.golsVisitante) {
+            diretos[jogo.visitanteId] += criterios.pontosVitoria;
+            diretos[jogo.mandanteId] += criterios.pontosDerrota;
+          }
+          else {
+            diretos[jogo.mandanteId] += criterios.pontosEmpate;
+            diretos[jogo.visitanteId] += criterios.pontosEmpate;
+          }
+        });
+        const particoes = {};
+        bucket.forEach(function (linha) {
+          const chave = String(diretos[linha.equipeId]);
+          (particoes[chave] = particoes[chave] || []).push(linha);
+        });
+        Object.keys(particoes).sort(function (a, b) { return Number(b) - Number(a); })
+          .forEach(function (chave) { resultado.push(particoes[chave]); });
+        return resultado;
+      }
+      const particoes = {};
+      bucket.forEach(function (linha) {
+        const chave = String(linha[criterio]);
+        (particoes[chave] = particoes[chave] || []).push(linha);
+      });
+      const ascendente = TABELA_DESEMPATES_ASC.indexOf(criterio) !== -1;
+      Object.keys(particoes).sort(function (a, b) {
+        return (Number(a) - Number(b)) * (ascendente ? 1 : -1);
+      }).forEach(function (chave) { resultado.push(particoes[chave]); });
+      return resultado;
+    }, []);
+  });
+
+  const empates = [];
+  const ranqueados = [];
+  buckets.forEach(function (bucket) {
+    if (bucket.length < 2) { ranqueados.push({ bucket: bucket, decisao: false }); return; }
+    const assinatura = assinaturaEmpateTabela_(escopo, bucket.map(function (linha) {
+      return linha.equipeId;
+    }), jogosClassificacao, criterios);
+    const decisao = (decisoes || []).find(function (item) {
+      return item.escopo === escopo.id && item.assinaturaEmpate === assinatura
+        && item.equipeIds.length === bucket.length
+        && item.equipeIds.every(function (id) {
+          return bucket.some(function (linha) { return linha.equipeId === id; });
+        });
+    }) || null;
+    empates.push({
+      escopo: escopo.id, escopoNome: escopo.nome, assinaturaEmpate: assinatura,
+      equipes: bucket.map(function (linha) { return { id: linha.equipeId, nome: linha.equipeNome }; }),
+      decisao: decisao ? {
+        equipeIds: decisao.equipeIds.slice(), motivo: decisao.motivo,
+        registradoEm: decisao.registradoEm, registradoPor: decisao.registradoPor
+      } : null
+    });
+    if (decisao) {
+      const porEquipe = {};
+      bucket.forEach(function (linha) { porEquipe[linha.equipeId] = linha; });
+      ranqueados.push({ bucket: decisao.equipeIds.map(function (id) { return porEquipe[id]; }), decisao: true });
+    } else {
+      bucket.sort(function (a, b) { return a.equipeNome.localeCompare(b.equipeNome, 'pt-BR'); });
+      ranqueados.push({ bucket: bucket, decisao: false });
+    }
+  });
+  let proximaPosicao = 1;
+  ranqueados.forEach(function (grupo) {
+    grupo.bucket.forEach(function (linha, indice) {
+      linha.posicao = grupo.decisao ? proximaPosicao + indice : proximaPosicao;
+    });
+    proximaPosicao += grupo.bucket.length;
+  });
+  return {
+    linhas: linhas.slice().sort(function (a, b) {
+      return a.posicao - b.posicao || a.equipeNome.localeCompare(b.equipeNome, 'pt-BR');
+    }),
+    empates: empates
+  };
+}
+
+function calcularClassificacaoTabela_(equipes, jogos, criterios, escopo, decisoes) {
+  return resultadoClassificacaoTabela_(equipes, jogos, criterios,
+    escopo || { id: 'geral', nome: 'Classificação geral' }, decisoes).linhas;
+}
+
+function montarTelaTabela_(lista, contexto) {
+  const criterios = contexto ? contexto.criterios : criteriosPadraoTabela_();
+  const equipes = contexto ? contexto.equipes : [];
+  const jogos = contexto ? contexto.jogos : [];
+  const grupos = contexto ? contexto.grupos : [];
+  const temClassificacao = contexto && contexto.fases.some(function (fase) { return fase.tipo === 'classificacao'; });
+  const resultadoGeral = temClassificacao ? resultadoClassificacaoTabela_(equipes, jogos, criterios,
+    { id: 'geral', nome: 'Classificação geral', equipeIds: equipes.map(function (item) { return item.id; }),
+      contexto: grupos.map(function (grupo) { return [grupo.id, grupo.equipeIds.slice().sort()]; }) },
+    contexto.doc.desempatesOrganizacao) : { linhas: [], empates: [] };
+  const resultadoGrupos = grupos.map(function (grupo) {
+    const grupoEquipes = equipes.filter(function (equipe) { return grupo.equipeIds.indexOf(equipe.id) !== -1; });
+    const resultado = resultadoClassificacaoTabela_(grupoEquipes, jogos, criterios,
+      { id: grupo.id, nome: grupo.nome, equipeIds: grupo.equipeIds },
+      contexto.doc.desempatesOrganizacao);
+    return { grupoId: grupo.id, nome: grupo.nome, linhas: resultado.linhas, empatesOrganizacao: resultado.empates };
+  });
+  const avisosLegado = [];
+  if (contexto) {
+    jogos.forEach(function (jogo) {
+      if (jogo.faseId !== 'fase-classificacao' || jogo.status !== 'encerrado') return;
+      if (!jogo.resultado || !Array.isArray(jogo.resultado.equipes)
+          || jogo.resultado.equipes.some(function (item) {
+            return !Array.isArray(item.atletas) || !Array.isArray(item.comissao)
+              || item.atletas.concat(item.comissao).some(function (pessoa) {
+                return !Number.isInteger(pessoa.amarelos) || typeof pessoa.vermelho !== 'boolean';
+              });
+          })) {
+        avisosLegado.push('O jogo ' + jogo.id
+          + ' não possui todos os snapshots de cartões; cartões históricos ausentes foram considerados zero.');
+      }
+    });
+  }
+  return {
+    campeonatos: lista.map(function (item) { return { id: item.id, nome: item.nome, temporada: item.temporada, status: item.status }; }),
+    campeonatoId: contexto ? contexto.campeonato.id : '',
+    campeonato: contexto ? { id: contexto.campeonato.id, nome: contexto.campeonato.nome,
+      temporada: contexto.campeonato.temporada, status: contexto.campeonato.status } : null,
+    estrutura: contexto ? contexto.estrutura : null, grupos: grupos, fases: contexto ? contexto.fases : [],
+    equipes: equipes, campos: contexto ? contexto.campos : lerCamposTabela_().campos, jogos: jogos, criterios: criterios,
+    criterioOpcoes: TABELA_CRITERIO_OPCOES.map(function (item) { return { id: item.id, nome: item.nome }; }),
+    avisos: avisosLegado,
+    empatesOrganizacao: resultadoGeral.empates.concat.apply(resultadoGeral.empates,
+      resultadoGrupos.map(function (grupo) { return grupo.empatesOrganizacao; })),
+    classificacao: {
+      geral: resultadoGeral.linhas,
+      empatesOrganizacao: resultadoGeral.empates,
+      grupos: resultadoGrupos
+    },
+    revisao: contexto ? revisaoTabela_(contexto) : '', podeEditar: true
+  };
+}
+
+function listarTabelaCampeonato(campeonatoId) {
+  sessaoCampeonato_();
+  equipesRegistro_();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const lista = campeonatos_();
+    const id = String(campeonatoId || '').trim() || (lista.length ? lista[0].id : '');
+    return montarTelaTabela_(lista, id ? contextoTabela_(id, lista, true) : null);
+  } finally { lock.releaseLock(); }
+}
+
+function mutarTabelaCampeonato_(payload, operacao, global) {
+  sessaoCampeonato_();
+  equipesRegistro_();
+  const dados = payload || {};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const lista = campeonatos_();
+    const contexto = contextoTabela_(String(dados.campeonatoId || '').trim(), lista, true);
+    if (typeof dados.revisao !== 'string' || dados.revisao !== revisaoTabela_(contexto)) {
+      throw new Error('A tabela foi alterada. Recarregue antes de salvar novamente.');
+    }
+    operacao(contexto, dados, lista);
+    // Toda a validação precede a única operação de persistência.
+    contexto.grupos = gruposTabela_(contexto.doc, esqueletoTabela_(contexto.estrutura), contexto.equipes, contexto.estrutura);
+    contexto.doc.jogos.forEach(function (jogo) { validarJogoTabela_(jogo, contexto, jogo); });
+    if (global) {
+      contexto.camposDoc.revisao = Utilities.getUuid();
+      gravarListaCadastroDrive_(TABELA_CAMPOS_ARQUIVO, TABELA_CAMPOS_CHAVE, [contexto.camposDoc]);
+    } else {
+      contexto.doc.revisao = Utilities.getUuid();
+      gravarListaCadastroDrive_(arquivoTabelaCampeonato_(contexto.campeonato.id),
+        chaveTabelaCampeonato_(contexto.campeonato.id), [contexto.doc]);
+    }
+    return montarTelaTabela_(lista, contextoTabela_(contexto.campeonato.id, lista, true));
+  } finally { lock.releaseLock(); }
+}
+
+function salvarJogoCampeonato(payload) {
+  return mutarTabelaCampeonato_(payload, function (contexto, dados) {
+    const id = String(dados.id || '').trim();
+    const existente = contexto.doc.jogos.find(function (item) { return item.id === id; });
+    if (id && !existente) throw new Error('Jogo não encontrado.');
+    const entrada = Object.assign({}, existente || {}, dados);
+    const fechado = existente && (existente.status === 'encerrado' || existente.resultado);
+    ['golsMandante', 'golsVisitante', 'resultado'].forEach(function (chave) {
+      if (!Object.prototype.hasOwnProperty.call(dados, chave)) return;
+      const esperado = existente ? existente[chave] : (chave === 'resultado' ? undefined : null);
+      if (JSON.stringify(dados[chave]) !== JSON.stringify(esperado)) {
+        throw new Error('Lance ou corrija o placar pela tela de resultado, não pela edição do jogo.');
+      }
+    });
+    if (fechado) {
+      ['status', 'faseId', 'grupoId', 'mandanteId', 'visitanteId'].forEach(function (chave) {
+        if (Object.prototype.hasOwnProperty.call(dados, chave) && dados[chave] !== existente[chave]) {
+          throw new Error('Não é possível alterar status, fase, grupo ou equipes de um jogo encerrado.');
+        }
+      });
+    } else if (['agendado', 'adiado', 'cancelado'].indexOf(entrada.status) === -1) {
+      throw new Error('Encerre o jogo pela tela de resultado.');
+    }
+    const jogo = validarJogoTabela_(entrada, contexto, existente);
+    if (existente) contexto.doc.jogos[contexto.doc.jogos.indexOf(existente)] = jogo;
+    else contexto.doc.jogos.push(jogo);
+  }, false);
+}
+
+function booleanoResultadoTabela_(valor, nome) {
+  if (typeof valor !== 'boolean') throw new Error(nome + ' deve ser verdadeiro ou falso.');
+  return valor;
+}
+
+function inteiroResultadoTabela_(valor, maximo, nome) {
+  if (typeof valor !== 'number') throw new Error(nome + ' deve ser um número inteiro.');
+  return inteiroTabela_(valor, 0, maximo, nome);
+}
+
+function eventosResultadoTabela_(dados, atleta) {
+  if (!dados || typeof dados !== 'object') throw new Error('Informe os eventos de cada participante.');
+  const eventos = {
+    amarelos: inteiroResultadoTabela_(dados.amarelos, 2, 'Cartões amarelos'),
+    vermelho: booleanoResultadoTabela_(dados.vermelho, 'Cartão vermelho')
+  };
+  if (atleta) {
+    eventos.participou = booleanoResultadoTabela_(dados.participou, 'Participação');
+    eventos.gols = inteiroResultadoTabela_(dados.gols, 999, 'Gols do atleta');
+    eventos.golsContra = inteiroResultadoTabela_(dados.golsContra, 999, 'Gols contra');
+  }
+  return eventos;
+}
+
+function informacoesResultadoTabela_(dados, jogo) {
+  if (!dados || typeof dados !== 'object' || Array.isArray(dados)) throw new Error('Informe os detalhes do resultado.');
+  const wo = booleanoResultadoTabela_(dados.wo, 'WO');
+  const penaltis = booleanoResultadoTabela_(dados.penaltis, 'Pênaltis');
+  const prorrogacao = booleanoResultadoTabela_(dados.prorrogacao, 'Prorrogação');
+  if (typeof dados.woEquipeId !== 'string' || (wo && [jogo.mandanteId, jogo.visitanteId].indexOf(dados.woEquipeId) === -1)) {
+    throw new Error('Informe a equipe ausente no WO.');
+  }
+  if (typeof dados.observacoes !== 'string' || dados.observacoes.length > 2000) {
+    throw new Error('As observações devem ter no máximo 2000 caracteres.');
+  }
+  return {
+    wo: wo, woEquipeId: wo ? dados.woEquipeId : '', prorrogacao: prorrogacao, penaltis: penaltis,
+    golsPenaltisMandante: penaltis ? inteiroResultadoTabela_(dados.golsPenaltisMandante, 999, 'Pênaltis do mandante') : null,
+    golsPenaltisVisitante: penaltis ? inteiroResultadoTabela_(dados.golsPenaltisVisitante, 999, 'Pênaltis do visitante') : null,
+    observacoes: dados.observacoes
+  };
+}
+
+function equipesResultadoValidasTabela_(equipes, jogo) {
+  idsUnicosTabela_(equipes, 'equipes do resultado');
+  if (equipes.length !== 2 || ![jogo.mandanteId, jogo.visitanteId].every(function (id) {
+    return equipes.some(function (equipe) { return equipe.id === id; });
+  })) throw new Error('Informe exatamente as duas equipes do jogo.');
+  equipes.forEach(function (equipe) {
+    ['atletas', 'comissao'].forEach(function (tipo) { idsUnicosTabela_(equipe[tipo], tipo + ' do resultado'); });
+  });
+}
+
+function validarResultadoSalvoTabela_(resultado, jogo) {
+  if (jogo.status !== 'encerrado') throw new Error('Um resultado detalhado exige jogo encerrado.');
+  const info = informacoesResultadoTabela_(resultado, jogo);
+  Object.keys(info).forEach(function (chave) {
+    if (info[chave] !== resultado[chave]) throw new Error('O resultado armazenado está inválido.');
+  });
+  equipesResultadoValidasTabela_(resultado.equipes, jogo);
+  const ids = new Set();
+  resultado.equipes.forEach(function (equipe) {
+    ['atletas', 'comissao'].forEach(function (tipo) {
+      equipe[tipo].forEach(function (pessoa) {
+        if (ids.has(pessoa.id) || typeof pessoa.nome !== 'string' || !pessoa.nome.trim()) {
+          throw new Error('Participantes armazenados inválidos ou repetidos.');
+        }
+        ids.add(pessoa.id);
+        const eventos = eventosResultadoTabela_(
+          Object.assign({ golsContra: 0, amarelos: 0, vermelho: false }, pessoa), tipo === 'atletas');
+        Object.keys(eventos).forEach(function (chave) {
+          if (chave === 'golsContra' && pessoa.golsContra === undefined) return;
+          if ((chave === 'amarelos' || chave === 'vermelho') && pessoa[chave] === undefined) return;
+          if (eventos[chave] !== pessoa[chave]) throw new Error('Eventos armazenados inválidos.');
+        });
+        if (tipo === 'atletas') {
+          if (typeof pessoa.dataNascimento !== 'string'
+              || (typeof pessoa.numero !== 'string' && typeof pessoa.numero !== 'number')
+              || (typeof pessoa.numero === 'number' && !Number.isFinite(pessoa.numero))) {
+            throw new Error('Identificação do atleta armazenada inválida.');
+          }
+        } else if (typeof pessoa.cargo !== 'string') throw new Error('Cargo armazenado inválido.');
+      });
+    });
+  });
+}
+
+function elencosResultadoTabela_(contexto, jogo, persistirIds) {
+  // A lista bruta preserva a situação ativa omitida pelo normalizador legado da comissão.
+  const listas = { atletas: atletasCampeonato_(contexto.campeonato.id, persistirIds !== false),
+    comissao: lerListaCadastroDrive_(arquivoCadastroPessoasCampeonato_(contexto.campeonato.id, 'Comissao Tecnica'),
+      chaveComissaoTecnicaCampeonato_(contexto.campeonato.id)) };
+  garantirIdsHistoricoElenco_(contexto.campeonato.id, 'comissao', listas.comissao, persistirIds !== false);
+  const identidades = new Set();
+  const metadadosAtuais = [];
+  const equipes = [jogo.mandanteId, jogo.visitanteId].map(function (id, indice) {
+    const equipe = contexto.equipes.find(function (item) { return item.id === id; });
+    const salvo = jogo.resultado && jogo.resultado.equipes.find(function (item) { return item.id === id; });
+    const resposta = { id: id, nome: equipe.nome, escudo: equipe.escudo,
+      lado: indice ? 'visitante' : 'mandante' };
+    ['atletas', 'comissao'].forEach(function (tipo) {
+      const atuais = listas[tipo].filter(function (pessoa) {
+        return pessoa && String(pessoa.nome || '').trim() && pessoa.ativo !== false
+          && chaveEquipe_(pessoa.timeVinculado) === chaveEquipe_(equipe.nome);
+      });
+      idsUnicosTabela_(atuais, tipo + ' do elenco');
+      metadadosAtuais.push({ equipeId: id, tipo: tipo, pessoas: atuais.map(function (pessoa) {
+        return tipo === 'atletas' ? { id: pessoa.id, nome: pessoa.nome, numero: pessoa.numero == null ? '' : pessoa.numero,
+          dataNascimento: String(pessoa.dataNascimento || '') }
+          : { id: pessoa.id, nome: pessoa.nome, cargo: String(pessoa.cargo || 'Comissão Técnica') };
+      }) });
+      const anteriores = salvo ? salvo[tipo] : [];
+      const pessoas = anteriores.concat(atuais.filter(function (pessoa) {
+        return !anteriores.some(function (anterior) { return anterior.id === pessoa.id; });
+      }));
+      resposta[tipo] = pessoas.map(function (pessoa) {
+        if (identidades.has(pessoa.id)) throw new Error('Elencos com identificadores de participantes repetidos.');
+        identidades.add(pessoa.id);
+        const anterior = anteriores.find(function (item) { return item.id === pessoa.id; });
+        const snapshot = anterior || pessoa;
+        const item = {
+          id: pessoa.id, nome: String(snapshot.nome), disponivel: atuais.some(function (atual) { return atual.id === pessoa.id; }),
+          amarelos: anterior && Number.isInteger(anterior.amarelos) ? anterior.amarelos : 0,
+          vermelho: anterior && typeof anterior.vermelho === 'boolean' ? anterior.vermelho : false
+        };
+        if (tipo === 'atletas') {
+          item.numero = snapshot.numero == null ? '' : snapshot.numero;
+          item.dataNascimento = String(snapshot.dataNascimento || '');
+          item.participou = anterior ? anterior.participou : false;
+          item.gols = anterior ? anterior.gols : 0;
+          item.golsContra = anterior && anterior.golsContra !== undefined ? anterior.golsContra : 0;
+          if (anterior && anterior.assistencias !== undefined) item.assistencias = anterior.assistencias;
+        } else item.cargo = String(snapshot.cargo || 'Comissão Técnica');
+        return item;
+      });
+    });
+    return resposta;
+  });
+  const snapshots = equipes.map(function (equipe) {
+    const snapshot = { id: equipe.id };
+    ['atletas', 'comissao'].forEach(function (tipo) {
+      snapshot[tipo] = equipe[tipo].map(function (pessoa) {
+        return tipo === 'atletas' ? { id: pessoa.id, nome: pessoa.nome, numero: pessoa.numero,
+          dataNascimento: pessoa.dataNascimento, disponivel: pessoa.disponivel }
+          : { id: pessoa.id, nome: pessoa.nome, cargo: pessoa.cargo, disponivel: pessoa.disponivel };
+      });
+    });
+    return snapshot;
+  });
+  Object.defineProperty(equipes, 'revisaoElencos', { value: JSON.stringify([metadadosAtuais, snapshots]) });
+  return equipes;
+}
+
+function revisaoElencosResultadoTabela_(equipes) {
+  // Detecta mudanças no cadastro atual mesmo quando a tela exibe a identificação histórica.
+  return equipes.revisaoElencos;
+}
+
+function avisosResultadoTabela_(jogo, equipes) {
+  return equipes.reduce(function (avisos, equipe) {
+    const adversaria = equipes.find(function (item) { return item.id !== equipe.id; });
+    const total = equipe.atletas.reduce(function (soma, pessoa) { return soma + pessoa.gols; }, 0)
+      + adversaria.atletas.reduce(function (soma, pessoa) { return soma + (pessoa.golsContra || 0); }, 0);
+    const placar = equipe.id === jogo.mandanteId ? jogo.golsMandante : jogo.golsVisitante;
+    if (placar !== null && total !== placar) avisos.push('O total de gols de ' + equipe.nome + ', incluindo gols contra do adversário,'
+      + ' (' + total + ') difere do placar manual (' + placar + '). O placar manual foi mantido.');
+    return avisos;
+  }, []);
+}
+
+function listarResultadoJogoCampeonato(payload) {
+  sessaoCampeonato_();
+  equipesRegistro_();
+  const dados = payload || {};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const contexto = contextoTabela_(String(dados.campeonatoId || '').trim(), campeonatos_(), true);
+    const jogo = contexto.jogos.find(function (item) { return item.id === dados.id; });
+    if (!jogo) throw new Error('Jogo não encontrado.');
+    const equipes = elencosResultadoTabela_(contexto, jogo);
+    const fase = contexto.fases.find(function (item) { return item.id === jogo.faseId; });
+    const resultado = jogo.resultado || { wo: false, woEquipeId: '', prorrogacao: false, penaltis: false,
+      golsPenaltisMandante: null, golsPenaltisVisitante: null, observacoes: '' };
+    const info = {};
+    ['wo', 'woEquipeId', 'prorrogacao', 'penaltis', 'golsPenaltisMandante', 'golsPenaltisVisitante', 'observacoes']
+      .forEach(function (chave) { info[chave] = resultado[chave]; });
+    return { campeonatoId: contexto.campeonato.id, jogo: jogo,
+      campeonato: { id: contexto.campeonato.id, nome: contexto.campeonato.nome, temporada: contexto.campeonato.temporada },
+      fase: { id: fase.id, nome: fase.nome, tipo: fase.tipo }, revisao: revisaoTabela_(contexto),
+      revisaoElencos: revisaoElencosResultadoTabela_(equipes), podeEditar: true,
+      equipes: equipes, resultado: info, avisos: avisosResultadoTabela_(jogo, equipes) };
+  } finally { lock.releaseLock(); }
+}
+
+function salvarResultadoJogoCampeonato(payload) {
+  let avisos;
+  const tela = mutarTabelaCampeonato_(payload, function (contexto, dados) {
+    const jogo = contexto.jogos.find(function (item) { return item.id === dados.id; });
+    if (!jogo) throw new Error('Jogo não encontrado.');
+    const elencos = elencosResultadoTabela_(contexto, jogo, false);
+    if (typeof dados.revisaoElencos !== 'string' || dados.revisaoElencos !== revisaoElencosResultadoTabela_(elencos)) {
+      throw new Error('Os elencos foram alterados. Recarregue o resultado antes de salvar.');
+    }
+    equipesResultadoValidasTabela_(dados.equipes, jogo);
+    const resultado = informacoesResultadoTabela_(dados.resultado, jogo);
+    resultado.equipes = elencos.map(function (equipe) {
+      const entrada = dados.equipes.find(function (item) { return item.id === equipe.id; });
+      const snapshot = { id: equipe.id };
+      ['atletas', 'comissao'].forEach(function (tipo) {
+        if (entrada[tipo].length !== equipe[tipo].length) throw new Error('Envie todos os participantes exibidos no resultado.');
+        snapshot[tipo] = entrada[tipo].map(function (pessoa) {
+          const confiavel = equipe[tipo].find(function (item) { return item.id === pessoa.id; });
+          if (!confiavel) throw new Error('Participante não pertence a este elenco e tipo de cadastro.');
+          const salvo = Object.assign({}, confiavel, eventosResultadoTabela_(pessoa, tipo === 'atletas'));
+          delete salvo.disponivel;
+          return salvo;
+        });
+      });
+      return snapshot;
+    });
+    const atualizado = Object.assign({}, jogo, {
+      status: 'encerrado',
+      golsMandante: inteiroResultadoTabela_(dados.golsMandante, 999, 'Gols do mandante'),
+      golsVisitante: inteiroResultadoTabela_(dados.golsVisitante, 999, 'Gols do visitante'),
+      resultado: resultado
+    });
+    validarJogoTabela_(atualizado, contexto, jogo);
+    contexto.doc.jogos[contexto.doc.jogos.indexOf(jogo)] = atualizado;
+    avisos = avisosResultadoTabela_(atualizado, elencos.map(function (equipe, indice) {
+      return Object.assign({}, equipe, { atletas: resultado.equipes[indice].atletas });
+    }));
+  }, false);
+  tela.avisos = tela.avisos.concat(avisos);
+  tela.recado = 'Resultado salvo. O placar manual inclui a prorrogação; WO e pênaltis são informativos, sem avanço ou suspensão automática.';
+  return tela;
+}
+
+function removerJogoCampeonato(payload) {
+  return mutarTabelaCampeonato_(payload, function (contexto, dados) {
+    const indice = contexto.doc.jogos.findIndex(function (jogo) { return jogo.id === dados.id; });
+    if (indice === -1) throw new Error('Jogo não encontrado.');
+    contexto.doc.jogos.splice(indice, 1);
+  }, false);
+}
+
+function salvarGruposTabelaCampeonato(payload) {
+  return mutarTabelaCampeonato_(payload, function (contexto, dados) {
+    idsUnicosTabela_(dados.grupos, 'grupos');
+    if (dados.grupos.length !== contexto.grupos.length || dados.grupos.some(function (grupo) {
+      return !contexto.grupos.some(function (item) { return item.id === grupo.id; }) || !Array.isArray(grupo.equipeIds);
+    })) throw new Error('Informe todos os grupos configurados, sem incluir outros.');
+    contexto.doc.grupos = dados.grupos.map(function (grupo) { return { id: grupo.id, equipeIds: grupo.equipeIds.slice() }; });
+    // Os jogos existentes, mesmo não encerrados, devem continuar no mesmo grupo.
+  }, false);
+}
+
+function salvarCriteriosTabelaCampeonato(payload) {
+  return mutarTabelaCampeonato_(payload, function (contexto, dados) {
+    contexto.doc.criterios = validarCriteriosTabela_(dados.criterios);
+  }, false);
+}
+
+function salvarDesempateOrganizacaoTabela(payload) {
+  const sessao = sessaoCampeonato_();
+  const tela = mutarTabelaCampeonato_(payload, function (contexto, dados, lista) {
+    if (typeof dados.escopo !== 'string' || typeof dados.assinaturaEmpate !== 'string'
+        || !dados.assinaturaEmpate || !Array.isArray(dados.equipeIds)
+        || !dados.equipeIds.length || dados.equipeIds.some(function (id) {
+          return typeof id !== 'string' || !id;
+        }) || new Set(dados.equipeIds).size !== dados.equipeIds.length) {
+      throw new Error('Informe um desempate e uma ordem de equipes válidos.');
+    }
+    if (typeof dados.motivo !== 'string' || !dados.motivo.trim() || dados.motivo.length > 1000) {
+      throw new Error('Informe o motivo da organização manual (até 1000 caracteres).');
+    }
+    const tela = montarTelaTabela_(lista, contexto);
+    const empate = tela.empatesOrganizacao.find(function (item) {
+      return item.escopo === dados.escopo && item.assinaturaEmpate === dados.assinaturaEmpate;
+    });
+    if (!empate) throw new Error('O empate esportivo foi alterado. Recarregue a tabela antes de organizar.');
+    if (dados.equipeIds.length !== empate.equipes.length
+        || dados.equipeIds.some(function (id) {
+          return !empate.equipes.some(function (equipe) { return equipe.id === id; });
+        })) throw new Error('A ordem deve incluir exatamente todas as equipes empatadas.');
+    const decisao = {
+      escopo: empate.escopo, assinaturaEmpate: empate.assinaturaEmpate,
+      equipeIds: dados.equipeIds.slice(), motivo: dados.motivo.trim(),
+      registradoEm: new Date().toISOString(), registradoPor: sessao.usuario.nome
+    };
+    const indice = contexto.doc.desempatesOrganizacao.findIndex(function (item) {
+      return item.escopo === decisao.escopo && item.assinaturaEmpate === decisao.assinaturaEmpate;
+    });
+    if (indice === -1) contexto.doc.desempatesOrganizacao.push(decisao);
+    else contexto.doc.desempatesOrganizacao[indice] = decisao;
+  }, false);
+  tela.recado = 'Organização manual do empate registrada.';
+  return tela;
+}
+
+function removerDesempateOrganizacaoTabela(payload) {
+  const dados = payload || {};
+  const tela = mutarTabelaCampeonato_(dados, function (contexto, entrada, lista) {
+    if (typeof entrada.escopo !== 'string' || typeof entrada.assinaturaEmpate !== 'string'
+        || !entrada.assinaturaEmpate) throw new Error('Informe o empate cuja decisão será removida.');
+    const tela = montarTelaTabela_(lista, contexto);
+    const empate = tela.empatesOrganizacao.find(function (item) {
+      return item.escopo === entrada.escopo && item.assinaturaEmpate === entrada.assinaturaEmpate;
+    });
+    if (!empate) throw new Error('O empate esportivo foi alterado. Recarregue a tabela antes de remover a decisão.');
+    const indice = contexto.doc.desempatesOrganizacao.findIndex(function (item) {
+      return item.escopo === empate.escopo && item.assinaturaEmpate === empate.assinaturaEmpate;
+    });
+    if (indice === -1) throw new Error('Não há decisão manual registrada para este empate.');
+    contexto.doc.desempatesOrganizacao.splice(indice, 1);
+  }, false);
+  tela.recado = 'Decisão manual removida.';
+  return tela;
+}
+
+function salvarCampoCampeonato(payload) {
+  return mutarTabelaCampeonato_(payload, function (contexto, dados) {
+    const nome = limparCampo_(dados.nome || '', 120);
+    const endereco = limparCampo_(dados.endereco || '', 300);
+    if (!nome) throw new Error('Informe o nome do campo.');
+    if (typeof dados.ativo !== 'boolean') throw new Error('Informe se o campo está ativo.');
+    const id = String(dados.id || '').trim();
+    const indice = contexto.campos.findIndex(function (campo) { return campo.id === id; });
+    if (id && indice === -1) throw new Error('Campo não encontrado.');
+    if (contexto.campos.some(function (campo) { return campo.id !== id && chaveEquipe_(campo.nome) === chaveEquipe_(nome); })) {
+      throw new Error('Já existe um campo com esse nome.');
+    }
+    const campo = { id: id || Utilities.getUuid(), nome: nome, endereco: endereco, ativo: dados.ativo };
+    if (indice === -1) contexto.campos.push(campo);
+    else contexto.campos[indice] = campo;
+  }, true);
+}
+
+function removerCampoCampeonato(payload) {
+  return mutarTabelaCampeonato_(payload, function (contexto, dados, lista) {
+    const indice = contexto.campos.findIndex(function (campo) { return campo.id === dados.id; });
+    if (indice === -1) throw new Error('Campo não encontrado.');
+    if (lista.some(function (campeonato) {
+      return lerTabelaCampeonato_(campeonato.id).jogos.some(function (jogo) { return jogo.campoId === dados.id; });
+    })) throw new Error('Este campo está em uso em jogos. Inative-o para preservar o histórico.');
+    contexto.campos.splice(indice, 1);
+  }, true);
+}
+
+function validarAlteracaoEstruturaTabela_(campeonato) {
+  const doc = lerTabelaCampeonato_(campeonato.id);
+  const estrutura = estruturaCampeonato_(campeonato.id, campeonato);
+  const esqueleto = esqueletoTabela_(estrutura);
+  const contexto = {
+    fases: esqueleto.fases, grupos: gruposTabela_(doc, esqueleto, equipesTabela_(campeonato.id, true), estrutura),
+    equipes: equipesTabela_(campeonato.id, true), campos: lerCamposTabela_().campos, jogos: doc.jogos
+  };
+  doc.jogos.forEach(function (jogo) { validarJogoTabela_(jogo, contexto, jogo); });
+}
+
+function impedirRemocaoEquipeTabela_(campeonatoId, nomeChave) {
+  const equipe = lerRegistroEquipes_().find(function (item) { return chaveEquipe_(item.nome) === nomeChave; });
+  if (!equipe) return;
+  const lista = campeonatos_().filter(function (item) { return !campeonatoId || item.id === campeonatoId; });
+  lista.forEach(function (campeonato) {
+    const doc = lerTabelaCampeonato_(campeonato.id);
+    if (doc.jogos.some(function (jogo) { return jogo.mandanteId === equipe.id || jogo.visitanteId === equipe.id; })
+        || doc.grupos.some(function (grupo) { return grupo.equipeIds.indexOf(equipe.id) !== -1; })) {
+      throw new Error('Esta equipe está em uso na tabela. Remova seus jogos e sua atribuição de grupo antes de desvincular.');
+    }
+  });
+}
+
+function removerCadastroTabelaCampeonato_(id) {
+  const arquivos = pastaRaizProjeto_().getFilesByName(arquivoTabelaCampeonato_(id));
+  while (arquivos.hasNext()) arquivos.next().setTrashed(true);
+  PropertiesService.getScriptProperties().deleteProperty(chaveTabelaCampeonato_(id));
+}
+
+function escaparSumulaTabela_(valor) {
+  return String(valor === undefined || valor === null ? '' : valor).replace(/[&<>"']/g, function (caractere) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[caractere];
+  });
+}
+
+function cpfSumulaTabela_(valor) {
+  const digitos = String(valor || '').replace(/\D/g, '');
+  return digitos.length === 11 ? '***' + digitos.slice(3, 7) + '****' : '—';
+}
+
+function suspensosSumulaTabela_(controle, campeonato) {
+  const competicao = chaveEquipe_(campeonato.nome);
+  const suspensos = Object.create(null);
+  controle.registros.forEach(function (item) {
+    const equipe = chaveEquipe_(item.equipe);
+    const pessoa = chaveEquipe_(item.punido);
+    const tipo = chaveEquipe_(item.tipo);
+    if (!competicao || !equipe || !pessoa || chaveEquipe_(item.competicao) !== competicao
+        || chaveEquipe_(item.status) !== 'DEFINIDA'
+        || !/^A CUMPRIR(?:\b|$)/.test(chaveEquipe_(item.situacao))
+        || (tipo !== 'ATLETA' && tipo !== 'COMISSAO TECNICA')) return;
+    suspensos[JSON.stringify([equipe, tipo, pessoa])] = true;
+  });
+  return suspensos;
+}
+
+const SUMULA_ATLETAS_POR_FOLHA = 22;
+
+function painelSumulaTabela_(equipe, atletas, comissao, suspensos, pagina) {
+  const e = escaparSumulaTabela_;
+  const chave = chaveEquipe_(equipe.nome);
+  function nomePessoa(item, tipo) {
+    const suspenso = suspensos[JSON.stringify([chave, tipo, chaveEquipe_(item.nome)])];
+    return {
+      classe: suspenso ? ' class="suspenso"' : '',
+      nome: e(item.nome) + (suspenso ? ' <strong>SUSPENSO</strong>' : '')
+    };
+  }
+  function vazias(quantidade, colunas) {
+    let linhas = '';
+    for (let i = 0; i < quantidade; i++) {
+      linhas += '<tr class="linha"><td>&nbsp;</td>' + '<td></td>'.repeat(colunas - 1) + '</tr>';
+    }
+    return linhas;
+  }
+  const membros = comissao.slice(pagina * 4, (pagina + 1) * 4);
+  const elenco = atletas.slice(pagina * SUMULA_ATLETAS_POR_FOLHA, (pagina + 1) * SUMULA_ATLETAS_POR_FOLHA);
+  let html = '<table class="identidade"><tr><td>'
+    + (equipe.escudo ? '<img class="escudo" alt="Escudo da equipe" src="' + e(equipe.escudo) + '">' : '')
+    + '<strong>' + e(equipe.nome) + '</strong></td></tr></table>'
+    + '<table class="comissao"><colgroup><col style="width:18%"><col style="width:42%">'
+    + '<col style="width:28%"><col style="width:6%"><col style="width:6%"></colgroup>'
+    + '<thead><tr><th colspan="5">COMISSÃO TÉCNICA</th></tr>'
+    + '<tr><th>CPF</th><th>Nome — Cargo</th><th>Assinatura</th><th>CA</th><th>CV</th></tr></thead><tbody>';
+  membros.forEach(function (item) {
+    const pessoa = nomePessoa(item, 'COMISSAO TECNICA');
+    html += '<tr' + pessoa.classe + '><td>' + e(cpfSumulaTabela_(item.cpf)) + '</td><td class="nome">'
+      + pessoa.nome + ' — ' + e(item.cargo || 'Comissão Técnica') + '</td><td></td><td></td><td></td></tr>';
+  });
+  html += vazias(4 - membros.length, 5) + '</tbody></table>'
+    + '<table class="atletas"><colgroup><col style="width:16%"><col style="width:33%">'
+    + '<col style="width:6%"><col style="width:11%"><col style="width:11%">'
+    + '<col style="width:5%"><col style="width:5%"><col style="width:6%"><col style="width:7%"></colgroup>'
+    + '<thead><tr><th colspan="9">ATLETAS</th></tr><tr><th rowspan="2">CPF</th><th rowspan="2">Nome</th>'
+    + '<th rowspan="2">Nº</th><th colspan="2">Substituições</th><th rowspan="2">CA</th><th rowspan="2">CV</th>'
+    + '<th colspan="2">Gol</th></tr><tr><th>Entrada</th><th>Saída</th><th>Nº</th><th>Min</th></tr></thead><tbody>';
+  elenco.forEach(function (item) {
+    const pessoa = nomePessoa(item, 'ATLETA');
+    html += '<tr' + pessoa.classe + '><td>' + e(cpfSumulaTabela_(item.cpf)) + '</td><td class="nome">'
+      + pessoa.nome + '</td><td>' + e(item.numero) + '</td>' + '<td></td>'.repeat(6) + '</tr>';
+  });
+  html += vazias(SUMULA_ATLETAS_POR_FOLHA - elenco.length, 9) + '</tbody></table>'
+    + '<table class="suplemento"><thead><tr><th>Substituições: entra / sai / min</th>'
+    + '<th>Pedido de tempo: 1T / 2T</th><th>Gols contra: jogador / min</th></tr></thead>'
+    + '<tbody><tr class="anotacao"><td></td><td></td><td></td></tr></tbody></table>'
+    + '<table><tr class="assinatura"><td>Capitão(ã) / assinatura:</td></tr></table>';
+  return html;
+}
+
+function gerarSumulaJogoCampeonato(payload) {
+  sessaoCampeonato_();
+  equipesRegistro_();
+  const dados = payload || {};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  let html;
+  let nome;
+  try {
+    const contexto = contextoTabela_(String(dados.campeonatoId || '').trim(), campeonatos_(), true);
+    const jogo = contexto.jogos.find(function (item) { return item.id === dados.id; });
+    if (!jogo) throw new Error('Jogo não encontrado.');
+    const campo = contexto.campos.find(function (item) { return item.id === jogo.campoId; });
+    const fase = contexto.fases.find(function (item) { return item.id === jogo.faseId; });
+    const grupo = contexto.grupos.find(function (item) { return item.id === jogo.grupoId; });
+    const atletas = atletasCampeonato_(contexto.campeonato.id);
+    // O normalizador público da comissão legada não expõe o campo ativo.
+    const comissao = lerListaCadastroDrive_(
+      arquivoCadastroPessoasCampeonato_(contexto.campeonato.id, 'Comissao Tecnica'),
+      chaveComissaoTecnicaCampeonato_(contexto.campeonato.id));
+    const e = escaparSumulaTabela_;
+    // A leitura é obrigatória: uma falha não pode aparentar ausência de suspensões.
+    const controle = listarPunicoes();
+    const suspensos = suspensosSumulaTabela_(controle, contexto.campeonato);
+    const fuso = Session.getScriptTimeZone();
+    const emitidoEm = Utilities.formatDate(new Date(), fuso, 'dd/MM/yyyy HH:mm:ss');
+    const logoBlob = DriveApp.getFileById(CONFIG.logoFileId).getBlob();
+    const logo = 'data:' + logoBlob.getContentType() + ';base64,' + Utilities.base64Encode(logoBlob.getBytes());
+    html = '<!doctype html><html><head><meta charset="UTF-8"><style>'
+      + '@page{size:A4 landscape;margin:5mm 10mm}body{margin:0;font:7.5pt Arial,sans-serif;line-height:1;color:#111}'
+      + 'table{width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 1mm}'
+      + 'th,td{border:0.2mm solid #555;padding:0.15mm 0.6mm;text-align:center;vertical-align:middle;overflow-wrap:break-word;word-wrap:break-word}'
+      + 'th{font-size:7pt;background:#eee}td.nome{text-align:left;font-size:8pt}'
+      + 'thead{display:table-header-group}tr{page-break-inside:avoid;break-inside:avoid}'
+      + '.folha{page-break-before:always}.folha.primeira{page-break-before:auto}'
+      + '.cabecalho td,.paineis>tbody>tr>td,.identidade td{border:0}'
+      + '.cabecalho{margin-bottom:1mm}.cabecalho .marca{width:17mm}.logo{width:15mm;height:15mm}'
+      + '.cabecalho .emissao{width:47mm;text-align:right;vertical-align:top;font-size:7pt}'
+      + 'h1{font-size:12pt;margin:0.5mm 0}'
+      + '.placar{font-size:10pt}.caixa{display:inline-block;border:0.3mm solid #111;width:10mm;height:6mm;vertical-align:middle}'
+      + '.paineis>tbody>tr>td{width:50%;padding:0 1mm;vertical-align:top}.paineis>tbody>tr{page-break-inside:auto}'
+      + '.identidade td{height:11mm;font-size:10pt}.escudo{width:10mm;height:10mm;vertical-align:middle;margin-right:2mm}'
+      + '.atletas td,.comissao td{height:2.8mm}.linha{height:3.3mm}'
+      + '.suspenso td{color:#b00020;background:#ffe6e6}.suspenso strong{font-size:7pt}'
+      + '.anotacao{height:6mm}.assinatura{height:6mm;text-align:left}.relatorio{height:8mm}'
+      + '.rodape{text-align:left;font-size:7pt;margin:1mm 0}'
+      + '</style></head><body>';
+    const equipes = [jogo.mandanteId, jogo.visitanteId].map(function (id) {
+      const equipe = contexto.equipes.find(function (item) { return item.id === id; });
+      const chave = chaveEquipe_(equipe.nome);
+      const elenco = atletas.filter(function (item) { return item.ativo !== false && chaveEquipe_(item.timeVinculado) === chave; });
+      const membros = comissao.filter(function (item) {
+        return item && item.ativo !== false && String(item.nome || '').trim() && chaveEquipe_(item.timeVinculado) === chave;
+      });
+      return { equipe: equipe, atletas: elenco, comissao: membros };
+    });
+    // Blocos limitados por folha preservam todos os inscritos sem reduzir a fonte.
+    const paginas = Math.max.apply(null, equipes.map(function (item) {
+      return Math.max(1, Math.ceil(item.atletas.length / SUMULA_ATLETAS_POR_FOLHA), Math.ceil(item.comissao.length / 4));
+    }));
+    const dataJogo = String(jogo.data || '').replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$3/$2/$1');
+    for (let pagina = 0; pagina < paginas; pagina++) {
+      html += '<section class="folha' + (pagina === 0 ? ' primeira' : '') + '">'
+        + '<table class="cabecalho"><tr><td class="marca"><img class="logo" alt="AEUV" src="' + e(logo) + '"></td>'
+        + '<td><strong>' + e(ASSOCIACAO_NOME) + '</strong><h1>' + e(contexto.campeonato.nome)
+        + ' — ' + e(contexto.campeonato.temporada) + '</h1>'
+        + e(fase.nome) + (grupo ? ' / ' + e(grupo.nome) : '') + ' / Rodada ' + e(jogo.rodada)
+        + '<br>Local: ' + e(campo.nome) + ' — ' + e(campo.endereco)
+        + '<br>Data: ' + e(dataJogo) + ' — Horário: ' + e(jogo.hora) + '</td>'
+        + '<td class="emissao"><strong>SÚMULA — MANUAL</strong><br>Gerada em: ' + e(emitidoEm) + '<br>Fuso: ' + e(fuso)
+        + '<br>Jogo: ' + e(jogo.id) + '<br>Folha ' + (pagina + 1) + '/' + paginas + '</td></tr></table>'
+        + '<div class="placar" style="text-align:center">PLACAR: <span class="caixa">&nbsp;</span>'
+        + ' × <span class="caixa">&nbsp;</span></div><table class="paineis"><tbody><tr>';
+      equipes.forEach(function (item) {
+        html += '<td>' + painelSumulaTabela_(item.equipe, item.atletas, item.comissao, suspensos, pagina) + '</td>';
+      });
+      html += '</tr></tbody></table>'
+        + '<table><thead><tr><th>ARBITRAGEM — função</th><th>Nome</th><th>Documento</th><th>Assinatura</th>'
+        + '<th>PERÍODO</th><th>Início</th><th>Fim</th></tr></thead><tbody>'
+        + '<tr><td>Árbitro(a)</td><td></td><td></td><td></td><td>1º tempo</td><td></td><td></td></tr>'
+        + '<tr><td>Auxiliar</td><td></td><td></td><td></td><td>2º tempo</td><td></td><td></td></tr>'
+        + '<tr><td>Mesário(a)</td><td></td><td></td><td></td><td>Prorrogação</td><td></td><td></td></tr>'
+        + '</tbody></table><table><thead><tr><th>RELATÓRIO / OBSERVAÇÕES</th></tr></thead>'
+        + '<tbody><tr class="relatorio"><td></td></tr></tbody></table>'
+        + '<p class="rodape">CA: cartão amarelo · CV: cartão vermelho · CPF parcialmente mascarado. '
+        + 'Elencos e suspensões atuais, consultados na emissão; não representam o histórico na data do jogo.'
+        + '<br>Suspensões: Controle de punições — atualizado em ' + e(controle.atualizadoEm || 'data não informada')
+        + '. Somente DEFINIDA / A CUMPRIR, por competição, equipe, tipo e nome.</p></section>';
+    }
+    html += '</body></html>';
+    nome = 'Sumula-' + String(jogo.id).replace(/[^A-Za-z0-9_-]/g, '-') + '.pdf';
+  } finally { lock.releaseLock(); }
+  const pdf = Utilities.newBlob(html, 'text/html', 'Sumula.html').getAs('application/pdf').setName(nome);
+  return { nome: nome, mimeType: 'application/pdf', base64: Utilities.base64Encode(pdf.getBytes()) };
 }
 
  /******************************************************
@@ -2690,6 +3840,7 @@ function validarEstruturaCampeonato_(dados, campeonatoId) {
        || !timesCampeonato_(id).some(function (item) { return chaveEquipe_(item) === alvo; })) {
      throw new Error('Esta equipe não está vinculada a este campeonato.');
    }
+   impedirRemocaoEquipeTabela_(id, alvo);
 
     const atletasVinculados = atletasCampeonato_(id).filter(function (item) {
       return chaveEquipe_(item.timeVinculado) === alvo;
