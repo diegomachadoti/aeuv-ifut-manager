@@ -1056,6 +1056,44 @@ function validarEscudoEquipe_(valor) {
   return escudo;
 }
 
+function assinaturaEscudoEquipe_(escudo) {
+  return Utilities.base64Encode(Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256, String(escudo || '')));
+}
+
+function otimizarEscudosEquipes(payload) {
+  exigirEdicaoEquipes_();
+  const entradas = payload && payload.escudos;
+  if (!Array.isArray(entradas) || !entradas.length) throw new Error('Informe os escudos a otimizar.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const registros = equipesRegistro_(true);
+    const ids = new Set();
+    const alteracoes = entradas.map(function (entrada) {
+      if (!entrada || typeof entrada.id !== 'string' || ids.has(entrada.id)) {
+        throw new Error('Escudos com identificadores invalidos ou repetidos.');
+      }
+      ids.add(entrada.id);
+      const equipe = registros.find(function (item) { return item.id === entrada.id; });
+      if (!equipe || entrada.assinatura !== assinaturaEscudoEquipe_(equipe.escudo)) {
+        throw new Error('Um escudo foi alterado. Recarregue as equipes antes de otimizar.');
+      }
+      const escudo = validarEscudoEquipe_(entrada.escudo);
+      if (!escudo || escudo.length >= String(equipe.escudo || '').length || escudo.length > 100 * 1024) {
+        throw new Error('O escudo otimizado deve ser menor que o original e ter ate 100 KB.');
+      }
+      return { equipe: equipe, escudo: escudo };
+    });
+    // Preserva os originais antes da unica gravacao do registro de equipes.
+    pastaRaizProjeto_().createFile(Utilities.newBlob(JSON.stringify(registros), 'application/json',
+      'AEUV - Backup Escudos - ' + Utilities.getUuid() + '.json'));
+    alteracoes.forEach(function (item) { item.equipe.escudo = item.escudo; });
+    gravarRegistroEquipes_(registros);
+    return { total: alteracoes.length, recado: alteracoes.length + ' escudo(s) otimizado(s). Originais preservados em backup no Drive.' };
+  } finally { lock.releaseLock(); }
+}
+
 function sessaoElenco_(campeonatoId, equipeId, lockJaAdquirido) {
   const sessao = identificarUsuario_();
   if (!sessao.autorizado || ['admin', 'diretoria', 'associado'].indexOf(sessao.usuario.perfil) === -1) {
@@ -1669,7 +1707,9 @@ function montarTelaEquipes_(lista, sessao) {
   return {
     equipes: lista.map(function (nome) {
       const registro = registros.find(function (item) { return chaveEquipe_(item.nome) === chaveEquipe_(nome); });
-      return { id: registro.id, nome: nome, escudo: registro.escudo || '', emUso: emUso[chaveEquipe_(nome)] || [] };
+      return { id: registro.id, nome: nome, escudo: registro.escudo || '',
+        assinaturaEscudo: assinaturaEscudoEquipe_(registro.escudo),
+        emUso: emUso[chaveEquipe_(nome)] || [] };
     }),
     arquivoUrl: arquivoEquipesUrl_(),
     podeEditar: EQUIPES_PERFIS_EDICAO.indexOf(sessao.usuario.perfil) !== -1

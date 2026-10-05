@@ -35,6 +35,19 @@ de pontuação/desempate no contexto do campeonato selecionado.
   cadastro/remoção/transferência; bases com imagens grandes ainda podem ter
   custo significativo nesses fluxos.
 
+**Escudos:** novos uploads de equipe e campeonato são redimensionados no
+navegador para até 256 pixels, preservando proporção e transparência, usando
+PNG ou WebP (o menor resultado), com limite de 100 KB para a imagem otimizada.
+No **Banco de Dados de Equipes**, admin/diretoria pode confirmar **Otimizar
+escudos existentes** para reduzir as imagens antigas. Essa ação substitui
+somente os escudos menores que o original e valida assinaturas sob o lock,
+recusando a operação inteira se houver conflito. Antes da substituição,
+salva uma cópia do registro original em `AEUV - Backup Escudos - <id>.json`
+na pasta raiz do Drive. Não renomeia equipes nem altera vínculos. Pode haver
+pequena perda de qualidade; a cópia original permite restauração administrativa.
+Publicar os arquivos não otimiza automaticamente os registros antigos:
+executar a ação uma vez e repetir o benchmark com a mesma base.
+
 **Publicação:** atualizar `WebApp.gs` e `Index.html` juntos no Apps Script e
 publicar uma nova versão da implantação. Os contratos de consulta mudaram;
 recarregar abas antigas após a publicação. Não há migração de arquivos no Drive.

@@ -3212,6 +3212,8 @@
       const barra = equipes.podeEditar
         ? '<div class="barra-acoes">'
           + '<button type="button" class="botao-principal" id="novaEquipe">Incluir equipe</button>'
+          + '<button type="button" class="botao-apoio" id="otimizarEscudos">Otimizar escudos existentes</button>'
+          + '<span id="avisoOtimizacaoEscudos" class="apoio" role="status" aria-live="polite"></span>'
           + '</div>'
         : '';
 
@@ -3228,6 +3230,7 @@
         + linkArquivo + '. Vale na hora, sem publicar nova vers&atilde;o de nenhum dos tr&ecirc;s projetos.</div>';
 
       if (equipes.podeEditar) {
+        document.getElementById('otimizarEscudos').addEventListener('click', otimizarEscudosExistentes_);
         document.getElementById('novaEquipe').addEventListener('click', function () {
           abrirFormularioEquipe('');
         });
@@ -3320,10 +3323,80 @@
         aviso.textContent = 'Envie um escudo PNG, JPEG ou WebP de até 1,5 MB.';
         return;
       }
-      const leitor = new FileReader();
-      leitor.onload = function () { payload.escudo = leitor.result; enviar(); };
-      leitor.onerror = leitor.onabort = function () { botao.disabled = false; aviso.textContent = 'Não foi possível ler o escudo.'; };
-      leitor.readAsDataURL(arquivo);
+      otimizarImagemEscudo_(arquivo).then(function (escudo) {
+        payload.escudo = escudo; enviar();
+      }).catch(function (erro) {
+        botao.disabled = false; aviso.textContent = erro.message;
+      });
+    }
+
+    function otimizarImagemEscudo_(origem) {
+      return new Promise(function (resolve, reject) {
+        const imagem = new Image();
+        const url = typeof origem === 'string' ? origem : URL.createObjectURL(origem);
+        const liberar = function () { if (typeof origem !== 'string') URL.revokeObjectURL(url); };
+        imagem.onerror = function () { liberar(); reject(new Error('Nao foi possivel carregar o escudo.')); };
+        imagem.onload = function () {
+          liberar();
+          try {
+            const proporcao = Math.min(1, 256 / Math.max(imagem.naturalWidth, imagem.naturalHeight));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(imagem.naturalWidth * proporcao));
+            canvas.height = Math.max(1, Math.round(imagem.naturalHeight * proporcao));
+            const contexto = canvas.getContext('2d');
+            if (!contexto) throw new Error('Seu navegador nao permite otimizar imagens.');
+            contexto.drawImage(imagem, 0, 0, canvas.width, canvas.height);
+            const webp = canvas.toDataURL('image/webp', 0.85);
+            const png = canvas.toDataURL('image/png');
+            let resultado = webp.length < png.length ? webp : png;
+            if (typeof origem === 'string' && origem.length < resultado.length) resultado = origem;
+            if (resultado.length > 100 * 1024) throw new Error('O escudo continua acima de 100 KB. Use uma imagem mais simples.');
+            resolve(resultado);
+          } catch (erro) { reject(erro); }
+        };
+        imagem.src = url;
+      });
+    }
+
+    async function otimizarEscudosExistentes_() {
+      if (confirmacaoElencoAtual || moduloAtual !== 'equipes' || !equipes.podeEditar) return;
+      const dadosOrigem = equipes;
+      const botao = document.getElementById('otimizarEscudos');
+      const aviso = document.getElementById('avisoOtimizacaoEscudos');
+      const confirmado = await confirmarDescarteElenco_({
+        titulo: 'Otimizar escudos das equipes?',
+        mensagem: 'Os escudos serao redimensionados para ate 256 pixels e comprimidos, mantendo transparencia. '
+          + 'Pode haver pequena perda de qualidade. Os originais serao preservados em um backup no Drive. Nomes e vinculos nao mudam.',
+        confirmar: 'Otimizar escudos'
+      });
+      if (!confirmado || moduloAtual !== 'equipes' || equipes !== dadosOrigem || !botao.isConnected) return;
+      const area = document.getElementById('areaEquipes');
+      area.querySelectorAll('button').forEach(function (item) { item.disabled = true; });
+      aviso.textContent = 'Preparando escudos...';
+      try {
+        const escudos = [];
+        for (const equipe of dadosOrigem.equipes) {
+          if (!equipe.escudo) continue;
+          const escudo = await otimizarImagemEscudo_(equipe.escudo);
+          if (escudo.length < equipe.escudo.length) {
+            escudos.push({ id: equipe.id, assinatura: equipe.assinaturaEscudo, escudo: escudo });
+          }
+        }
+        if (moduloAtual !== 'equipes' || equipes !== dadosOrigem || !botao.isConnected) return;
+        if (!escudos.length) { aviso.textContent = 'Os escudos ja estao otimizados.'; return; }
+        aviso.textContent = 'Salvando ' + escudos.length + ' escudo(s)...';
+        await new Promise(function (resolve, reject) {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).otimizarEscudosEquipes({ escudos: escudos });
+        });
+        if (moduloAtual === 'equipes' && botao.isConnected) {
+          aviso.textContent = 'Escudos otimizados. Atualizando a lista...';
+          carregarEquipes();
+        }
+      } catch (erro) {
+        if (botao.isConnected) aviso.textContent = erro.message || String(erro);
+      } finally {
+        if (botao.isConnected) area.querySelectorAll('button').forEach(function (item) { item.disabled = false; });
+      }
     }
 
     /**
@@ -4963,16 +5036,12 @@
 
        const inputEscudo = document.getElementById('cEscudo');
        if (inputEscudo && inputEscudo.files && inputEscudo.files[0]) {
-         const leitor = new FileReader();
-         leitor.onload = function (e) {
-           payload.escudo = e.target.result;
-           enviarPayload();
-         };
-         leitor.onerror = function () {
+         otimizarImagemEscudo_(inputEscudo.files[0]).then(function (escudo) {
+           payload.escudo = escudo; enviarPayload();
+         }).catch(function (erro) {
            botao.disabled = false;
-           aviso.textContent = 'Não foi possível ler o escudo. Selecione o arquivo novamente.';
-         };
-         leitor.readAsDataURL(inputEscudo.files[0]);
+           aviso.textContent = erro.message;
+         });
        } else {
          enviarPayload();
        }
