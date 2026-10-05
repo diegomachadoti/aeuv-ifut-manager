@@ -1061,9 +1061,11 @@ function sessaoElenco_(campeonatoId, equipeId, lockJaAdquirido) {
   if (!sessao.autorizado || ['admin', 'diretoria', 'associado'].indexOf(sessao.usuario.perfil) === -1) {
     throw new Error('Você não tem permissão para acessar este elenco.');
   }
-  const equipe = equipesRegistro_(lockJaAdquirido).find(function (item) {
+  const registroEquipes = equipesRegistro_(lockJaAdquirido);
+  const ativas = obterEquipes_().map(chaveEquipe_);
+  const equipe = registroEquipes.find(function (item) {
     return item.id === String(equipeId || '').trim()
-      && obterEquipes_().some(function (nome) { return chaveEquipe_(nome) === chaveEquipe_(item.nome); });
+      && ativas.indexOf(chaveEquipe_(item.nome)) !== -1;
   });
   if (!equipe || (sessao.usuario.perfil === 'associado'
       && chaveEquipe_(sessao.usuario.equipe) !== chaveEquipe_(equipe.nome))) {
@@ -1075,7 +1077,7 @@ function sessaoElenco_(campeonatoId, equipeId, lockJaAdquirido) {
   })) {
     throw new Error('Esta equipe não está vinculada a este campeonato.');
   }
-  return { sessao: sessao, equipe: equipe, campeonato: campeonato };
+  return { sessao: sessao, equipe: equipe, campeonato: campeonato, registroEquipes: registroEquipes };
 }
 
 const ELENCO_BLOQUEIOS_ARQUIVO = 'AEUV - Bloqueios de Elenco.json';
@@ -1236,7 +1238,7 @@ function bloquearVinculoAtletaParticipante_(campeonato, jogos, cpf, timeVinculad
 function equipesDestinoTransferencia_(contexto, lockJaAdquirido) {
   const nomes = timesCampeonato_(contexto.campeonato.id);
   const ativas = obterEquipes_().map(chaveEquipe_);
-  return equipesRegistro_(lockJaAdquirido).filter(function (equipe) {
+  return (contexto.registroEquipes || equipesRegistro_(lockJaAdquirido)).filter(function (equipe) {
     return equipe.id !== contexto.equipe.id && ativas.indexOf(chaveEquipe_(equipe.nome)) !== -1
       && nomes.some(function (nome) { return chaveEquipe_(nome) === chaveEquipe_(equipe.nome); });
   }).map(function (equipe) { return { id: equipe.id, nome: equipe.nome }; });
@@ -1498,7 +1500,8 @@ function prepararHistoricoElenco_(cache) {
 }
 
 function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado, listasPreparadas) {
-  const historico = historicoPreparado || prepararHistoricoElenco_();
+  const cache = {};
+  const historico = historicoPreparado || prepararHistoricoElenco_(cache);
   const campeonato = campeonatos_().find(function (item) { return item.id === campeonatoId; });
   if (!campeonato) throw new Error('Campeonato não encontrado.');
   try {
@@ -1512,7 +1515,7 @@ function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado
   }
   try {
     historico.inscricoes.forEach(function (item) { item.presenteAntes = item.presente; });
-    const listas = listasPreparadas || {
+    const listas = listasPreparadas || cache[campeonatoId] || {
       atletas: tipo === 'atletas' ? lista : atletasCampeonato_(campeonatoId),
       comissao: tipo === 'comissao' ? lista : comissaoTecnicaCampeonato_(campeonatoId)
     };
@@ -3111,34 +3114,51 @@ function montarTelaTabela_(lista, contexto) {
     campeonato: contexto ? { id: contexto.campeonato.id, nome: contexto.campeonato.nome,
       temporada: contexto.campeonato.temporada, status: contexto.campeonato.status } : null,
     estrutura: contexto ? contexto.estrutura : null, grupos: grupos, fases: contexto ? contexto.fases : [],
-    equipes: equipes, campos: contexto ? contexto.campos : lerCamposTabela_().campos, jogos: jogos, criterios: criterios,
+    equipes: equipes, campos: contexto ? contexto.campos : lerCamposTabela_().campos,
+    // Os snapshots permanecem no Drive e nos endpoints de resultado, nao na lista de jogos.
+    jogos: jogos.map(function (jogo) {
+      const resumo = Object.assign({}, jogo);
+      delete resumo.resultado;
+      return resumo;
+    }), criterios: criterios,
     criterioOpcoes: TABELA_CRITERIO_OPCOES.map(function (item) { return { id: item.id, nome: item.nome }; }),
     avisos: avisosLegado,
     empatesOrganizacao: resultadoGeral.empates.concat.apply(resultadoGeral.empates,
       resultadoGrupos.map(function (grupo) { return grupo.empatesOrganizacao; })),
     classificacao: {
-      geral: resultadoGeral.linhas,
+      geral: resultadoGeral.linhas.map(resumirLinhaClassificacao_),
       empatesOrganizacao: resultadoGeral.empates,
-      grupos: resultadoGrupos
+      grupos: resultadoGrupos.map(function (grupo) {
+        return Object.assign({}, grupo, { linhas: grupo.linhas.map(resumirLinhaClassificacao_) });
+      })
     },
     revisao: contexto ? revisaoTabela_(contexto) : '', podeEditar: true
   };
 }
 
+function resumirLinhaClassificacao_(linha) {
+  const resumo = Object.assign({}, linha);
+  // O cliente resolve o escudo pelo equipeId na colecao unica de equipes.
+  delete resumo.escudo;
+  return resumo;
+}
+
 function listarTabelaCampeonato(campeonatoId) {
   sessaoCampeonato_();
-  equipesRegistro_();
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     const lista = campeonatos_();
     const id = String(campeonatoId || '').trim() || (lista.length ? lista[0].id : '');
-    return montarTelaTabela_(lista, id ? contextoTabela_(id, lista, true) : null);
+    const recursos = recursosTabelaCampeonato_(true);
+    return montarTelaTabela_(lista, id ? contextoTabela_(id, lista, true, recursos) : null);
   } finally { lock.releaseLock(); }
 }
 
-function recursosSumulasCampeonato_() {
-  return { camposDoc: lerCamposTabela_(), registro: lerRegistroEquipes_(), ativas: obterEquipes_().map(chaveEquipe_) };
+function recursosTabelaCampeonato_(garantirRegistro) {
+  return { camposDoc: lerCamposTabela_(),
+    registro: garantirRegistro ? equipesRegistro_(true) : lerRegistroEquipes_(),
+    ativas: obterEquipes_().map(chaveEquipe_) };
 }
 
 function listarSumulasCampeonato() {
@@ -3146,7 +3166,7 @@ function listarSumulasCampeonato() {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    const lista = campeonatos_(), recursos = recursosSumulasCampeonato_();
+    const lista = campeonatos_(), recursos = recursosTabelaCampeonato_();
     const jogos = [];
     const equipes = {};
     lista.forEach(function (campeonato) {
@@ -3180,7 +3200,7 @@ function consultarSumulaCampeonato(payload) {
   const dados = payload || {}, lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    const contexto = contextoTabela_(String(dados.campeonatoId || '').trim(), campeonatos_(), true, recursosSumulasCampeonato_());
+    const contexto = contextoTabela_(String(dados.campeonatoId || '').trim(), campeonatos_(), true, recursosTabelaCampeonato_());
     const jogo = contexto.jogos.find(function (item) { return item.id === dados.id; });
     if (!jogo || jogo.status !== 'encerrado' || !jogo.resultado) throw new Error('Súmula finalizada não encontrada. Atualize a lista.');
     const equipes = [jogo.mandanteId, jogo.visitanteId].map(function (id, indice) {
@@ -3208,13 +3228,12 @@ function consultarSumulaCampeonato(payload) {
 
 function mutarTabelaCampeonato_(payload, operacao, global) {
   sessaoCampeonato_();
-  equipesRegistro_();
   const dados = payload || {};
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     const lista = campeonatos_();
-    const contexto = contextoTabela_(String(dados.campeonatoId || '').trim(), lista, true);
+    const contexto = contextoTabela_(String(dados.campeonatoId || '').trim(), lista, true, recursosTabelaCampeonato_(true));
     if (typeof dados.revisao !== 'string' || dados.revisao !== revisaoTabela_(contexto)) {
       throw new Error('A tabela foi alterada. Recarregue antes de salvar novamente.');
     }
@@ -3222,6 +3241,9 @@ function mutarTabelaCampeonato_(payload, operacao, global) {
     operacao(contexto, dados, lista);
     validarNovasInfracoesDisciplinaTabela_(infracoesAntes, contexto.doc.jogos);
     // Toda a validação precede a única operação de persistência.
+    contexto.jogos = contexto.doc.jogos;
+    contexto.criterios = contexto.doc.criterios;
+    contexto.campos = contexto.camposDoc.campos;
     contexto.grupos = gruposTabela_(contexto.doc, esqueletoTabela_(contexto.estrutura), contexto.equipes, contexto.estrutura);
     contexto.doc.jogos.forEach(function (jogo) { validarJogoTabela_(jogo, contexto, jogo); });
     if (global) {
@@ -3232,7 +3254,7 @@ function mutarTabelaCampeonato_(payload, operacao, global) {
       gravarListaCadastroDrive_(arquivoTabelaCampeonato_(contexto.campeonato.id),
         chaveTabelaCampeonato_(contexto.campeonato.id), [contexto.doc]);
     }
-    return montarTelaTabela_(lista, contextoTabela_(contexto.campeonato.id, lista, true));
+    return montarTelaTabela_(lista, contexto);
   } finally { lock.releaseLock(); }
 }
 
@@ -4128,63 +4150,63 @@ function gerarSumulaJogoCampeonato(payload) {
    prepararHistoricoElenco_();
  }
 
-  function detalharTimesCampeonato_(campeonatoId, times) {
+  function detalharTimesCampeonato_(campeonatoId, times, registroEquipes, somenteResumo) {
+    if (!(times || []).length) return [];
     const atletas = atletasCampeonato_(campeonatoId);
     const comissao = comissaoTecnicaCampeonato_(campeonatoId);
-    const equipes = equipesRegistro_();
+    const equipes = registroEquipes || equipesRegistro_();
 
     return (times || []).map(function (nomeTime) {
       const chaveTime = chaveEquipe_(nomeTime);
       const atletasVinculados = atletas.filter(function (atleta) {
         return chaveEquipe_(atleta.timeVinculado) === chaveTime;
-      }).map(function (atleta) {
-        return {
-          id: atleta.id,
-          nome: atleta.nome,
-          apelido: atleta.apelido,
-          cpf: atleta.cpf,
-          foto: atleta.foto
-        };
       });
-
-      return {
-        id: (equipes.find(function (item) { return chaveEquipe_(item.nome) === chaveTime; }) || {}).id || '',
-        escudo: (equipes.find(function (item) { return chaveEquipe_(item.nome) === chaveTime; }) || {}).escudo || '',
+      const equipe = equipes.find(function (item) { return chaveEquipe_(item.nome) === chaveTime; }) || {};
+      const resumo = {
+        id: equipe.id || '',
+        escudo: equipe.escudo || '',
         nome: nomeTime,
         totalAtletas: atletasVinculados.length,
-        totalComissao: comissao.filter(function (item) { return chaveEquipe_(item.timeVinculado) === chaveTime; }).length,
-        atletas: atletasVinculados
+        totalComissao: comissao.filter(function (item) { return chaveEquipe_(item.timeVinculado) === chaveTime; }).length
       };
+      if (!somenteResumo) resumo.atletas = atletasVinculados.map(function (atleta) {
+        return { id: atleta.id, nome: atleta.nome, apelido: atleta.apelido, cpf: atleta.cpf, foto: atleta.foto };
+      });
+      return resumo;
     });
   }
 
- function listarEquipesParticipantes() {
+ function listarEquipesParticipantes(campeonatoId) {
    const sessao = identificarUsuario_();
    if (!sessao.autorizado || ['admin', 'diretoria', 'associado'].indexOf(sessao.usuario.perfil) === -1) {
      throw new Error('Você não tem permissão para consultar os elencos.');
    }
    const associado = sessao.usuario.perfil === 'associado';
    const globais = equipesRegistro_();
+   const ativas = obterEquipes_().map(chaveEquipe_);
    const bloqueios = lerBloqueiosElenco_();
    const campeonatos = campeonatosResumo_().filter(function (campeonato) {
      return !associado || timesCampeonato_(campeonato.id).some(function (nome) {
        return chaveEquipe_(nome) === chaveEquipe_(sessao.usuario.equipe);
      });
    });
+   const selecionado = campeonatos.find(function (item) { return item.id === String(campeonatoId || '').trim(); })
+     || campeonatos[0];
    return {
      campeonatos: campeonatos,
+     campeonatoId: selecionado ? selecionado.id : '',
      equipesGlobais: associado ? [] : globais.filter(function (item) {
-       return obterEquipes_().some(function (nome) { return chaveEquipe_(nome) === chaveEquipe_(item.nome); });
-     }),
+       return ativas.indexOf(chaveEquipe_(item.nome)) !== -1;
+     }).map(function (item) { return { id: item.id, nome: item.nome }; }),
      podeEditar: !associado,
-     registros: campeonatos.map(function (campeonato) {
+     registros: (selecionado ? [selecionado] : []).map(function (campeonato) {
        const nomes = timesCampeonato_(campeonato.id).filter(function (nome) {
          return !associado || chaveEquipe_(nome) === chaveEquipe_(sessao.usuario.equipe);
        });
        return {
          campeonatoId: campeonato.id, campeonatoNome: campeonato.nome,
          times: nomes,
-         timesDetalhados: detalharTimesCampeonato_(campeonato.id, nomes).map(function (time) {
+         timesDetalhados: detalharTimesCampeonato_(campeonato.id, nomes, globais, true).map(function (time) {
            return { id: time.id, nome: time.nome, escudo: time.escudo,
              bloqueado: elencoBloqueado_(campeonato.id, time.id, bloqueios),
              totalAtletas: time.totalAtletas, totalComissao: time.totalComissao };
@@ -4209,7 +4231,7 @@ function gerarSumulaJogoCampeonato(payload) {
    } finally {
      lock.releaseLock();
    }
-   return listarEquipesParticipantes();
+   return listarEquipesParticipantes(dados.campeonatoId);
  }
 
  function listarTimesCampeonato() {

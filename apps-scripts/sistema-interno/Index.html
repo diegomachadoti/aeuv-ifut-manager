@@ -3630,9 +3630,6 @@
         tabelaEstado.formulario = '';
         tabelaEstado.resultado = null;
         if (modulo === 'sumula-campeonato') carregarSumulasCampeonato_(dados.recado || 'Alterações salvas.');
-        else if (['salvarJogoCampeonato', 'salvarResultadoJogoCampeonato', 'removerJogoCampeonato'].indexOf(metodo) >= 0) {
-          carregarTabelaCampeonato_(tabelaEstado.campeonatoId, '', dados.recado || 'Alterações salvas.');
-        }
         else montarTabelaCampeonato_(dados.recado || 'Alterações salvas.');
       }).withFailureHandler(function (erro) {
         if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
@@ -3801,8 +3798,10 @@
       return '<section class="tabela-painel"><div class="tabela-scroll" tabindex="0" role="region" aria-label="' + escapar(titulo) + ' — role horizontalmente para ver todas as colunas"><table class="tabela-classificacao"><caption>' + escapar(titulo) + '</caption>'
         + '<thead><tr>' + ['Pos.', 'Equipe', 'P', 'J', 'V', 'E', 'D', 'GP', 'GC', 'SG', '%', 'CA', 'CV'].map(function (coluna) { return '<th scope="col">' + coluna + '</th>'; }).join('') + '</tr></thead><tbody>'
         + (linhas.length ? linhas.map(function (linha) {
+          const equipe = tabelaEstado.dados.equipes.find(function (item) { return item.id === linha.equipeId; });
+          const escudo = equipe ? equipe.escudo : '';
           return '<tr><td>' + escapar(linha.posicao) + '</td><td>'
-            + (linha.escudo ? '<img class="tabela-escudo" src="' + escapar(linha.escudo) + '" alt="" loading="lazy">' : '') + escapar(linha.equipeNome) + '</td>'
+            + (escudo ? '<img class="tabela-escudo" src="' + escapar(escudo) + '" alt="" loading="lazy">' : '') + escapar(linha.equipeNome) + '</td>'
             + ['pontos', 'jogos', 'vitorias', 'empates', 'derrotas', 'golsPro', 'golsContra', 'saldoGols', 'aproveitamento', 'amarelos', 'vermelhos'].map(function (chave) {
               return '<td>' + escapar(linha[chave] == null ? '—' : linha[chave]) + (chave === 'aproveitamento' && linha[chave] != null ? '%' : '') + '</td>';
             }).join('') + '</tr>';
@@ -5015,6 +5014,7 @@
     }
 
     let timesCampeonato = { campeonatos: [], equipesGlobais: [], registros: [], podeEditar: false };
+    let participantesRequisicao = 0;
     let campeonatoParticipantesAtual = '';
     let elencoAtual = null;
     let dialogoDetalhesElencoAtual = null;
@@ -5044,25 +5044,28 @@
         return;
       }
       elencoAtual = null;
+      const requisicao = ++participantesRequisicao;
+      const campeonatoId = campeonatoParticipantesAtual;
       document.getElementById('areaTimesCampeonato').innerHTML = blocoCarregando('statusTimesCampeonato');
       google.script.run
         .withSuccessHandler(function (dados) {
-          if (moduloAtual !== 'times-campeonato' || elencoAtual) {
+          if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual) {
             return;
           }
 
           timesCampeonato = dados;
+          campeonatoParticipantesAtual = dados.campeonatoId || '';
           montarTelaTimesCampeonato();
         })
         .withFailureHandler(function (erro) {
-          if (moduloAtual !== 'times-campeonato' || elencoAtual) {
+          if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual) {
             return;
           }
 
           document.getElementById('statusTimesCampeonato').outerHTML =
             '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
         })
-        .listarEquipesParticipantes();
+        .listarEquipesParticipantes(campeonatoId);
     }
 
     function montarTelaTimesCampeonato(recado) {
@@ -5101,7 +5104,7 @@
         }).join('') + '</div>' + (!times.length ? '<div class="aviso">Nenhuma equipe vinculada neste campeonato.</div>' : '')
         + '<div id="timesFormArea"></div>';
       document.getElementById('epCampeonato').addEventListener('change', function () {
-        campeonatoParticipantesAtual = this.value; montarEquipesParticipantes();
+        campeonatoParticipantesAtual = this.value; carregarTimesCampeonato();
       });
       document.getElementById('epAtualizar').addEventListener('click', carregarTimesCampeonato);
       if (timesCampeonato.podeEditar) document.getElementById('epVincular').addEventListener('click', abrirVinculoEquipeParticipante);

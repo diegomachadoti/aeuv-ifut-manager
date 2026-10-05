@@ -13,6 +13,45 @@ Consulte [armazenamento e permissões](../../README.md#equipes-participantes-e-m
 classificação, manutenção dos grupos e fases, cadastro de campos e critérios
 de pontuação/desempate no contexto do campeonato selecionado.
 
+### Consultas e desempenho
+
+- **Equipes participantes** retorna os campeonatos permitidos para o seletor,
+  mas carrega cards e contagens somente do campeonato selecionado. Trocar o
+  campeonato faz uma nova consulta; voltar do elenco mantém a seleção.
+  A lista usada para vincular equipes contém somente ID e nome, sem escudos.
+- **Tabela e Classificação** envia o escudo uma única vez por equipe. As linhas
+  de classificação o consultam pelo ID da equipe. A lista de jogos não envia
+  snapshots detalhados de resultados; consulta e edição da súmula continuam
+  buscando esses dados pelos endpoints próprios, sem alterar o arquivo salvo.
+- Depois de uma alteração na tabela, a resposta contém a tela atualizada e a
+  nova revisão. O navegador a renderiza sem repetir a consulta completa.
+  O servidor reutiliza o contexto validado sob o mesmo lock, sem reler os
+  arquivos que acabou de gravar. Avisos e regras esportivas são preservados.
+- As alterações de elenco reutilizam as listas já lidas na reconciliação
+  histórica. A reconciliação global, os snapshots, a recuperação após falhas e
+  as verificações de participação continuam ativos.
+- Não há cache persistente de permissões, elencos ou tabelas nesta etapa.
+  Fotos do elenco continuam sendo enviadas na consulta e na resposta de
+  cadastro/remoção/transferência; bases com imagens grandes ainda podem ter
+  custo significativo nesses fluxos.
+
+**Publicação:** atualizar `WebApp.gs` e `Index.html` juntos no Apps Script e
+publicar uma nova versão da implantação. Os contratos de consulta mudaram;
+recarregar abas antigas após a publicação. Não há migração de arquivos no Drive.
+Comparar os tempos e os tamanhos dos callbacks no Network usando a mesma base e
+os mesmos fluxos antes/depois, incluindo troca de campeonato, edição de
+critérios, resultado, transferência e consulta de súmula.
+
+**Armazenamento:** o Drive continua como persistência nesta etapa. Ele é adequado
+para uma operação pequena com baixa concorrência, mas arquivos JSON completos
+e um lock global limitam o crescimento. Se as consultas continuarem lentas após
+reduzir payloads e leituras, medir separadamente execução, espera do lock e
+transporte antes de decidir a migração. Firestore ou PostgreSQL gerenciado
+(por exemplo, Supabase) são opções a avaliar; planos gratuitos têm limites e
+exigem projetar autenticação, acesso, índices, transações, backups e migração
+dos históricos. Imagens devem ser tratadas separadamente dos registros, mesmo
+ao trocar de banco.
+
 Criar uma área para operar campeonatos dentro do `sistema-interno`, seguindo o mesmo padrão visual e estrutural já usado no projeto.
 
 Este MVP deve permitir começar uma competição com o básico necessário para operação:
