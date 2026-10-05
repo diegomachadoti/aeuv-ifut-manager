@@ -211,3 +211,42 @@ test('analise HAR preserva tempos e separa erros sem exportar payloads privados'
   assert.throws(() => analisar({ log: { entries: [] } }, 'v1'), /Nenhum callback/);
   assert.throws(() => analisar({}, 'v1'), /HAR invalido/);
 });
+
+test('executor curl so consulta, sem credenciais no relatorio e com corpo codificado', () => {
+  const { executar } = require('./executar-consultas.cjs');
+  const local = {
+    callbackUrl: 'https://script.google.com/macros/s/mock/callback?token=PRIVATE-TOKEN',
+    referer: 'https://script.google.com/macros/s/mock/exec',
+    campeonatoId: 'PRIVATE-CHAMP', equipeId: 'PRIVATE-TEAM',
+    cookie: 'PRIVATE-COOKIE', etiqueta: 'v1', repeticoes: 2
+  };
+  const calls = [];
+  const output = (http, body = '{"private":"PRIVATE-RESPONSE"}') => body
+    + '\nAEUV_METRICS:' + JSON.stringify({
+      http_code: http, time_total: 1.5, time_starttransfer: 1, size_download: 42
+    });
+  const data = executar(local, entrada => { calls.push(entrada); return output(200); });
+  assert.equal(calls.length, 6);
+  assert.equal(data.resumo[0].medianaMs, 1500);
+  assert.equal(data.interrompido, false);
+  const body = JSON.parse(calls[1].split('\n').find(line => line.startsWith('data = ')).slice(7));
+  const envelope = JSON.parse(new URLSearchParams(body).get('request'));
+  assert.equal(envelope[0], 'listarElenco');
+  assert.deepEqual(JSON.parse(envelope[1]), ['PRIVATE-CHAMP', 'PRIVATE-TEAM']);
+  assert(calls.every(call => !call.includes('location =') && !call.includes('salvar')));
+  for (const sensitive of ['PRIVATE-TOKEN', 'PRIVATE-COOKIE', 'PRIVATE-RESPONSE', 'PRIVATE-CHAMP', 'PRIVATE-TEAM']) {
+    assert(!JSON.stringify(data).includes(sensitive));
+  }
+  let requests = 0;
+  const failed = executar(local, () => { requests++; return output(401); });
+  assert.equal(requests, 1);
+  assert.equal(failed.interrompido, true);
+  assert.equal(failed.registros[0].estado, 'erro-http');
+  assert.equal(failed.resumo[0].medianaMs, null);
+  assert.equal(executar(local, () => output(200, '<!DOCTYPE html><html>login</html>')).interrompido, true);
+  const broken = executar(local, () => { throw new Error('PRIVATE-COOKIE'); });
+  assert.equal(broken.registros[0].estado, 'erro-curl-ou-resposta');
+  assert(!JSON.stringify(broken).includes('PRIVATE-COOKIE'));
+  assert.throws(() => executar({ ...local, callbackUrl: 'https://example.org/callback?token=abc' }), /callback/);
+  assert.throws(() => executar({ ...local, cookie: 'cookie\r\nurl = "https://example.org"' }), /controle/);
+});

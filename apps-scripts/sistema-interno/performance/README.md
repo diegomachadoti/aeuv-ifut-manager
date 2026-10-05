@@ -9,6 +9,44 @@ navegador. Tokens, cookies, cURLs, HARs e respostas com CPF/fotos não devem ser
 versionados. As revisões de jogos também mudam após cada gravação: repetir um
 cURL antigo pode medir um erro ou duplicar/excluir dados, não o fluxo desejado.
 
+## Executor local com curl: somente consultas
+
+Requer Node.js e curl com suporte a `%{json}` (curl 7.70 ou posterior).
+Não instala dependências. Executa equipes, elenco e tabela sequencialmente,
+sem transferência, cadastro, exclusão ou edição de critérios.
+
+1. Copie `config.example.json` para `config.local.json` nesta pasta. O arquivo
+   local é ignorado pelo Git.
+2. No Network, copie um cURL **recente** de consulta. Preencha `callbackUrl`
+   com sua URL completa (incluindo o token), `referer`, IDs, etiqueta e
+   quantidade de repetições. Não cole os escapes de CMD (`^`, `^%^`): no JSON
+   use a URL normal, com `&` e `%3A`, por exemplo.
+3. Execute na raiz do projeto:
+
+```powershell
+node apps-scripts\sistema-interno\performance\executar-consultas.cjs apps-scripts\sistema-interno\performance\config.local.json > downloads\metricas-consultas.json
+```
+
+Crie a pasta de saída antes caso não exista. O programa interrompe na primeira
+falha de HTTP/rede ou página HTML, preservando as métricas das chamadas anteriores.
+Não segue redirecionamentos de login, não renova tokens automaticamente e
+não registra corpos ou mensagens do servidor. Token/cookies são passados ao
+curl via entrada padrão, não como argumentos de linha de comando.
+
+Se retornar 401/403, atualize o token com uma captura recente. Se persistir,
+a chamada pode depender de cookies da sessão: o campo `cookie` aceita o valor
+do cabeçalho Cookie, **somente se disponível na sua própria captura local**.
+Não envie cookies ou a configuração aqui; não tente contornar o login.
+Se mesmo a cópia completa não funcionar fora do navegador, use o benchmark
+autenticado ou o HAR. Estes callbacks internos não são uma API estável.
+
+O relatório exporta duração, primeiro byte, bytes transferidos, bytes da
+resposta decodificada, mediana e p95. HTTP 2xx sem HTML é
+`http-ok-nao-validado`: pode ainda ser erro de aplicação no envelope interno.
+Não confundir com sucesso funcional nem comparar uma resposta de erro com
+dados válidos. Envie somente `metricas-consultas.json` para avaliação.
+Para outra versão, troque a etiqueta; para outra sessão, atualize a configuração.
+
 ## Instalar e medir consultas
 
 1. Abra a implantação do sistema, faça login e aguarde o carregamento inicial.

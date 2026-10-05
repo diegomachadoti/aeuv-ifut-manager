@@ -1,0 +1,9 @@
+{
+  "callbackUrl": "https://script.google.com/macros/s/ID_DA_IMPLANTACAO/callback?token=TOKEN_ATUAL",
+  "referer": "https://script.google.com/macros/s/ID_DA_IMPLANTACAO/exec?origem=direto",
+  "campeonatoId": "ID_DO_CAMPEONATO",
+  "equipeId": "ID_DA_EQUIPE",
+  "etiqueta": "perf-atual",
+  "repeticoes": 3,
+  "cookie": ""
+}
