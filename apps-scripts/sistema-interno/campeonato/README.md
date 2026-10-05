@@ -41,6 +41,9 @@ recarregar abas antigas após a publicação. Não há migração de arquivos no
 Comparar os tempos e os tamanhos dos callbacks no Network usando a mesma base e
 os mesmos fluxos antes/depois, incluindo troca de campeonato, edição de
 critérios, resultado, transferência e consulta de súmula.
+O [benchmark reutilizável](../performance/README.md) executa consultas na sessão
+autenticada do navegador, acompanha callbacks das ações manuais e exporta
+somente métricas. Não publicar a ferramenta como parte do WebApp.
 
 **Armazenamento:** o Drive continua como persistência nesta etapa. Ele é adequado
 para uma operação pequena com baixa concorrência, mas arquivos JSON completos
