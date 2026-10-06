@@ -13,3 +13,4 @@ config.local.ini
 .logs/
 .logs/ifut.log
 assets/assinatura-*.png
+performance/config.local.json

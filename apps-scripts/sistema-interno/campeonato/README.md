@@ -30,23 +30,276 @@ de pontuação/desempate no contexto do campeonato selecionado.
 - As alterações de elenco reutilizam as listas já lidas na reconciliação
   histórica. A reconciliação global, os snapshots, a recuperação após falhas e
   as verificações de participação continuam ativos.
-- Não há cache persistente de permissões, elencos ou tabelas nesta etapa.
+- Não há cache persistente de permissões, elencos ou tabelas; só IDs de
+  arquivos ficam memorizados por usuário (veja **IDs de arquivos entre chamadas**).
   Fotos do elenco continuam sendo enviadas na consulta e na resposta de
   cadastro/remoção/transferência; bases com imagens grandes ainda podem ter
   custo significativo nesses fluxos.
 
+**Salvar atletas e comissão:** criação e edição reaproveitam apenas recursos
+da operação atual, lidos depois de adquirir o `ScriptLock`: sessão e
+autorização, registro de equipes, lista de equipes ativas, campeonatos,
+times do campeonato, bloqueio do elenco, listas de atletas/comissão do
+campeonato alvo e jogos usados na verificação de participação. Esses mesmos
+dados alimentam a validação (alvo, duplicatas, CPF entre categorias,
+participação), a preparação histórica e a resposta, antes de liberar o lock.
+A lista bruta gravada é descartada desse conjunto logo antes da gravação.
+A entrada `salvarCadastroElenco` mantém autenticação/perfil, formato dos IDs
+e campos baratos antes do lock, mas não consulta equipes, campeonatos ou times
+para validar o vínculo nessa etapa. O despacho leva apenas IDs solicitados,
+não um contexto autorizado. Depois da espera, sessão, acesso à equipe ativa,
+vínculo ao campeonato, bloqueio e propriedade do cadastro são validados com
+dados frescos antes de qualquer escrita, inclusive histórica. O time gravado
+é forçado pelo nome da equipe assim validada, nunca pelo payload. Remoção,
+transferência, consultas e endpoints legados mantêm seus fluxos; os endpoints
+legados de atletas/comissão continuam restritos a admin/diretoria e validam o
+time informado. Não há cache de dados global nem entre
+requisições (apenas IDs de arquivos, descritos abaixo). A resposta só reutiliza recursos vinculados ao contexto
+produzido pela revalidação sob lock; qualquer outro contexto relê bloqueio,
+destinos e participação. Fotos são mantidas.
+
+Nesse salvamento, a leitura de registro de equipes é estritamente de consulta
+durante as guardas: equipes ativas sem ID ainda são migradas globalmente pela
+preparação histórica, mas somente após a validação completa sob lock. Assim,
+uma solicitação recusada não grava sequer essa migração auxiliar. Havendo
+equipes a migrar, as leituras/escritas adicionais necessárias são preservadas.
+
+A preparação histórica continua percorrendo **todos os campeonatos**, inclusive
+inativos/encerrados, lendo atletas e comissão, migrando IDs legados e
+reconciliando snapshots. A leitura anterior à gravação não foi eliminada:
+ela preserva registros anteriores e recupera falhas de atualização do histórico.
+Falhas continuam propagadas com orientação de recarregar. CPF, duplicatas,
+vínculos, participação, transferências e snapshots esportivos não mudam.
+
+No fixture local com dois campeonatos (antes → depois da retirada do vínculo
+pré-lock), para criação e edição via `salvarCadastroElenco`: leituras de elencos
+4 → **4**; registro de equipes 2 → **1**; campeonatos 2 → **1**;
+bloqueios 1 → **1**; times do campeonato 4 → **2**; sessão
+2 → **2** (antes e depois do lock). Antes do lock há somente a autenticação,
+sem consultas de contexto ou de arquivos do Drive pelo fluxo de salvamento.
+A tabela de jogos é lida uma vez na
+criação de atleta (antes 2) e na edição com troca de CPF/equipe (antes 2,
+além de uma leitura extra do registro de equipes). A resposta não readquire
+o lock.
+São contagens de chamadas/leituras no fixture, não uma promessa de latência
+no Drive. A otimização busca eliminar o custo do vínculo pré-lock redundante
+(2.176 ms na amostra observada), não o custo da validação sob lock, das escritas
+ou da reconciliação global. Não é uma previsão de redução do tempo total:
+compare novas amostras equivalentes após publicar. Testes: `node --test apps-scripts\sistema-interno\performance\save.test.cjs
+apps-scripts\sistema-interno\performance\escudos.test.cjs
+apps-scripts\sistema-interno\performance\arquivos-id.test.cjs`, executado na raiz
+do repositório.
+
+**Logs de salvamento:** nas execuções do Apps Script, filtre as mensagens
+JSON por `"metrica":"cadastro_elenco"`. Tempos gerais contêm `metrica`,
+`fase` e `duracaoMs`; etapas de IO/memória também têm `categoria`
+(`historico`, `atletas`, `comissao`, `equipes`, `campeonatos` ou `bloqueios`).
+Contadores `tamanho_json` têm
+`metrica`, `fase`, `categoria`, `direcao` (`leitura`/`gravacao`),
+`origem` (`drive`/`legado`), `bytesJson` e `registros` para listas ou
+`participacoes`/`inscricoes` para histórico. Não registram nomes, arquivos,
+IDs, CPF, fotos, payloads ou conteúdo de erros.
+As fases são `espera_lock`, `validacao_leitura`, `preparacao_historico`,
+`gravacao_elenco`, `gravacao_historico` e `resposta`. A validação possui
+medidas antes e depois da espera do lock. Subfases aninhadas detalham o custo:
+`pre_lock_autorizacao`/`lock_autorizacao` (sessão e perfil),
+`lock_vinculo` (equipes, campeonato e times; `salvarCadastroElenco` não emite
+mais `pre_lock_vinculo`),
+`lock_bloqueio`, `lock_elenco_leitura`, `lock_cpf_categorias`,
+`lock_participacao` (leitura/validação dos jogos e vínculo por CPF),
+`resposta_destinos` e `resposta_participacao` (quando há atletas; se os jogos
+já foram lidos na validação sob o mesmo lock, não há nova leitura). A preparação pode conter uma
+gravação histórica de reconciliação, medida também como `gravacao_historico`;
+esses intervalos são aninhados e não devem ser somados para obter o total.
+A resposta inclui a montagem no servidor, não transporte nem renderização.
+Operações interrompidas não produzem todas as fases. Compare a mesma base,
+perfil e ação depois da publicação; não repita gravações reais por benchmark.
+
+O arquivo Drive localizado na leitura do elenco/histórico é reutilizado nas
+escritas da **mesma operação**, somente após validar o contexto sob ScriptLock.
+Ausência também é retida: a primeira escrita cria o arquivo e as seguintes
+reutilizam o handle retornado. Invalidar a lista bruta não invalida o handle;
+o `finally` do salvamento descarta os handles antes de liberar o lock, inclusive
+nas falhas. Handles não atravessam requisições, nem há índice ou mudança de
+armazenamento; helpers sem contexto validado continuam localizando normalmente.
+Limpeza das propriedades legadas continua somente após persistência bem-sucedida.
+No fixture com quatro elencos, migração de ID e duas escritas históricas,
+buscas por nome/`hasNext` caem **9 → 5** (uma por arquivo); leituras e escritas
+permanecem iguais. Com histórico já reconciliado e sem migração de ID, o
+salvamento comum cai **7 → 5**. Cada escrita reaproveitada elimina uma busca e seu iterador.
+Na amostra real, as buscas/iterações redundantes do elenco e histórico somavam
+**524 ms** (84+133+101+206 ms): ganho candidato modesto de **~0,5 s**, não garantido.
+Os custos principais de leitura/escrita e reconciliação global permanecem.
+
+**IDs de arquivos entre chamadas:** registro de equipes, campeonatos,
+bloqueios, histórico e listas de atletas/comissão de cada campeonato guardam
+apenas o **ID** do arquivo em `CacheService.getUserCache()` (por usuário, pois o
+Web App executa como `USER_ACCESSING`), por até 6 horas. A chave é um hash
+SHA-256 de versão do esquema + pasta raiz + nome lógico exato; não há conteúdo,
+listas, ausência, sessão, perfil ou autorização no cache. Toda chamada reabre o
+arquivo pelo ID e confere nome exato, lixeira e pasta raiz antes de usá-lo; o
+conteúdo é sempre lido do Drive, e as validações sob lock são as mesmas. Tabelas
+e demais arquivos continuam somente com a busca por nome.
+
+- **Sem cache negativo:** arquivo ausente (inclusive com dados legados em
+  PropertiesService) sempre volta a ser procurado pelo nome; o ID só é guardado
+  quando a busca encontra o arquivo ou depois que a criação tem sucesso.
+- **Renomeado, movido ou na lixeira:** o ID é descartado e a mesma chamada busca
+  pelo nome (o arquivo foi aberto com permissão, então a divergência é segura).
+  Substituição externa (antigo na lixeira + novo homônimo) passa a usar o novo.
+- **Erro ao abrir pelo ID** (removido definitivamente ou sem permissão — o Apps
+  Script não distingue os dois com segurança): o ID é descartado e a operação
+  **falha** com mensagem pedindo nova tentativa, sem busca por nome nem gravação
+  nessa chamada. A próxima chamada busca pelo nome com as permissões atuais,
+  exatamente como antes do cache. Falhas na verificação de metadados seguem a
+  mesma regra.
+- **Homônimos:** guarda-se o primeiro arquivo devolvido pela busca, como antes;
+  enquanto ele continuar válido, as chamadas seguintes ficam nele, mesmo que a
+  ordem do Drive (não garantida) mude. Os demais nunca são lidos ou gravados.
+- **Remoção pelo sistema:** excluir um campeonato invalida os IDs das listas no
+  cache do usuário que excluiu. Caches de outros usuários não são alcançáveis,
+  mas a verificação detecta o arquivo na lixeira na chamada seguinte.
+- **Indisponibilidade/expulsão do CacheService:** o cache pode descartar entradas
+  a qualquer momento; falhas ou ausência do serviço equivalem a "não memorizado"
+  e usam a busca por nome original, nunca a "arquivo ausente". Valores
+  adulterados que não parecem um ID são descartados. `ARQUIVO_ID_CACHE_ATIVO =
+  false` em `WebApp.gs` desliga o recurso por completo.
+- **Sem promessa de velocidade:** com cache quente, cada arquivo troca
+  `getFolderById` + busca por nome + `hasNext`/`next` (4 chamadas) por
+  `getFileById` + `getName` + `isTrashed` + `getParents`/`hasNext`/`getId`
+  (6 chamadas de método). Num salvamento com 8 arquivos, no fixture, são 32 → 48
+  chamadas de método e 8 → **0** buscas por nome; leituras de conteúdo e
+  escritas não mudam. A primeira chamada acrescenta um `getId` e um `put` por
+  arquivo encontrado. O ganho depende de a busca por nome no Drive ser mais lenta
+  que a abertura direta mais metadados — só a medição real responde. Compare
+  `drive_localizar` + `drive_iterar` antes com `drive_id_cache` + `drive_id_abrir`
+  depois, na mesma base/ação; se não houver ganho, desligue a constante.
+
+Para avaliar o cache de IDs, os pais
+`lock_autorizacao`, `lock_vinculo` (2.336 ms na amostra) e `lock_bloqueio`
+(1.037 ms) têm medidas mais finas: `lock_autorizacao_identificar`,
+`lock_autorizacao_perfil`, `lock_equipes_registro`, `lock_equipes_ativas`,
+`lock_equipe_acesso`, `lock_campeonatos`, `lock_campeonato_alvo`, `lock_times`,
+`lock_vinculo_validacao`, `lock_bloqueio_leitura` e `lock_bloqueio_consulta`.
+Registro de equipes, lista de campeonatos e bloqueios também usam as etapas
+Drive/parse existentes com suas categorias, sem consultas extras. São medidas
+aninhadas: não some filhos aos pais. `lock_times` mede PropertiesService e
+normalização; a consulta de bloqueio mede somente a busca em memória.
+
+**Separar memória e Drive:** `drive_localizar` mede pasta e busca por nome;
+`drive_iterar` mede o iterador; `drive_ler` mede blob e decodificação UTF-8
+(`next()` fica em `drive_iterar`, inclusive no histórico); `drive_setContent` mede a escrita existente;
+`drive_criar` inclui a preparação do blob e criação. `legado_ler` mede
+PropertiesService quando não há arquivo; não representa Drive.
+`json_parse`/`json_serializar` medem parse e serialização para persistência;
+`json_comparacao_antes`/`json_comparacao_depois` medem serializações usadas
+para detectar mudanças históricas. `reconciliacao_memoria` mede cada campeonato
+sem a consulta de times, incluindo comparação JSON dos snapshots, buscas,
+UUIDs e atualizações em memória. `historico_marcar_memoria` e
+`historico_limpar_memoria` medem preparação/remoção dos marcadores temporários.
+`tamanho_utf8` mede separadamente o custo da contagem de bytes, sem nova
+leitura ou serialização do documento.
+Escritas com handle reutilizado não emitem `drive_localizar`/`drive_iterar`;
+ausência dessas etapas não representa tempo zero de persistência.
+Com ID memorizado, `drive_id_cache` mede a leitura do CacheService e
+`drive_id_abrir` mede `getFileById` e a verificação de nome/lixeira/pasta; a
+busca por nome só aparece quando o ID falta ou diverge. Linhas `drive_id` têm
+apenas `metrica`, `fase`, `categoria` e `resultado` (`acerto`, `ausente`,
+`divergente`, `invalido`, `falha` ou `cache_indisponivel`), sem IDs ou nomes.
+
+`bytesJson` é UTF-8 do texto bruto já lido (inclusive espaços) ou do JSON
+compacto efetivamente escrito, não caracteres, transferência comprimida,
+quota do Drive ou tamanho binário das imagens. Inclui base64/fotos e snapshots,
+sem detalhar imagens. Tamanhos/contagens saem após leitura validada ou escrita
+bem-sucedida; arquivo ausente sem legado não produz contador de tamanho.
+São medidas por acesso, sem identificador: agrupe por categoria e direção,
+não some leitura e escrita como tamanho único da base. A varredura global
+obrigatória continua medindo também elencos dos outros campeonatos e migração
+de IDs. Helpers sem recursos da operação não emitem essas novas etapas.
+
+As etapas são **aninhadas/inclusivas**, não parcelas aditivas dos pais:
+`preparacao_historico` contém leitura, reconciliação e eventual gravação;
+`gravacao_historico` pós-elenco contém reconciliação e escrita. Não some os
+pais com seus filhos nem com `validacao_leitura`/`resposta`. Tempos de etapas
+são emitidos também em falhas, sem status/mensagem; um log de tempo não
+comprova sucesso. A instrumentação não altera armazenamento ou regras.
+
 **Escudos:** novos uploads de equipe e campeonato são redimensionados no
 navegador para até 256 pixels, preservando proporção e transparência, usando
 PNG ou WebP (o menor resultado), com limite de 100 KB para a imagem otimizada.
-No **Banco de Dados de Equipes**, admin/diretoria pode confirmar **Otimizar
-escudos existentes** para reduzir as imagens antigas. Essa ação substitui
-somente os escudos menores que o original e valida assinaturas sob o lock,
-recusando a operação inteira se houver conflito. Antes da substituição,
-salva uma cópia do registro original em `AEUV - Backup Escudos - <id>.json`
-na pasta raiz do Drive. Não renomeia equipes nem altera vínculos. Pode haver
-pequena perda de qualidade; a cópia original permite restauração administrativa.
+Na tela **Administração**, somente admin pode otimizar os escudos antigos.
+Não renomeia equipes nem altera vínculos. Pode haver pequena perda de
+qualidade; os backups por lote permitem restauração administrativa.
 Publicar os arquivos não otimiza automaticamente os registros antigos:
 executar a ação uma vez e repetir o benchmark com a mesma base.
+
+**Fotos de atletas e comissão:** ao selecionar uma nova foto no cadastro ou
+na edição, o navegador reduz o maior lado para até 512 pixels, sem ampliar
+imagens pequenas nem recortar. Usa o menor resultado entre PNG e WebP com
+qualidade 0,85, limitado a 200 KB de Data URL (incluindo base64). A tela indica
+a preparação antes de enviar a imagem no mesmo RPC de cadastro, sem chamada
+extra ao servidor. Se a imagem não puder ser processada, o envio é impedido e
+o formulário exibe o erro. Editar sem selecionar outra foto mantém a original.
+Fotos antigas e snapshots históricos não são convertidos automaticamente.
+O processamento é local e depende do aparelho e das dimensões do arquivo;
+o ganho nas consultas ocorre à medida que fotos menores são cadastradas.
+Comprovantes e anexos documentais não passam por essa conversão.
+
+**Administração:** módulo exclusivo do perfil admin, inclusive nos endpoints
+de manutenção do servidor. Centraliza ferramentas administrativas sem
+alterar as permissões do cadastro normal de equipes e campeonatos.
+Os botões são **Escudos de equipes**, **Escudos de campeonatos**, **Fotos de
+atletas**, **Fotos da comissão** e **Otimizar toda a base**. Para fotos,
+selecione um campeonato ou **Todos os campeonatos**; a ação de toda a base
+ignora esse seletor e inclui todas as categorias.
+
+**Otimizar imagens da base:** o administrador pode confirmar a ação para
+processar escudos de equipes, escudos dos
+campeonatos e fotos dos cadastros de atletas e comissão de cada campeonato,
+inclusive campeonatos inativos. O navegador usa os mesmos limites dos uploads.
+Mantenha a tela aberta e evite alterações simultâneas. A navegação interna
+fica bloqueada durante a execução (fechar/recarregar a aba ainda interrompe).
+A preparação ocorre
+fora do lock; a gravação confere a assinatura do documento completo sob lock
+e recusa o lote se houver mudança concorrente.
+
+Cada lote tem até cinco imagens, altera um único documento e cria antes um
+`AEUV - Backup Imagens - <id>.json` na raiz do Drive, contendo `arquivoOriginal`,
+`fonte` e `registros` completos antes da alteração. Esses backups contêm
+dados pessoais: mantenha o acesso restrito. Para restauração administrativa,
+use o conteúdo de `registros` no arquivo indicado por `arquivoOriginal`;
+o backup é um envelope, não uma cópia direta para substituir o arquivo.
+Falha de backup impede a gravação. Não há transação entre documentos:
+se houver erro/interrupção, lotes já gravados permanecem salvos. Recarregue
+antes de repetir se a resposta de uma gravação falhar.
+
+A ação substitui apenas imagens menores que as originais. Não altera
+identificadores, vínculos, revisões ou campos cadastrais, nem executa
+reconciliação esportiva. Súmulas, snapshots de resultados e histórico de
+inscrições ficam intactos; portanto, imagens nessas cópias podem continuar
+grandes. A reconciliação habitual do sistema continua funcionando.
+Não é uma função de compressão executável no editor do Apps Script: o
+redimensionamento requer o Canvas do navegador. Nenhum serviço externo de
+processamento é utilizado. Publicar não inicia a operação automaticamente.
+
+**Logo principal do sistema:** em Administração, execute **Otimizar logo
+principal do sistema** após publicar. O navegador prepara uma versão de até
+512 pixels e 100 KB de Data URL. O servidor valida a assinatura sob lock,
+cria um arquivo separado `AEUV - Logo Sistema - <id>` no Drive e guarda seu
+ID na propriedade `AEUV_LOGO_SISTEMA_OTIMIZADO_ID`. O arquivo original
+`CONFIG.logoFileId` e as versões anteriores não são modificados ou excluídos;
+a geração de documentos no servidor continua usando o original.
+As próximas aberturas leem somente a versão leve. Até executar a ação,
+a abertura continua usando o original. Para voltar ao original, remova essa
+propriedade nas configurações do projeto; para atualizar a versão leve após
+trocar o original, execute a ação novamente.
+
+O `Index.html` inclui a imagem apenas uma vez, na configuração JavaScript;
+o cabeçalho reutiliza esse valor em vez de embutir uma segunda cópia no HTML.
+O logo leve também é usado pelos relatórios montados no navegador e pela tela
+de acesso negado. Não há cache de usuários ou permissões. O ganho real na
+abertura deve ser medido após executar a ação e recarregar; essa alteração
+não elimina necessariamente a espera pela infraestrutura do Apps Script.
 
 **Publicação:** atualizar `WebApp.gs` e `Index.html` juntos no Apps Script e
 publicar uma nova versão da implantação. Os contratos de consulta mudaram;

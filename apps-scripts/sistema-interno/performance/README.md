@@ -162,3 +162,72 @@ node --test apps-scripts\sistema-interno\performance\benchmark.test.cjs
 
 Esses testes verificam a coleta, os limites, a separação entre HTTP e sucesso
 RPC e a ausência de dados privados no relatório. Não medem a implantação real.
+
+Para o salvamento de elencos e a otimização de imagens:
+
+```powershell
+node --test apps-scripts\sistema-interno\performance\save.test.cjs apps-scripts\sistema-interno\performance\escudos.test.cjs apps-scripts\sistema-interno\performance\arquivos-id.test.cjs
+```
+
+Fixtures locais, sem acesso ou escrita na rede. Os testes de salvamento cobrem
+criação/edição de atleta e comissão, ausência de leituras de vínculo/Drive
+antes do lock, revalidação de autorização e propriedade depois da espera,
+time forçado pelo contexto fresco, CPF/participação, resposta autorizada,
+reconciliação histórica global e recuperação de falhas. Também verificam que
+os endpoints legados mantêm seu time solicitado e suas permissões.
+Contagens são chamadas no fixture, não uma garantia de tempo no Drive.
+
+## Logs do servidor: tamanho e memória versus Drive
+
+No editor Apps Script → **Execuções**, abra a execução do salvamento e filtre
+as linhas JSON por `"metrica":"cadastro_elenco"`. Não é necessário instalar
+o monitor do navegador para estes logs. Consulte a seção **Logs de salvamento**
+em `apps-scripts\sistema-interno\campeonato\README.md` para todos os campos
+e fases. Compare uma criação/edição equivalente por execução, confirmando o
+sucesso na tela, sem repetir gravações reais automaticamente.
+
+Separe `drive_localizar`, `drive_iterar`, `drive_ler`, `drive_setContent` e
+`drive_criar` das etapas `json_*`, `reconciliacao_memoria` e
+`historico_*_memoria`. `tamanho_json` informa bytes UTF-8 brutos/gravados e
+contagens por categoria/direção; `tamanho_utf8` explicita a sobrecarga de medir.
+Não some etapas com os pais inclusivos `preparacao_historico`,
+`gravacao_historico`, `gravacao_elenco`, `validacao_leitura` e `resposta`.
+O custo de normalizações e chamadas não instrumentadas continua nos pais;
+as novas etapas não pretendem decompor todo o tempo do servidor.
+Ausência de arquivo, validação inválida ou falha de escrita pode não produzir
+contador de tamanho; tempos de falha não comprovam sucesso.
+
+Nenhuma leitura Drive extra é feita para medir: usa os textos já lidos e o
+JSON já serializado para gravar. Bytes incluem imagens base64 e snapshots,
+não seu tamanho binário; não há conteúdo/identificador nos logs. Os testes
+também verificam Unicode, contadores, privacidade, IO equivalente, migração
+global, silêncio fora da operação e emissão de etapas nas falhas.
+
+O refinamento de handles reutiliza o File encontrado na leitura somente nas
+escritas da mesma operação sob ScriptLock/contexto autorizado. Captura também
+ausência/legado, guarda o handle após criação e o descarta ao terminar, mesmo
+em erro; não introduz cache/índice entre requisições. No fixture com migração
+global e duas escritas históricas, buscas/iterações caem de 9 para 5, sem mudar
+leituras, snapshots ou escritas; no salvamento comum com histórico reconciliado,
+caem de 7 para 5. Na amostra real, as duas buscas/iterações
+redundantes custaram 524 ms: redução candidata **~0,5 s**, não promessa de tempo.
+
+`lock_vinculo` e `lock_bloqueio` agora detalham registro de equipes, equipes
+ativas, autorização da equipe, lista/alvo de campeonato, times e validação
+de vínculo, além de leitura/consulta em memória do bloqueio. A autorização
+separa identificação e perfil. Registro/campeonatos/bloqueios usam categorias
+próprias nas etapas Drive/parse; nenhuma consulta extra é feita para medir.
+Veja os nomes exatos e a hierarquia no README de campeonato. Filhos continuam
+inclusos nos pais e não devem ser somados. Quando a escrita reutiliza o handle,
+ela não emite etapas de localização/iteração. O custo dominante de `setContent`,
+das quatro leituras e da reconciliação global continua presente.
+
+O cache de IDs de arquivos (somente IDs, por usuário, sempre reverificados) é
+descrito em **IDs de arquivos entre chamadas** no README de campeonato. No
+fixture, um salvamento quente com 8 arquivos troca 8 buscas por nome por 8
+aberturas diretas, mas as chamadas de método sobem de 32 para 48 por causa da
+verificação de nome/lixeira/pasta. Não é promessa de ganho: compare, na mesma
+base e ação, `drive_localizar` + `drive_iterar` (antes) com `drive_id_cache` +
+`drive_id_abrir` (depois) e desligue `ARQUIVO_ID_CACHE_ATIVO` se não houver
+redução. O CacheService pode expulsar entradas a qualquer momento; nesse caso
+a chamada volta à busca por nome sem erro.

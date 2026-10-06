@@ -277,6 +277,14 @@ const MODULOS = [
     perfis: ['admin', 'diretoria']
   },
   {
+    id: 'administracao',
+    nome: 'Administração',
+    icone: '⚙️',
+    tipo: 'administracao',
+    descricao: 'Ferramentas administrativas e manutenção da base de dados.',
+    perfis: ['admin']
+  },
+  {
     id: 'equipes',
     nome: 'Banco de Dados de Equipes',
     icone: '📟',
@@ -472,14 +480,54 @@ function include_(nome) {
  * @return {string}
  */
 function obterLogo_() {
+   const otimizadoId = PropertiesService.getScriptProperties().getProperty(LOGO_SISTEMA_CHAVE);
+   if (otimizadoId) return lerImagemLogo_(otimizadoId);
    try {
-     const arquivo = DriveApp.getFileById(CONFIG.logoFileId);
-     const blob = arquivo.getBlob();
-
-     return 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes());
+     return lerImagemLogo_(CONFIG.logoFileId);
    } catch (e) {
      return '';
    }
+}
+
+const LOGO_SISTEMA_CHAVE = 'AEUV_LOGO_SISTEMA_OTIMIZADO_ID';
+
+function lerImagemLogo_(id) {
+  const blob = DriveApp.getFileById(id).getBlob();
+  return 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes());
+}
+
+function assinaturaLogoSistema_(imagem) {
+  return assinaturaEscudoEquipe_(CONFIG.logoFileId + '\n'
+    + (PropertiesService.getScriptProperties().getProperty(LOGO_SISTEMA_CHAVE) || '') + '\n' + imagem);
+}
+
+function lerLogoParaOtimizacao() {
+  exigirAdministracao_();
+  const imagem = lerImagemLogo_(CONFIG.logoFileId);
+  return { imagem: imagem, assinatura: assinaturaLogoSistema_(imagem) };
+}
+
+function salvarLogoOtimizado(payload) {
+  exigirAdministracao_();
+  const imagem = validarEscudoEquipe_(payload && payload.imagem);
+  if (!imagem || imagem.length > 100 * 1024) throw new Error('O logo otimizado deve ter ate 100 KB.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const original = lerImagemLogo_(CONFIG.logoFileId);
+    if (!payload || payload.assinatura !== assinaturaLogoSistema_(original)) {
+      throw new Error('O logo foi alterado durante a preparacao. Recarregue antes de otimizar.');
+    }
+    if (imagem.length > original.length) throw new Error('O logo otimizado nao pode ser maior que o original.');
+    const partes = /^data:(image\/(?:png|jpeg|webp));base64,(.+)$/.exec(imagem);
+    const arquivo = pastaRaizProjeto_().createFile(Utilities.newBlob(
+      Utilities.base64Decode(partes[2]), partes[1], 'AEUV - Logo Sistema - ' + Utilities.getUuid()));
+    // Arquivos imutaveis: original e versoes anteriores continuam disponiveis no Drive.
+    PropertiesService.getScriptProperties().setProperty(LOGO_SISTEMA_CHAVE, arquivo.getId());
+    return { bytesAntes: original.length, bytesDepois: imagem.length };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /******************************************************
@@ -992,12 +1040,15 @@ function exigirEdicaoEquipes_() {
   return sessao;
 }
 
-function lerRegistroEquipes_() {
-  const arquivos = pastaRaizProjeto_().getFilesByName(CONFIG.equipes.arquivoRegistro);
-  if (!arquivos.hasNext()) return [];
+function lerRegistroEquipes_(recursos) {
+  const arquivo = resolverArquivoCadastro_(CONFIG.equipes.arquivoRegistro, recursos, 'equipes').arquivo;
+  if (!arquivo) return [];
   let lista;
   try {
-    lista = JSON.parse(arquivos.next().getBlob().getDataAsString('UTF-8'));
+    const bruto = medirEtapaCadastro_(recursos, 'equipes', 'drive_ler', function () {
+      return arquivo.getBlob().getDataAsString('UTF-8');
+    });
+    lista = medirEtapaCadastro_(recursos, 'equipes', 'json_parse', function () { return JSON.parse(bruto); });
   } catch (e) {
     throw new Error('O cadastro de equipes no Drive está inválido. Restaure o arquivo antes de continuar.');
   }
@@ -1016,22 +1067,21 @@ function lerRegistroEquipes_() {
 }
 
 function gravarRegistroEquipes_(lista) {
-  const raiz = pastaRaizProjeto_();
-  const arquivos = raiz.getFilesByName(CONFIG.equipes.arquivoRegistro);
+  const localizado = resolverArquivoCadastro_(CONFIG.equipes.arquivoRegistro);
   const json = JSON.stringify(lista);
-  if (arquivos.hasNext()) arquivos.next().setContent(json);
-  else raiz.createFile(Utilities.newBlob(json, 'application/json', CONFIG.equipes.arquivoRegistro));
+  if (localizado.arquivo) localizado.arquivo.setContent(json);
+  else criarArquivoCadastro_(localizado, CONFIG.equipes.arquivoRegistro, json);
 }
 
 // A leitura só semeia os nomes ainda sem ID; não muda equipes.json nem vínculos legados.
-function equipesRegistro_(lockJaAdquirido) {
-  let registros = lerRegistroEquipes_();
+function equipesRegistro_(lockJaAdquirido, somenteLeitura, recursos) {
+  let registros = lerRegistroEquipes_(recursos);
   const faltam = function () {
     return obterEquipes_().filter(function (nome) {
       return !registros.some(function (item) { return chaveEquipe_(item.nome) === chaveEquipe_(nome); });
     });
   };
-  if (!faltam().length) return registros;
+  if (somenteLeitura || !faltam().length) return registros;
   const lock = lockJaAdquirido ? null : LockService.getScriptLock();
   if (lock) lock.waitLock(30000);
   try {
@@ -1061,8 +1111,16 @@ function assinaturaEscudoEquipe_(escudo) {
     Utilities.DigestAlgorithm.SHA_256, String(escudo || '')));
 }
 
+function exigirAdministracao_() {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !sessao.usuario || sessao.usuario.perfil !== 'admin') {
+    throw new Error('Somente o administrador pode executar as ferramentas de manutencao.');
+  }
+  return sessao;
+}
+
 function otimizarEscudosEquipes(payload) {
-  exigirEdicaoEquipes_();
+  exigirAdministracao_();
   const entradas = payload && payload.escudos;
   if (!Array.isArray(entradas) || !entradas.length) throw new Error('Informe os escudos a otimizar.');
   const lock = LockService.getScriptLock();
@@ -1094,37 +1152,225 @@ function otimizarEscudosEquipes(payload) {
   } finally { lock.releaseLock(); }
 }
 
-function sessaoElenco_(campeonatoId, equipeId, lockJaAdquirido) {
-  const sessao = identificarUsuario_();
-  if (!sessao.autorizado || ['admin', 'diretoria', 'associado'].indexOf(sessao.usuario.perfil) === -1) {
-    throw new Error('Você não tem permissão para acessar este elenco.');
-  }
-  const registroEquipes = equipesRegistro_(lockJaAdquirido);
-  const ativas = obterEquipes_().map(chaveEquipe_);
-  const equipe = registroEquipes.find(function (item) {
-    return item.id === String(equipeId || '').trim()
-      && ativas.indexOf(chaveEquipe_(item.nome)) !== -1;
+function listarFontesOtimizacaoImagens() {
+  exigirAdministracao_();
+  const fontes = [
+    { tipo: 'equipes', rotulo: 'Escudos das equipes' },
+    { tipo: 'campeonatos', rotulo: 'Escudos dos campeonatos' }
+  ];
+  lerListaCadastroDrive_(CAMPEONATOS_ARQUIVO, CAMPEONATOS_CHAVE).forEach(function (campeonato) {
+    if (!campeonato || !campeonato.id || !campeonato.nome) {
+      throw new Error('Cadastro de campeonatos invalido. Corrija antes de otimizar.');
+    }
+    ['atletas', 'comissao'].forEach(function (tipo) {
+      fontes.push({ tipo: tipo, campeonatoId: campeonato.id,
+        campeonatoNome: campeonato.nome,
+        rotulo: campeonato.nome + ' - ' + (tipo === 'atletas' ? 'Atletas' : 'Comissao') });
+    });
   });
-  if (!equipe || (sessao.usuario.perfil === 'associado'
-      && chaveEquipe_(sessao.usuario.equipe) !== chaveEquipe_(equipe.nome))) {
-    throw new Error('Esta equipe não pertence ao seu acesso.');
+  return fontes;
+}
+
+function fonteOtimizacaoImagens_(fonte) {
+  if (!fonte || ['equipes', 'campeonatos', 'atletas', 'comissao'].indexOf(fonte.tipo) === -1) {
+    throw new Error('Fonte de imagens invalida.');
   }
-  const campeonato = campeonatos_().find(function (item) { return item.id === String(campeonatoId || '').trim(); });
-  if (!campeonato || !timesCampeonato_(campeonato.id).some(function (nome) {
-    return chaveEquipe_(nome) === chaveEquipe_(equipe.nome);
-  })) {
-    throw new Error('Esta equipe não está vinculada a este campeonato.');
+  if (fonte.tipo === 'equipes') {
+    return { lista: lerRegistroEquipes_(), campo: 'escudo', limite: 100 * 1024,
+      nome: CONFIG.equipes.arquivoRegistro, gravar: gravarRegistroEquipes_ };
   }
-  return { sessao: sessao, equipe: equipe, campeonato: campeonato, registroEquipes: registroEquipes };
+  if (fonte.tipo === 'campeonatos') {
+    return { lista: lerListaCadastroDrive_(CAMPEONATOS_ARQUIVO, CAMPEONATOS_CHAVE),
+      campo: 'escudo', limite: 100 * 1024, nome: CAMPEONATOS_ARQUIVO, gravar: gravarCampeonatos_ };
+  }
+  const id = String(fonte.campeonatoId || '');
+  const campeonatos = lerListaCadastroDrive_(CAMPEONATOS_ARQUIVO, CAMPEONATOS_CHAVE);
+  if (!campeonatos.some(function (item) { return item && item.id === id; })) {
+    throw new Error('Campeonato nao encontrado. Recarregue antes de otimizar.');
+  }
+  const nome = arquivoCadastroPessoasCampeonato_(id, fonte.tipo === 'atletas' ? 'Atletas' : 'Comissao Tecnica');
+  const chave = fonte.tipo === 'atletas' ? chaveAtletasCampeonato_(id) : chaveComissaoTecnicaCampeonato_(id);
+  return { lista: lerListaCadastroDrive_(nome, chave), campo: 'foto', limite: 200 * 1024,
+    nome: nome, gravar: function (lista) { gravarListaCadastroDrive_(nome, chave, lista); } };
+}
+
+function listarLoteOtimizacaoImagens(payload) {
+  exigirAdministracao_();
+  const inicio = payload && payload.inicio;
+  if (!Number.isInteger(inicio) || inicio < 0) throw new Error('Posicao de lote invalida.');
+  const fonte = fonteOtimizacaoImagens_(payload.fonte);
+  if (inicio > fonte.lista.length) throw new Error('O cadastro mudou. Reinicie a otimizacao.');
+  const imagens = [];
+  let proximo = inicio, tamanho = 0;
+  // Limita quantidade e payload; uma imagem legada grande ainda precisa caber sozinha.
+  while (proximo < fonte.lista.length && imagens.length < 5) {
+    const item = fonte.lista[proximo];
+    if (!item || typeof item !== 'object') throw new Error('Registro invalido em ' + fonte.nome + '.');
+    const imagem = String(item[fonte.campo] || '');
+    if (imagem) {
+      if (imagens.length && tamanho + imagem.length > 4 * 1024 * 1024) break;
+      imagens.push({ indice: proximo, imagem: imagem });
+      tamanho += imagem.length;
+    }
+    proximo++;
+  }
+  return { imagens: imagens, proximo: proximo, fim: proximo === fonte.lista.length,
+    assinatura: assinaturaEscudoEquipe_(JSON.stringify(fonte.lista)) };
+}
+
+function salvarLoteOtimizacaoImagens(payload) {
+  exigirAdministracao_();
+  const entradas = payload && payload.imagens;
+  if (!Array.isArray(entradas) || !entradas.length || entradas.length > 5) {
+    throw new Error('Informe de uma a cinco imagens por lote.');
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const fonte = fonteOtimizacaoImagens_(payload.fonte);
+    if (payload.assinatura !== assinaturaEscudoEquipe_(JSON.stringify(fonte.lista))) {
+      throw new Error('O cadastro mudou durante a preparacao. Reinicie a otimizacao; lotes anteriores permanecem salvos.');
+    }
+    const indices = new Set();
+    const alteracoes = entradas.map(function (entrada) {
+      if (!entrada || !Number.isInteger(entrada.indice) || entrada.indice < 0
+          || entrada.indice >= fonte.lista.length || indices.has(entrada.indice)) {
+        throw new Error('Indices de imagens invalidos ou repetidos.');
+      }
+      indices.add(entrada.indice);
+      const item = fonte.lista[entrada.indice];
+      const imagem = entrada.imagem;
+      if (!item || typeof imagem !== 'string'
+          || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(imagem)
+          || imagem.length > fonte.limite || imagem.length >= String(item[fonte.campo] || '').length) {
+        throw new Error('A imagem otimizada deve ser valida, menor que a original e respeitar o limite de tamanho.');
+      }
+      return { item: item, imagem: imagem };
+    });
+    const backup = pastaRaizProjeto_().createFile(Utilities.newBlob(JSON.stringify({
+      arquivoOriginal: fonte.nome, fonte: payload.fonte, registros: fonte.lista
+    }), 'application/json', 'AEUV - Backup Imagens - ' + Utilities.getUuid() + '.json'));
+    alteracoes.forEach(function (alteracao) { alteracao.item[fonte.campo] = alteracao.imagem; });
+    // Cada lote altera um unico documento. Historico e snapshots esportivos nao sao regravados.
+    fonte.gravar(fonte.lista);
+    return { total: alteracoes.length, backupId: backup.getId() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function exigirSessaoElenco_(recursos) {
+  const atual = medirRecursoCadastro_(recursos, 'lock_autorizacao_identificar', identificarUsuario_);
+  medirRecursoCadastro_(recursos, 'lock_autorizacao_perfil', function () {
+    if (!atual.autorizado || ['admin', 'diretoria', 'associado'].indexOf(atual.usuario.perfil) === -1) {
+      throw new Error('Você não tem permissão para acessar este elenco.');
+    }
+  });
+  return atual;
+}
+
+// recursos: objeto local de uma única operação, preenchido apenas sob o ScriptLock.
+function sessaoElenco_(campeonatoId, equipeId, lockJaAdquirido, recursos) {
+  const prefixo = lockJaAdquirido ? 'lock_' : 'pre_lock_';
+  const medir = function (fase, operacao) {
+    return recursos ? medirFaseCadastro_(prefixo + fase, operacao) : operacao();
+  };
+  const sessao = medir('autorizacao', function () {
+    return exigirSessaoElenco_(lockJaAdquirido ? recursos : null);
+  });
+  const vinculo = medir('vinculo', function () {
+    // Salvamentos com recursos não migram o registro antes de validar todo o alvo.
+    const registroEquipes = medir('equipes_registro', function () {
+      return equipesRegistro_(lockJaAdquirido, Boolean(recursos && lockJaAdquirido), recursos);
+    });
+    const ativas = medir('equipes_ativas', function () { return obterEquipes_().map(chaveEquipe_); });
+    const equipe = medir('equipe_acesso', function () {
+      const encontrada = registroEquipes.find(function (item) {
+        return item.id === String(equipeId || '').trim()
+          && ativas.indexOf(chaveEquipe_(item.nome)) !== -1;
+      });
+      if (!encontrada || (sessao.usuario.perfil === 'associado'
+          && chaveEquipe_(sessao.usuario.equipe) !== chaveEquipe_(encontrada.nome))) {
+        throw new Error('Esta equipe não pertence ao seu acesso.');
+      }
+      return encontrada;
+    });
+    const campeonatos = medir('campeonatos', function () { return campeonatos_(recursos); });
+    const campeonato = medir('campeonato_alvo', function () {
+      return campeonatos.find(function (item) { return item.id === String(campeonatoId || '').trim(); });
+    });
+    const times = medir('times', function () { return campeonato ? timesCampeonato_(campeonato.id) : []; });
+    medir('vinculo_validacao', function () {
+      if (!campeonato || !times.some(function (nome) {
+        return chaveEquipe_(nome) === chaveEquipe_(equipe.nome);
+      })) {
+        throw new Error('Esta equipe não está vinculada a este campeonato.');
+      }
+    });
+    return { registroEquipes: registroEquipes, ativas: ativas, equipe: equipe,
+      campeonatos: campeonatos, campeonato: campeonato, times: times };
+  });
+  if (recursos && lockJaAdquirido) {
+    recursos.equipes = vinculo.registroEquipes;
+    recursos.equipesAtivas = vinculo.ativas;
+    recursos.campeonatos = vinculo.campeonatos;
+    recursos.times = Object.create(null);
+    recursos.times[vinculo.campeonato.id] = vinculo.times;
+  }
+  return { sessao: sessao, equipe: vinculo.equipe, campeonato: vinculo.campeonato,
+    registroEquipes: vinculo.registroEquipes };
+}
+
+// Recursos lidos sob o lock da própria operação; sem recursos, lê normalmente.
+function timesCampeonatoOperacao_(campeonatoId, recursos) {
+  if (!recursos) return timesCampeonato_(campeonatoId);
+  const times = recursos.times || (recursos.times = Object.create(null));
+  if (!times[campeonatoId]) times[campeonatoId] = timesCampeonato_(campeonatoId);
+  return times[campeonatoId].slice();
+}
+
+function lerElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
+  const ler = function () {
+    return lerListaCadastroDrive_(
+      arquivoCadastroPessoasCampeonato_(campeonatoId, tipo === 'atletas' ? 'Atletas' : 'Comissao Tecnica'),
+      tipo === 'atletas' ? chaveAtletasCampeonato_(campeonatoId) : chaveComissaoTecnicaCampeonato_(campeonatoId),
+      recursos, tipo
+    );
+  };
+  if (!recursos) return ler();
+  const brutos = recursos.elencosBrutos || (recursos.elencosBrutos = Object.create(null));
+  const chave = JSON.stringify([campeonatoId, tipo]);
+  if (!brutos[chave]) brutos[chave] = ler();
+  return brutos[chave];
+}
+
+function descartarElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
+  if (recursos && recursos.elencosBrutos) delete recursos.elencosBrutos[JSON.stringify([campeonatoId, tipo])];
+}
+
+function jogosParticipacaoOperacao_(campeonatoId, recursos) {
+  if (!recursos) return jogosParticipacaoCampeonato_(campeonatoId);
+  const jogos = recursos.jogos || (recursos.jogos = Object.create(null));
+  if (!jogos[campeonatoId]) jogos[campeonatoId] = jogosParticipacaoCampeonato_(campeonatoId);
+  return jogos[campeonatoId];
+}
+
+function medirRecursoCadastro_(recursos, fase, operacao) {
+  return recursos ? medirFaseCadastro_(fase, operacao) : operacao();
 }
 
 const ELENCO_BLOQUEIOS_ARQUIVO = 'AEUV - Bloqueios de Elenco.json';
 
-function lerBloqueiosElenco_() {
-  const arquivos = pastaRaizProjeto_().getFilesByName(ELENCO_BLOQUEIOS_ARQUIVO);
-  if (!arquivos.hasNext()) return [];
+function lerBloqueiosElenco_(recursos) {
+  const arquivo = resolverArquivoCadastro_(ELENCO_BLOQUEIOS_ARQUIVO, recursos, 'bloqueios').arquivo;
+  if (!arquivo) return [];
   let registros;
-  try { registros = JSON.parse(arquivos.next().getBlob().getDataAsString('UTF-8')); }
+  try {
+    const bruto = medirEtapaCadastro_(recursos, 'bloqueios', 'drive_ler', function () {
+      return arquivo.getBlob().getDataAsString('UTF-8');
+    });
+    registros = medirEtapaCadastro_(recursos, 'bloqueios', 'json_parse', function () { return JSON.parse(bruto); });
+  }
   catch (e) { throw new Error('O registro de bloqueios de elenco no Drive está inválido.'); }
   if (!Array.isArray(registros) || registros.some(function (item) {
     return !item || typeof item.campeonatoId !== 'string' || !item.campeonatoId
@@ -1146,11 +1392,29 @@ function elencoBloqueado_(campeonatoId, equipeId, registros) {
 }
 
 // Executado dentro do ScriptLock de cada escrita, com sessão e vínculo reavaliados.
-function exigirEdicaoElenco_(contexto) {
-  const atual = sessaoElenco_(contexto.campeonato.id, contexto.equipe.id, true);
-  const bloqueado = elencoBloqueado_(atual.campeonato.id, atual.equipe.id);
+function exigirEdicaoElenco_(contexto, recursos) {
+  return exigirEdicaoElencoPorIds_(contexto.campeonato.id, contexto.equipe.id, recursos);
+}
+
+function exigirEdicaoElencoPorIds_(campeonatoId, equipeId, recursos) {
+  const atual = sessaoElenco_(campeonatoId, equipeId, true, recursos);
+  let bloqueios;
+  const bloqueado = medirRecursoCadastro_(recursos, 'lock_bloqueio', function () {
+    bloqueios = medirRecursoCadastro_(recursos, 'lock_bloqueio_leitura', function () {
+      return lerBloqueiosElenco_(recursos);
+    });
+    return medirRecursoCadastro_(recursos, 'lock_bloqueio_consulta', function () {
+      return elencoBloqueado_(atual.campeonato.id, atual.equipe.id, bloqueios);
+    });
+  });
   if (atual.sessao.usuario.perfil === 'associado' && bloqueado) {
     throw new Error('Elenco bloqueado. Somente leitura para o associado.');
+  }
+  if (recursos) {
+    recursos.bloqueios = bloqueios;
+    // Marca o único contexto autorizado a reutilizar estes recursos na resposta.
+    recursos.contexto = atual;
+    recursos.arquivosDrive = { contexto: atual, arquivos: Object.create(null) };
   }
   return atual;
 }
@@ -1174,24 +1438,30 @@ function definirBloqueioElenco(payload) {
       registros.push(registro);
     }
     registro.bloqueado = dados.bloqueado;
-    const raiz = pastaRaizProjeto_();
-    const arquivos = raiz.getFilesByName(ELENCO_BLOQUEIOS_ARQUIVO);
+    const localizado = resolverArquivoCadastro_(ELENCO_BLOQUEIOS_ARQUIVO);
     const json = JSON.stringify(registros);
-    if (arquivos.hasNext()) arquivos.next().setContent(json);
-    else raiz.createFile(Utilities.newBlob(json, 'application/json', ELENCO_BLOQUEIOS_ARQUIVO));
+    if (localizado.arquivo) localizado.arquivo.setContent(json);
+    else criarArquivoCadastro_(localizado, ELENCO_BLOQUEIOS_ARQUIVO, json);
     return listarElenco(contexto.campeonato.id, contexto.equipe.id, true);
   } finally { lock.releaseLock(); }
 }
 
-function validarAlvoElenco_(contexto, tipo, id) {
-  if (!contexto) return;
-  const atual = exigirEdicaoElenco_(contexto);
+function validarAlvoElenco_(contexto, tipo, id, recursos, solicitacaoElenco) {
+  if (!contexto && !solicitacaoElenco) return;
+  // A solicitação contém só IDs não confiáveis, nunca sessão, equipe ou campeonato validados.
+  const atual = solicitacaoElenco
+    ? exigirEdicaoElencoPorIds_(solicitacaoElenco.campeonatoId, solicitacaoElenco.equipeId, recursos)
+    : exigirEdicaoElenco_(contexto, recursos);
   if (!id) return atual;
-  const lista = tipo === 'comissao' ? comissaoTecnicaCampeonato_(atual.campeonato.id) : atletasCampeonato_(atual.campeonato.id);
+  const lista = medirRecursoCadastro_(recursos, 'lock_elenco_leitura', function () {
+    return tipo === 'comissao' ? comissaoTecnicaCampeonato_(atual.campeonato.id, false, recursos)
+      : atletasCampeonato_(atual.campeonato.id, false, recursos);
+  });
   const alvo = lista.find(function (item) { return item.id === id; });
   if (!alvo || chaveEquipe_(alvo.timeVinculado) !== chaveEquipe_(atual.equipe.nome)) {
     throw new Error('Este cadastro não pertence ao elenco selecionado.');
   }
+  if (recursos) recursos.listaValidacao = lista;
   return atual;
 }
 
@@ -1252,10 +1522,11 @@ function anotarVinculoCompeticaoAtletas_(campeonato, atletas, jogos) {
 
 // Novo vínculo (inscrição, importação, troca de CPF/equipe): um CPF que já jogou no campeonato
 // só pode voltar à(s) equipe(s) pela(s) qual(is) participou.
-function bloquearVinculoAtletaParticipante_(campeonato, jogos, cpf, timeVinculado, contexto) {
+function bloquearVinculoAtletaParticipante_(campeonato, jogos, cpf, timeVinculado, contexto, registroEquipes) {
   const jogadas = equipesParticipacaoAtleta_(jogos, { id: '', cpf: cpf });
   if (!jogadas.length) return;
-  const registro = lerRegistroEquipes_();
+  // registroEquipes, quando informado, foi relido sob o lock desta mesma operação.
+  const registro = registroEquipes || lerRegistroEquipes_();
   const destino = registro.find(function (item) { return chaveEquipe_(item.nome) === chaveEquipe_(timeVinculado); });
   if (destino && jogadas.indexOf(destino.id) !== -1) return;
   const nomes = jogadas.map(function (id) {
@@ -1273,9 +1544,9 @@ function bloquearVinculoAtletaParticipante_(campeonato, jogos, cpf, timeVinculad
   throw new Error(mensagem);
 }
 
-function equipesDestinoTransferencia_(contexto, lockJaAdquirido) {
-  const nomes = timesCampeonato_(contexto.campeonato.id);
-  const ativas = obterEquipes_().map(chaveEquipe_);
+function equipesDestinoTransferencia_(contexto, lockJaAdquirido, recursos) {
+  const nomes = timesCampeonatoOperacao_(contexto.campeonato.id, recursos);
+  const ativas = recursos && recursos.equipesAtivas ? recursos.equipesAtivas : obterEquipes_().map(chaveEquipe_);
   return (contexto.registroEquipes || equipesRegistro_(lockJaAdquirido)).filter(function (equipe) {
     return equipe.id !== contexto.equipe.id && ativas.indexOf(chaveEquipe_(equipe.nome)) !== -1
       && nomes.some(function (nome) { return chaveEquipe_(nome) === chaveEquipe_(equipe.nome); });
@@ -1287,16 +1558,32 @@ function listarElenco(campeonatoId, equipeId, lockJaAdquirido) {
   if (lock) lock.waitLock(30000);
   try {
     const contexto = sessaoElenco_(campeonatoId, equipeId, true);
-    const bloqueado = elencoBloqueado_(contexto.campeonato.id, contexto.equipe.id);
+    return montarRespostaElenco_(contexto);
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+// Contexto revalidado e listas persistidas na mesma operação, ainda sob ScriptLock.
+// Recursos só são reaproveitados quando pertencem ao contexto produzido por exigirEdicaoElenco_.
+function montarRespostaElenco_(contexto, listas, recursos) {
+    const operacao = recursos && recursos.contexto === contexto ? recursos : null;
+    const bloqueado = elencoBloqueado_(contexto.campeonato.id, contexto.equipe.id,
+      operacao ? operacao.bloqueios : null);
     const podeBloquear = EQUIPES_PERFIS_EDICAO.indexOf(contexto.sessao.usuario.perfil) !== -1;
     const podeEditar = podeBloquear || !bloqueado;
     const proprio = function (item) { return chaveEquipe_(item.timeVinculado) === chaveEquipe_(contexto.equipe.nome); };
-    const atletas = atletasCampeonato_(contexto.campeonato.id, true).filter(proprio);
+    const atletas = (listas ? listas.atletas : atletasCampeonato_(contexto.campeonato.id, true))
+      .filter(proprio).map(function (item) { return Object.assign({}, item); });
     const podeTransferir = EQUIPES_PERFIS_EDICAO.indexOf(contexto.sessao.usuario.perfil) !== -1;
-    const destinos = podeTransferir ? equipesDestinoTransferencia_(contexto, true) : [];
+    const destinos = podeTransferir ? medirRecursoCadastro_(operacao, 'resposta_destinos', function () {
+      return equipesDestinoTransferencia_(contexto, true, operacao);
+    }) : [];
     // A trava de remoção vale para todos os perfis, independentemente de haver destinos de transferência.
     anotarVinculoCompeticaoAtletas_(contexto.campeonato, atletas,
-      atletas.length ? jogosParticipacaoCampeonato_(contexto.campeonato.id) : []);
+      atletas.length ? medirRecursoCadastro_(operacao, 'resposta_participacao', function () {
+        return jogosParticipacaoOperacao_(contexto.campeonato.id, operacao);
+      }) : []);
     if (podeTransferir) {
       atletas.forEach(function (atleta) {
         atleta.motivoTransferencia = atleta.participouCompeticao
@@ -1322,15 +1609,12 @@ function listarElenco(campeonatoId, equipeId, lockJaAdquirido) {
       registros: [{
         campeonatoId: contexto.campeonato.id, campeonatoNome: contexto.campeonato.nome,
         atletas: atletas,
-        comissao: comissaoTecnicaCampeonato_(contexto.campeonato.id).filter(proprio)
+        comissao: (listas ? listas.comissao : comissaoTecnicaCampeonato_(contexto.campeonato.id)).filter(proprio)
       }],
       linkInscricao: contexto.sessao.usuario.perfil === 'associado' ? ''
         : ScriptApp.getService().getUrl() + '?origem=direto&campeonatoId='
           + encodeURIComponent(contexto.campeonato.id) + '&equipeId=' + encodeURIComponent(contexto.equipe.id)
     };
-  } finally {
-    if (lock) lock.releaseLock();
-  }
 }
 
 function transferirAtletaElenco(payload) {
@@ -1382,26 +1666,34 @@ function transferirAtletaElenco(payload) {
 
 function salvarCadastroElenco(payload) {
   const dados = Object.assign({}, payload || {});
-  const contexto = sessaoElenco_(dados.campeonatoId, dados.equipeId);
+  medirFaseCadastro_('validacao_leitura', function () {
+    medirFaseCadastro_('pre_lock_autorizacao', exigirSessaoElenco_);
+  });
   if (dados.tipo !== 'atletas' && dados.tipo !== 'comissao') throw new Error('Escolha um tipo de cadastro válido.');
+  if (typeof dados.campeonatoId !== 'string' || !dados.campeonatoId.trim()
+      || typeof dados.equipeId !== 'string' || !dados.equipeId.trim()
+      || (dados.registroId != null && typeof dados.registroId !== 'string')) {
+    throw new Error('Informe campeonato, equipe e cadastro válidos.');
+  }
+  const solicitacaoElenco = { campeonatoId: dados.campeonatoId.trim(), equipeId: dados.equipeId.trim() };
   const id = String(dados.registroId || '').trim();
-  dados.campeonatoId = contexto.campeonato.id;
-  dados.timeVinculado = contexto.equipe.nome;
+  dados.campeonatoId = solicitacaoElenco.campeonatoId;
+  delete dados.timeVinculado;
   delete dados.id;
   delete dados.atletaId;
   delete dados.membroId;
   if (dados.tipo === 'comissao') {
     if (id) {
       dados.membroId = id;
-      return atualizarMembroComissaoInterno_(dados, contexto);
+      return atualizarMembroComissaoInterno_(dados, null, solicitacaoElenco);
     }
-    return salvarMembroComissaoInterno_(dados, contexto);
+    return salvarMembroComissaoInterno_(dados, null, solicitacaoElenco);
   }
   if (id) {
     dados.atletaId = id;
-    return atualizarAtletaCampeonatoInterno_(dados, contexto);
+    return atualizarAtletaCampeonatoInterno_(dados, null, solicitacaoElenco);
   }
-  return salvarAtletaCampeonatoInterno_(dados, contexto);
+  return salvarAtletaCampeonatoInterno_(dados, null, solicitacaoElenco);
 }
 
 function removerCadastroElenco(payload) {
@@ -1418,15 +1710,235 @@ function respostaCadastro_(contexto) {
   return contexto ? listarElenco(contexto.campeonato.id, contexto.equipe.id) : listarCadastroPessoasCampeonato();
 }
 
+function registrarTempoCadastro_(fase, inicio) {
+  console.log(JSON.stringify({ metrica: 'cadastro_elenco', fase: fase, duracaoMs: Date.now() - inicio }));
+}
+
+function medirFaseCadastro_(fase, operacao) {
+  const inicio = Date.now();
+  try { return operacao(); }
+  finally { registrarTempoCadastro_(fase, inicio); }
+}
+
+function medirEtapaCadastro_(recursos, categoria, fase, operacao) {
+  if (!recursos) return operacao();
+  const inicio = Date.now();
+  try { return operacao(); }
+  finally {
+    console.log(JSON.stringify({ metrica: 'cadastro_elenco', fase: fase,
+      categoria: categoria, duracaoMs: Date.now() - inicio }));
+  }
+}
+
+// Handles e ausência pertencem ao contexto validado desta operação sob ScriptLock.
+// Separado das listas brutas: invalidar uma lista não descarta seu arquivo.
+function arquivosDriveOperacao_(recursos) {
+  if (!recursos) return null;
+  if (!recursos.contexto || !recursos.arquivosDrive
+      || recursos.arquivosDrive.contexto !== recursos.contexto) {
+    delete recursos.arquivosDrive;
+    return null;
+  }
+  if (!LockService.getScriptLock().hasLock()) {
+    delete recursos.arquivosDrive;
+    return null;
+  }
+  return recursos.arquivosDrive.arquivos;
+}
+
+function localizarArquivoCadastro_(nomeArquivo, recursos, categoria) {
+  const operacao = arquivosDriveOperacao_(recursos);
+  if (operacao && Object.prototype.hasOwnProperty.call(operacao, nomeArquivo)) {
+    return operacao[nomeArquivo];
+  }
+  const localizado = resolverArquivoCadastro_(nomeArquivo, recursos, categoria);
+  if (operacao) operacao[nomeArquivo] = localizado;
+  return localizado;
+}
+
+// Cache por usuário (USER_ACCESSING) apenas com IDs de arquivos: nunca conteúdo, ausência ou
+// autorização. Todo uso reabre o arquivo e confere nome, lixeira e pasta raiz; o conteúdo é
+// sempre lido do Drive. Sem cache, o comportamento é a busca por nome original.
+// Desligar (false) volta integralmente à busca por nome, sem consultar o CacheService.
+const ARQUIVO_ID_CACHE_ATIVO = true;
+const ARQUIVO_ID_CACHE_VERSAO = 1;
+const ARQUIVO_ID_CACHE_TTL_SEGUNDOS = 21600;
+
+function arquivoIdCacheavel_(nomeArquivo) {
+  return nomeArquivo === CONFIG.equipes.arquivoRegistro || nomeArquivo === CAMPEONATOS_ARQUIVO
+    || nomeArquivo === ELENCO_BLOQUEIOS_ARQUIVO || nomeArquivo === ELENCO_HISTORICO_ARQUIVO
+    || /^AEUV - Campeonato - [^ ]+ - (Atletas|Comissao Tecnica)\.json$/.test(nomeArquivo);
+}
+
+function cacheIdsArquivos_() {
+  // Fixtures locais sem o serviço seguem a busca por nome; em produção usa a API real.
+  if (!ARQUIVO_ID_CACHE_ATIVO || typeof CacheService === 'undefined') return null;
+  try { return CacheService.getUserCache() || null; }
+  catch (e) { return null; }
+}
+
+function chaveCacheIdArquivo_(nomeArquivo) {
+  return 'aeuv.arquivoId.v' + ARQUIVO_ID_CACHE_VERSAO + '.' + Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
+      JSON.stringify([ARQUIVO_ID_CACHE_VERSAO, CONFIG.pastaRaizId, nomeArquivo]), Utilities.Charset.UTF_8));
+}
+
+function registrarCacheIdArquivo_(recursos, categoria, resultado) {
+  if (!recursos) return;
+  console.log(JSON.stringify({ metrica: 'cadastro_elenco', fase: 'drive_id',
+    categoria: categoria, resultado: resultado }));
+}
+
+// Falhas do CacheService equivalem a "não memorizado"; nunca a arquivo ausente.
+function removerCacheIdArquivo_(cache, chave) {
+  if (!cache || !chave) return;
+  try { cache.remove(chave); } catch (e) { /* o ID será reverificado no próximo uso */ }
+}
+
+function memorizarIdArquivo_(localizado) {
+  if (!localizado.cache || !localizado.arquivo) return;
+  const id = localizado.arquivo.getId();
+  try { localizado.cache.put(localizado.chaveCache, id, ARQUIVO_ID_CACHE_TTL_SEGUNDOS); }
+  catch (e) { /* sem ID memorizado, a próxima chamada busca pelo nome */ }
+}
+
+function invalidarIdArquivoCadastro_(nomeArquivo) {
+  const cache = arquivoIdCacheavel_(nomeArquivo) ? cacheIdsArquivos_() : null;
+  if (cache) removerCacheIdArquivo_(cache, chaveCacheIdArquivo_(nomeArquivo));
+}
+
+function lerCacheIdArquivo_(cache, chave, recursos, categoria) {
+  let id;
+  try {
+    id = medirEtapaCadastro_(recursos, categoria, 'drive_id_cache', function () { return cache.get(chave); });
+  } catch (e) {
+    registrarCacheIdArquivo_(recursos, categoria, 'cache_indisponivel');
+    return null;
+  }
+  if (id === null || id === undefined) {
+    registrarCacheIdArquivo_(recursos, categoria, 'ausente');
+    return null;
+  }
+  if (!/^[A-Za-z0-9_-]{10,128}$/.test(String(id))) {
+    removerCacheIdArquivo_(cache, chave);
+    registrarCacheIdArquivo_(recursos, categoria, 'invalido');
+    return null;
+  }
+  return String(id);
+}
+
+function arquivoNaPastaRaiz_(arquivo) {
+  const pais = arquivo.getParents();
+  while (pais.hasNext()) {
+    if (pais.next().getId() === CONFIG.pastaRaizId) return true;
+  }
+  return false;
+}
+
+// Apps Script não distingue com segurança "removido" de "sem permissão" em getFileById:
+// nenhum erro vira busca por nome na mesma chamada. O ID é descartado e o erro é exibido;
+// a próxima chamada busca pelo nome com as permissões atuais do usuário.
+function abrirArquivoPorIdCache_(id, nomeArquivo, cache, chave, recursos, categoria) {
+  let arquivo;
+  let verificado = false;
+  try {
+    arquivo = medirEtapaCadastro_(recursos, categoria, 'drive_id_abrir', function () {
+      const candidato = DriveApp.getFileById(id);
+      return candidato.getName() === nomeArquivo && !candidato.isTrashed()
+        && arquivoNaPastaRaiz_(candidato) ? candidato : null;
+    });
+    verificado = true;
+  } catch (e) {
+    registrarCacheIdArquivo_(recursos, categoria, 'falha');
+    const erro = new Error('Não foi possível abrir um arquivo de cadastro no Drive pela referência memorizada '
+      + '(removido definitivamente ou sem permissão). A referência foi descartada; tente novamente. '
+      + 'Se persistir, verifique o seu acesso à pasta do projeto.');
+    erro.cause = e;
+    throw erro;
+  } finally {
+    if (!verificado) removerCacheIdArquivo_(cache, chave);
+  }
+  // Renomeado, movido ou na lixeira: o arquivo foi aberto com permissão, então a busca por nome é segura.
+  if (!arquivo) removerCacheIdArquivo_(cache, chave);
+  registrarCacheIdArquivo_(recursos, categoria, arquivo ? 'acerto' : 'divergente');
+  return arquivo;
+}
+
+// Primeiro arquivo com o nome exato na pasta raiz, como antes; o ID dele é reutilizado entre
+// chamadas enquanto continuar válido. Ausência nunca é memorizada.
+function resolverArquivoCadastro_(nomeArquivo, recursos, categoria) {
+  const cache = arquivoIdCacheavel_(nomeArquivo) ? cacheIdsArquivos_() : null;
+  const chave = cache ? chaveCacheIdArquivo_(nomeArquivo) : '';
+  if (cache) {
+    const id = lerCacheIdArquivo_(cache, chave, recursos, categoria);
+    const porId = id ? abrirArquivoPorIdCache_(id, nomeArquivo, cache, chave, recursos, categoria) : null;
+    if (porId) return { raiz: null, arquivo: porId, cache: cache, chaveCache: chave };
+  }
+  let raiz;
+  const arquivos = medirEtapaCadastro_(recursos, categoria, 'drive_localizar', function () {
+    raiz = pastaRaizProjeto_();
+    return raiz.getFilesByName(nomeArquivo);
+  });
+  const arquivo = medirEtapaCadastro_(recursos, categoria, 'drive_iterar', function () {
+    return arquivos.hasNext() ? arquivos.next() : null;
+  });
+  const localizado = { raiz: raiz, arquivo: arquivo, cache: cache, chaveCache: chave };
+  memorizarIdArquivo_(localizado);
+  return localizado;
+}
+
+function criarArquivoCadastro_(localizado, nomeArquivo, conteudo) {
+  const raiz = localizado.raiz || pastaRaizProjeto_();
+  localizado.raiz = raiz;
+  localizado.arquivo = raiz.createFile(Utilities.newBlob(conteudo, 'application/json', nomeArquivo));
+  memorizarIdArquivo_(localizado);
+  return localizado.arquivo;
+}
+
+// UTF-8, inclusive pares de surrogates e substituição de surrogates isolados.
+function bytesUtf8Cadastro_(texto) {
+  let bytes = 0;
+  for (let i = 0; i < texto.length; i++) {
+    const codigo = texto.charCodeAt(i);
+    if (codigo < 0x80) bytes++;
+    else if (codigo < 0x800) bytes += 2;
+    else if (codigo >= 0xD800 && codigo <= 0xDBFF && i + 1 < texto.length
+        && texto.charCodeAt(i + 1) >= 0xDC00 && texto.charCodeAt(i + 1) <= 0xDFFF) {
+      bytes += 4;
+      i++;
+    } else bytes += 3;
+  }
+  return bytes;
+}
+
+function registrarTamanhoCadastro_(recursos, categoria, direcao, origem, json, dados) {
+  if (!recursos) return;
+  const bytes = medirEtapaCadastro_(recursos, categoria, 'tamanho_utf8', function () {
+    return bytesUtf8Cadastro_(json);
+  });
+  const metrica = { metrica: 'cadastro_elenco', fase: 'tamanho_json', categoria: categoria,
+    direcao: direcao, origem: origem, bytesJson: bytes };
+  if (Array.isArray(dados)) metrica.registros = dados.length;
+  else {
+    metrica.participacoes = dados.participacoes.length;
+    metrica.inscricoes = dados.inscricoes.length;
+  }
+  console.log(JSON.stringify(metrica));
+}
+
 // Permanent Drive history: enrollment snapshots, never a PropertiesService payload.
 const ELENCO_HISTORICO_ARQUIVO = 'AEUV - Historico de Inscricoes.json';
 
-function lerHistoricoElenco_() {
-  const arquivos = pastaRaizProjeto_().getFilesByName(ELENCO_HISTORICO_ARQUIVO);
-  if (!arquivos.hasNext()) return { versao: 1, sequencia: 0, participacoes: [], inscricoes: [] };
+function lerHistoricoElenco_(recursos) {
+  const localizado = localizarArquivoCadastro_(ELENCO_HISTORICO_ARQUIVO, recursos, 'historico');
+  if (!localizado.arquivo) return { versao: 1, sequencia: 0, participacoes: [], inscricoes: [] };
   let dados;
+  let bruto;
   try {
-    dados = JSON.parse(arquivos.next().getBlob().getDataAsString('UTF-8'));
+    bruto = medirEtapaCadastro_(recursos, 'historico', 'drive_ler', function () {
+      return localizado.arquivo.getBlob().getDataAsString('UTF-8');
+    });
+    dados = medirEtapaCadastro_(recursos, 'historico', 'json_parse', function () { return JSON.parse(bruto); });
   } catch (e) {
     throw new Error('Histórico de inscrições inválido no Drive. Restaure o arquivo antes de continuar.');
   }
@@ -1434,18 +1946,22 @@ function lerHistoricoElenco_() {
       || !Array.isArray(dados.inscricoes) || !Number.isFinite(dados.sequencia)) {
     throw new Error('Histórico de inscrições inválido no Drive.');
   }
+  registrarTamanhoCadastro_(recursos, 'historico', 'leitura', 'drive', bruto, dados);
   return dados;
 }
 
-function gravarHistoricoElenco_(dados) {
-  const raiz = pastaRaizProjeto_();
-  const arquivos = raiz.getFilesByName(ELENCO_HISTORICO_ARQUIVO);
-  const json = JSON.stringify(dados);
-  if (arquivos.hasNext()) arquivos.next().setContent(json);
-  else raiz.createFile(Utilities.newBlob(json, 'application/json', ELENCO_HISTORICO_ARQUIVO));
+function gravarHistoricoElenco_(dados, recursos) {
+  const localizado = localizarArquivoCadastro_(ELENCO_HISTORICO_ARQUIVO, recursos, 'historico');
+  const json = medirEtapaCadastro_(recursos, 'historico', 'json_serializar', function () { return JSON.stringify(dados); });
+  const arquivo = localizado.arquivo;
+  if (arquivo) medirEtapaCadastro_(recursos, 'historico', 'drive_setContent', function () { arquivo.setContent(json); });
+  else medirEtapaCadastro_(recursos, 'historico', 'drive_criar', function () {
+    criarArquivoCadastro_(localizado, ELENCO_HISTORICO_ARQUIVO, json);
+  });
+  registrarTamanhoCadastro_(recursos, 'historico', 'gravacao', 'drive', json, dados);
 }
 
-function garantirIdsHistoricoElenco_(campeonatoId, tipo, lista, persistirIds) {
+function garantirIdsHistoricoElenco_(campeonatoId, tipo, lista, persistirIds, recursos) {
   if (!persistirIds) return;
   let mudou = false;
   lista.forEach(function (pessoa) {
@@ -1459,108 +1975,150 @@ function garantirIdsHistoricoElenco_(campeonatoId, tipo, lista, persistirIds) {
   if (mudou) gravarListaCadastroDrive_(
     arquivoCadastroPessoasCampeonato_(campeonatoId, tipo === 'atletas' ? 'Atletas' : 'Comissao Tecnica'),
     tipo === 'atletas' ? chaveAtletasCampeonato_(campeonatoId) : chaveComissaoTecnicaCampeonato_(campeonatoId),
-    lista
+    lista, recursos, tipo
   );
 }
 
-function reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas) {
+function reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas, recursos) {
   const agora = new Date().toISOString();
-  const nomes = timesCampeonato_(campeonato.id).concat(
+  const nomes = timesCampeonatoOperacao_(campeonato.id, recursos).concat(
     listas.atletas.concat(listas.comissao).map(function (pessoa) { return pessoa.timeVinculado; })
   ).filter(function (nome) { return !!nome; });
-  const identidades = Object.create(null);
-  nomes.forEach(function (nome) {
-    const chave = chaveEquipe_(nome);
-    if (identidades[chave]) return;
-    const equipe = equipes.find(function (item) { return chaveEquipe_(item.nome) === chave; });
-    const anterior = historico.participacoes.find(function (item) {
-      return chaveEquipe_(item.equipeNome) === chave;
-    });
-    const equipeId = equipe ? equipe.id : (anterior ? anterior.equipeId : Utilities.getUuid());
-    identidades[chave] = equipeId;
-    let participacao = historico.participacoes.find(function (item) {
-      return item.equipeId === equipeId && item.campeonatoId === campeonato.id;
-    });
-    if (!participacao) {
-      participacao = {
-        id: Utilities.getUuid(), equipeId: equipeId, campeonatoId: campeonato.id,
-        equipeNomeOriginal: nome, campeonatoNomeOriginal: campeonato.nome, inscritoEm: agora
-      };
-      historico.participacoes.push(participacao);
-    }
-    participacao.equipeNome = nome;
-    participacao.campeonatoNome = campeonato.nome;
-  });
-  historico.inscricoes.forEach(function (item) {
-    if (item.campeonatoId === campeonato.id) item.presente = false;
-  });
-  ['atletas', 'comissao'].forEach(function (tipo) {
-    listas[tipo].forEach(function (pessoa) {
-      const equipeId = identidades[chaveEquipe_(pessoa.timeVinculado)];
-      if (!equipeId) return;
-      const cpf = somenteDigitos_(pessoa.cpf || '');
-      let inscricao = historico.inscricoes.find(function (item) {
-        return item.campeonatoId === campeonato.id && item.equipeId === equipeId
-          && item.tipo === tipo && item.registroId === pessoa.id && item.cpf === cpf;
+  return medirEtapaCadastro_(recursos, 'historico', 'reconciliacao_memoria', function () {
+    const identidades = Object.create(null);
+    nomes.forEach(function (nome) {
+      const chave = chaveEquipe_(nome);
+      if (identidades[chave]) return;
+      const equipe = equipes.find(function (item) { return chaveEquipe_(item.nome) === chave; });
+      const anterior = historico.participacoes.find(function (item) {
+        return chaveEquipe_(item.equipeNome) === chave;
       });
-      if (!inscricao) {
-        inscricao = {
+      const equipeId = equipe ? equipe.id : (anterior ? anterior.equipeId : Utilities.getUuid());
+      identidades[chave] = equipeId;
+      let participacao = historico.participacoes.find(function (item) {
+        return item.equipeId === equipeId && item.campeonatoId === campeonato.id;
+      });
+      if (!participacao) {
+        participacao = {
           id: Utilities.getUuid(), equipeId: equipeId, campeonatoId: campeonato.id,
-          tipo: tipo, registroId: pessoa.id, cpf: cpf, inscritoEm: agora
+          equipeNomeOriginal: nome, campeonatoNomeOriginal: campeonato.nome, inscritoEm: agora
         };
-        historico.inscricoes.push(inscricao);
+        historico.participacoes.push(participacao);
       }
-      if (!inscricao.presenteAntes || JSON.stringify(inscricao.dados) !== JSON.stringify(pessoa)) {
-        inscricao.dados = Object.assign({}, pessoa);
-        inscricao.atualizadoEm = agora;
-        inscricao.sequencia = ++historico.sequencia;
-      }
-      inscricao.presente = true;
+      participacao.equipeNome = nome;
+      participacao.campeonatoNome = campeonato.nome;
+    });
+    historico.inscricoes.forEach(function (item) {
+      if (item.campeonatoId === campeonato.id) item.presente = false;
+    });
+    ['atletas', 'comissao'].forEach(function (tipo) {
+      listas[tipo].forEach(function (pessoa) {
+        const equipeId = identidades[chaveEquipe_(pessoa.timeVinculado)];
+        if (!equipeId) return;
+        const cpf = somenteDigitos_(pessoa.cpf || '');
+        let inscricao = historico.inscricoes.find(function (item) {
+          return item.campeonatoId === campeonato.id && item.equipeId === equipeId
+            && item.tipo === tipo && item.registroId === pessoa.id && item.cpf === cpf;
+        });
+        if (!inscricao) {
+          inscricao = {
+            id: Utilities.getUuid(), equipeId: equipeId, campeonatoId: campeonato.id,
+            tipo: tipo, registroId: pessoa.id, cpf: cpf, inscritoEm: agora
+          };
+          historico.inscricoes.push(inscricao);
+        }
+        if (!inscricao.presenteAntes || JSON.stringify(inscricao.dados) !== JSON.stringify(pessoa)) {
+          inscricao.dados = Object.assign({}, pessoa);
+          inscricao.atualizadoEm = agora;
+          inscricao.sequencia = ++historico.sequencia;
+        }
+        inscricao.presente = true;
+      });
     });
   });
 }
 
 // Called under the script lock, before destructive writes and on import reads.
 // Reconciliation also repairs a failed post-write history update from the saved roster.
-function prepararHistoricoElenco_(cache) {
-  const historico = lerHistoricoElenco_();
-  const antes = JSON.stringify(historico);
-  historico.inscricoes.forEach(function (item) { item.presenteAntes = item.presente; item.presente = false; });
-  const equipes = equipesRegistro_(true);
-  campeonatos_().forEach(function (campeonato) {
-    const listas = { atletas: atletasCampeonato_(campeonato.id, true), comissao: comissaoTecnicaCampeonato_(campeonato.id, true) };
-    if (cache) cache[campeonato.id] = listas;
-    reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas);
+function prepararHistoricoElenco_(cache, recursos) {
+  const historico = lerHistoricoElenco_(recursos);
+  const antes = medirEtapaCadastro_(recursos, 'historico', 'json_comparacao_antes', function () { return JSON.stringify(historico); });
+  medirEtapaCadastro_(recursos, 'historico', 'historico_marcar_memoria', function () {
+    historico.inscricoes.forEach(function (item) { item.presenteAntes = item.presente; item.presente = false; });
   });
-  historico.inscricoes.forEach(function (item) { delete item.presenteAntes; });
-  if (antes !== JSON.stringify(historico)) gravarHistoricoElenco_(historico);
+  let equipes = recursos && recursos.equipes ? recursos.equipes : equipesRegistro_(true);
+  // Preserva a migração global, mas só depois das guardas do salvamento sob lock.
+  if (recursos && recursos.equipesAtivas && recursos.equipesAtivas.some(function (nome) {
+    return !equipes.some(function (item) { return chaveEquipe_(item.nome) === nome; });
+  })) {
+    equipes = equipesRegistro_(true);
+    if (recursos.contexto) recursos.contexto.registroEquipes = equipes;
+  }
+  // Todos os campeonatos continuam reconciliados; só leituras desta operação sob lock são reaproveitadas.
+  const campeonatos = recursos && recursos.campeonatos ? recursos.campeonatos : campeonatos_();
+  if (recursos) {
+    recursos.equipes = equipes;
+    recursos.campeonatos = campeonatos;
+    recursos.listas = cache;
+  }
+  campeonatos.forEach(function (campeonato) {
+    const listas = {
+      atletas: atletasCampeonato_(campeonato.id, true, recursos),
+      comissao: comissaoTecnicaCampeonato_(campeonato.id, true, recursos)
+    };
+    if (cache) cache[campeonato.id] = listas;
+    reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas, recursos);
+  });
+  medirEtapaCadastro_(recursos, 'historico', 'historico_limpar_memoria', function () {
+    historico.inscricoes.forEach(function (item) { delete item.presenteAntes; });
+  });
+  if (antes !== medirEtapaCadastro_(recursos, 'historico', 'json_comparacao_depois', function () { return JSON.stringify(historico); })) {
+    if (recursos) medirFaseCadastro_('gravacao_historico', function () { gravarHistoricoElenco_(historico, recursos); });
+    else gravarHistoricoElenco_(historico);
+  }
   return historico;
 }
 
-function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado, listasPreparadas) {
+function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado, listasPreparadas, recursos) {
   const cache = {};
-  const historico = historicoPreparado || prepararHistoricoElenco_(cache);
-  const campeonato = campeonatos_().find(function (item) { return item.id === campeonatoId; });
+  const historico = historicoPreparado || (recursos
+    ? medirFaseCadastro_('preparacao_historico', function () { return prepararHistoricoElenco_(cache, recursos); })
+    : prepararHistoricoElenco_(cache));
+  const campeonato = (recursos && recursos.campeonatos ? recursos.campeonatos : campeonatos_())
+    .find(function (item) { return item.id === campeonatoId; });
   if (!campeonato) throw new Error('Campeonato não encontrado.');
   try {
-    gravarListaCadastroDrive_(
+    const gravar = function () { return gravarListaCadastroDrive_(
       arquivoCadastroPessoasCampeonato_(campeonatoId, tipo === 'atletas' ? 'Atletas' : 'Comissao Tecnica'),
       tipo === 'atletas' ? chaveAtletasCampeonato_(campeonatoId) : chaveComissaoTecnicaCampeonato_(campeonatoId),
-      lista
-    );
+      lista, recursos, tipo
+    ); };
+    // A leitura bruta deixa de representar o arquivo depois da gravação.
+    descartarElencoBrutoOperacao_(campeonatoId, tipo, recursos);
+    if (recursos) medirFaseCadastro_('gravacao_elenco', gravar);
+    else gravar();
   } catch (e) {
     throw new Error('Não foi possível confirmar a gravação do elenco. Recarregue antes de repetir a operação; o histórico será reconciliado com os dados persistidos. ' + e.message);
   }
   try {
-    historico.inscricoes.forEach(function (item) { item.presenteAntes = item.presente; });
-    const listas = listasPreparadas || cache[campeonatoId] || {
-      atletas: tipo === 'atletas' ? lista : atletasCampeonato_(campeonatoId),
-      comissao: tipo === 'comissao' ? lista : comissaoTecnicaCampeonato_(campeonatoId)
+    const atualizarHistorico = function () {
+      medirEtapaCadastro_(recursos, 'historico', 'historico_marcar_memoria', function () {
+        historico.inscricoes.forEach(function (item) { item.presenteAntes = item.presente; });
+      });
+      const listas = listasPreparadas || cache[campeonatoId] || {
+        atletas: tipo === 'atletas' ? lista : atletasCampeonato_(campeonatoId),
+        comissao: tipo === 'comissao' ? lista : comissaoTecnicaCampeonato_(campeonatoId)
+      };
+      listas[tipo] = lista;
+      reconciliarHistoricoCampeonato_(historico, campeonato,
+        recursos && recursos.equipes ? recursos.equipes : equipesRegistro_(true), listas, recursos);
+      medirEtapaCadastro_(recursos, 'historico', 'historico_limpar_memoria', function () {
+        historico.inscricoes.forEach(function (item) { delete item.presenteAntes; });
+      });
+      gravarHistoricoElenco_(historico, recursos);
     };
-    listas[tipo] = lista;
-    reconciliarHistoricoCampeonato_(historico, campeonato, equipesRegistro_(true), listas);
-    historico.inscricoes.forEach(function (item) { delete item.presenteAntes; });
-    gravarHistoricoElenco_(historico);
+    if (recursos) medirFaseCadastro_('gravacao_historico', atualizarHistorico);
+    else atualizarHistorico();
   } catch (e) {
     throw new Error('O elenco foi salvo, mas o histórico não foi atualizado. Recarregue antes de repetir: a próxima consulta de importação reconciliará os cadastros persistidos. ' + e.message);
   }
@@ -2181,8 +2739,8 @@ function dataIsoValida_(valor) {
   return texto;
 }
 
-function campeonatos_() {
-  const lista = lerListaCadastroDrive_(CAMPEONATOS_ARQUIVO, CAMPEONATOS_CHAVE);
+function campeonatos_(recursos) {
+  const lista = lerListaCadastroDrive_(CAMPEONATOS_ARQUIVO, CAMPEONATOS_CHAVE, recursos, 'campeonatos');
 
   return lista.map(function (item) {
     return normalizarCampeonato_(item, true);
@@ -2191,12 +2749,15 @@ function campeonatos_() {
   });
 }
 
-function lerListaCadastroDrive_(nomeArquivo, chaveLegada) {
-  const arquivos = pastaRaizProjeto_().getFilesByName(nomeArquivo);
-  const arquivo = arquivos.hasNext() ? arquivos.next() : null;
+function lerListaCadastroDrive_(nomeArquivo, chaveLegada, recursos, categoria) {
+  const arquivo = localizarArquivoCadastro_(nomeArquivo, recursos, categoria).arquivo;
   const bruto = arquivo
-    ? arquivo.getBlob().getDataAsString('UTF-8')
-    : PropertiesService.getScriptProperties().getProperty(chaveLegada);
+    ? medirEtapaCadastro_(recursos, categoria, 'drive_ler', function () {
+      return arquivo.getBlob().getDataAsString('UTF-8');
+    })
+    : medirEtapaCadastro_(recursos, categoria, 'legado_ler', function () {
+      return PropertiesService.getScriptProperties().getProperty(chaveLegada);
+    });
 
   if (!arquivo && bruto === null) {
     return [];
@@ -2208,7 +2769,7 @@ function lerListaCadastroDrive_(nomeArquivo, chaveLegada) {
 
   let lista;
   try {
-    lista = JSON.parse(bruto);
+    lista = medirEtapaCadastro_(recursos, categoria, 'json_parse', function () { return JSON.parse(bruto); });
   } catch (e) {
     throw new Error('O cadastro ' + nomeArquivo + ' contém JSON inválido. Restaure os dados antes de continuar.');
   }
@@ -2217,6 +2778,7 @@ function lerListaCadastroDrive_(nomeArquivo, chaveLegada) {
     throw new Error('O cadastro ' + nomeArquivo + ' está inválido: o conteúdo deve ser uma lista.');
   }
 
+  registrarTamanhoCadastro_(recursos, categoria, 'leitura', arquivo ? 'drive' : 'legado', bruto, lista);
   return lista;
 }
 
@@ -2265,20 +2827,23 @@ function gravarCampeonatos_(lista) {
   gravarListaCadastroDrive_(CAMPEONATOS_ARQUIVO, CAMPEONATOS_CHAVE, lista);
 }
 
-function gravarListaCadastroDrive_(nomeArquivo, chaveLegada, lista) {
-  const raiz = pastaRaizProjeto_();
-  const arquivos = raiz.getFilesByName(nomeArquivo);
-  const conteudo = JSON.stringify(lista);
+function gravarListaCadastroDrive_(nomeArquivo, chaveLegada, lista, recursos, categoria) {
+  const localizado = localizarArquivoCadastro_(nomeArquivo, recursos, categoria);
+  const conteudo = medirEtapaCadastro_(recursos, categoria, 'json_serializar', function () { return JSON.stringify(lista); });
 
   // As chamadas de gravação já são protegidas pelo lock de salvar/remover.
-  if (arquivos.hasNext()) {
-    arquivos.next().setContent(conteudo);
+  const arquivo = localizado.arquivo;
+  if (arquivo) {
+    medirEtapaCadastro_(recursos, categoria, 'drive_setContent', function () { arquivo.setContent(conteudo); });
   } else {
-    raiz.createFile(Utilities.newBlob(conteudo, 'application/json', nomeArquivo));
+    medirEtapaCadastro_(recursos, categoria, 'drive_criar', function () {
+      criarArquivoCadastro_(localizado, nomeArquivo, conteudo);
+    });
   }
 
   // Só remove o armazenamento legado depois de persistir no Drive com sucesso.
   PropertiesService.getScriptProperties().deleteProperty(chaveLegada);
+  registrarTamanhoCadastro_(recursos, categoria, 'gravacao', 'drive', conteudo, lista);
 }
 
 function arquivoCadastroPessoasCampeonato_(campeonatoId, tipo) {
@@ -2291,9 +2856,14 @@ function arquivoCadastroPessoasCampeonato_(campeonatoId, tipo) {
 
 function removerCadastroPessoasCampeonato_(campeonatoId) {
   ['Atletas', 'Comissao Tecnica'].forEach(function (tipo) {
-    const arquivos = pastaRaizProjeto_().getFilesByName(arquivoCadastroPessoasCampeonato_(campeonatoId, tipo));
-    while (arquivos.hasNext()) {
-      arquivos.next().setTrashed(true);
+    const nome = arquivoCadastroPessoasCampeonato_(campeonatoId, tipo);
+    try {
+      const arquivos = pastaRaizProjeto_().getFilesByName(nome);
+      while (arquivos.hasNext()) {
+        arquivos.next().setTrashed(true);
+      }
+    } finally {
+      invalidarIdArquivoCadastro_(nome);
     }
   });
   const propriedades = PropertiesService.getScriptProperties();
@@ -4431,12 +5001,9 @@ function gerarSumulaJogoCampeonato(payload) {
    return CAMPEONATO_ATLETAS_CHAVE + String(campeonatoId || '').trim();
  }
 
- function atletasCampeonato_(campeonatoId, persistirIds) {
-   const lista = lerListaCadastroDrive_(
-     arquivoCadastroPessoasCampeonato_(campeonatoId, 'Atletas'),
-     chaveAtletasCampeonato_(campeonatoId)
-   );
-   garantirIdsHistoricoElenco_(campeonatoId, 'atletas', lista, persistirIds);
+ function atletasCampeonato_(campeonatoId, persistirIds, recursos) {
+   const lista = lerElencoBrutoOperacao_(campeonatoId, 'atletas', recursos);
+   garantirIdsHistoricoElenco_(campeonatoId, 'atletas', lista, persistirIds, recursos);
 
       return lista.filter(function (item) {
         return item && typeof item === 'object' && String(item.nome || '').trim();
@@ -4457,7 +5024,7 @@ function gerarSumulaJogoCampeonato(payload) {
       });
  }
 
-  function gravarAtletasCampeonato_(campeonatoId, lista) {
+  function gravarAtletasCampeonato_(campeonatoId, lista, recursos) {
     const validos = (lista || []).filter(function (item) {
       return item && typeof item === 'object' && String(item.nome || '').trim();
     }).map(function (item) {
@@ -4476,7 +5043,7 @@ function gerarSumulaJogoCampeonato(payload) {
       };
     });
 
-    gravarElencoComHistorico_(campeonatoId, 'atletas', validos);
+    gravarElencoComHistorico_(campeonatoId, 'atletas', validos, null, null, recursos);
   }
 
  function listarAtletasCampeonato() {
@@ -4556,14 +5123,14 @@ function validarCpfCadastroCampeonato_(valor, contexto) {
   return cpf;
 }
 
-function validarTimeVinculadoCampeonato_(campeonatoId, valor, contexto) {
+function validarTimeVinculadoCampeonato_(campeonatoId, valor, contexto, recursos) {
   const timeVinculado = limparCampo_(valor || '', 100);
 
   if (!timeVinculado) {
     throw new Error('Selecione o time vinculado ' + contexto + '.');
   }
 
-  const times = timesCampeonato_(campeonatoId) || [];
+  const times = timesCampeonatoOperacao_(campeonatoId, recursos) || [];
   if (!times.some(function (t) {
     return chaveEquipe_(t) === chaveEquipe_(timeVinculado);
   })) {
@@ -4583,10 +5150,12 @@ function existeCpfNoCadastro_(lista, cpf, idIgnorado) {
   });
 }
 
-function validarCpfUnicoEntreCadastros_(campeonatoId, cpf, origem, idIgnorado) {
-  const outraLista = origem === 'atleta'
-    ? comissaoTecnicaCampeonato_(campeonatoId)
-    : atletasCampeonato_(campeonatoId);
+function validarCpfUnicoEntreCadastros_(campeonatoId, cpf, origem, idIgnorado, recursos) {
+  const outraLista = medirRecursoCadastro_(recursos, 'lock_cpf_categorias', function () {
+    return origem === 'atleta'
+      ? comissaoTecnicaCampeonato_(campeonatoId, false, recursos)
+      : atletasCampeonato_(campeonatoId, false, recursos);
+  });
 
   if (existeCpfNoCadastro_(outraLista, cpf, idIgnorado)) {
     throw new Error('Este CPF já está cadastrado na ' + (origem === 'atleta' ? 'comissão técnica' : 'lista de atletas') + ' deste campeonato.');
@@ -4629,15 +5198,18 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
    return salvarAtletaCampeonatoInterno_(payload);
  }
 
- function salvarAtletaCampeonatoInterno_(payload, contexto) {
+ function salvarAtletaCampeonatoInterno_(payload, contexto, solicitacaoElenco) {
+   let inicioValidacao = Date.now();
    const dados = payload || {};
    const campeonatoId = String(dados.campeonatoId || '').trim();
-   const campeonatos = campeonatos_();
-   const campeonato = campeonatos.filter(function (item) {
-     return item.id === campeonatoId;
-   })[0];
+   // No salvamento do elenco, só a validação sob lock produz o campeonato autorizado.
+   const campeonato = solicitacaoElenco ? null
+     : contexto && contexto.campeonato.id === campeonatoId ? contexto.campeonato
+     : campeonatos_().filter(function (item) {
+       return item.id === campeonatoId;
+     })[0];
 
-   if (!campeonato) {
+   if (!solicitacaoElenco && !campeonato) {
      throw new Error('Escolha um campeonato válido.');
    }
 
@@ -4646,7 +5218,7 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
     const numeroInformado = String(dados.numero || '').trim();
     const numero = numeroInformado === '' ? '' : Number(numeroInformado);
    const posicao = String(dados.posicao || 'Indefinida').trim();
-    const timeVinculado = validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'do atleta');
+    let timeVinculado = solicitacaoElenco ? '' : validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'do atleta');
     const cpf = validarCpfCadastroCampeonato_(dados.cpf, 'do atleta');
    const rg = limparCampo_(dados.rg || '', 30);
    const foto = String(dados.foto || '').trim();
@@ -4670,11 +5242,20 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
    }
 
    const lock = LockService.getScriptLock();
-   lock.waitLock(30000);
+   registrarTempoCadastro_('validacao_leitura', inicioValidacao);
+   medirFaseCadastro_('espera_lock', function () { lock.waitLock(30000); });
+   let tela;
+   const recursos = {};
 
    try {
-     const contextoAtual = validarAlvoElenco_(contexto, 'atletas', '');
-     const lista = atletasCampeonato_(campeonatoId).slice();
+     inicioValidacao = Date.now();
+     const contextoAtual = validarAlvoElenco_(contexto, 'atletas', '', recursos, solicitacaoElenco);
+     if (solicitacaoElenco) timeVinculado = validarTimeVinculadoCampeonato_(
+       campeonatoId, contextoAtual.equipe.nome, 'do atleta', recursos);
+     const campeonatoAtual = contextoAtual ? contextoAtual.campeonato : campeonato;
+     const lista = medirRecursoCadastro_(recursos, 'lock_elenco_leitura', function () {
+       return atletasCampeonato_(campeonatoId, false, recursos).slice();
+     });
       bloquearCpfAtletaEmOutraEquipe_(contextoAtual, cpf, lista, '');
       const validacaoDuplicata = validarDuplicataAtleta_(nome, cpf, lista);
 
@@ -4682,8 +5263,11 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
         throw new Error(validacaoDuplicata.motivo);
      }
 
-      validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'atleta');
-      bloquearVinculoAtletaParticipante_(campeonato, jogosParticipacaoCampeonato_(campeonatoId), cpf, timeVinculado, contextoAtual);
+      validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'atleta', '', recursos);
+      medirRecursoCadastro_(recursos, 'lock_participacao', function () {
+        bloquearVinculoAtletaParticipante_(campeonatoAtual, jogosParticipacaoOperacao_(campeonatoId, recursos),
+          cpf, timeVinculado, contextoAtual, contextoAtual ? recursos.equipes : null);
+      });
 
      const novoAtleta = {
        id: gerarIdUnico_(),
@@ -4701,12 +5285,17 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
 
      lista.push(novoAtleta);
 
-     gravarAtletasCampeonato_(campeonatoId, lista);
+     registrarTempoCadastro_('validacao_leitura', inicioValidacao);
+     gravarAtletasCampeonato_(campeonatoId, lista, recursos);
+     if (contextoAtual) tela = medirFaseCadastro_('resposta', function () {
+       return montarRespostaElenco_(contextoAtual, recursos.listas[campeonatoId], recursos);
+     });
    } finally {
+     delete recursos.arquivosDrive;
      lock.releaseLock();
    }
 
-    const tela = respostaCadastro_(contexto);
+    if (!tela) tela = medirFaseCadastro_('resposta', function () { return respostaCadastro_(contexto); });
    tela.recado = 'Atleta ' + nome + ' adicionado ao campeonato.';
    return tela;
  }
@@ -4761,7 +5350,8 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
      return atualizarAtletaCampeonatoInterno_(payload);
    }
 
-  function atualizarAtletaCampeonatoInterno_(payload, contexto) {
+  function atualizarAtletaCampeonatoInterno_(payload, contexto, solicitacaoElenco) {
+     let inicioValidacao = Date.now();
      const dados = payload || {};
      const campeonatoId = String(dados.campeonatoId || '').trim();
      const atletaId = String(dados.atletaId || '').trim();
@@ -4775,7 +5365,7 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
       const numeroInformado = String(dados.numero || '').trim();
       const numero = numeroInformado === '' ? '' : Number(numeroInformado);
      const posicao = String(dados.posicao || 'Indefinida').trim();
-      const timeVinculado = validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'do atleta');
+      let timeVinculado = solicitacaoElenco ? '' : validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'do atleta');
       const cpf = validarCpfCadastroCampeonato_(dados.cpf, 'do atleta');
      const ativo = Boolean(dados.ativo !== false);
      const rg = limparCampo_(dados.rg || '', 30);
@@ -4796,11 +5386,19 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
 
 
      const lock = LockService.getScriptLock();
-     lock.waitLock(30000);
+     registrarTempoCadastro_('validacao_leitura', inicioValidacao);
+     medirFaseCadastro_('espera_lock', function () { lock.waitLock(30000); });
+     let tela;
+     const recursos = {};
 
      try {
-       const contextoAtual = validarAlvoElenco_(contexto, 'atletas', atletaId);
-       const lista = atletasCampeonato_(campeonatoId);
+       inicioValidacao = Date.now();
+       const contextoAtual = validarAlvoElenco_(contexto, 'atletas', atletaId, recursos, solicitacaoElenco);
+       if (solicitacaoElenco) timeVinculado = validarTimeVinculadoCampeonato_(
+         campeonatoId, contextoAtual.equipe.nome, 'do atleta', recursos);
+       const lista = recursos.listaValidacao || medirRecursoCadastro_(recursos, 'lock_elenco_leitura', function () {
+         return atletasCampeonato_(campeonatoId, false, recursos);
+       });
        const atletaExistente = lista.find(function (a) { return a.id === atletaId; });
 
        if (!atletaExistente) {
@@ -4817,20 +5415,25 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
           throw new Error(validacaoDuplicata.motivo);
         }
 
-        validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'atleta');
+        validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'atleta', '', recursos);
 
         // A identidade de origem (ID/CPF atuais) é verificada antes de aceitar novo CPF ou equipe.
         if (cpf !== somenteDigitos_(atletaExistente.cpf || '')
             || chaveEquipe_(timeVinculado) !== chaveEquipe_(atletaExistente.timeVinculado)) {
-          const campeonato = campeonatos_().find(function (item) { return item.id === campeonatoId; });
-          if (!campeonato) {
-            throw new Error('Campeonato não encontrado.');
-          }
-          const jogos = jogosParticipacaoCampeonato_(campeonatoId);
-          if (atletaParticipouCompeticao_(jogos, atletaExistente)) {
-            throw new Error(mensagemVinculoCompeticao_(atletaExistente, campeonato, 'não pode ter a equipe nem o CPF alterados'));
-          }
-          bloquearVinculoAtletaParticipante_(campeonato, jogos, cpf, timeVinculado, contextoAtual);
+          medirRecursoCadastro_(recursos, 'lock_participacao', function () {
+            // Com contexto, campeonatos e equipes foram relidos sob este mesmo lock.
+            const campeonato = (contextoAtual ? recursos.campeonatos : campeonatos_())
+              .find(function (item) { return item.id === campeonatoId; });
+            if (!campeonato) {
+              throw new Error('Campeonato não encontrado.');
+            }
+            const jogos = jogosParticipacaoOperacao_(campeonatoId, recursos);
+            if (atletaParticipouCompeticao_(jogos, atletaExistente)) {
+              throw new Error(mensagemVinculoCompeticao_(atletaExistente, campeonato, 'não pode ter a equipe nem o CPF alterados'));
+            }
+            bloquearVinculoAtletaParticipante_(campeonato, jogos, cpf, timeVinculado, contextoAtual,
+              contextoAtual ? recursos.equipes : null);
+          });
         }
 
        const novaLista = lista.map(function (item) {
@@ -4853,12 +5456,17 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
          return item;
        });
 
-       gravarAtletasCampeonato_(campeonatoId, novaLista);
+       registrarTempoCadastro_('validacao_leitura', inicioValidacao);
+       gravarAtletasCampeonato_(campeonatoId, novaLista, recursos);
+       if (contextoAtual) tela = medirFaseCadastro_('resposta', function () {
+         return montarRespostaElenco_(contextoAtual, recursos.listas[campeonatoId], recursos);
+       });
      } finally {
+       delete recursos.arquivosDrive;
        lock.releaseLock();
      }
 
-      const tela = respostaCadastro_(contexto);
+      if (!tela) tela = medirFaseCadastro_('resposta', function () { return respostaCadastro_(contexto); });
      tela.recado = 'Atleta ' + nome + ' atualizado com sucesso.';
      return tela;
    }
@@ -8227,12 +8835,9 @@ function abaFinanceiro_() {
     return 'aeuv.comissaoTecnica.campeonato.' + String(campeonatoId || '').trim();
   }
 
-  function comissaoTecnicaCampeonato_(campeonatoId, persistirIds) {
-    const lista = lerListaCadastroDrive_(
-      arquivoCadastroPessoasCampeonato_(campeonatoId, 'Comissao Tecnica'),
-      chaveComissaoTecnicaCampeonato_(campeonatoId)
-    );
-    garantirIdsHistoricoElenco_(campeonatoId, 'comissao', lista, persistirIds);
+  function comissaoTecnicaCampeonato_(campeonatoId, persistirIds, recursos) {
+    const lista = lerElencoBrutoOperacao_(campeonatoId, 'comissao', recursos);
+    garantirIdsHistoricoElenco_(campeonatoId, 'comissao', lista, persistirIds, recursos);
 
       return lista.filter(function (item) {
         return item && typeof item === 'object' && String(item.nome || '').trim();
@@ -8252,7 +8857,7 @@ function abaFinanceiro_() {
       });
   }
 
-  function gravarComissaoTecnicaCampeonato_(campeonatoId, lista) {
+  function gravarComissaoTecnicaCampeonato_(campeonatoId, lista, recursos) {
     const validos = (lista || []).filter(function (item) {
       return item && typeof item === 'object' && String(item.nome || '').trim();
     }).map(function (item) {
@@ -8270,7 +8875,7 @@ function abaFinanceiro_() {
       };
     });
 
-    gravarElencoComHistorico_(campeonatoId, 'comissao', validos);
+    gravarElencoComHistorico_(campeonatoId, 'comissao', validos, null, null, recursos);
   }
 
   function listarComissaoTecnica() {
@@ -8312,7 +8917,8 @@ function abaFinanceiro_() {
     return salvarMembroComissaoInterno_(payload);
   }
 
-  function salvarMembroComissaoInterno_(payload, contexto) {
+  function salvarMembroComissaoInterno_(payload, contexto, solicitacaoElenco) {
+    let inicioValidacao = Date.now();
     const dados = payload || {};
     const campeonatoId = String(dados.campeonatoId || '').trim();
 
@@ -8328,7 +8934,7 @@ function abaFinanceiro_() {
     const cpf = validarCpfCadastroCampeonato_(dados.cpf, 'da comissão técnica');
     const foto = String(dados.foto || '').trim();
     const dataNascimento = validarDataNascimentoCampeonato_(dados.dataNascimento, 'da comissão técnica');
-    const timeVinculado = validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'da comissão técnica');
+    let timeVinculado = solicitacaoElenco ? '' : validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'da comissão técnica');
 
     if (!nome) {
       throw new Error('Informe o nome do membro.');
@@ -8338,18 +8944,26 @@ function abaFinanceiro_() {
     }
 
     const lock = LockService.getScriptLock();
-    lock.waitLock(30000);
+    registrarTempoCadastro_('validacao_leitura', inicioValidacao);
+    medirFaseCadastro_('espera_lock', function () { lock.waitLock(30000); });
+    let tela;
+    const recursos = {};
 
     try {
-      validarAlvoElenco_(contexto, 'comissao', '');
-      const lista = comissaoTecnicaCampeonato_(campeonatoId);
+      inicioValidacao = Date.now();
+      const contextoAtual = validarAlvoElenco_(contexto, 'comissao', '', recursos, solicitacaoElenco);
+      if (solicitacaoElenco) timeVinculado = validarTimeVinculadoCampeonato_(
+        campeonatoId, contextoAtual.equipe.nome, 'da comissão técnica', recursos);
+      const lista = medirRecursoCadastro_(recursos, 'lock_elenco_leitura', function () {
+        return comissaoTecnicaCampeonato_(campeonatoId, false, recursos);
+      });
       const validacaoDuplicata = validarDuplicataComissao_(nome, cpf, lista);
 
       if (!validacaoDuplicata.ok) {
         throw new Error(validacaoDuplicata.motivo);
       }
 
-      validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'comissao');
+      validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'comissao', '', recursos);
 
       lista.push({
         id: gerarIdUnico_(),
@@ -8364,12 +8978,17 @@ function abaFinanceiro_() {
         timeVinculado: timeVinculado
       });
 
-      gravarComissaoTecnicaCampeonato_(campeonatoId, lista);
+      registrarTempoCadastro_('validacao_leitura', inicioValidacao);
+      gravarComissaoTecnicaCampeonato_(campeonatoId, lista, recursos);
+      if (contextoAtual) tela = medirFaseCadastro_('resposta', function () {
+        return montarRespostaElenco_(contextoAtual, recursos.listas[campeonatoId], recursos);
+      });
     } finally {
+      delete recursos.arquivosDrive;
       lock.releaseLock();
     }
 
-    const tela = respostaCadastro_(contexto);
+    if (!tela) tela = medirFaseCadastro_('resposta', function () { return respostaCadastro_(contexto); });
     tela.recado = 'Membro ' + nome + ' adicionado à comissão técnica.';
     return tela;
   }
@@ -8379,7 +8998,8 @@ function abaFinanceiro_() {
     return atualizarMembroComissaoInterno_(payload);
   }
 
-  function atualizarMembroComissaoInterno_(payload, contexto) {
+  function atualizarMembroComissaoInterno_(payload, contexto, solicitacaoElenco) {
+    let inicioValidacao = Date.now();
     const dados = payload || {};
     const campeonatoId = String(dados.campeonatoId || '').trim();
     const membroId = String(dados.membroId || '').trim();
@@ -8392,18 +9012,26 @@ function abaFinanceiro_() {
     const cpf = validarCpfCadastroCampeonato_(dados.cpf, 'da comissão técnica');
     const foto = String(dados.foto || '').trim();
     const dataNascimento = validarDataNascimentoCampeonato_(dados.dataNascimento, 'da comissão técnica');
-    const timeVinculado = validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'da comissão técnica');
+    let timeVinculado = solicitacaoElenco ? '' : validarTimeVinculadoCampeonato_(campeonatoId, dados.timeVinculado, 'da comissão técnica');
 
     if (!nome) {
       throw new Error('Informe o nome do membro.');
     }
 
     const lock = LockService.getScriptLock();
-    lock.waitLock(30000);
+    registrarTempoCadastro_('validacao_leitura', inicioValidacao);
+    medirFaseCadastro_('espera_lock', function () { lock.waitLock(30000); });
+    let tela;
+    const recursos = {};
 
     try {
-      validarAlvoElenco_(contexto, 'comissao', membroId);
-      const existentes = comissaoTecnicaCampeonato_(campeonatoId);
+      inicioValidacao = Date.now();
+      const contextoAtual = validarAlvoElenco_(contexto, 'comissao', membroId, recursos, solicitacaoElenco);
+      if (solicitacaoElenco) timeVinculado = validarTimeVinculadoCampeonato_(
+        campeonatoId, contextoAtual.equipe.nome, 'da comissão técnica', recursos);
+      const existentes = recursos.listaValidacao || medirRecursoCadastro_(recursos, 'lock_elenco_leitura', function () {
+        return comissaoTecnicaCampeonato_(campeonatoId, false, recursos);
+      });
       const membroExistente = existentes.find(function (item) { return item.id === membroId; });
 
       if (!membroExistente) {
@@ -8421,7 +9049,7 @@ function abaFinanceiro_() {
       }
       const duplicata = validarDuplicataComissao_(nome, cpf, existentes, membroId);
       if (!duplicata.ok) throw new Error(duplicata.motivo);
-      validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'comissao');
+      validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'comissao', '', recursos);
 
       const lista = existentes.map(function (item) {
         if (item.id === membroId) {
@@ -8442,12 +9070,17 @@ function abaFinanceiro_() {
         return item;
       });
 
-      gravarComissaoTecnicaCampeonato_(campeonatoId, lista);
+      registrarTempoCadastro_('validacao_leitura', inicioValidacao);
+      gravarComissaoTecnicaCampeonato_(campeonatoId, lista, recursos);
+      if (contextoAtual) tela = medirFaseCadastro_('resposta', function () {
+        return montarRespostaElenco_(contextoAtual, recursos.listas[campeonatoId], recursos);
+      });
     } finally {
+      delete recursos.arquivosDrive;
       lock.releaseLock();
     }
 
-    const tela = respostaCadastro_(contexto);
+    if (!tela) tela = medirFaseCadastro_('resposta', function () { return respostaCadastro_(contexto); });
     tela.recado = 'Membro ' + nome + ' atualizado com sucesso.';
     return tela;
   }

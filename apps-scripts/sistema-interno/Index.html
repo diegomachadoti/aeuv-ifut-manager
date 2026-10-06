@@ -2340,7 +2340,7 @@
   <header class="topo">
     <div class="topo-conteudo">
       <div class="brasao">
-        <img src="<?!= config.logoUrl ?>" alt="Logomarca da AEUV">
+        <img id="logoSistema" alt="Logomarca da AEUV">
       </div>
       <div class="topo-identidade">
         <h1><?= config.associacao ?></h1>
@@ -2375,6 +2375,7 @@
 
   <script>
     const CONFIG = <?!= JSON.stringify(config).replace(/</g, '\\u003c') ?>;
+    document.getElementById('logoSistema').src = CONFIG.logoUrl;
     const MODULOS = CONFIG.modulos;
 
     (function configurarAlternanciaTema() {
@@ -2696,6 +2697,11 @@
         return;
       }
 
+      if (administracaoOcupada_) {
+        if (window.location.hash !== '#' + moduloAtual) window.location.hash = moduloAtual;
+        return;
+      }
+
       if (tabelaModuloAtivo_() && (tabelaEstado.ocupado || tabelaEstado.sujo)) {
         if (window.location.hash !== '#' + moduloAtual) window.location.hash = moduloAtual;
         tabelaNavegar_(function () { abrirModulo(id, busca); });
@@ -2775,6 +2781,13 @@
         conteudo.innerHTML = cabecalho
           + '<div id="areaCampeonatos">' + blocoCarregando('statusCampeonatos') + '</div>';
         carregarCampeonatos();
+        return;
+      }
+
+      if (modulo.id === 'administracao') {
+        conteudo.innerHTML = cabecalho
+          + '<div id="areaAdministracao">' + blocoCarregando() + '</div>';
+        carregarAdministracao_();
         return;
       }
 
@@ -3212,8 +3225,6 @@
       const barra = equipes.podeEditar
         ? '<div class="barra-acoes">'
           + '<button type="button" class="botao-principal" id="novaEquipe">Incluir equipe</button>'
-          + '<button type="button" class="botao-apoio" id="otimizarEscudos">Otimizar escudos existentes</button>'
-          + '<span id="avisoOtimizacaoEscudos" class="apoio" role="status" aria-live="polite"></span>'
           + '</div>'
         : '';
 
@@ -3230,7 +3241,6 @@
         + linkArquivo + '. Vale na hora, sem publicar nova vers&atilde;o de nenhum dos tr&ecirc;s projetos.</div>';
 
       if (equipes.podeEditar) {
-        document.getElementById('otimizarEscudos').addEventListener('click', otimizarEscudosExistentes_);
         document.getElementById('novaEquipe').addEventListener('click', function () {
           abrirFormularioEquipe('');
         });
@@ -3331,15 +3341,24 @@
     }
 
     function otimizarImagemEscudo_(origem) {
+      return otimizarImagemUpload_(origem, 256, 100 * 1024, 'escudo');
+    }
+
+    function otimizarFotoPessoa_(origem) {
+      return otimizarImagemUpload_(origem, 512, 200 * 1024, 'foto');
+    }
+
+    function otimizarImagemUpload_(origem, dimensaoMaxima, limite, rotulo) {
       return new Promise(function (resolve, reject) {
         const imagem = new Image();
         const url = typeof origem === 'string' ? origem : URL.createObjectURL(origem);
         const liberar = function () { if (typeof origem !== 'string') URL.revokeObjectURL(url); };
-        imagem.onerror = function () { liberar(); reject(new Error('Nao foi possivel carregar o escudo.')); };
+        imagem.onerror = function () { liberar(); reject(new Error('Nao foi possivel carregar a imagem (' + rotulo + '). Selecione outro arquivo.')); };
         imagem.onload = function () {
           liberar();
           try {
-            const proporcao = Math.min(1, 256 / Math.max(imagem.naturalWidth, imagem.naturalHeight));
+            if (!imagem.naturalWidth || !imagem.naturalHeight) throw new Error('A imagem nao possui dimensoes validas.');
+            const proporcao = Math.min(1, dimensaoMaxima / Math.max(imagem.naturalWidth, imagem.naturalHeight));
             const canvas = document.createElement('canvas');
             canvas.width = Math.max(1, Math.round(imagem.naturalWidth * proporcao));
             canvas.height = Math.max(1, Math.round(imagem.naturalHeight * proporcao));
@@ -3350,7 +3369,7 @@
             const png = canvas.toDataURL('image/png');
             let resultado = webp.length < png.length ? webp : png;
             if (typeof origem === 'string' && origem.length < resultado.length) resultado = origem;
-            if (resultado.length > 100 * 1024) throw new Error('O escudo continua acima de 100 KB. Use uma imagem mais simples.');
+            if (resultado.length > limite) throw new Error('A imagem (' + rotulo + ') continua acima de ' + (limite / 1024) + ' KB. Use uma imagem mais simples.');
             resolve(resultado);
           } catch (erro) { reject(erro); }
         };
@@ -3358,44 +3377,176 @@
       });
     }
 
-    async function otimizarEscudosExistentes_() {
-      if (confirmacaoElencoAtual || moduloAtual !== 'equipes' || !equipes.podeEditar) return;
-      const dadosOrigem = equipes;
-      const botao = document.getElementById('otimizarEscudos');
-      const aviso = document.getElementById('avisoOtimizacaoEscudos');
-      const confirmado = await confirmarDescarteElenco_({
-        titulo: 'Otimizar escudos das equipes?',
-        mensagem: 'Os escudos serao redimensionados para ate 256 pixels e comprimidos, mantendo transparencia. '
-          + 'Pode haver pequena perda de qualidade. Os originais serao preservados em um backup no Drive. Nomes e vinculos nao mudam.',
-        confirmar: 'Otimizar escudos'
+    let administracaoOcupada_ = false;
+    let administracaoFontes_ = null;
+
+    function carregarAdministracao_() {
+      if (CONFIG.usuario.perfil !== 'admin') {
+        document.getElementById('areaAdministracao').textContent = 'Acesso exclusivo do administrador.';
+        return;
+      }
+      administracaoFontes_ = null;
+      google.script.run.withSuccessHandler(function (fontes) {
+        if (moduloAtual !== 'administracao') return;
+        administracaoFontes_ = fontes;
+        const campeonatos = fontes.filter(function (fonte) { return fonte.tipo === 'atletas'; });
+        document.getElementById('areaAdministracao').innerHTML = '<section class="formulario">'
+          + '<h3>Manutencao de imagens</h3><p class="apoio">Originais preservados em backups no Drive. '
+          + 'Sumulas e snapshots historicos nao sao alterados. Mantenha esta tela aberta durante a operacao.</p>'
+          + '<div class="grupo"><label for="adminCampeonato">Campeonato para fotos de atletas e comissao</label>'
+          + '<select id="adminCampeonato"><option value="">Todos os campeonatos</option>'
+          + campeonatos.map(function (fonte) {
+            return '<option value="' + escapar(fonte.campeonatoId) + '">' + escapar(fonte.campeonatoNome) + '</option>';
+          }).join('') + '</select></div><div class="barra-acoes">'
+          + '<button type="button" class="botao-apoio" data-otimizar-base="equipes">Escudos de equipes</button>'
+          + '<button type="button" class="botao-apoio" data-otimizar-base="campeonatos">Escudos de campeonatos</button>'
+          + '<button type="button" class="botao-apoio" data-otimizar-base="atletas">Fotos de atletas</button>'
+          + '<button type="button" class="botao-apoio" data-otimizar-base="comissao">Fotos da comissao</button>'
+          + '<button type="button" class="botao-principal" data-otimizar-base="todas">Otimizar toda a base</button>'
+          + '<button type="button" class="botao-apoio" id="otimizarLogoSistema">Otimizar logo principal do sistema</button>'
+          + '</div><p id="avisoAdministracao" class="apoio" role="status" aria-live="polite"></p></section>';
+        document.querySelectorAll('[data-otimizar-base]').forEach(function (botao) {
+          botao.addEventListener('click', function () { otimizarImagensBase_(botao.dataset.otimizarBase); });
+        });
+        document.getElementById('otimizarLogoSistema').addEventListener('click', otimizarLogoSistema_);
+      }).withFailureHandler(function (erro) {
+        if (moduloAtual !== 'administracao') return;
+        document.getElementById('areaAdministracao').innerHTML = '<p class="alerta">'
+          + escapar(erro.message || String(erro)) + '</p>';
+      }).listarFontesOtimizacaoImagens();
+    }
+
+    function selecionarFontesOtimizacao_(fontes, tipo, campeonatoId) {
+      return fontes.filter(function (fonte) {
+        return tipo === 'todas' || (fonte.tipo === tipo
+          && (!campeonatoId || (tipo !== 'atletas' && tipo !== 'comissao') || fonte.campeonatoId === campeonatoId));
       });
-      if (!confirmado || moduloAtual !== 'equipes' || equipes !== dadosOrigem || !botao.isConnected) return;
-      const area = document.getElementById('areaEquipes');
-      area.querySelectorAll('button').forEach(function (item) { item.disabled = true; });
-      aviso.textContent = 'Preparando escudos...';
+    }
+
+    async function otimizarLogoSistema_() {
+      if (confirmacaoElencoAtual || administracaoOcupada_ || moduloAtual !== 'administracao'
+          || CONFIG.usuario.perfil !== 'admin') return;
+      const area = document.getElementById('areaAdministracao');
+      const aviso = document.getElementById('avisoAdministracao');
+      const confirmado = await confirmarDescarteElenco_({
+        titulo: 'Criar logo leve para o sistema?',
+        mensagem: 'O logo sera reduzido para ate 512 pixels e 100 KB, preservando proporcao e transparencia. '
+          + 'O arquivo original dos documentos nao sera modificado. A versao leve sera usada nas proximas aberturas.',
+        confirmar: 'Otimizar logo'
+      });
+      if (!confirmado || moduloAtual !== 'administracao' || !area.isConnected) return;
+      administracaoOcupada_ = true;
+      const controles = Array.from(area.querySelectorAll('button, select'));
+      const estados = controles.map(function (item) { return item.disabled; });
+      controles.forEach(function (item) { item.disabled = true; });
+      aviso.classList.remove('alerta');
       try {
-        const escudos = [];
-        for (const equipe of dadosOrigem.equipes) {
-          if (!equipe.escudo) continue;
-          const escudo = await otimizarImagemEscudo_(equipe.escudo);
-          if (escudo.length < equipe.escudo.length) {
-            escudos.push({ id: equipe.id, assinatura: equipe.assinaturaEscudo, escudo: escudo });
+        aviso.textContent = 'Lendo logo original...';
+        const dados = await new Promise(function (resolve, reject) {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).lerLogoParaOtimizacao();
+        });
+        const imagem = await otimizarImagemUpload_(dados.imagem, 512, 100 * 1024, 'logo');
+        aviso.textContent = 'Salvando versao leve do logo...';
+        const resultado = await new Promise(function (resolve, reject) {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)
+            .salvarLogoOtimizado({ imagem: imagem, assinatura: dados.assinatura });
+        });
+        CONFIG.logoUrl = imagem;
+        document.getElementById('logoSistema').src = imagem;
+        aviso.textContent = 'Logo do sistema: ' + (resultado.bytesAntes / 1024).toFixed(1) + ' KB → '
+          + (resultado.bytesDepois / 1024).toFixed(1) + ' KB (base64). Original preservado no Drive. '
+          + 'Recarregue para medir a abertura com a versao leve.';
+      } catch (erro) {
+        if (area.isConnected) {
+          aviso.textContent = (erro.message || String(erro)) + ' Recarregue antes de repetir se houve falha na gravacao.';
+          aviso.classList.add('alerta');
+        }
+      } finally {
+        administracaoOcupada_ = false;
+        controles.forEach(function (item, indice) { if (item.isConnected) item.disabled = estados[indice]; });
+      }
+    }
+
+    async function otimizarImagensBase_(tipo) {
+      if (confirmacaoElencoAtual || administracaoOcupada_ || moduloAtual !== 'administracao'
+          || CONFIG.usuario.perfil !== 'admin' || !administracaoFontes_) return;
+      const fontesOrigem = administracaoFontes_;
+      const area = document.getElementById('areaAdministracao');
+      const aviso = document.getElementById('avisoAdministracao');
+      const seletor = document.getElementById('adminCampeonato');
+      const fontes = selecionarFontesOtimizacao_(fontesOrigem, tipo, seletor.value);
+      if (!fontes.length) { aviso.textContent = 'Nenhum cadastro encontrado para esta selecao.'; return; }
+      const confirmado = await confirmarDescarteElenco_({
+        titulo: tipo === 'todas' ? 'Otimizar imagens de toda a base?' : 'Otimizar imagens selecionadas?',
+        mensagem: 'Escopo: ' + fontes.map(function (fonte) { return fonte.rotulo; }).join('; ') + '. '
+          + 'Pode haver perda de qualidade. Cada lote tera backup dos originais no Drive. '
+          + 'Sumulas e snapshots historicos nao mudam. Mantenha esta tela aberta e evite edicoes simultaneas. '
+          + 'Se houver interrupcao, lotes ja salvos permanecem otimizados.',
+        confirmar: 'Otimizar imagens'
+      });
+      if (!confirmado || moduloAtual !== 'administracao' || fontesOrigem !== administracaoFontes_ || !area.isConnected) return;
+      administracaoOcupada_ = true;
+      const botoes = Array.from(area.querySelectorAll('button'));
+      const estados = botoes.map(function (item) { return item.disabled; });
+      botoes.forEach(function (item) { item.disabled = true; });
+      seletor.disabled = true;
+      aviso.classList.remove('alerta');
+      const ativo = function () {
+        if (moduloAtual !== 'administracao' || administracaoFontes_ !== fontesOrigem || !area.isConnected) {
+          throw new Error('Otimizacao interrompida ao sair da tela. Lotes anteriores permanecem salvos.');
+        }
+      };
+      let total = 0, bytesEconomizados = 0, mantidas = 0;
+      try {
+        for (const fonte of fontes) {
+          let inicio = 0, fim = false;
+          while (!fim) {
+            ativo();
+            aviso.textContent = fonte.rotulo + ': lendo lote... ' + total + ' imagem(ns) otimizada(s).';
+            const lote = await new Promise(function (resolve, reject) {
+              google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)
+                .listarLoteOtimizacaoImagens({ fonte: fonte, inicio: inicio });
+            });
+            ativo();
+            const imagens = [];
+            let economia = 0;
+            for (const item of lote.imagens) {
+              ativo();
+              aviso.textContent = fonte.rotulo + ': preparando imagem ' + (item.indice + 1) + '...';
+              const imagem = fonte.tipo === 'atletas' || fonte.tipo === 'comissao'
+                ? await otimizarFotoPessoa_(item.imagem) : await otimizarImagemEscudo_(item.imagem);
+              if (imagem.length < item.imagem.length) {
+                imagens.push({ indice: item.indice, imagem: imagem });
+                economia += item.imagem.length - imagem.length;
+              } else { mantidas++; }
+            }
+            ativo();
+            if (imagens.length) {
+              aviso.textContent = fonte.rotulo + ': criando backup e salvando lote...';
+              const resposta = await new Promise(function (resolve, reject) {
+                google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)
+                  .salvarLoteOtimizacaoImagens({ fonte: fonte, assinatura: lote.assinatura, imagens: imagens });
+              });
+              total += resposta.total;
+              bytesEconomizados += economia;
+            }
+            inicio = lote.proximo;
+            fim = lote.fim;
           }
         }
-        if (moduloAtual !== 'equipes' || equipes !== dadosOrigem || !botao.isConnected) return;
-        if (!escudos.length) { aviso.textContent = 'Os escudos ja estao otimizados.'; return; }
-        aviso.textContent = 'Salvando ' + escudos.length + ' escudo(s)...';
-        await new Promise(function (resolve, reject) {
-          google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).otimizarEscudosEquipes({ escudos: escudos });
-        });
-        if (moduloAtual === 'equipes' && botao.isConnected) {
-          aviso.textContent = 'Escudos otimizados. Atualizando a lista...';
-          carregarEquipes();
-        }
+        ativo();
+        aviso.textContent = total + ' imagem(ns) otimizada(s); ' + mantidas + ' mantida(s). Reducao de '
+          + (bytesEconomizados / 1024 / 1024).toFixed(2) + ' MB nas imagens (base64). Originais em backups no Drive.';
       } catch (erro) {
-        if (botao.isConnected) aviso.textContent = erro.message || String(erro);
+        if (area.isConnected) {
+          aviso.textContent = 'Interrompido. ' + total + ' imagem(ns) confirmada(s) em lotes anteriores. '
+            + (erro.message || String(erro)) + ' Se houve falha ao salvar, recarregue antes de tentar novamente.';
+          aviso.classList.add('alerta');
+        }
       } finally {
-        if (botao.isConnected) area.querySelectorAll('button').forEach(function (item) { item.disabled = false; });
+        administracaoOcupada_ = false;
+        if (seletor.isConnected) seletor.disabled = false;
+        botoes.forEach(function (item, indice) { if (item.isConnected) item.disabled = estados[indice]; });
       }
     }
 
@@ -6306,15 +6457,14 @@
        const inputFoto = document.getElementById('cpFoto');
        mostrarLoadingCadastroPessoa_(true);
        if (inputFoto && inputFoto.files && inputFoto.files[0]) {
-         const leitor = new FileReader();
-         leitor.onload = function (e) {
-           payload.foto = e.target.result;
+         aviso.textContent = 'Otimizando foto antes do envio...';
+         otimizarFotoPessoa_(inputFoto.files[0]).then(function (foto) {
+           payload.foto = foto;
+           aviso.textContent = 'Gravando...';
            enviarCadastroPessoa(tipo, registroId, payload, botao, aviso, contextoSalvar);
-         };
-         leitor.onerror = leitor.onabort = function () {
-           exibirErroCadastroPessoa('Não foi possível ler a foto. Selecione o arquivo novamente.', botao, aviso);
-         };
-         leitor.readAsDataURL(inputFoto.files[0]);
+         }).catch(function (erro) {
+           exibirErroCadastroPessoa(erro, botao, aviso);
+         });
        } else {
          enviarCadastroPessoa(tipo, registroId, payload, botao, aviso, contextoSalvar);
        }
