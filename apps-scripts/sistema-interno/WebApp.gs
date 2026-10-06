@@ -1618,50 +1618,82 @@ function montarRespostaElenco_(contexto, listas, recursos) {
 }
 
 function transferirAtletaElenco(payload) {
+  return medirFaseCadastro_('transferencia_total', function () {
+    return transferirAtletaElencoInterno_(payload);
+  });
+}
+
+function transferirAtletaElencoInterno_(payload) {
   const dados = payload || {};
+  medirFaseCadastro_('pre_lock_autorizacao', exigirTransferenciaElenco_);
+  const solicitacao = validarIdsMutacaoElenco_(dados, true);
+  const lock = LockService.getScriptLock();
+  medirFaseCadastro_('espera_lock', function () { lock.waitLock(30000); });
+  const recursos = {};
+  try {
+    const origemAtual = validarAlvoElenco_(null, 'atletas', solicitacao.registroId, recursos, solicitacao);
+    if (EQUIPES_PERFIS_EDICAO.indexOf(origemAtual.sessao.usuario.perfil) === -1) {
+      throw new Error('Somente admin e diretoria podem transferir atletas entre equipes.');
+    }
+    if (solicitacao.equipeDestinoId === origemAtual.equipe.id) throw new Error('Escolha outra equipe do mesmo campeonato.');
+    // Destinos derivados apenas do registro, equipes ativas e vínculos relidos sob este lock.
+    const destino = medirRecursoCadastro_(recursos, 'lock_destino', function () {
+      return equipesDestinoTransferencia_(origemAtual, true, recursos).find(function (item) {
+        return item.id === solicitacao.equipeDestinoId;
+      });
+    });
+    if (!destino) {
+      throw new Error('A equipe de destino não está ativa e vinculada a este campeonato.');
+    }
+    const lista = recursos.listaValidacao;
+    const atleta = lista.find(function (item) { return item.id === solicitacao.registroId; });
+
+    // Qualquer participação no campeonato (por qualquer equipe, mesmo ID ou mesmo CPF) bloqueia a troca.
+    medirRecursoCadastro_(recursos, 'lock_participacao', function () {
+      if (atletaParticipouCompeticao_(jogosParticipacaoOperacao_(origemAtual.campeonato.id, recursos), atleta)) {
+        throw new Error(mensagemVinculoCompeticao_(atleta, origemAtual.campeonato, 'não pode ser transferido'));
+      }
+    });
+
+    const cache = {};
+    // Persistir o snapshot ORIGINAL antes de trocar o vínculo, inclusive no primeiro histórico.
+    const historico = medirFaseCadastro_('preparacao_historico', function () {
+      return prepararHistoricoElenco_(cache, recursos);
+    });
+    const atualizada = lista.map(function (item) {
+      if (item.id !== atleta.id) return item;
+      return Object.assign({}, item, { timeVinculado: destino.nome });
+    });
+    gravarAtletasCampeonato_(origemAtual.campeonato.id, atualizada, recursos,
+      historico, cache[origemAtual.campeonato.id]);
+    const resposta = medirFaseCadastro_('resposta', function () {
+      return montarRespostaElenco_(origemAtual, cache[origemAtual.campeonato.id], recursos);
+    });
+    resposta.recado = atleta.nome + ' transferido para ' + destino.nome + '.';
+    return resposta;
+  } finally {
+    delete recursos.arquivosDrive;
+    lock.releaseLock();
+  }
+}
+
+function exigirTransferenciaElenco_() {
   const sessao = identificarUsuario_();
   if (!sessao.autorizado || EQUIPES_PERFIS_EDICAO.indexOf(sessao.usuario.perfil) === -1) {
     throw new Error('Somente admin e diretoria podem transferir atletas entre equipes.');
   }
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try {
-    const contexto = sessaoElenco_(dados.campeonatoId, dados.equipeId, true);
-    if (EQUIPES_PERFIS_EDICAO.indexOf(contexto.sessao.usuario.perfil) === -1) {
-      throw new Error('Somente admin e diretoria podem transferir atletas entre equipes.');
-    }
-    const atletaId = String(dados.registroId || '').trim();
-    if (!atletaId) throw new Error('Informe o atleta a transferir.');
-    const origemAtual = exigirEdicaoElenco_(contexto);
-    const destino = sessaoElenco_(origemAtual.campeonato.id, dados.equipeDestinoId, true);
-    if (destino.equipe.id === origemAtual.equipe.id) throw new Error('Escolha outra equipe do mesmo campeonato.');
-    const permitidas = equipesDestinoTransferencia_(origemAtual, true);
-    if (!permitidas.some(function (item) { return item.id === destino.equipe.id; })) {
-      throw new Error('A equipe de destino não está ativa e vinculada a este campeonato.');
-    }
+  return sessao;
+}
 
-    const lista = atletasCampeonato_(origemAtual.campeonato.id);
-    const atleta = lista.find(function (item) {
-      return item.id === atletaId && chaveEquipe_(item.timeVinculado) === chaveEquipe_(origemAtual.equipe.nome);
-    });
-    if (!atleta) throw new Error('O atleta não pertence mais a esta equipe. Atualize o elenco.');
-
-    // Qualquer participação no campeonato (por qualquer equipe, mesmo ID ou mesmo CPF) bloqueia a troca.
-    if (atletaParticipouCompeticao_(jogosParticipacaoCampeonato_(origemAtual.campeonato.id), atleta)) {
-      throw new Error(mensagemVinculoCompeticao_(atleta, origemAtual.campeonato, 'não pode ser transferido'));
-    }
-
-    const atualizada = lista.map(function (item) {
-      if (item.id !== atleta.id) return item;
-      return Object.assign({}, item, { timeVinculado: destino.equipe.nome });
-    });
-    gravarAtletasCampeonato_(origemAtual.campeonato.id, atualizada);
-    const resposta = listarElenco(origemAtual.campeonato.id, origemAtual.equipe.id, true);
-    resposta.recado = atleta.nome + ' transferido para ' + destino.equipe.nome + '.';
-    return resposta;
-  } finally {
-    lock.releaseLock();
+function validarIdsMutacaoElenco_(dados, transferencia) {
+  const campos = ['campeonatoId', 'equipeId', 'registroId'];
+  if (transferencia) campos.push('equipeDestinoId');
+  if (campos.some(function (campo) { return typeof dados[campo] !== 'string' || !dados[campo].trim(); })) {
+    throw new Error('Informe campeonato, equipe e cadastro válidos.');
   }
+  const solicitacao = {};
+  campos.forEach(function (campo) { solicitacao[campo] = dados[campo].trim(); });
+  return solicitacao;
 }
 
 function salvarCadastroElenco(payload) {
@@ -1698,30 +1730,87 @@ function salvarCadastroElenco(payload) {
 
 function removerCadastroElenco(payload) {
   const dados = payload || {};
-  const contexto = sessaoElenco_(dados.campeonatoId, dados.equipeId);
-  const id = String(dados.registroId || '').trim();
-  if (!id || ['atletas', 'comissao'].indexOf(dados.tipo) === -1) throw new Error('Informe o cadastro a remover.');
+  medirFaseCadastro_('pre_lock_autorizacao', exigirSessaoElenco_);
+  const solicitacao = validarIdsMutacaoElenco_(dados, false);
+  if (['atletas', 'comissao'].indexOf(dados.tipo) === -1) throw new Error('Informe o cadastro a remover.');
   return dados.tipo === 'comissao'
-    ? removerMembroComissaoInterno_(contexto.campeonato.id, id, contexto)
-    : removerAtletaCampeonatoInterno_(contexto.campeonato.id, id, contexto);
+    ? removerMembroComissaoInterno_(solicitacao.campeonatoId, solicitacao.registroId, null, solicitacao)
+    : removerAtletaCampeonatoInterno_(solicitacao.campeonatoId, solicitacao.registroId, null, solicitacao);
+}
+
+function removerPessoaCampeonatoInterno_(campeonatoId, registroId, tipo, contexto, solicitacaoElenco) {
+  return medirFaseCadastro_('remocao_' + tipo + '_total', function () {
+    const id = String(campeonatoId || '').trim();
+    const alvoId = String(registroId || '').trim();
+    if (!id || !alvoId) throw new Error(tipo === 'atletas'
+      ? 'Informe o campeonato e o atleta a remover.' : 'Informe o campeonato e o membro a remover.');
+    const lock = LockService.getScriptLock();
+    medirFaseCadastro_('espera_lock', function () { lock.waitLock(30000); });
+    const recursos = {};
+    let tela;
+    try {
+      // O endpoint legado continua exclusivo de admin/diretoria; não aceita contexto do cliente.
+      if (!contexto && !solicitacaoElenco) medirFaseCadastro_('lock_autorizacao', sessaoCampeonato_);
+      const atual = validarAlvoElenco_(contexto, tipo, alvoId, recursos, solicitacaoElenco);
+      if (!atual) recursos.campeonatos = campeonatos_();
+      const campeonato = atual ? atual.campeonato
+        : recursos.campeonatos.find(function (item) { return item.id === id; });
+      if (tipo === 'atletas' && !campeonato) throw new Error('Campeonato não encontrado.');
+      const atuais = recursos.listaValidacao || medirRecursoCadastro_(recursos, 'lock_elenco_leitura', function () {
+        return tipo === 'atletas' ? atletasCampeonato_(id, false, recursos)
+          : comissaoTecnicaCampeonato_(id, false, recursos);
+      });
+      if (tipo === 'atletas') {
+        const alvo = atuais.find(function (item) { return item.id === alvoId; });
+        if (!alvo) throw new Error('Atleta não encontrado neste campeonato. Atualize a lista antes de remover.');
+        medirRecursoCadastro_(recursos, 'lock_participacao', function () {
+          if (atletaParticipouCompeticao_(jogosParticipacaoOperacao_(id, recursos), alvo)) {
+            throw new Error(mensagemVinculoCompeticao_(alvo, campeonato, 'não pode ser removido'));
+          }
+        });
+      }
+      const cache = {};
+      // A reconciliação global salva o cadastro original antes de qualquer remoção.
+      const historico = medirFaseCadastro_('preparacao_historico', function () {
+        return prepararHistoricoElenco_(cache, recursos);
+      });
+      const lista = atuais.filter(function (item) { return item.id !== alvoId; });
+      if (tipo === 'atletas') gravarAtletasCampeonato_(id, lista, recursos, historico, cache[id]);
+      else gravarComissaoTecnicaCampeonato_(id, lista, recursos, historico, cache[id]);
+      if (atual) tela = medirFaseCadastro_('resposta', function () {
+        return montarRespostaElenco_(atual, cache[id], recursos);
+      });
+    } finally {
+      delete recursos.arquivosDrive;
+      lock.releaseLock();
+    }
+    // O contrato agregado dos endpoints legados permanece inalterado.
+    if (!tela) tela = medirFaseCadastro_('resposta', function () { return respostaCadastro_(contexto); });
+    tela.recado = tipo === 'atletas' ? 'Atleta removido do campeonato.' : 'Membro removido da comissão técnica.';
+    return tela;
+  });
 }
 
 function respostaCadastro_(contexto) {
   return contexto ? listarElenco(contexto.campeonato.id, contexto.equipe.id) : listarCadastroPessoasCampeonato();
 }
 
+const CADASTRO_METRICAS_ATIVAS = false;
+
 function registrarTempoCadastro_(fase, inicio) {
+  if (!CADASTRO_METRICAS_ATIVAS) return;
   console.log(JSON.stringify({ metrica: 'cadastro_elenco', fase: fase, duracaoMs: Date.now() - inicio }));
 }
 
 function medirFaseCadastro_(fase, operacao) {
+  if (!CADASTRO_METRICAS_ATIVAS) return operacao();
   const inicio = Date.now();
   try { return operacao(); }
   finally { registrarTempoCadastro_(fase, inicio); }
 }
 
 function medirEtapaCadastro_(recursos, categoria, fase, operacao) {
-  if (!recursos) return operacao();
+  if (!CADASTRO_METRICAS_ATIVAS || !recursos) return operacao();
   const inicio = Date.now();
   try { return operacao(); }
   finally {
@@ -1784,7 +1873,7 @@ function chaveCacheIdArquivo_(nomeArquivo) {
 }
 
 function registrarCacheIdArquivo_(recursos, categoria, resultado) {
-  if (!recursos) return;
+  if (!CADASTRO_METRICAS_ATIVAS || !recursos) return;
   console.log(JSON.stringify({ metrica: 'cadastro_elenco', fase: 'drive_id',
     categoria: categoria, resultado: resultado }));
 }
@@ -1912,7 +2001,7 @@ function bytesUtf8Cadastro_(texto) {
 }
 
 function registrarTamanhoCadastro_(recursos, categoria, direcao, origem, json, dados) {
-  if (!recursos) return;
+  if (!CADASTRO_METRICAS_ATIVAS || !recursos) return;
   const bytes = medirEtapaCadastro_(recursos, categoria, 'tamanho_utf8', function () {
     return bytesUtf8Cadastro_(json);
   });
@@ -5024,7 +5113,7 @@ function gerarSumulaJogoCampeonato(payload) {
       });
  }
 
-  function gravarAtletasCampeonato_(campeonatoId, lista, recursos) {
+  function gravarAtletasCampeonato_(campeonatoId, lista, recursos, historicoPreparado, listasPreparadas) {
     const validos = (lista || []).filter(function (item) {
       return item && typeof item === 'object' && String(item.nome || '').trim();
     }).map(function (item) {
@@ -5043,7 +5132,7 @@ function gerarSumulaJogoCampeonato(payload) {
       };
     });
 
-    gravarElencoComHistorico_(campeonatoId, 'atletas', validos, null, null, recursos);
+    gravarElencoComHistorico_(campeonatoId, 'atletas', validos, historicoPreparado, listasPreparadas, recursos);
   }
 
  function listarAtletasCampeonato() {
@@ -5305,44 +5394,8 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
    return removerAtletaCampeonatoInterno_(campeonatoId, atletaId);
  }
 
- function removerAtletaCampeonatoInterno_(campeonatoId, atletaId, contexto) {
-   const id = String(campeonatoId || '').trim();
-   const alvoId = String(atletaId || '').trim();
-
-   if (!id || !alvoId) {
-     throw new Error('Informe o campeonato e o atleta a remover.');
-   }
-
-   const lock = LockService.getScriptLock();
-   lock.waitLock(30000);
-
-   try {
-     validarAlvoElenco_(contexto, 'atletas', alvoId);
-     const campeonato = campeonatos_().find(function (item) { return item.id === id; });
-     if (!campeonato) {
-       throw new Error('Campeonato não encontrado.');
-     }
-     const atuais = atletasCampeonato_(id);
-     const alvo = atuais.find(function (item) { return item.id === alvoId; });
-     if (!alvo) {
-       throw new Error('Atleta não encontrado neste campeonato. Atualize a lista antes de remover.');
-     }
-     // Verificado sob o lock, antes de qualquer gravação de elenco ou histórico.
-     if (atletaParticipouCompeticao_(jogosParticipacaoCampeonato_(id), alvo)) {
-       throw new Error(mensagemVinculoCompeticao_(alvo, campeonato, 'não pode ser removido'));
-     }
-     const lista = atuais.filter(function (item) {
-       return item.id !== alvoId;
-     });
-
-     gravarAtletasCampeonato_(id, lista);
-   } finally {
-     lock.releaseLock();
-   }
-
-    const tela = respostaCadastro_(contexto);
-   tela.recado = 'Atleta removido do campeonato.';
-   return tela;
+ function removerAtletaCampeonatoInterno_(campeonatoId, atletaId, contexto, solicitacaoElenco) {
+   return removerPessoaCampeonatoInterno_(campeonatoId, atletaId, 'atletas', contexto, solicitacaoElenco);
  }
 
   function atualizarAtletaCampeonato(payload) {
@@ -8857,7 +8910,7 @@ function abaFinanceiro_() {
       });
   }
 
-  function gravarComissaoTecnicaCampeonato_(campeonatoId, lista, recursos) {
+  function gravarComissaoTecnicaCampeonato_(campeonatoId, lista, recursos, historicoPreparado, listasPreparadas) {
     const validos = (lista || []).filter(function (item) {
       return item && typeof item === 'object' && String(item.nome || '').trim();
     }).map(function (item) {
@@ -8875,7 +8928,7 @@ function abaFinanceiro_() {
       };
     });
 
-    gravarElencoComHistorico_(campeonatoId, 'comissao', validos, null, null, recursos);
+    gravarElencoComHistorico_(campeonatoId, 'comissao', validos, historicoPreparado, listasPreparadas, recursos);
   }
 
   function listarComissaoTecnica() {
@@ -9090,31 +9143,8 @@ function abaFinanceiro_() {
     return removerMembroComissaoInterno_(campeonatoId, membroId);
   }
 
-  function removerMembroComissaoInterno_(campeonatoId, membroId, contexto) {
-    const id = String(campeonatoId || '').trim();
-    const alvoId = String(membroId || '').trim();
-
-    if (!id || !alvoId) {
-      throw new Error('Informe o campeonato e o membro a remover.');
-    }
-
-    const lock = LockService.getScriptLock();
-    lock.waitLock(30000);
-
-    try {
-      validarAlvoElenco_(contexto, 'comissao', alvoId);
-      const lista = comissaoTecnicaCampeonato_(id).filter(function (item) {
-        return item.id !== alvoId;
-      });
-
-      gravarComissaoTecnicaCampeonato_(id, lista);
-    } finally {
-      lock.releaseLock();
-    }
-
-    const tela = respostaCadastro_(contexto);
-    tela.recado = 'Membro removido da comissão técnica.';
-    return tela;
+  function removerMembroComissaoInterno_(campeonatoId, membroId, contexto, solicitacaoElenco) {
+    return removerPessoaCampeonatoInterno_(campeonatoId, membroId, 'comissao', contexto, solicitacaoElenco);
   }
 
   /**

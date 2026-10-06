@@ -163,10 +163,10 @@ node --test apps-scripts\sistema-interno\performance\benchmark.test.cjs
 Esses testes verificam a coleta, os limites, a separação entre HTTP e sucesso
 RPC e a ausência de dados privados no relatório. Não medem a implantação real.
 
-Para o salvamento de elencos e a otimização de imagens:
+Para salvamento, remoção/transferência de elencos e otimização de imagens:
 
 ```powershell
-node --test apps-scripts\sistema-interno\performance\save.test.cjs apps-scripts\sistema-interno\performance\escudos.test.cjs apps-scripts\sistema-interno\performance\arquivos-id.test.cjs
+node --test apps-scripts\sistema-interno\performance\save.test.cjs apps-scripts\sistema-interno\performance\mutations.test.cjs apps-scripts\sistema-interno\performance\escudos.test.cjs apps-scripts\sistema-interno\performance\arquivos-id.test.cjs apps-scripts\sistema-interno\performance\benchmark.test.cjs
 ```
 
 Fixtures locais, sem acesso ou escrita na rede. Os testes de salvamento cobrem
@@ -176,12 +176,20 @@ time forçado pelo contexto fresco, CPF/participação, resposta autorizada,
 reconciliação histórica global e recuperação de falhas. Também verificam que
 os endpoints legados mantêm seu time solicitado e suas permissões.
 Contagens são chamadas no fixture, não uma garantia de tempo no Drive.
+`mutations.test.cjs` cobre snapshot original persistido antes de remoção ou
+transferência, reconciliação global sem segunda varredura, inscrições ausentes,
+recuperação de falhas, participante por ID/CPF, permissões revogadas durante a
+espera, bloqueios, destinos/alvos removidos ou movidos, cache de IDs, flag de
+métricas e contratos de resposta/frontend/legados. No fixture, elencos lidos
+caem de 8/8/7 para 4 e buscas por nome de 12/12/11 para 5
+(remover atleta/comissão/transferir). As escritas históricas permanecem.
 
 ## Logs do servidor: tamanho e memória versus Drive
 
-No editor Apps Script → **Execuções**, abra a execução do salvamento e filtre
+No editor Apps Script → **Execuções**, abra a execução do salvamento,
+remoção ou transferência e filtre
 as linhas JSON por `"metrica":"cadastro_elenco"`. Não é necessário instalar
-o monitor do navegador para estes logs. Consulte a seção **Logs de salvamento**
+o monitor do navegador para estes logs. Consulte a seção **Logs de salvamento, remoção e transferência**
 em `apps-scripts\sistema-interno\campeonato\README.md` para todos os campos
 e fases. Compare uma criação/edição equivalente por execução, confirmando o
 sucesso na tela, sem repetir gravações reais automaticamente.

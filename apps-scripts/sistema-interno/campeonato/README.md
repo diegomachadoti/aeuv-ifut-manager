@@ -2,6 +2,14 @@
 
 ## Objetivo
 
+**Logs de diagnóstico do cadastro:** `CADASTRO_METRICAS_ATIVAS` em
+`WebApp.gs` controla os registros `cadastro_elenco`. Está inicialmente
+`true` para manter a coleta atual. Use `false` na operação normal e publique
+uma nova versão; isso desativa logs de fases, resultados do cache de IDs e
+cálculos de tamanho UTF-8. Não desativa o cache, validações, gravações ou
+recuperação do histórico. Para investigar novamente, retorne a `true` e
+publique. Erros normais do Apps Script continuam visíveis.
+
 **Fluxo implementado nesta etapa:** Banco de Dados de Equipes com escudo no
 Drive → Equipes participantes (seleção do campeonato e vínculo de equipe
 existente) → Gerenciar elenco (Atletas / Comissão técnica, cadastro e importação
@@ -50,8 +58,8 @@ para validar o vínculo nessa etapa. O despacho leva apenas IDs solicitados,
 não um contexto autorizado. Depois da espera, sessão, acesso à equipe ativa,
 vínculo ao campeonato, bloqueio e propriedade do cadastro são validados com
 dados frescos antes de qualquer escrita, inclusive histórica. O time gravado
-é forçado pelo nome da equipe assim validada, nunca pelo payload. Remoção,
-transferência, consultas e endpoints legados mantêm seus fluxos; os endpoints
+é forçado pelo nome da equipe assim validada, nunca pelo payload. Consultas
+mantêm seus fluxos; os endpoints
 legados de atletas/comissão continuam restritos a admin/diretoria e validam o
 time informado. Não há cache de dados global nem entre
 requisições (apenas IDs de arquivos, descritos abaixo). A resposta só reutiliza recursos vinculados ao contexto
@@ -90,7 +98,63 @@ apps-scripts\sistema-interno\performance\escudos.test.cjs
 apps-scripts\sistema-interno\performance\arquivos-id.test.cjs`, executado na raiz
 do repositório.
 
-**Logs de salvamento:** nas execuções do Apps Script, filtre as mensagens
+**Remover atletas/comissão e transferir atletas:** `removerCadastroElenco`
+e `transferirAtletaElenco` aplicam a mesma arquitetura conservadora: antes do
+lock somente autenticação/perfil e formato dos IDs. Sob o lock reavaliam
+acesso, equipe ativa, vínculo, bloqueio e propriedade; transferência continua
+exclusiva de admin/diretoria e verifica destino diferente, existente, ativo e
+vinculado ao mesmo campeonato. Participação por ID **ou CPF normalizado**
+impede remover/transferir atleta para qualquer perfil, inclusive admin.
+Associado só remove na própria equipe desbloqueada; admin/diretoria mantêm
+a exceção aos bloqueios de elenco, inclusive na transferência entre elencos
+bloqueados. Payload não escolhe time, CPF nem contexto autorizado.
+
+Após todas as guardas, a reconciliação global síncrona persiste o snapshot
+**original antes da escrita destrutiva**. Histórico e listas preparados são
+passados à gravação para não repetir a varredura global; a reconciliação
+pós-escrita continua ativa. Inscrições ausentes e campeonatos removidos mantêm
+snapshots, com presença atualizada. Falha pré-histórico impede a escrita do
+elenco; falha no elenco ou no histórico posterior exige recarregar e mantém
+a recuperação pela próxima reconciliação. Não há tarefas adiadas, alteração
+de snapshots esportivos, novas regras de CPF ou saneamento de duplicatas
+legadas. A resposta completa usa listas persistidas e contexto autorizado
+ainda sob lock; o frontend existente a renderiza na mesma RPC, sem segunda
+consulta. Remoções legadas continuam restritas a admin/diretoria (reavaliados
+também após a espera), com resposta agregada e sem mudar o contrato.
+
+Contagens no fixture de dois campeonatos, histórico inicialmente ausente,
+um alvo e sem migração de IDs, medidas antes/depois desta otimização:
+
+| Recurso | Remover atleta | Remover comissão | Transferir atleta |
+| --- | --- | --- | --- |
+| Leituras de elencos | 8 → 4 | 8 → 4 | 7 → 4 |
+| Buscas Drive por nome | 12 → 5 | 12 → 5 | 11 → 5 |
+| Listas de campeonatos | 6 → 1 | 5 → 1 | 6 → 1 |
+| Registros de equipes | 5 → 1 | 5 → 1 | 6 → 1 |
+| Consultas de times | 7 → 2 | 7 → 2 | 9 → 2 |
+| Leituras de bloqueios | 2 → 1 | 2 → 1 | 2 → 1 |
+| Identificações de sessão | 3 → 2 | 3 → 2 | 5 → 2 |
+| Aquisições de lock | 2 → 1 | 2 → 1 | 1 → 1 |
+
+As três escritas necessárias permanecem: histórico original, elenco e
+histórico atualizado. Com histórico preexistente lê-se esse arquivo uma vez.
+As contagens não estimam latência real: espera por lock, Drive, fotos e
+reconciliação global ainda custam tempo. Testes adicionais:
+`node --test apps-scripts\sistema-interno\performance\mutations.test.cjs`.
+
+**Publicar estas otimizações:** copie o `WebApp.gs` atualizado para o projeto
+Apps Script do **sistema interno**; mantenha o `Index.html` mais recente junto
+dele para preservar as melhorias anteriores de imagens e interface. No editor,
+salve e use **Implantar → Gerenciar implantações → Editar (lápis) → Versão:
+Nova versão → Implantar**, na implantação WebApp já existente, sem alterar
+identidade de execução/permissões. A URL existente permanece. Esta mudança
+não publica nem executa gravações automaticamente. Primeiro valide manualmente
+em uma base de teste, com os mesmos perfis/cenários, confirmando a tela e o
+histórico. Não faça benchmark automático de remoções/transferências reais.
+Para desligar métricas, mude `CADASTRO_METRICAS_ATIVAS` para `false` e publique
+outra versão pelo mesmo procedimento.
+
+**Logs de salvamento, remoção e transferência:** nas execuções do Apps Script, filtre as mensagens
 JSON por `"metrica":"cadastro_elenco"`. Tempos gerais contêm `metrica`,
 `fase` e `duracaoMs`; etapas de IO/memória também têm `categoria`
 (`historico`, `atletas`, `comissao`, `equipes`, `campeonatos` ou `bloqueios`).
@@ -114,6 +178,14 @@ esses intervalos são aninhados e não devem ser somados para obter o total.
 A resposta inclui a montagem no servidor, não transporte nem renderização.
 Operações interrompidas não produzem todas as fases. Compare a mesma base,
 perfil e ação depois da publicação; não repita gravações reais por benchmark.
+Remoções emitem o pai inclusivo `remocao_atletas_total` ou
+`remocao_comissao_total`; transferência emite `transferencia_total` e a
+subfase `lock_destino` (consulta em memória aos destinos frescos). A remoção
+tem autenticação/guardas baratas antes do intervalo total; transferência as
+inclui. Esses pais são tempos do servidor, não do navegador. As fases
+comuns, etapas por categoria, tamanhos e resultados do cache de IDs continuam
+sob a única flag `CADASTRO_METRICAS_ATIVAS`; desligá-la evita também o cálculo
+dos tamanhos. Nenhum rótulo contém identificadores ou dados de pessoas.
 
 O arquivo Drive localizado na leitura do elenco/histórico é reutilizado nas
 escritas da **mesma operação**, somente após validar o contexto sob ScriptLock.

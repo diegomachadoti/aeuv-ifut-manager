@@ -1,6 +1,33 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { harness, person, participation, historyFile, rosterFile } = require('./save-fixture.cjs');
+const fs = require('node:fs');
+const path = require('node:path');
+
+test('desligar metricas elimina logs e calculo de tamanho sem mudar persistencia ou erros', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'WebApp.gs'), 'utf8');
+  assert(source.includes('const CADASTRO_METRICAS_ATIVAS = true;'));
+  const disabled = source.replace('const CADASTRO_METRICAS_ATIVAS = true;',
+    'const CADASTRO_METRICAS_ATIVAS = false;');
+  for (const tipo of ['atletas', 'comissao']) {
+    for (const edit of [false, true]) {
+      const h = harness(disabled);
+      if (edit) h.seed('c1', tipo, [person(tipo)]);
+      h.c.bytesUtf8Cadastro_ = () => { throw new Error('Tamanho nao deve ser calculado'); };
+      const result = h.c.salvarCadastroElenco(h.payload(tipo, edit));
+      assert.equal(h.logs.length, 0);
+      assert.equal(result.registros[0][tipo].length, h.roster('c1', tipo).length);
+      assert(h.history().inscricoes.some(item => item.tipo === tipo));
+      assert.equal(h.counts.rosters, 4);
+      assert(!h.locked());
+    }
+  }
+  const h = harness(disabled);
+  assert.throws(() => h.c.medirFaseCadastro_('teste', () => { throw Error('falha'); }), /falha/);
+  assert.throws(() => h.c.medirEtapaCadastro_({}, 'atletas', 'teste',
+    () => { throw Error('falha'); }), /falha/);
+  assert.equal(h.logs.length, 0);
+});
 
 for (const tipo of ['atletas', 'comissao']) {
   for (const edit of [false, true]) {
