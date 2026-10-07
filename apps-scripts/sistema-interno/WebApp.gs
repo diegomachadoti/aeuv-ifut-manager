@@ -1191,6 +1191,17 @@ function fonteOtimizacaoImagens_(fonte) {
   }
   const nome = arquivoCadastroPessoasCampeonato_(id, fonte.tipo === 'atletas' ? 'Atletas' : 'Comissao Tecnica');
   const chave = fonte.tipo === 'atletas' ? chaveAtletasCampeonato_(id) : chaveComissaoTecnicaCampeonato_(id);
+  if (elencosParticionadosCutoverAtivo_()) {
+    const recursos = {};
+    const lista = lerElencoBrutoOperacao_(id, fonte.tipo, recursos);
+    // The photo list is mutated in memory only after its durable backup.
+    delete recursos.elencosBrutos;
+    const equipe = fonte.equipeId ? equipePermanenteElencoParticionado_(fonte.equipeId) : null;
+    return { lista: equipe ? lista.filter(function (item) {
+      return chaveEquipe_(item.timeVinculado) === chaveEquipe_(equipe.nome);
+    }) : lista, campo: 'foto', limite: 200 * 1024, nome: nomePastaElencosParticionados_(id),
+    gravar: function () { gravarElencoComHistorico_(id, fonte.tipo, lista, null, null, recursos); } };
+  }
   return { lista: lerListaCadastroDrive_(nome, chave), campo: 'foto', limite: 200 * 1024,
     nome: nome, gravar: function (lista) { gravarListaCadastroDrive_(nome, chave, lista); } };
 }
@@ -1252,7 +1263,7 @@ function salvarLoteOtimizacaoImagens(payload) {
       arquivoOriginal: fonte.nome, fonte: payload.fonte, registros: fonte.lista
     }), 'application/json', 'AEUV - Backup Imagens - ' + Utilities.getUuid() + '.json'));
     alteracoes.forEach(function (alteracao) { alteracao.item[fonte.campo] = alteracao.imagem; });
-    // Cada lote altera um unico documento. Historico e snapshots esportivos nao sao regravados.
+    // O backup precede a publicacao; snapshots esportivos salvos permanecem intactos.
     fonte.gravar(fonte.lista);
     return { total: alteracoes.length, backupId: backup.getId() };
   } finally {
@@ -1332,6 +1343,21 @@ function timesCampeonatoOperacao_(campeonatoId, recursos) {
 
 function lerElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
   const ler = function () {
+    if (elencosParticionadosCutoverAtivo_()) {
+      const estado = lerEstadoElencosParticionados_(campeonatoId);
+      const assinatura = assinaturaEstadoElencoParticionado_(estado);
+      if (recursos) {
+        const estados = recursos.estadosElencosParticionados
+          || (recursos.estadosElencosParticionados = Object.create(null));
+        const anterior = estados[campeonatoId];
+        if (anterior && anterior.assinatura !== assinatura) {
+          throw new Error('Uma fonte do elenco mudou durante a operacao. Recarregue antes de repetir.');
+        }
+        estados[campeonatoId] = { revisao: estado.manifesto.revisao, assinatura: assinatura };
+      }
+      return lerElencoParticionadoPorEquipe_(campeonatoId, tipo, estado)
+        .reduce(function (lista, equipe) { return lista.concat(equipe.registros); }, []);
+    }
     return lerListaCadastroDrive_(
       arquivoCadastroPessoasCampeonato_(campeonatoId, tipo === 'atletas' ? 'Atletas' : 'Comissao Tecnica'),
       tipo === 'atletas' ? chaveAtletasCampeonato_(campeonatoId) : chaveComissaoTecnicaCampeonato_(campeonatoId),
@@ -2213,6 +2239,15 @@ function processarFilaHistoricoElencoSobLock_() {
   const campeonatos = campeonatos_();
   const alvos = pendencias.map(function (pendencia) {
     const campeonato = campeonatos.find(function (item) { return item.id === pendencia.campeonatoId; });
+    if (!campeonato && elencosParticionadosCutoverAtivo_()) {
+      const tombstone = props.getProperty(chaveRemocaoElencosParticionados_(pendencia.campeonatoId));
+      if (tombstone) {
+        const removido = JSON.parse(tombstone);
+        if (removido.versao === 1 && removido.campeonatoId === pendencia.campeonatoId) {
+          return { pendencia: pendencia, campeonato: { id: pendencia.campeonatoId }, removido: true };
+        }
+      }
+    }
     if (!campeonato) {
       const erro = new Error('Campeonato da fila não encontrado; pendência preservada.');
       erro.code = 'CAMPEONATO_AUSENTE';
@@ -2233,11 +2268,11 @@ function processarFilaHistoricoElencoSobLock_() {
         item.presente = false;
       }
     });
-    const listas = {
+    const listas = alvo.removido ? { atletas: [], comissao: [] } : {
       atletas: atletasCampeonato_(campeonato.id, false),
       comissao: comissaoTecnicaCampeonato_(campeonato.id, false)
     };
-    reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas);
+    if (!alvo.removido) reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas);
     resultados.push({
       campeonatoId: campeonato.id,
       atletasLidos: listas.atletas.length,
@@ -2368,6 +2403,10 @@ function gravarHistoricoElenco_(dados, recursos) {
 }
 
 function garantirIdsHistoricoElenco_(campeonatoId, tipo, lista, persistirIds, recursos) {
+  if (elencosParticionadosCutoverAtivo_()) {
+    validarRegistrosParticaoElenco_(lista);
+    return;
+  }
   if (!persistirIds) return;
   let mudou = false;
   lista.forEach(function (pessoa) {
@@ -2513,11 +2552,42 @@ function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado
     .find(function (item) { return item.id === campeonatoId; });
   if (!campeonato) throw new Error('Campeonato não encontrado.');
   try {
-    const gravar = function () { return gravarListaCadastroDrive_(
-      arquivoCadastroPessoasCampeonato_(campeonatoId, tipo === 'atletas' ? 'Atletas' : 'Comissao Tecnica'),
-      tipo === 'atletas' ? chaveAtletasCampeonato_(campeonatoId) : chaveComissaoTecnicaCampeonato_(campeonatoId),
-      lista, recursos, tipo
-    ); };
+    const gravar = function () {
+      if (elencosParticionadosCutoverAtivo_()) {
+        const estado = lerEstadoElencosParticionados_(campeonatoId);
+        const assinatura = assinaturaEstadoElencoParticionado_(estado);
+        const anterior = recursos && recursos.estadosElencosParticionados
+          && recursos.estadosElencosParticionados[campeonatoId];
+        if (anterior && anterior.assinatura !== assinatura) {
+          throw new Error('Uma fonte do elenco mudou durante a operacao. Recarregue antes de repetir.');
+        }
+        const grupos = prepararParticoesElencoPorNome_(lista, recursos && recursos.equipes);
+        const alteracoes = grupos.map(function (grupo) {
+          return { tipo: tipo, equipeId: grupo.equipeId, registros: grupo.registros };
+        });
+        estado.manifesto.particoes.forEach(function (particao) {
+          if (particao.tipo === tipo && !grupos.some(function (grupo) {
+            return grupo.equipeId === particao.equipeId;
+          })) alteracoes.push({ tipo: tipo, equipeId: particao.equipeId, registros: [] });
+        });
+        // Durable enrollment queue and dirty checkpoint precede the sole manifest commit.
+        invalidarIndiceValidacao_(campeonatoId);
+        if (recursos) delete recursos.indicesValidacao;
+        marcarHistoricoElencoPendente_(campeonatoId);
+        marcarSnapshotsEsportivosPendentes_();
+        if (alteracoes.length) gravarParticoesElenco_(
+          campeonatoId, alteracoes, estado.manifesto.revisao, assinatura);
+        if (recursos && recursos.estadosElencosParticionados) {
+          delete recursos.estadosElencosParticionados[campeonatoId];
+        }
+        return;
+      }
+      return gravarListaCadastroDrive_(
+        arquivoCadastroPessoasCampeonato_(campeonatoId, tipo === 'atletas' ? 'Atletas' : 'Comissao Tecnica'),
+        tipo === 'atletas' ? chaveAtletasCampeonato_(campeonatoId) : chaveComissaoTecnicaCampeonato_(campeonatoId),
+        lista, recursos, tipo
+      );
+    };
     // A leitura bruta deixa de representar o arquivo depois da gravação.
     descartarElencoBrutoOperacao_(campeonatoId, tipo, recursos);
     if (recursos) medirFaseCadastro_('gravacao_elenco', gravar);
@@ -2526,7 +2596,9 @@ function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado
     const orientacao = /Acesso negado:\s*DriveApp/i.test(e.message || '')
       ? ' A execução usa a conta de quem acessa. Peça ao administrador para verificar a autorização Google e a permissão de edição dessa conta no arquivo de elenco; não compartilhe a pasta inteira como solução.'
       : '';
-    throw new Error('Não foi possível confirmar a gravação do elenco. Recarregue antes de repetir a operação; o histórico será reconciliado com os dados persistidos. ' + e.message + orientacao);
+    const erro = new Error('Não foi possível confirmar a gravação do elenco. Recarregue antes de repetir a operação; o histórico será reconciliado com os dados persistidos. ' + e.message + orientacao);
+    erro.cause = e;
+    throw erro;
   }
   const listasResposta = listasPreparadas || cache[campeonatoId];
   if (listasResposta) listasResposta[tipo] = lista;
@@ -3272,9 +3344,17 @@ function arquivoCadastroPessoasCampeonato_(campeonatoId, tipo) {
   return 'AEUV - Campeonato - ' + encodeURIComponent(id) + ' - ' + tipo + '.json';
 }
 
-// Storage-only vertical slice. RPCs still use the legacy storage until all
-// consumers, history and validation indexes are switched together.
+// Production remains legacy; active-gate integration is exercised only in VM fixtures.
 const ELENCOS_PARTICOES_MANIFESTO = 'manifesto.json';
+const ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = false;
+
+function elencosParticionadosCutoverAtivo_() {
+  return ELENCOS_PARTICIONADOS_CUTOVER_ATIVO;
+}
+
+function chaveRemocaoElencosParticionados_(campeonatoId) {
+  return 'ELENCOS_PARTICOES_REMOVIDO_V1_' + digestIndiceValidacao_(campeonatoId);
+}
 
 function identidadeElencoParticionado_(id) {
   if (typeof id !== 'string' || !id.trim() || id !== id.trim()) {
@@ -3427,6 +3507,50 @@ function lerElencoParticionado_(campeonatoId, tipo) {
     }, []);
 }
 
+// Gated RPC write adapter. It resolves every
+// timeVinculado to exactly one permanent team and never silently drops rows.
+function prepararParticoesElencoPorNome_(registros, equipes) {
+  validarRegistrosParticaoElenco_(registros);
+  const registroEquipes = equipes || lerRegistroEquipes_(), porEquipe = new Map();
+  registros.forEach(function (registro) {
+    if (typeof registro.timeVinculado !== 'string' || !registro.timeVinculado.trim()) {
+      throw new Error('Registro sem timeVinculado. Corrija o cadastro antes de continuar.');
+    }
+    const mapeada = equipePorNomeElencoParticionado_(registro.timeVinculado, registroEquipes);
+    const equipe = equipePermanenteElencoParticionado_(mapeada.id, registroEquipes);
+    if (!porEquipe.has(equipe.id)) porEquipe.set(equipe.id, []);
+    porEquipe.get(equipe.id).push(Object.assign({}, registro, { timeVinculado: equipe.nome }));
+  });
+  return Array.from(porEquipe.keys()).map(function (equipeId) {
+    return { equipeId: equipeId, registros: porEquipe.get(equipeId) };
+  });
+}
+
+// ID-keyed read adapter for consumers that must not infer storage identity
+// from labels. Resolving the canonical label back to an ID also rejects
+// ambiguous names rather than returning a partial roster.
+function lerElencoParticionadoPorEquipe_(campeonatoId, tipo, estadoPreparado) {
+  if (tipo !== 'atletas' && tipo !== 'comissao') throw new Error('Categoria de elenco invalida.');
+  const estado = estadoPreparado || lerEstadoElencosParticionados_(campeonatoId);
+  if (estado.manifesto.campeonatoId !== campeonatoId) throw new Error('Estado de outro campeonato.');
+  const equipes = lerRegistroEquipes_(), ids = new Set();
+  return estado.manifesto.particoes.filter(function (item) { return item.tipo === tipo; })
+    .map(function (particao) {
+      const equipe = equipePermanenteElencoParticionado_(particao.equipeId, equipes);
+      const registros = registrosCanonicosElencoParticionado_(
+        lerConteudoParticaoElenco_(estado, particao).registros, particao.equipeId, equipes);
+      registros.forEach(function (registro) {
+        if (ids.has(registro.id)) throw new Error('Identificador repetido entre particoes de elenco.');
+        ids.add(registro.id);
+        const mapeada = equipePorNomeElencoParticionado_(registro.timeVinculado, equipes);
+        if (mapeada.id !== equipe.id) {
+          throw new Error('Nome da equipe nao corresponde a identidade permanente da particao.');
+        }
+      });
+      return { equipeId: equipe.id, registros: registros };
+    });
+}
+
 // Live fingerprint, deliberately not based on legacy metadata or cached IDs.
 // External edits of a published partition also change this fingerprint.
 function fontesEstadoElencoParticionado_(estado) {
@@ -3468,8 +3592,7 @@ function criarDocumentoPreparacaoElenco_(pasta, nome, dados) {
   return nome;
 }
 
-// Recovery evidence only, not the enrollment history or its legacy worker queue.
-// Keep RPCs inactive until both workers and all consumers share the new sources.
+// Recovery evidence only; the RPC adapter separately persists the enrollment queue.
 function prepararSnapshotPublicacaoElenco_(pasta, estado, conteudos, revisao, assinatura) {
   return criarDocumentoPreparacaoElenco_(pasta, 'snapshot - ' + identidadeElencoParticionado_(revisao) + '.json', {
     schema: 'aeuv.elencos.snapshot', versao: 1, campeonatoId: estado.manifesto.campeonatoId,
@@ -3631,6 +3754,7 @@ function transferirRegistroParticionado_(campeonatoId, tipo, registroId, origemI
 
 function removerCadastroPessoasCampeonato_(campeonatoId) {
   invalidarIndiceValidacao_(campeonatoId);
+  if (elencosParticionadosCutoverAtivo_()) return;
   ['Atletas', 'Comissao Tecnica'].forEach(function (tipo) {
     const nome = arquivoCadastroPessoasCampeonato_(campeonatoId, tipo);
     try {
@@ -3860,12 +3984,29 @@ function removerCampeonato(id) {
     }
 
       prepararHistoricoElenco_();
-      gravarCampeonatos_(restante);
-      PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_ESTRUTURA_CHAVE + idAlvo);
-      PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_TIMES_CHAVE + idAlvo);
-      removerCadastroPessoasCampeonato_(idAlvo);
-      removerCadastroTabelaCampeonato_(idAlvo);
-      PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_COMISSAO_CHAVE + idAlvo);
+      if (elencosParticionadosCutoverAtivo_()) {
+        const props = PropertiesService.getScriptProperties();
+        props.setProperty(chaveRemocaoElencosParticionados_(idAlvo), JSON.stringify({
+          versao: 1, campeonatoId: idAlvo, removidoEm: new Date().toISOString()
+        }));
+        invalidarIndiceValidacao_(idAlvo);
+        marcarHistoricoElencoPendente_(idAlvo);
+      }
+      try { gravarCampeonatos_(restante); }
+      catch (causa) {
+        if (!elencosParticionadosCutoverAtivo_()) throw causa;
+        const erro = new Error('Nao foi possivel confirmar a exclusao logica do campeonato. '
+          + 'Recarregue antes de repetir; os arquivos e o historico foram preservados.');
+        erro.cause = causa;
+        throw erro;
+      }
+      if (!elencosParticionadosCutoverAtivo_()) {
+        PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_ESTRUTURA_CHAVE + idAlvo);
+        PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_TIMES_CHAVE + idAlvo);
+        removerCadastroPessoasCampeonato_(idAlvo);
+        removerCadastroTabelaCampeonato_(idAlvo);
+        PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_COMISSAO_CHAVE + idAlvo);
+      }
       limparIndiceValidacaoRemovido_(idAlvo);
 
      const tela = montarTelaCampeonatos_(restante, sessao);
@@ -4893,8 +5034,7 @@ function validarNovasInfracoesDisciplinaTabela_(infracoesAntes, jogos) {
 function elencosResultadoTabela_(contexto, jogo, persistirIds) {
   // A lista bruta preserva a situação ativa omitida pelo normalizador legado da comissão.
   const listas = { atletas: atletasCampeonato_(contexto.campeonato.id, persistirIds !== false),
-    comissao: lerListaCadastroDrive_(arquivoCadastroPessoasCampeonato_(contexto.campeonato.id, 'Comissao Tecnica'),
-      chaveComissaoTecnicaCampeonato_(contexto.campeonato.id)) };
+    comissao: lerElencoBrutoOperacao_(contexto.campeonato.id, 'comissao') };
   garantirIdsHistoricoElenco_(contexto.campeonato.id, 'comissao', listas.comissao, persistirIds !== false);
   const identidades = new Set();
   const metadadosAtuais = [];
@@ -5388,9 +5528,7 @@ function gerarSumulaJogoCampeonato(payload) {
     const grupo = contexto.grupos.find(function (item) { return item.id === jogo.grupoId; });
     const atletas = atletasCampeonato_(contexto.campeonato.id);
     // O normalizador público da comissão legada não expõe o campo ativo.
-    const comissao = lerListaCadastroDrive_(
-      arquivoCadastroPessoasCampeonato_(contexto.campeonato.id, 'Comissao Tecnica'),
-      chaveComissaoTecnicaCampeonato_(contexto.campeonato.id));
+    const comissao = lerElencoBrutoOperacao_(contexto.campeonato.id, 'comissao');
     const e = escaparSumulaTabela_;
     // A leitura é obrigatória: uma falha não pode aparentar ausência de suspensões.
     const controle = listarPunicoes();
@@ -6283,10 +6421,7 @@ function listarCadastroPessoasCampeonato() {
 }
 
   function comissaoCampeonato_(campeonatoId) {
-    const lista = lerListaCadastroDrive_(
-      arquivoCadastroPessoasCampeonato_(campeonatoId, 'Comissao Tecnica'),
-      chaveComissaoCampeonato_(campeonatoId)
-    );
+    const lista = lerElencoBrutoOperacao_(campeonatoId, 'comissao');
 
       return lista.filter(function (item) {
         return item && typeof item === 'object' && String(item.nome || '').trim();
@@ -7215,10 +7350,17 @@ function md5IndiceValidacao_(texto) {
 }
 
 function versoesFontesIndiceValidacao_(id, recursos, posicoes) {
-  if (typeof Drive === 'undefined') throw new Error('Ative o servico avancado Drive v3 para usar o indice.');
   const fontes = fontesIndiceValidacao_(id);
   return (posicoes || [0, 1, 2]).map(function (posicao) {
     const fonte = fontes[posicao];
+    if (elencosParticionadosCutoverAtivo_() && fonte.tipo !== 'tabela') {
+      const estado = lerEstadoElencosParticionados_(id);
+      return ['aeuv.elencos.particoes.v2', fonte.tipo, digestIndiceValidacao_(JSON.stringify([
+        estado.pasta ? estado.pasta.getId() : null, estado.arquivo ? estado.arquivo.getId() : null,
+        assinaturaEstadoElencoParticionado_(estado)
+      ]))];
+    }
+    if (typeof Drive === 'undefined') throw new Error('Ative o servico avancado Drive v3 para usar o indice.');
     const arquivo = localizarArquivoCadastro_(fonte.nome, recursos, fonte.tipo).arquivo;
     // Absence is resolved again on every request; never persist/cache a negative file lookup.
     if (!arquivo) {
@@ -7269,7 +7411,8 @@ function compactarParticipacaoIndiceValidacao_(jogos) {
 }
 
 function lerPayloadIndiceValidacao_(id, meta) {
-  if (meta.versao !== 1 || meta.dirty !== false || !meta.token
+  const versao = elencosParticionadosCutoverAtivo_() ? 2 : 1;
+  if (meta.versao !== versao || meta.dirty !== false || !meta.token
       || !Number.isInteger(meta.chunks) || meta.chunks < 1 || meta.chunks > 24
       || !Array.isArray(meta.fontes) || meta.fontes.length !== 3 || !meta.digest) return null;
   const props = PropertiesService.getScriptProperties(), prefixo = chaveIndiceValidacao_(id) + meta.token + '_';
@@ -7286,7 +7429,7 @@ function lerPayloadIndiceValidacao_(id, meta) {
     registrarFalhaIndiceValidacao_('payload_corrompido');
     return null;
   }
-  if (indice.versao !== 1 || indice.campeonatoId !== id || indice.token !== meta.token
+  if (indice.versao !== versao || indice.campeonatoId !== id || indice.token !== meta.token
       || !indice.cadastros || !indice.cadastros.atletas || !indice.cadastros.comissao || !indice.participacao) return null;
   return indice;
 }
@@ -7294,7 +7437,7 @@ function lerPayloadIndiceValidacao_(id, meta) {
 function consultarIndiceValidacao_(id, recursos, tipo) {
   try {
     // Reuse only within the existing synchronous lock, never across requests.
-    const reutilizar = recursos && LockService.getScriptLock().hasLock();
+    const reutilizar = !elencosParticionadosCutoverAtivo_() && recursos && LockService.getScriptLock().hasLock();
     const cache = reutilizar && recursos.indicesValidacao;
     let entrada = cache && cache[id];
     if (!entrada) {
@@ -7324,7 +7467,7 @@ function consultarIndiceValidacao_(id, recursos, tipo) {
 function invalidarIndiceValidacao_(id) {
   const checkpoint = Utilities.getUuid();
   PropertiesService.getScriptProperties().setProperty(chaveIndiceValidacao_(id) + 'meta',
-    JSON.stringify({ versao: 1, dirty: true, checkpoint: checkpoint }));
+    JSON.stringify({ versao: elencosParticionadosCutoverAtivo_() ? 2 : 1, dirty: true, checkpoint: checkpoint }));
   return checkpoint;
 }
 
@@ -7408,7 +7551,7 @@ function publicarIndiceValidacao_(id, indice, fontes, checkpoint, anterior) {
     throw new Error('Sem espaco seguro nas propriedades para publicar o indice.');
   }
   partes.forEach(function (valor, i) { props.setProperty(prefixo + token + '_' + i, valor); });
-  const meta = { versao: 1, dirty: false, checkpoint: checkpoint, token: token, chunks: partes.length,
+  const meta = { versao: elencosParticionadosCutoverAtivo_() ? 2 : 1, dirty: false, checkpoint: checkpoint, token: token, chunks: partes.length,
     fontes: fontes, digest: digestIndiceValidacao_(texto), atualizadoEm: new Date().toISOString() };
   if (!lerPayloadIndiceValidacao_(id, meta)) throw new Error('Falha na leitura de confirmacao do indice.');
   // Single publication point. Dirty metadata survives all earlier failures.
@@ -7458,7 +7601,7 @@ function reconciliarIndiceValidacao_(id) {
         && JSON.stringify(fontes) === JSON.stringify(antes.fontes)) return 'atual';
   } catch (e) { registrarFalhaIndiceValidacao_('payload_reconciliacao'); }
   // Never hold ScriptLock while reading/parsing large roster/table files.
-  const indice = { versao: 1, campeonatoId: id, cadastros: {
+  const indice = { versao: elencosParticionadosCutoverAtivo_() ? 2 : 1, campeonatoId: id, cadastros: {
     atletas: compactarCadastroIndiceValidacao_(lerElencoBrutoOperacao_(id, 'atletas')),
     comissao: compactarCadastroIndiceValidacao_(lerElencoBrutoOperacao_(id, 'comissao'))
   }, participacao: compactarParticipacaoIndiceValidacao_(jogosParticipacaoCampeonato_(id)) };
@@ -10743,7 +10886,7 @@ function abaFinanceiro_() {
       return lista.filter(function (item) {
         return item && typeof item === 'object' && String(item.nome || '').trim();
       }).map(function (item) {
-        return {
+        return Object.assign({
           id: String(item.id || '').trim() || gerarIdUnico_(),
           nome: limparCampo_(item.nome || '', 100),
           cargo: String(item.cargo || '').trim() || 'Comissão Técnica',
@@ -10754,7 +10897,7 @@ function abaFinanceiro_() {
           foto: String(item.foto || '').trim(),
           dataNascimento: String(item.dataNascimento || '').trim(),
           timeVinculado: String(item.timeVinculado || '').trim()
-        };
+        }, elencosParticionadosCutoverAtivo_() ? { ativo: item.ativo !== false } : {});
       });
   }
 
@@ -10762,7 +10905,7 @@ function abaFinanceiro_() {
     const validos = (lista || []).filter(function (item) {
       return item && typeof item === 'object' && String(item.nome || '').trim();
     }).map(function (item) {
-      return {
+      return Object.assign({
         id: String(item.id || '').trim() || gerarIdUnico_(),
         nome: limparCampo_(item.nome || '', 100),
         cargo: String(item.cargo || '').trim() || 'Comissão Técnica',
@@ -10773,7 +10916,7 @@ function abaFinanceiro_() {
         foto: String(item.foto || '').trim(),
         dataNascimento: String(item.dataNascimento || '').trim(),
         timeVinculado: String(item.timeVinculado || '').trim()
-      };
+      }, elencosParticionadosCutoverAtivo_() ? { ativo: item.ativo !== false } : {});
     });
 
     gravarElencoComHistorico_(campeonatoId, 'comissao', validos, historicoPreparado, listasPreparadas, recursos);
@@ -10954,7 +11097,7 @@ function abaFinanceiro_() {
 
       const lista = existentes.map(function (item) {
         if (item.id === membroId) {
-          return {
+          return Object.assign({
             id: membroId,
             nome: nome,
             cargo: cargo,
@@ -10965,7 +11108,7 @@ function abaFinanceiro_() {
             foto: foto || item.foto,
             dataNascimento: dataNascimento,
             timeVinculado: timeVinculado
-          };
+          }, elencosParticionadosCutoverAtivo_() ? { ativo: item.ativo !== false } : {});
         }
 
         return item;

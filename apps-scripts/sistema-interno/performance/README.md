@@ -3,13 +3,17 @@
 Ferramenta local reutilizável; **não publicar `benchmark.js` no Apps Script**.
 Não muda endpoints, permissões, regras ou dados do sistema.
 
-## Elencos particionados: camada de armazenamento ainda inativa
+## Elencos particionados: integração com gate de produção desabilitado
 
-`elencos-particionados.test.cjs` cobre a etapa privada de armazenamento
-preparada em `WebApp.gs`. **Não mede um cutover ativo:** os RPCs, histórico,
-fila, snapshots esportivos, índices de validação e consumidores atuais
-continuam usando os JSONs anteriores. O formato e a lista exata de pendências estão no
+`elencos-particionados.test.cjs` cobre o armazenamento privado e o canário
+do gate desabilitado. `elencos-cutover.test.cjs` cobre a integração funcional
+com gate ativo **exclusivamente no VM local**. O formato e os limites estão no
 [guia principal](../../README.md#elencos-particionados-etapa-inativa).
+O literal `const ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = false;` permanece no
+código de produção. Fixtures ativas substituem esse literal por `true`,
+sem alterar endpoints/regras nem executar ferramentas de publicação.
+Os adaptadores `prepararParticoesElencoPorNome_` e
+`lerElencoParticionadoPorEquipe_` conectam os RPCs somente quando o gate é ativo.
 
 A camada nova usa a pasta `AEUV - Elencos - <campeonatoId codificado>` e
 arquivos `Atletas - <equipeId codificado> - <revisao>.json` /
@@ -26,9 +30,11 @@ Cada alteração efetiva confirma um `snapshot - <revisaoDestino>.json`
 do estado anterior antes de preparar as partições, e um
 `pendencia - <revisaoDestino>.json` antes de publicar o manifesto.
 São documentos privados de recuperação, retidos e ignorados nas leituras.
-**Não são o histórico de inscrições nem a fila existente; nenhum worker
-novo está integrado.** Não execute as funções privadas manualmente para
-substituir RPCs ou reconciliar o histórico.
+**Não são o histórico de inscrições nem a fila existente.** A integração RPC
+mantém o snapshot síncrono global e persiste separadamente fila, índice dirty
+e pendência esportiva antes do manifesto. Os workers existentes respeitam
+o gate; não há worker novo para consumir os journals de recuperação.
+Não execute as funções privadas manualmente para substituir RPCs.
 
 A fixture mantém o fake plano anterior e acrescenta pastas aninhadas,
 arquivos homônimos em pastas distintas, IDs/pais corretos e falhas de
@@ -48,9 +54,29 @@ causa e não declara rollback.
 Um teste canário com dados novos diferentes dos legados bloqueia as funções
 novas e compara os contratos atuais de elenco/cadastros, comissão ativa de
 resultados, imagens, CPF, histórico, importação e gravação. Isso comprova a
-inatividade consistente desses caminhos, **não sua integração nova**.
+inatividade consistente desses caminhos quando o gate é `false`.
+Os novos testes de adaptação por `timeVinculado` verificam que todos os
+registros são agrupados por ID permanente, nomes não resolvidos/ambíguos
+falham e a leitura por equipe mantém os dados e nomes canônicos sem escrita.
+`elencos-cutover.test.cjs` exerce adição/edição/remoção/transferência via RPC,
+listagens/agregadores, cache local de operação, guardas originais,
+importação de candidaturas novas e snapshots globais antigos, imagens por
+equipe e agregadas com assinatura/backup, comissão ativa/inativa em resultados
+e geração real da súmula no VM, histórico pré/pós-publicação e exclusão lógica
+com tombstone. Falhas de histórico, fila, índice dirty, snapshot, segunda
+partição, journal, manifesto e resposta/readback após commit preservam estado,
+causa, pendências e necessidade de recarregar, sem perda/duplicação.
+Os testes também impedem sobrescrita por mudança externa durante a operação.
+
+`validation-index.test.cjs` mantém as regressões V1 e acrescenta V2 sob gate:
+rejeição de payload antigo, fingerprints vivos completos, corrupção/remoção/
+edição externa de pasta/manifesto/partições e mudança de nome canônico,
+fallback live enquanto dirty e recálculo manual/agendado, incluindo corridas.
+`esportivos-snapshot.test.cjs` também executa builders e workers agendados
+com gate ativo, preservando cópias anteriores.
+
 As regressões existentes de credenciais, índices, participação, snapshots
-esportivos e agendas continuam exercitando o comportamento legado. Não simula
+esportivos e agendas continuam exercitando o comportamento legado. O VM não simula
 latência, quotas reais nem atomicidade entre serviços Google distintos.
 O manifesto depende da substituição integral do conteúdo de um único
 arquivo pelo Drive e do `ScriptLock` dos escritores da aplicação; edições
@@ -58,18 +84,18 @@ manuais concorrentes no Drive não participam desse lock. A revalidação de
 manifesto, blobs e nomes canônicos antes de publicar rejeita divergências,
 mas não elimina a janela entre a última leitura e a publicação no Drive.
 
-O fingerprint novo lê manifesto e blobs publicados; **não há promessa de
-validação sem leituras nem integração ao índice antigo**. Não reutilize
-metadados/contadores do índice atual como evidência de frescor das partições.
-Os escritores privados novos só usam fontes vivas, nunca esse índice V1.
-A limpeza ao remover campeonato, adaptação dos consumidores e integração
-com histórico/índice ainda não foram ativadas nem são reivindicadas por
-estes testes.
+O fingerprint V2 lê manifesto e blobs publicados; **não há promessa de
+validação sem leituras**. O namespace de propriedades do índice é preservado,
+mas metadados/payloads V1 não autorizam consultas V2. Elencos V2 deixam o índice
+dirty até o recálculo, sem atualização incremental. Não há limpeza física
+nem consumo automático de journals; remoção com gate ativo é somente lógica
+e preserva os arquivos. Ativação remota e validação nos serviços Google reais
+continuam fora desta entrega.
 
 No cutover futuro da base de testes, os elencos atuais começarão vazios.
 A leitura nova ignora os JSONs e propriedades antigos: não os copia,
-migra ou mescla. Eles poderão ser apagados **manualmente após validação do
-cutover completo**, sem nenhum apagar automático. Nesta etapa os
+migra ou mescla. Eles permanecem preservados, sem nenhum apagar automático.
+Com o gate de produção desabilitado, os
 consumidores legados ainda dependem deles; mantenha-os. Equipes e IDs
 globais, jogos/tabela e histórico de inscrições permanecem preservados.
 Os testes são exclusivamente locais e não executam ações no Drive remoto.

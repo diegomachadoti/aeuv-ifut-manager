@@ -18,20 +18,23 @@ Nota Oficial).
 Veja como os formulários geram e armazenam esses arquivos no
 [guia dos aplicativos Apps Script](apps-scripts/README.md).
 
-### Elencos separados por equipe: etapa de armazenamento, ainda inativa
+### Elencos separados por equipe: integração implementada, produção desabilitada
 
 O sistema interno agora tem uma camada privada de armazenamento por
 `campeonatoId` e `equipeId`, com versões de atletas/comissão e publicação
-atômica por manifesto. **O cutover não está ativado:** cadastros, consultas,
+atômica por manifesto e integração funcional atrás de feature gate.
+**O cutover não está ativado em produção:** cadastros, consultas,
 histórico, índices e consumidores esportivos continuam no armazenamento
 anterior. Não basta publicar esta versão para iniciar elencos vazios.
 
-A camada nova não lê, copia, mescla nem apaga os JSONs antigos. Quando todos
-os consumidores forem adaptados e o cutover da base de testes for ativado,
-os elencos atuais começarão vazios; os arquivos antigos ficarão ignorados,
-não migrados, e poderão ser apagados **manualmente somente após validação**.
+A camada nova não lê, copia, mescla nem apaga os JSONs antigos. Fixtures VM
+locais ativam o gate por substituição do literal e exercitam RPCs, histórico,
+índice V2, importação, resultados/súmulas, imagens e workers esportivos.
+Com gate ativo, os elencos atuais começam vazios; os arquivos antigos ficam
+ignorados, não migrados, e são preservados também na exclusão lógica.
 Os IDs/registros globais de equipes, jogos e histórico devem ser mantidos.
-Não há limpeza automática, e nenhum dado remoto foi alterado nesta etapa.
+O código mantém `ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = false`.
+Não há limpeza automática, e nenhum dado remoto foi alterado nesta entrega.
 Formato e pendências estão no
 [guia de elencos particionados](apps-scripts/README.md#elencos-particionados-etapa-inativa).
 

@@ -10,8 +10,9 @@ const md5 = text => crypto.createHash('md5').update(text, 'utf8').digest('hex');
 const source = fs.readFileSync(path.join(__dirname, '..', 'WebApp.gs'), 'utf8');
 const html = fs.readFileSync(path.join(__dirname, '..', 'Index.html'), 'utf8');
 
-function fixture() {
-  const h = harness(undefined, { cache: true });
+function fixture(active = false) {
+  const h = harness(active ? source.replace('const ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = false;',
+    'const ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = true;') : undefined, { cache: true });
   const versions = new Map(), triggers = [];
   let sequence = 0;
   h.state.email = h.state.effective = 'admin@example.invalid';
@@ -112,6 +113,143 @@ function fixture() {
   };
   return { ...h, games, game, build, meta, index, withLock, triggers, trigger };
 }
+
+const activeSeed = (h, tipo, registros, id = 'c1') => h.withLock(() => h.c.gravarParticoesElenco_(id,
+  h.c.prepararParticoesElencoPorNome_(registros).map(group => ({ ...group, tipo }))));
+const activePath = (h, tipo = 'comissao') => {
+  const folder = h.c.nomePastaElencosParticionados_('c1');
+  const manifest = JSON.parse(h.files.get(folder + '\\manifesto.json'));
+  return folder + '\\' + manifest.particoes.find(item => item.tipo === tipo).arquivo;
+};
+
+test('active V2 index reconciles both partition categories and retains Drive version checks for games', () => {
+  const h = fixture(true);
+  activeSeed(h, 'atletas', [person('atletas')]);
+  activeSeed(h, 'comissao', [person('comissao')]);
+  h.seed('c1', 'comissao', [person('comissao', { cpf: '12345678909' })]);
+  h.games([h.game(person('atletas', { id: 'old-game-id', cpf: '529.982.247-25' }), 'e2')]);
+  assert.equal(h.build(), 'reconciliado');
+  assert.equal(h.meta().versao, 2);
+  assert.equal(h.index().versao, 2);
+  assert.deepEqual(h.meta().fontes.slice(0, 2).map(item => item.slice(0, 2)), [
+    ['aeuv.elencos.particoes.v2', 'atletas'], ['aeuv.elencos.particoes.v2', 'comissao']
+  ]);
+  assert.equal(h.meta().fontes[2][2], md5(h.files.get(h.c.arquivoTabelaCampeonato_('c1'))));
+  assert(h.index().cadastros.comissao['11144477735']);
+  assert(!h.index().cadastros.comissao['12345678909']);
+  assert.equal(h.build(), 'atual');
+  assert.throws(() => h.c.removerCadastroElenco(h.payload('atletas', true)), /já participou/);
+  h.games([]);
+  assert.equal(h.c.consultarIndiceValidacao_('c1', null, 'tabela'), null);
+  assert.equal(h.build(), 'reconciliado');
+  assert.deepEqual(h.index().participacao, {});
+});
+
+test('active RPC mutations leave V2 dirty until reconciliation; live fallback cannot authorize stale CPF/team data', () => {
+  const h = fixture(true);
+  h.build();
+  h.c.salvarCadastroElenco(h.payload('comissao'));
+  assert.equal(h.meta().dirty, true);
+  assert.equal(h.index(), null);
+  assert.throws(() => h.c.validarCpfUnicoEntreCadastros_('c1', '11144477735', 'atleta', ''), /comissão técnica/);
+  assert.equal(h.build(), 'reconciliado');
+  const staff = h.c.lerElencoBrutoOperacao_('c1', 'comissao')[0];
+  h.c.salvarCadastroElenco({ ...h.payload('comissao'), registroId: staff.id, cpf: '12345678909' });
+  assert.equal(h.index(), null);
+  assert.throws(() => h.c.validarCpfUnicoEntreCadastros_('c1', '12345678909', 'atleta', ''), /comissão técnica/);
+  h.build();
+  assert(!h.index().cadastros.comissao['11144477735']);
+  h.c.removerCadastroElenco({ campeonatoId: 'c1', equipeId: 'e1', tipo: 'comissao', registroId: staff.id });
+  assert.equal(h.meta().dirty, true);
+  h.build();
+  assert.deepEqual(h.index().cadastros.comissao, {});
+  h.c.salvarCadastroElenco(h.payload('atletas'));
+  const athlete = h.c.lerElencoBrutoOperacao_('c1', 'atletas')[0];
+  h.build();
+  h.c.transferirAtletaElenco({
+    campeonatoId: 'c1', equipeId: 'e1', registroId: athlete.id, equipeDestinoId: 'e2'
+  });
+  assert.equal(h.index(), null);
+  h.build();
+  assert.equal(h.index().cadastros.atletas[athlete.cpf][0][1], h.c.chaveEquipe_('Equipe B'));
+});
+
+test('active gate rejects an otherwise valid old V1 payload automatically and rebuilds from partitions', () => {
+  const h = fixture(true);
+  activeSeed(h, 'comissao', [person('comissao')]);
+  h.build();
+  const meta = h.meta(), index = h.index(), prefix = h.c.chaveIndiceValidacao_('c1');
+  index.versao = meta.versao = 1;
+  const text = JSON.stringify(index);
+  meta.digest = h.c.digestIndiceValidacao_(text);
+  h.properties.set(prefix + meta.token + '_0', text);
+  h.properties.set(prefix + 'meta', JSON.stringify(meta));
+  assert.equal(h.index(), null);
+  assert.throws(() => h.c.validarCpfUnicoEntreCadastros_('c1', '11144477735', 'atleta', ''), /comissão técnica/);
+  assert.equal(h.build(), 'reconciliado');
+  assert.equal(h.meta().versao, 2);
+});
+
+for (const change of ['edit', 'remove', 'corrupt', 'manifest-edit', 'manifest-remove', 'folder-remove', 'team-name']) {
+  test(`active live fingerprint detects ${change}, never relying on legacy metadata or a cached index`, () => {
+    const h = fixture(true);
+    activeSeed(h, 'comissao', [person('comissao')]);
+    h.build();
+    const resources = {};
+    h.withLock(() => {
+      assert(h.c.consultarIndiceValidacao_('c1', resources, 'comissao'));
+      const file = activePath(h), manifest = h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json';
+      if (change === 'edit') h.files.set(file, JSON.stringify([person('comissao', { cpf: '12345678909' })]));
+      if (change === 'remove') h.files.delete(file);
+      if (change === 'corrupt') h.files.set(file, '{broken');
+      if (change === 'manifest-edit') {
+        const doc = JSON.parse(h.files.get(manifest)); doc.revisao = 'external';
+        h.files.set(manifest, JSON.stringify(doc));
+      }
+      if (change === 'manifest-remove') h.files.delete(manifest);
+      if (change === 'folder-remove') h.folders.clear();
+      if (change === 'team-name') h.state.equipes[0].nome = 'Renamed Team';
+      assert.equal(h.c.consultarIndiceValidacao_('c1', resources, 'comissao'), null);
+    });
+    assert.equal(h.index(), null);
+    if (['remove', 'corrupt'].includes(change)) {
+      assert.throws(() => h.c.validarCpfUnicoEntreCadastros_('c1', '11144477735', 'atleta', ''));
+      assert.throws(() => h.build());
+    } else {
+      if (change === 'edit') assert.throws(() =>
+        h.c.validarCpfUnicoEntreCadastros_('c1', '12345678909', 'atleta', ''), /comissão técnica/);
+      assert.equal(h.build(), 'reconciliado');
+      assert(h.index());
+    }
+  });
+}
+
+test('active index scheduled reconciler and races use new sources without publishing a stale build', () => {
+  const h = fixture(true);
+  activeSeed(h, 'comissao', [person('comissao')]);
+  h.c.configurarAgendamentoIndicesValidacao();
+  const trigger = h.triggers.find(t => t.handler === 'reconciliarIndicesValidacaoAgendado');
+  const result = h.c.reconciliarIndicesValidacaoAgendado({ triggerUid: trigger.id });
+  assert.equal(result.resultados.reconciliado, 2);
+  assert(h.index().cadastros.comissao['11144477735']);
+  const read = h.c.lerElencoBrutoOperacao_;
+  let changed = false;
+  h.withLock(() => h.c.invalidarIndiceValidacao_('c1'));
+  h.c.lerElencoBrutoOperacao_ = (...args) => {
+    const list = read(...args);
+    assert(!h.locked());
+    if (!changed) {
+      changed = true;
+      h.files.set(activePath(h), JSON.stringify([person('comissao', { cpf: '12345678909' })]));
+    }
+    return list;
+  };
+  assert.equal(h.build(), 'concorrente');
+  assert.equal(h.index(), null);
+  h.c.lerElencoBrutoOperacao_ = read;
+  assert.equal(h.build(), 'reconciliado');
+  assert(h.index().cadastros.comissao['12345678909']);
+});
 
 test('compact private index: complete ID OR normalized CPF/team evidence; source checks, not TTL', () => {
   const h = fixture();

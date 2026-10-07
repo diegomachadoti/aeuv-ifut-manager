@@ -32,6 +32,7 @@ const assertAtomicTransfer = (h, committed) => {
 
 test('inactive vertical slice: new reads start empty and ignore legacy JSON/properties without creating anything', () => {
   const h = harness();
+  assert.equal(h.c.elencosParticionadosCutoverAtivo_(), false);
   h.seed('c1', 'atletas', [person('atletas')]);
   h.seed('c1', 'comissao', [person('comissao')]);
   h.properties.set(h.c.chaveAtletasCampeonato_('c1'), '[{"nome":"Legado"}]');
@@ -384,6 +385,40 @@ test('canonical team identity survives renames and retains every field and unass
   assert.throws(() => h.c.equipePorNomeElencoParticionado_('desconhecida'), /ausente ou ambiguo/);
   h.state.equipes.push({ id: 'another', nome: 'Equipe A renomeada' });
   assert.throws(() => h.c.equipePorNomeElencoParticionado_('Equipe A renomeada'), /ausente ou ambiguo/);
+});
+
+test('ID-keyed read and write-preparation adapters preserve records and reject unresolved team names', () => {
+  const h = harness();
+  const first = person('atletas', { timeVinculado: 'Equipe A' });
+  const second = person('atletas', { id: 'athlete-2', timeVinculado: ' equipe b ' });
+  const untouched = [...h.files];
+  const prepared = h.c.prepararParticoesElencoPorNome_([first, second]);
+  assert.deepEqual(clone(prepared), [
+    { equipeId: 'e1', registros: [first] },
+    { equipeId: 'e2', registros: [{ ...second, timeVinculado: 'Equipe B' }] }
+  ]);
+  assert.deepEqual([...h.files], untouched, 'preparation never writes to Drive');
+  assert.equal(h.writes.length, 0);
+  assert.deepEqual(clone(h.c.lerElencoParticionadoPorEquipe_('c1', 'atletas')), []);
+
+  write(h, prepared.map(item => partition(item.equipeId, 'atletas', item.registros)));
+  assert.deepEqual(clone(h.c.lerElencoParticionadoPorEquipe_('c1', 'atletas')), clone(prepared));
+  assert.deepEqual(read(h), [first, { ...second, timeVinculado: 'Equipe B' }]);
+  const secondRef = manifest(h).particoes.find(item => item.equipeId === 'e2' && item.tipo === 'atletas');
+  const secondPath = folderName(h) + '\\' + secondRef.arquivo, secondText = h.files.get(secondPath);
+  h.files.set(secondPath, JSON.stringify([{ ...second, id: first.id, timeVinculado: 'Equipe B' }]));
+  assert.throws(() => h.c.lerElencoParticionadoPorEquipe_('c1', 'atletas'), /Identificador repetido/);
+  h.files.set(secondPath, secondText);
+
+  assert.throws(() => h.c.prepararParticoesElencoPorNome_([
+    person('atletas', { timeVinculado: '' })
+  ]), /sem timeVinculado/);
+  assert.throws(() => h.c.prepararParticoesElencoPorNome_([
+    person('atletas', { timeVinculado: 'Equipe inexistente' })
+  ]), /ausente ou ambiguo/);
+  h.state.equipes.push({ id: 'e3', nome: 'Equipe A' });
+  assert.throws(() => h.c.prepararParticoesElencoPorNome_([first]), /ausente ou ambiguo/);
+  assert.throws(() => h.c.lerElencoParticionadoPorEquipe_('c1', 'atletas'), /ausente ou ambiguo/);
 });
 
 test('unknown/ambiguous permanent IDs and malformed/duplicated records fail without creating storage', () => {

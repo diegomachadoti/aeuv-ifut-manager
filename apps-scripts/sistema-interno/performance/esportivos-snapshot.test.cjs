@@ -8,8 +8,9 @@ const backend = fs.readFileSync(path.join(__dirname, '..', 'WebApp.gs'), 'utf8')
 const html = fs.readFileSync(path.join(__dirname, '..', 'Index.html'), 'utf8');
 const clone = value => JSON.parse(JSON.stringify(value));
 
-function fixture() {
-  const h = harness();
+function fixture(active = false) {
+  const h = harness(active ? backend.replace('const ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = false;',
+    'const ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = true;') : undefined);
   let now = Date.parse('2026-10-06T19:00:00Z'), sequence = 0;
   const snapshots = new Map(), triggers = [];
   Object.assign(h.state, { email: 'admin@example.invalid', effective: 'admin@example.invalid', builds: 0 });
@@ -113,6 +114,30 @@ function fixture() {
   const schedule = tipo => JSON.parse(h.properties.get(h.c.chaveMetaSnapshotEsportivo_(tipo, 'agenda')) || '{}');
   return { ...h, snapshots, triggers, trigger, snapshotState: state, schedule, advance: ms => { now += ms; } };
 }
+
+test('active-gate sporting workers rebuild only from partitions, keeping games and earlier copies intact', () => {
+  const h = fixture(true);
+  h.seed('c1', 'atletas', [person('atletas', { id: 'legacy-ignored' })]);
+  h.seed('c1', 'comissao', [person('comissao', { id: 'legacy-staff-ignored' })]);
+  h.c.recalcularEquipesParticipantes('c1');
+  h.c.recalcularTabelaCampeonato('c1');
+  const old = h.snapshotState('participantes').currentId, original = h.snapshots.get(old).text;
+  assert.equal(h.c.listarEquipesParticipantes('c1').registros[0].timesDetalhados[0].totalAtletas, 0);
+  h.c.salvarCadastroElenco(h.payload('atletas'));
+  h.c.salvarCadastroElenco(h.payload('comissao'));
+  assert.equal(h.c.listarEquipesParticipantes('c1').snapshotStatus.pendente, true);
+  h.c.configurarAgendamentoParticipantes();
+  h.c.configurarAgendamentoTabela();
+  h.c.atualizarParticipantesAgendado({ triggerUid: h.schedule('participantes').triggerId });
+  h.c.atualizarTabelaAgendada({ triggerUid: h.schedule('tabela').triggerId });
+  const current = h.c.listarEquipesParticipantes('c1');
+  assert.equal(current.registros[0].timesDetalhados[0].totalAtletas, 1);
+  assert.equal(current.registros[0].timesDetalhados[0].totalComissao, 1);
+  assert.equal(current.snapshotStatus.pendente, false);
+  assert.equal(h.snapshots.get(old).text, original);
+  assert.equal(h.snapshots.get(old).trashed, false);
+  assert.equal(h.roster('c1', 'atletas')[0].id, 'legacy-ignored');
+});
 
 test('contratos completos por campeonato: builders existentes, cópia imutável e Atualizar sem recálculo', () => {
   const h = fixture();

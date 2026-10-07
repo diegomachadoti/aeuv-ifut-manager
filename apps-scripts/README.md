@@ -68,13 +68,14 @@ e nao sao desativadas por essa manutencao.
 
 ### Elencos particionados: etapa inativa
 
-**Esta entrega é uma etapa vertical de armazenamento, não uma migração
-end-to-end nem um cutover ativo.** As funções privadas em `WebApp.gs`
-(`lerParticaoElenco_`, `lerElencoParticionado_`, `gravarParticoesElenco_` e
-`transferirRegistroParticionado_`) ainda não são chamadas pelos RPCs,
-agendas ou consumidores atuais. Publicar esta versão mantém o comportamento
-anterior; não execute essas funções manualmente no Drive para fazer o cutover.
-Permissões, validações e contratos RPC não foram alterados.
+**A integração funcional está implementada atrás de um gate, mas o cutover
+de produção continua desabilitado.** O literal
+`const ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = false;` permanece em `WebApp.gs`.
+Com `false`, RPCs, histórico, índices, importação, imagens e consumidores
+esportivos continuam usando as fontes legadas. Somente fixtures VM locais
+substituem esse literal por `true`; nenhuma publicação ou alteração remota
+faz parte desta entrega. Não execute funções privadas manualmente no Drive
+para substituir os RPCs. Permissões, validações e IDs compartilhados permanecem.
 
 Formato preparado na pasta raiz do projeto:
 
@@ -102,7 +103,15 @@ partição nem exige regravar registros. A agregação não filtra por equipes
 ativas ou vinculadas ao campeonato: registros de outras equipes globais
 continuam presentes. IDs sem mapeamento, IDs ambíguos, nomes ambíguos ao
 resolver um destino e registros inválidos/duplicados geram erro explícito.
-Este adaptador **ainda não participa das permissões ou dos RPCs**.
+Sob o gate ativo, `lerElencoBrutoOperacao_` usa a agregação por ID permanente,
+com cache apenas no objeto de recursos da operação. Os normalizadores e
+guardas RPC existentes continuam sendo aplicados.
+`prepararParticoesElencoPorNome_` converte listas
+com `timeVinculado` em grupos por ID permanente e falha se algum nome estiver
+ausente/ambíguo; `lerElencoParticionadoPorEquipe_` retorna os grupos publicados
+por ID e confirma o mapeamento canônico. `gravarElencoComHistorico_` representa
+a lista inteira da categoria, inclusive equipes esvaziadas por exclusão ou
+transferência; o gravador publica apenas as diferenças, numa única revisão.
 
 As versões são **copy-on-write**: somente as partições alteradas ganham
 novos arquivos; equipes/categorias não afetadas conservam suas referências.
@@ -122,10 +131,13 @@ retidos e ignorados nas leituras. **Não existe remoção automática**, nem
 dos arquivos antigos nem dessas versões.
 
 **O snapshot de recuperação não substitui o histórico global de inscrições.
-O journal pendente não é a fila existente de reconciliação.** Não há worker
-para consumir esses journals nesta etapa. Ligá-los à fila antiga agora
-seria inseguro: seu worker continua lendo os JSONs legados e poderia
-reconciliar presença com uma fonte diferente da publicação nova.
+O journal pendente não é a fila existente de reconciliação.** O adaptador
+RPC prepara o snapshot síncrono no histórico global, no formato existente,
+antes da mutação. Antes de publicar o manifesto, deixa o índice dirty,
+persiste `marcarHistoricoElencoPendente_` e marca as cópias esportivas pendentes.
+O worker existente lê a mesma fonte escolhida pelo gate e reconcilia o
+estado persistido, tanto após sucesso como após falha. Os journals continuam
+sendo evidência de recuperação, não uma segunda fila.
 
 O fingerprint `assinaturaFontesElencoParticionado_` lê as fontes novas
 vivas, inclui o formato/manifesto, o digest de cada partição publicada e
@@ -137,33 +149,45 @@ impedem a publicação, mesmo quando não são o alvo da alteração. Isso
 detecta edições externas sem depender de metadados legados. Não é um CAS
 fornecido pelo Drive: existe uma janela entre a última leitura e a chamada
 de publicação para escritores externos que não usam o `ScriptLock`.
-Ele ainda
-**não foi conectado ao índice CPF/participação**; não se deve confiar no
-índice atual para validar cadastros da camada nova. As funções privadas
-novas não consultam o índice V1. Esse índice permanece exclusivo dos RPCs
-legados, que continuam com suas fontes anteriores.
+Sob o gate ativo, o índice usa payload/metadados **V2**, embora conserve seu
+namespace de propriedades para permitir a substituição segura. Payloads
+V1 são automaticamente recusados. Atletas/comissão usam fingerprints vivos
+com identidade da pasta/manifesto, todas as partições publicadas, tipo,
+estado e nomes canônicos; ausência, corrupção, remoção ou edição externa
+impedem o reaproveitamento do índice anterior. A tabela mantém versão/MD5
+do Drive. A consulta V2 não reutiliza verificações de um índice em memória,
+mesmo sob lock. Após mutação do elenco, o índice fica dirty e as guardas
+usam a fonte viva até o reconciliador manual/agendado reconstruí-lo.
+Não há promessa de validação V2 sem leituras de blobs.
 
-Pendências obrigatórias antes da ativação:
+Superfícies integradas, **somente sob o gate ativo**:
 
-| Superfície | O que permanece nesta entrega |
+| Superfície | Implementação desabilitada em produção |
 | --- | --- |
-| Cadastros e transferências RPC | `lerElencoBrutoOperacao_`, `gravarElencoComHistorico_`, migração de IDs e gravadores de atletas/comissão continuam nos JSONs anteriores. Falta adaptar todos juntos, preservando guardas, normalizadores e contratos. |
-| Histórico global, fila e snapshots | Intocados. `prepararHistoricoElenco_`, `reconciliarHistoricoCampeonato_` e o worker da fila ainda usam as listas antigas. Falta integrar snapshot de inscrição anterior, pendência persistida e reconciliação pós-publicação sem perda da presença/histórico anterior. Os documentos de recuperação novos não completam essa integração. |
-| Índice CPF/participação | `fontesIndiceValidacao_`, verificação de versões, cache sob lock e atualização incremental continuam V1/fontes anteriores. Falta versionar fonte/schema para manifesto/partições/registro ou forçar fallback vivo novo antes de ativar qualquer mutação RPC. |
-| Importação e respostas | A importação ainda prepara o histórico e valida/grava listas legadas; respostas de elenco/cadastros e participantes ainda usam os normalizadores anteriores. Falta comparar contratos completos após a mudança de fonte. |
-| Tabela, súmulas/resultados e imagens | Comissão bruta em `elencosResultadoTabela_` e `gerarSumulaJogoCampeonato`, `comissaoCampeonato_` e `fonteOtimizacaoImagens_` ainda leem os arquivos raiz. Backups/lotes ainda são por documento legado; adaptar sem tocar em snapshots esportivos já salvos. |
-| Registro/cache/assinaturas de fontes | Registro global e cache de arquivos ainda mantêm as fontes atuais. Falta conectar a identidade nova às assinaturas de resultado e revisão/pendências de snapshots esportivos, sem reutilizar IDs/metadados legados para partições. |
-| Remoção do campeonato | `removerCampeonato`, `removerCadastroPessoasCampeonato_` e `removerCadastroTabelaCampeonato_` continuam com a rotina anterior. **Não executar exclusão como parte deste cutover inativo.** Falta exclusão lógica que limpe apenas a pasta/índice novos, mantenha tabela no local legado e preserve os arquivos antigos. |
+| Cadastros e transferências RPC | Adição/edição/remoção e transferência por lista completa, resolução por ID permanente e publicação única. Registros particionados exigem IDs válidos; não há migração automática dos antigos. |
+| Histórico global e fila | Snapshot síncrono anterior, fila persistida antes do commit e reconciliação pós-publicação pela mesma fonte. Inscrições/snapshots antigos mantêm seus IDs e dados, inclusive para importação deliberada. |
+| Índice CPF/participação | V2 vivo para elencos, Drive version/MD5 para tabela, fallback seguro enquanto dirty e recálculo manual/agendado. Atualização incremental dos elencos V2 não é implementada: usa dirty + recálculo, intencionalmente. |
+| Importação e respostas | Listagens/agregadores e candidatos usam listas novas/histórico global; importação explícita passa pelas mesmas guardas e publica partições, sem copiar arquivos legados. |
+| Resultados e súmulas | Leituras diretas de comissão passam pelo adaptador. `ativo` é preservado também pelos normalizadores/edições V2; inativos não entram como participantes disponíveis nem na súmula atual. Resultados históricos salvos não são regravados. |
+| Imagens | Lotes mantêm assinatura e backup anterior; aceitam filtro opcional `fonte.equipeId`. Sem filtro, mantêm o contrato agregado atual. Apenas equipes alteradas recebem versões, com uma publicação por lote e histórico pela fila. Falha do backup impede a gravação. |
+| Cópias esportivas | Mutações marcam pendência; os builders/workers de tabela e participantes recompõem usando a fonte do gate. Cópias anteriores permanecem imutáveis e a releitura continua exibindo a cópia pronta, conforme o contrato existente. |
+| Remoção do campeonato | Exclusão lógica do registro listado, tombstone durável e fila antes da alteração. O worker fecha a presença das inscrições quando o campeonato removido tem tombstone válido. Pasta nova, versões/journals, propriedades antigas, arquivos legados e jogos/tabela são preservados; apenas o namespace do índice removido é limpo. |
+
+Limites ainda não suportados: limpeza física das pastas/versões, consumo
+automático dos journals e atualização incremental de índice V2 de elencos.
+Não são necessários para as leituras/gravações com gate, nem estão sendo
+executados. A validação local não substitui autorização, quotas e comportamento
+real dos serviços Google; ativação/publicação de produção permanece fora
+desta entrega. Não há CAS contra escritores externos que ignorem o lock.
 
 **Cutover futuro da base de testes:** a decisão é iniciar elencos atuais
 vazios, sem migrar/copiar/mesclar JSONs ou Script Properties antigos.
 Preservar `equipes.json`/registro global de equipes e seus IDs, jogos
 existentes e histórico global de inscrições; o arquivo de tabela continua
-no local atual. Somente depois de todos os consumidores acima estarem
-adaptados, as leituras atuais passarão a usar exclusivamente a estrutura
-nova. Nesse momento os JSONs antigos ficarão ignorados, não migrados, e
-poderão ser apagados manualmente após validação. **Hoje eles ainda são
-usados pelos consumidores legados: não os apague.** Nenhuma ação no Drive
+no local atual. Com gate ativo nas fixtures, as leituras atuais usam exclusivamente a
+estrutura nova; JSONs/propriedades antigos ficam ignorados, não migrados,
+e permanecem preservados. **Em produção o gate continua `false` e os
+consumidores ainda dependem deles: não os apague.** Nenhuma ação no Drive
 remoto ou remoção local/remota foi executada para implementar esta etapa.
 
 Repita estes passos para cada aplicativo:
@@ -1548,10 +1572,11 @@ terão a pendência descartada. Consultas de importação continuam reconciliand
 histórico antes de confiar nos candidatos, portanto podem fazer trabalho
 síncrono quando forem usadas.
 
-Esta é a primeira etapa da mudança: o armazenamento do elenco continua nos
-JSONs atuais por campeonato. A migração futura para arquivos separados por
-equipe/competição ainda precisa adaptar leituras, gravações, índices, importação
-e recuperação antes que os arquivos atuais possam ser aposentados.
+Em produção, o armazenamento do elenco continua nos JSONs atuais por campeonato,
+pois o gate permanece `false`. A integração com partições por equipe/competição,
+histórico, índice V2 e importação está implementada atrás desse gate e exercitada
+somente em fixtures locais; não houve migração nem aposentadoria dos arquivos.
+Veja [elencos particionados](#elencos-particionados-etapa-inativa).
 
 **Bloquear elenco:** somente admin/diretoria pode bloquear/desbloquear no cabeçalho.
 O bloqueio vale para o par de IDs permanentes **campeonato + equipe**, não para a
