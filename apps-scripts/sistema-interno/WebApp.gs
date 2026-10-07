@@ -3272,6 +3272,363 @@ function arquivoCadastroPessoasCampeonato_(campeonatoId, tipo) {
   return 'AEUV - Campeonato - ' + encodeURIComponent(id) + ' - ' + tipo + '.json';
 }
 
+// Storage-only vertical slice. RPCs still use the legacy storage until all
+// consumers, history and validation indexes are switched together.
+const ELENCOS_PARTICOES_MANIFESTO = 'manifesto.json';
+
+function identidadeElencoParticionado_(id) {
+  if (typeof id !== 'string' || !id.trim() || id !== id.trim()) {
+    throw new Error('Informe uma identidade permanente valida para o elenco.');
+  }
+  return encodeURIComponent(id);
+}
+
+function nomePastaElencosParticionados_(campeonatoId) {
+  return 'AEUV - Elencos - ' + identidadeElencoParticionado_(campeonatoId);
+}
+
+function nomeArquivoParticaoElenco_(equipeId, tipo, revisao) {
+  if (tipo !== 'atletas' && tipo !== 'comissao') throw new Error('Categoria de elenco invalida.');
+  return (tipo === 'atletas' ? 'Atletas' : 'Comissao Tecnica') + ' - '
+    + identidadeElencoParticionado_(equipeId) + ' - '
+    + identidadeElencoParticionado_(revisao) + '.json';
+}
+
+function itemUnicoElencoParticionado_(iterador) {
+  if (!iterador.hasNext()) return null;
+  const item = iterador.next();
+  if (iterador.hasNext()) throw new Error('Fonte de elenco duplicada no Drive. Resolva a duplicidade antes de continuar.');
+  return item;
+}
+
+function pastaElencosParticionados_(campeonatoId, criar) {
+  const raiz = pastaRaizProjeto_();
+  const nome = nomePastaElencosParticionados_(campeonatoId);
+  const pasta = itemUnicoElencoParticionado_(raiz.getFoldersByName(nome));
+  if (pasta || !criar) return pasta;
+  exigirLockElencoParticionado_();
+  return raiz.createFolder(nome);
+}
+
+function exigirLockElencoParticionado_() {
+  if (!LockService.getScriptLock().hasLock()) {
+    throw new Error('A gravacao das particoes exige o ScriptLock da operacao.');
+  }
+}
+
+function interpretarJsonElencoParticionado_(texto) {
+  try { return JSON.parse(texto); }
+  catch (e) { throw new Error('Fonte de elenco particionado contem JSON invalido. Restaure os dados antes de continuar.'); }
+}
+
+function lerEstadoElencosParticionados_(campeonatoId) {
+  const pasta = pastaElencosParticionados_(campeonatoId, false);
+  const arquivo = pasta && itemUnicoElencoParticionado_(pasta.getFilesByName(ELENCOS_PARTICOES_MANIFESTO));
+  const texto = arquivo ? arquivo.getBlob().getDataAsString('UTF-8') : null;
+  const manifesto = texto === null ? {
+    schema: 'aeuv.elencos.particoes', versao: 1, campeonatoId: campeonatoId, revisao: '', particoes: []
+  } : interpretarJsonElencoParticionado_(texto);
+  if (texto !== null && (!manifesto || manifesto.schema !== 'aeuv.elencos.particoes' || manifesto.versao !== 1
+      || manifesto.campeonatoId !== campeonatoId || typeof manifesto.revisao !== 'string'
+      || !manifesto.revisao || !Array.isArray(manifesto.particoes))) {
+    throw new Error('Manifesto de elenco particionado invalido.');
+  }
+  const chaves = new Set();
+  manifesto.particoes.forEach(function (particao) {
+    if (!particao || particao.arquivo !== nomeArquivoParticaoElenco_(
+      particao.equipeId, particao.tipo, particao.revisao)) {
+      throw new Error('Referencia de particao de elenco invalida.');
+    }
+    const chave = JSON.stringify([particao.tipo, particao.equipeId]);
+    if (chaves.has(chave)) throw new Error('Particao de elenco repetida no manifesto.');
+    chaves.add(chave);
+  });
+  return { pasta: pasta, arquivo: arquivo, texto: texto, manifesto: manifesto };
+}
+
+function validarRegistrosParticaoElenco_(registros) {
+  if (!Array.isArray(registros)) throw new Error('A particao de elenco deve conter uma lista.');
+  const ids = new Set();
+  registros.forEach(function (registro) {
+    if (!registro || typeof registro !== 'object' || Array.isArray(registro)
+        || typeof registro.id !== 'string' || !registro.id.trim() || registro.id !== registro.id.trim()
+        || typeof registro.nome !== 'string' || !registro.nome.trim()) {
+      throw new Error('Registro de elenco particionado invalido. Restaure os dados antes de continuar.');
+    }
+    if (ids.has(registro.id)) throw new Error('Identificador repetido na particao de elenco.');
+    ids.add(registro.id);
+  });
+}
+
+function lerConteudoParticaoElenco_(estado, particao) {
+  const arquivo = itemUnicoElencoParticionado_(estado.pasta.getFilesByName(particao.arquivo));
+  if (!arquivo) throw new Error('Particao publicada de elenco nao encontrada. Restaure os dados antes de continuar.');
+  const texto = arquivo.getBlob().getDataAsString('UTF-8');
+  const registros = interpretarJsonElencoParticionado_(texto);
+  validarRegistrosParticaoElenco_(registros);
+  return { texto: texto, registros: registros };
+}
+
+function equipePermanenteElencoParticionado_(equipeId, equipes) {
+  const encontrados = (equipes || lerRegistroEquipes_()).filter(function (item) {
+    return item && item.id === equipeId;
+  });
+  if (encontrados.length !== 1 || typeof encontrados[0].nome !== 'string' || !encontrados[0].nome.trim()) {
+    throw new Error('Mapeamento de equipe permanente ausente ou ambiguo. Corrija o registro global antes de continuar.');
+  }
+  return encontrados[0];
+}
+
+function equipePorNomeElencoParticionado_(nome, equipes) {
+  const registro = equipes || lerRegistroEquipes_();
+  const chave = chaveEquipe_(nome);
+  const encontrados = registro.filter(function (item) {
+    return item && chave && chaveEquipe_(item.nome) === chave;
+  });
+  if (encontrados.length !== 1) {
+    throw new Error('Mapeamento do nome da equipe ausente ou ambiguo. Corrija o registro global antes de continuar.');
+  }
+  identidadeElencoParticionado_(encontrados[0].id);
+  return equipePermanenteElencoParticionado_(encontrados[0].id, registro);
+}
+
+function registrosCanonicosElencoParticionado_(registros, equipeId, equipes) {
+  validarRegistrosParticaoElenco_(registros);
+  const equipe = equipePermanenteElencoParticionado_(equipeId, equipes);
+  return registros.map(function (registro) {
+    return Object.assign({}, registro, { timeVinculado: equipe.nome });
+  });
+}
+
+function lerParticaoElenco_(campeonatoId, equipeId, tipo, estado) {
+  nomeArquivoParticaoElenco_(equipeId, tipo, 'validacao');
+  const atual = estado || lerEstadoElencosParticionados_(campeonatoId);
+  if (atual.manifesto.campeonatoId !== campeonatoId) throw new Error('Estado de outro campeonato.');
+  const particao = atual.manifesto.particoes.find(function (item) {
+    return item.equipeId === equipeId && item.tipo === tipo;
+  });
+  return particao ? registrosCanonicosElencoParticionado_(
+    lerConteudoParticaoElenco_(atual, particao).registros, equipeId) : [];
+}
+
+function lerElencoParticionado_(campeonatoId, tipo) {
+  if (tipo !== 'atletas' && tipo !== 'comissao') throw new Error('Categoria de elenco invalida.');
+  const estado = lerEstadoElencosParticionados_(campeonatoId);
+  const equipes = lerRegistroEquipes_(), ids = new Set();
+  return estado.manifesto.particoes.filter(function (item) { return item.tipo === tipo; })
+    .reduce(function (lista, particao) {
+      const registros = registrosCanonicosElencoParticionado_(
+        lerConteudoParticaoElenco_(estado, particao).registros, particao.equipeId, equipes);
+      registros.forEach(function (registro) {
+        if (ids.has(registro.id)) throw new Error('Identificador repetido entre particoes de elenco.');
+        ids.add(registro.id);
+      });
+      return lista.concat(registros);
+    }, []);
+}
+
+// Live fingerprint, deliberately not based on legacy metadata or cached IDs.
+// External edits of a published partition also change this fingerprint.
+function fontesEstadoElencoParticionado_(estado) {
+  const equipes = lerRegistroEquipes_(), ids = new Set();
+  return estado.manifesto.particoes.map(function (particao) {
+    const conteudo = lerConteudoParticaoElenco_(estado, particao);
+    const equipe = equipePermanenteElencoParticionado_(particao.equipeId, equipes);
+    conteudo.registros.forEach(function (registro) {
+      const chave = JSON.stringify([particao.tipo, registro.id]);
+      if (ids.has(chave)) throw new Error('Identificador repetido entre particoes de elenco.');
+      ids.add(chave);
+    });
+    return { particao: particao, texto: conteudo.texto, registros: conteudo.registros, equipeNome: equipe.nome };
+  });
+}
+
+function assinaturaEstadoElencoParticionado_(estado, conteudos) {
+  const fontes = (conteudos || fontesEstadoElencoParticionado_(estado)).map(function (conteudo) {
+    const particao = conteudo.particao;
+    return [particao.tipo, particao.equipeId, particao.arquivo, conteudo.equipeNome,
+      digestIndiceValidacao_(conteudo.texto)];
+  });
+  return digestIndiceValidacao_(JSON.stringify(['aeuv.elencos.particoes.v1', estado.texto, fontes]));
+}
+
+function assinaturaFontesElencoParticionado_(campeonatoId) {
+  return assinaturaEstadoElencoParticionado_(lerEstadoElencosParticionados_(campeonatoId));
+}
+
+function criarDocumentoPreparacaoElenco_(pasta, nome, dados) {
+  if (itemUnicoElencoParticionado_(pasta.getFilesByName(nome))) {
+    throw new Error('Documento de preparacao ja existe. Recarregue antes de repetir a operacao.');
+  }
+  const texto = JSON.stringify(dados);
+  const arquivo = pasta.createFile(Utilities.newBlob(texto, 'application/json', nome));
+  if (arquivo.getBlob().getDataAsString('UTF-8') !== texto) {
+    throw new Error('Nao foi possivel confirmar a preparacao do elenco. Nada foi publicado.');
+  }
+  return nome;
+}
+
+// Recovery evidence only, not the enrollment history or its legacy worker queue.
+// Keep RPCs inactive until both workers and all consumers share the new sources.
+function prepararSnapshotPublicacaoElenco_(pasta, estado, conteudos, revisao, assinatura) {
+  return criarDocumentoPreparacaoElenco_(pasta, 'snapshot - ' + identidadeElencoParticionado_(revisao) + '.json', {
+    schema: 'aeuv.elencos.snapshot', versao: 1, campeonatoId: estado.manifesto.campeonatoId,
+    revisaoDestino: revisao, assinaturaAnterior: assinatura, manifestoAnterior: estado.manifesto,
+    particoes: conteudos.map(function (conteudo) {
+      return { referencia: conteudo.particao, registros: conteudo.registros };
+    })
+  });
+}
+
+function prepararPendenciaPublicacaoElenco_(pasta, manifesto, snapshot, assinatura) {
+  return criarDocumentoPreparacaoElenco_(pasta,
+    'pendencia - ' + identidadeElencoParticionado_(manifesto.revisao) + '.json', {
+      schema: 'aeuv.elencos.publicacao', versao: 1, campeonatoId: manifesto.campeonatoId,
+      revisaoDestino: manifesto.revisao, snapshotAnterior: snapshot,
+      assinaturaAnterior: assinatura, manifestoDestino: manifesto
+    });
+}
+
+function validarIdsPublicacaoElenco_(manifesto, conteudos, preparadas) {
+  const ids = new Set();
+  manifesto.particoes.forEach(function (particao) {
+    const nova = preparadas.find(function (preparada) {
+      return preparada.item.tipo === particao.tipo && preparada.item.equipeId === particao.equipeId;
+    });
+    const anterior = conteudos.find(function (conteudo) {
+      return conteudo.particao.tipo === particao.tipo && conteudo.particao.equipeId === particao.equipeId;
+    });
+    const registros = nova ? nova.item.registros : anterior.registros;
+    validarRegistrosParticaoElenco_(registros);
+    registros.forEach(function (registro) {
+      const chave = JSON.stringify([particao.tipo, registro.id]);
+      if (ids.has(chave)) throw new Error('Identificador repetido entre particoes de elenco.');
+      ids.add(chave);
+    });
+  });
+}
+
+function confirmarFontesPublicacaoElenco_(campeonatoId, assinatura) {
+  const atual = lerEstadoElencosParticionados_(campeonatoId);
+  if (assinaturaEstadoElencoParticionado_(atual) !== assinatura) {
+    throw new Error('O manifesto ou uma particao mudou durante a gravacao. Recarregue antes de repetir a operacao.');
+  }
+}
+
+function publicarManifestoElenco_(pasta, estado, texto) {
+  // The Drive call itself can fail after committing. Never claim rollback.
+  try {
+    if (estado.arquivo) estado.arquivo.setContent(texto);
+    else pasta.createFile(Utilities.newBlob(texto, 'application/json', ELENCOS_PARTICOES_MANIFESTO));
+    const publicado = itemUnicoElencoParticionado_(pasta.getFilesByName(ELENCOS_PARTICOES_MANIFESTO));
+    if (!publicado || publicado.getBlob().getDataAsString('UTF-8') !== texto) {
+      throw new Error('Conteudo publicado divergente.');
+    }
+  } catch (causa) {
+    const erro = new Error('Nao foi possivel confirmar a publicacao do elenco. O estado pode ter sido publicado integralmente; '
+      + 'recarregue antes de repetir a operacao. Nenhum rollback foi executado.');
+    erro.cause = causa;
+    throw erro;
+  }
+}
+
+function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assinaturaEsperada) {
+  exigirLockElencoParticionado_();
+  if (!Array.isArray(alteracoes) || !alteracoes.length) throw new Error('Informe as particoes alteradas.');
+  const chaves = new Set();
+  alteracoes.forEach(function (item) {
+    if (!item || !Array.isArray(item.registros)) throw new Error('A particao de elenco deve conter uma lista.');
+    nomeArquivoParticaoElenco_(item.equipeId, item.tipo, 'validacao');
+    const chave = JSON.stringify([item.tipo, item.equipeId]);
+    if (chaves.has(chave)) throw new Error('Particao repetida na gravacao.');
+    chaves.add(chave);
+  });
+  const estado = lerEstadoElencosParticionados_(campeonatoId);
+  if (revisaoEsperada !== undefined && revisaoEsperada !== estado.manifesto.revisao) {
+    throw new Error('O elenco mudou. Recarregue antes de repetir a operacao.');
+  }
+  // No manifest means an empty roster. Old JSONs and unpublished versions are
+  // never scanned, copied, merged, removed or used as a fallback.
+  const conteudos = fontesEstadoElencoParticionado_(estado);
+  const assinatura = assinaturaEstadoElencoParticionado_(estado, conteudos);
+  if (assinaturaEsperada !== undefined && assinaturaEsperada !== assinatura) {
+    throw new Error('Uma fonte do elenco mudou. Recarregue antes de repetir a operacao.');
+  }
+  const equipes = lerRegistroEquipes_();
+  const preparadas = alteracoes.map(function (item) {
+    const registros = registrosCanonicosElencoParticionado_(item.registros, item.equipeId, equipes);
+    const anterior = conteudos.find(function (conteudo) {
+      return conteudo.particao.tipo === item.tipo && conteudo.particao.equipeId === item.equipeId;
+    });
+    const texto = JSON.stringify(registros);
+    const antes = anterior ? JSON.stringify(registrosCanonicosElencoParticionado_(
+      anterior.registros, item.equipeId, equipes)) : '[]';
+    return { item: { equipeId: item.equipeId, tipo: item.tipo, registros: registros },
+      texto: texto, mudou: texto !== antes };
+  }).filter(function (item) { return item.mudou; });
+  if (!preparadas.length) return estado.manifesto.revisao;
+  const manifesto = Object.assign({}, estado.manifesto, {
+    revisao: Utilities.getUuid(), particoes: estado.manifesto.particoes.slice()
+  });
+  preparadas.forEach(function (preparada) {
+    if (!manifesto.particoes.some(function (particao) {
+      return particao.tipo === preparada.item.tipo && particao.equipeId === preparada.item.equipeId;
+    })) manifesto.particoes.push({ tipo: preparada.item.tipo, equipeId: preparada.item.equipeId });
+  });
+  validarIdsPublicacaoElenco_(manifesto, conteudos, preparadas);
+  const pasta = estado.pasta || pastaElencosParticionados_(campeonatoId, true);
+  const snapshot = prepararSnapshotPublicacaoElenco_(pasta, estado, conteudos, manifesto.revisao, assinatura);
+  preparadas.forEach(function (preparada) {
+    const item = preparada.item, revisao = Utilities.getUuid();
+    const nome = nomeArquivoParticaoElenco_(item.equipeId, item.tipo, revisao);
+    if (itemUnicoElencoParticionado_(pasta.getFilesByName(nome))) {
+      throw new Error('Versao de particao ja existe. Recarregue antes de repetir a operacao.');
+    }
+    const arquivo = pasta.createFile(Utilities.newBlob(preparada.texto, 'application/json', nome));
+    if (arquivo.getBlob().getDataAsString('UTF-8') !== preparada.texto) {
+      throw new Error('Nao foi possivel confirmar a nova particao de elenco.');
+    }
+    const referencia = { equipeId: item.equipeId, tipo: item.tipo, revisao: revisao, arquivo: nome };
+    const posicao = manifesto.particoes.findIndex(function (particao) {
+      return particao.equipeId === item.equipeId && particao.tipo === item.tipo;
+    });
+    if (posicao === -1) manifesto.particoes.push(referencia);
+    else manifesto.particoes[posicao] = referencia;
+  });
+  prepararPendenciaPublicacaoElenco_(pasta, manifesto, snapshot, assinatura);
+  confirmarFontesPublicacaoElenco_(campeonatoId, assinatura);
+  const texto = JSON.stringify(manifesto);
+  // Copy-on-write: one publication point for every affected team/category.
+  // A failure before this point leaves all old references intact. A failure
+  // after it leaves the complete new state; never roll back one partition.
+  publicarManifestoElenco_(pasta, estado, texto);
+  return manifesto.revisao;
+}
+
+// Storage operation only: the future RPC adapter must run the existing
+// permission, CPF, championship binding and participation guards beforehand.
+function transferirRegistroParticionado_(campeonatoId, tipo, registroId, origemId, destinoId, destinoNome) {
+  exigirLockElencoParticionado_();
+  if (origemId === destinoId || typeof registroId !== 'string' || !registroId.trim()
+      || typeof destinoNome !== 'string' || !destinoNome.trim()) {
+    throw new Error('Informe uma transferencia de elenco valida.');
+  }
+  const estado = lerEstadoElencosParticionados_(campeonatoId);
+  const assinatura = assinaturaEstadoElencoParticionado_(estado);
+  const origem = lerParticaoElenco_(campeonatoId, origemId, tipo, estado);
+  const destino = lerParticaoElenco_(campeonatoId, destinoId, tipo, estado);
+  const encontrados = origem.filter(function (item) { return item && item.id === registroId; });
+  if (encontrados.length !== 1 || destino.some(function (item) { return item && item.id === registroId; })) {
+    throw new Error('Registro de transferencia ausente ou duplicado. Recarregue antes de continuar.');
+  }
+  return gravarParticoesElenco_(campeonatoId, [
+    { tipo: tipo, equipeId: origemId, registros: origem.filter(function (item) { return item !== encontrados[0]; }) },
+    { tipo: tipo, equipeId: destinoId, registros: destino.concat([
+      Object.assign({}, encontrados[0], { timeVinculado: destinoNome })
+    ]) }
+  ], estado.manifesto.revisao, assinatura);
+}
+
 function removerCadastroPessoasCampeonato_(campeonatoId) {
   invalidarIndiceValidacao_(campeonatoId);
   ['Atletas', 'Comissao Tecnica'].forEach(function (tipo) {

@@ -66,6 +66,106 @@ autorizacao, limites, fallback e controles Admin, consulte
 As agendas de tabela, participantes e Banco de Atletas permanecem independentes
 e nao sao desativadas por essa manutencao.
 
+### Elencos particionados: etapa inativa
+
+**Esta entrega é uma etapa vertical de armazenamento, não uma migração
+end-to-end nem um cutover ativo.** As funções privadas em `WebApp.gs`
+(`lerParticaoElenco_`, `lerElencoParticionado_`, `gravarParticoesElenco_` e
+`transferirRegistroParticionado_`) ainda não são chamadas pelos RPCs,
+agendas ou consumidores atuais. Publicar esta versão mantém o comportamento
+anterior; não execute essas funções manualmente no Drive para fazer o cutover.
+Permissões, validações e contratos RPC não foram alterados.
+
+Formato preparado na pasta raiz do projeto:
+
+```text
+AEUV - Elencos - <encodeURIComponent(campeonatoId)>
+  manifesto.json
+  Atletas - <encodeURIComponent(equipeId)> - <revisao>.json
+  Comissao Tecnica - <encodeURIComponent(equipeId)> - <revisao>.json
+  snapshot - <revisaoDestino>.json
+  pendencia - <revisaoDestino>.json
+```
+
+Os nomes físicos usam somente identidades permanentes, nunca nomes visíveis.
+A pasta e os arquivos são criados sob demanda, sob o `ScriptLock` existente.
+O manifesto `aeuv.elencos.particoes`, versão 1, contém o `campeonatoId`, a
+revisão publicada e referências `{equipeId, tipo, revisao, arquivo}`.
+Cada arquivo referenciado contém uma lista JSON. As consultas da camada
+nova juntam somente as referências publicadas da categoria solicitada.
+Sem manifesto, o elenco novo é vazio; uma referência publicada ausente,
+duplicada ou inválida gera erro, não um fallback para arquivos antigos.
+
+Na camada privada, `timeVinculado` é derivado do ID permanente no registro
+global, preservando os demais campos. Renomear a equipe não troca sua
+partição nem exige regravar registros. A agregação não filtra por equipes
+ativas ou vinculadas ao campeonato: registros de outras equipes globais
+continuam presentes. IDs sem mapeamento, IDs ambíguos, nomes ambíguos ao
+resolver um destino e registros inválidos/duplicados geram erro explícito.
+Este adaptador **ainda não participa das permissões ou dos RPCs**.
+
+As versões são **copy-on-write**: somente as partições alteradas ganham
+novos arquivos; equipes/categorias não afetadas conservam suas referências.
+Antes de preparar as versões, a camada nova grava e confirma um snapshot
+de recuperação de todo o estado publicado anterior. Depois de preparar
+as versões, grava e confirma um journal pendente com o snapshot e o
+manifesto proposto. Ambos ficam na pasta nova, são imutáveis e não são
+interpretados como fontes de elenco.
+O manifesto é o único ponto de publicação de uma operação, inclusive uma
+transferência. Falha ao preparar a segunda partição deixa o estado anterior
+inteiro visível; falha após a publicação deixa o estado novo inteiro.
+Erros da própria chamada de publicação ou de seu readback exigem recarregar
+antes de repetir: o resultado pode já ter sido publicado integralmente,
+sem fingir rollback parcial. Versões anteriores, snapshots, journals e
+arquivos preparados mas não publicados ficam
+retidos e ignorados nas leituras. **Não existe remoção automática**, nem
+dos arquivos antigos nem dessas versões.
+
+**O snapshot de recuperação não substitui o histórico global de inscrições.
+O journal pendente não é a fila existente de reconciliação.** Não há worker
+para consumir esses journals nesta etapa. Ligá-los à fila antiga agora
+seria inseguro: seu worker continua lendo os JSONs legados e poderia
+reconciliar presença com uma fonte diferente da publicação nova.
+
+O fingerprint `assinaturaFontesElencoParticionado_` lê as fontes novas
+vivas, inclui o formato/manifesto, o digest de cada partição publicada e
+seu nome canônico no registro global. Antes de publicar, o gravador
+revalida todas essas fontes, inclusive partições não alteradas. A
+transferência também compara o fingerprint entre sua leitura e o início
+da gravação, não só a revisão do manifesto. Fontes ausentes ou corrompidas
+impedem a publicação, mesmo quando não são o alvo da alteração. Isso
+detecta edições externas sem depender de metadados legados. Não é um CAS
+fornecido pelo Drive: existe uma janela entre a última leitura e a chamada
+de publicação para escritores externos que não usam o `ScriptLock`.
+Ele ainda
+**não foi conectado ao índice CPF/participação**; não se deve confiar no
+índice atual para validar cadastros da camada nova. As funções privadas
+novas não consultam o índice V1. Esse índice permanece exclusivo dos RPCs
+legados, que continuam com suas fontes anteriores.
+
+Pendências obrigatórias antes da ativação:
+
+| Superfície | O que permanece nesta entrega |
+| --- | --- |
+| Cadastros e transferências RPC | `lerElencoBrutoOperacao_`, `gravarElencoComHistorico_`, migração de IDs e gravadores de atletas/comissão continuam nos JSONs anteriores. Falta adaptar todos juntos, preservando guardas, normalizadores e contratos. |
+| Histórico global, fila e snapshots | Intocados. `prepararHistoricoElenco_`, `reconciliarHistoricoCampeonato_` e o worker da fila ainda usam as listas antigas. Falta integrar snapshot de inscrição anterior, pendência persistida e reconciliação pós-publicação sem perda da presença/histórico anterior. Os documentos de recuperação novos não completam essa integração. |
+| Índice CPF/participação | `fontesIndiceValidacao_`, verificação de versões, cache sob lock e atualização incremental continuam V1/fontes anteriores. Falta versionar fonte/schema para manifesto/partições/registro ou forçar fallback vivo novo antes de ativar qualquer mutação RPC. |
+| Importação e respostas | A importação ainda prepara o histórico e valida/grava listas legadas; respostas de elenco/cadastros e participantes ainda usam os normalizadores anteriores. Falta comparar contratos completos após a mudança de fonte. |
+| Tabela, súmulas/resultados e imagens | Comissão bruta em `elencosResultadoTabela_` e `gerarSumulaJogoCampeonato`, `comissaoCampeonato_` e `fonteOtimizacaoImagens_` ainda leem os arquivos raiz. Backups/lotes ainda são por documento legado; adaptar sem tocar em snapshots esportivos já salvos. |
+| Registro/cache/assinaturas de fontes | Registro global e cache de arquivos ainda mantêm as fontes atuais. Falta conectar a identidade nova às assinaturas de resultado e revisão/pendências de snapshots esportivos, sem reutilizar IDs/metadados legados para partições. |
+| Remoção do campeonato | `removerCampeonato`, `removerCadastroPessoasCampeonato_` e `removerCadastroTabelaCampeonato_` continuam com a rotina anterior. **Não executar exclusão como parte deste cutover inativo.** Falta exclusão lógica que limpe apenas a pasta/índice novos, mantenha tabela no local legado e preserve os arquivos antigos. |
+
+**Cutover futuro da base de testes:** a decisão é iniciar elencos atuais
+vazios, sem migrar/copiar/mesclar JSONs ou Script Properties antigos.
+Preservar `equipes.json`/registro global de equipes e seus IDs, jogos
+existentes e histórico global de inscrições; o arquivo de tabela continua
+no local atual. Somente depois de todos os consumidores acima estarem
+adaptados, as leituras atuais passarão a usar exclusivamente a estrutura
+nova. Nesse momento os JSONs antigos ficarão ignorados, não migrados, e
+poderão ser apagados manualmente após validação. **Hoje eles ainda são
+usados pelos consumidores legados: não os apague.** Nenhuma ação no Drive
+remoto ou remoção local/remota foi executada para implementar esta etapa.
+
 Repita estes passos para cada aplicativo:
 
 1. Crie um projeto independente em [Google Apps Script](https://script.google.com/).

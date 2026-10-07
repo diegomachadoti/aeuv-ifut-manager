@@ -3,6 +3,77 @@
 Ferramenta local reutilizável; **não publicar `benchmark.js` no Apps Script**.
 Não muda endpoints, permissões, regras ou dados do sistema.
 
+## Elencos particionados: camada de armazenamento ainda inativa
+
+`elencos-particionados.test.cjs` cobre a etapa privada de armazenamento
+preparada em `WebApp.gs`. **Não mede um cutover ativo:** os RPCs, histórico,
+fila, snapshots esportivos, índices de validação e consumidores atuais
+continuam usando os JSONs anteriores. O formato e a lista exata de pendências estão no
+[guia principal](../../README.md#elencos-particionados-etapa-inativa).
+
+A camada nova usa a pasta `AEUV - Elencos - <campeonatoId codificado>` e
+arquivos `Atletas - <equipeId codificado> - <revisao>.json` /
+`Comissao Tecnica - <equipeId codificado> - <revisao>.json`.
+`manifesto.json` publica as referências de uma vez. Somente as equipes e
+categorias alteradas recebem novas versões; versões anteriores e arquivos
+preparados sem publicação são retidos, nunca apagados automaticamente.
+IDs permanentes definem a identidade física, não os nomes das equipes.
+O nome canônico vem do registro global por ID, com erro explícito para
+mapeamento ausente/ambíguo. A leitura agregada inclui equipes globais que
+não estejam associadas ao campeonato ou à lista ativa, sem descartar dados.
+
+Cada alteração efetiva confirma um `snapshot - <revisaoDestino>.json`
+do estado anterior antes de preparar as partições, e um
+`pendencia - <revisaoDestino>.json` antes de publicar o manifesto.
+São documentos privados de recuperação, retidos e ignorados nas leituras.
+**Não são o histórico de inscrições nem a fila existente; nenhum worker
+novo está integrado.** Não execute as funções privadas manualmente para
+substituir RPCs ou reconciliar o histórico.
+
+A fixture mantém o fake plano anterior e acrescenta pastas aninhadas,
+arquivos homônimos em pastas distintas, IDs/pais corretos e falhas de
+criação/escrita/confirmação. A cobertura nova inclui agregação multi-equipe
+e multi-categoria, escrita isolada, transferências com falha na segunda
+partição ou na publicação, ausência de perda/duplicação, retries, fontes
+inválidas sem fallback silencioso, fingerprint vivo recuperável e
+preservação byte a byte dos arquivos/IDs/histórico existentes. Também compara
+campos completos (CPF, imagens, contato, situação ativa e metadados), nomes
+canônicos após renomeação, dados não associados, snapshots anteriores e
+journals confirmados antes da publicação. Injeta falhas de criação/leitura/
+conteúdo nesses documentos, alterações em partições não afetadas e
+alteração externa entre leitura e gravação da transferência. Confirmação
+pós-publicação divergente ou com erro sempre exige recarregar, preserva a
+causa e não declara rollback.
+
+Um teste canário com dados novos diferentes dos legados bloqueia as funções
+novas e compara os contratos atuais de elenco/cadastros, comissão ativa de
+resultados, imagens, CPF, histórico, importação e gravação. Isso comprova a
+inatividade consistente desses caminhos, **não sua integração nova**.
+As regressões existentes de credenciais, índices, participação, snapshots
+esportivos e agendas continuam exercitando o comportamento legado. Não simula
+latência, quotas reais nem atomicidade entre serviços Google distintos.
+O manifesto depende da substituição integral do conteúdo de um único
+arquivo pelo Drive e do `ScriptLock` dos escritores da aplicação; edições
+manuais concorrentes no Drive não participam desse lock. A revalidação de
+manifesto, blobs e nomes canônicos antes de publicar rejeita divergências,
+mas não elimina a janela entre a última leitura e a publicação no Drive.
+
+O fingerprint novo lê manifesto e blobs publicados; **não há promessa de
+validação sem leituras nem integração ao índice antigo**. Não reutilize
+metadados/contadores do índice atual como evidência de frescor das partições.
+Os escritores privados novos só usam fontes vivas, nunca esse índice V1.
+A limpeza ao remover campeonato, adaptação dos consumidores e integração
+com histórico/índice ainda não foram ativadas nem são reivindicadas por
+estes testes.
+
+No cutover futuro da base de testes, os elencos atuais começarão vazios.
+A leitura nova ignora os JSONs e propriedades antigos: não os copia,
+migra ou mescla. Eles poderão ser apagados **manualmente após validação do
+cutover completo**, sem nenhum apagar automático. Nesta etapa os
+consumidores legados ainda dependem deles; mantenha-os. Equipes e IDs
+globais, jogos/tabela e histórico de inscrições permanecem preservados.
+Os testes são exclusivamente locais e não executam ações no Drive remoto.
+
 ### Regressao do indice de validacao
 
 `validation-index.test.cjs` usa o VM de `save-fixture.cjs`, fontes Drive com

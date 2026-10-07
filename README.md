@@ -18,6 +18,23 @@ Nota Oficial).
 Veja como os formulários geram e armazenam esses arquivos no
 [guia dos aplicativos Apps Script](apps-scripts/README.md).
 
+### Elencos separados por equipe: etapa de armazenamento, ainda inativa
+
+O sistema interno agora tem uma camada privada de armazenamento por
+`campeonatoId` e `equipeId`, com versões de atletas/comissão e publicação
+atômica por manifesto. **O cutover não está ativado:** cadastros, consultas,
+histórico, índices e consumidores esportivos continuam no armazenamento
+anterior. Não basta publicar esta versão para iniciar elencos vazios.
+
+A camada nova não lê, copia, mescla nem apaga os JSONs antigos. Quando todos
+os consumidores forem adaptados e o cutover da base de testes for ativado,
+os elencos atuais começarão vazios; os arquivos antigos ficarão ignorados,
+não migrados, e poderão ser apagados **manualmente somente após validação**.
+Os IDs/registros globais de equipes, jogos e histórico devem ser mantidos.
+Não há limpeza automática, e nenhum dado remoto foi alterado nesta etapa.
+Formato e pendências estão no
+[guia de elencos particionados](apps-scripts/README.md#elencos-particionados-etapa-inativa).
+
 ## Arquivos principais
 
 - `main.py`: fluxo principal

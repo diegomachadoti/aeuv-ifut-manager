@@ -25,11 +25,21 @@ function harness(source = backend, opcoes = {}) {
   };
   const writes = [], logs = [], reads = [], io = [], files = new Map(), properties = new Map();
   // Metadados Drive simulados: nome -> ID atual na pasta raiz e ID -> {nome, lixeira, pasta}.
-  const ids = new Map(), meta = new Map(), caches = new Map(), cacheOps = [];
-  const novoId = name => {
+  const ids = new Map(), meta = new Map(), caches = new Map(), cacheOps = [], folders = new Map();
+  const novoId = (name, parent) => {
+    if (parent === undefined) {
+      const separator = name.lastIndexOf('\\');
+      if (separator === -1) parent = 'root';
+      else {
+        const location = [...folders].find(([, item]) => item.path === name.slice(0, separator));
+        assert(location, 'nested file parent not found');
+        parent = location[0];
+      }
+    }
     const id = 'drive' + String(++nextId).padStart(12, '0');
     ids.set(name, id);
-    meta.set(id, { name, trashed: false, parent: 'root' });
+    meta.set(id, { name: name.split('\\').pop(), trashed: false, parent,
+      ...(parent === 'root' ? {} : { key: name }) });
     return id;
   };
   const idOf = name => ids.get(name) || novoId(name);
@@ -48,6 +58,7 @@ function harness(source = backend, opcoes = {}) {
   }
   const file = name => ({
     getId: () => { io.push({ operacao: 'getId', name }); return idOf(name); },
+    getName: () => name.split('\\').pop(),
     setTrashed: value => {
       io.push({ operacao: 'trash', name });
       assert.equal(value, true);
@@ -65,11 +76,13 @@ function harness(source = backend, opcoes = {}) {
     setContent: text => {
       io.push({ operacao: 'setContent', name });
       assert(locked, 'write outside lock');
+      if (state.failWrite === name) throw new Error('write failure');
       if (name === historyFile && state.failHistory) throw new Error('history failure');
       if (name.startsWith('AEUV - Campeonato -') && state.failRoster) throw new Error('roster failure');
       files.set(name, text);
       writes.push(name);
       if (name.startsWith('AEUV - Campeonato -') && state.onRoster) state.onRoster();
+      if (state.onWrite) state.onWrite(name);
     }
   });
   const triggers = [];
@@ -107,8 +120,8 @@ function harness(source = backend, opcoes = {}) {
             }
           };
         },
-        getBlob: () => file(atual().name).getBlob(),
-        setContent: text => file(atual().name).setContent(text)
+        getBlob: () => file(atual().key || atual().name).getBlob(),
+        setContent: text => file(atual().key || atual().name).setContent(text)
       };
     } },
     ScriptApp: {
@@ -178,7 +191,71 @@ function harness(source = backend, opcoes = {}) {
   const equipesRegistroReal = c.equipesRegistro_, lerRegistroEquipesReal = c.lerRegistroEquipes_;
   const campeonatosReal = c.campeonatos_, lerBloqueiosReal = c.lerBloqueiosElenco_;
   const registryFile = vm.runInContext('CONFIG.equipes.arquivoRegistro', c);
+  const iterator = values => {
+    const remaining = values.slice();
+    return { hasNext: () => remaining.length > 0, next: () => {
+      assert(remaining.length, 'iterator exhausted');
+      return remaining.shift();
+    } };
+  };
+  const folder = id => {
+    const info = folders.get(id);
+    assert(info, 'folder not found');
+    const keyOf = name => info.path + '\\' + name;
+    return {
+      getId: () => id,
+      getName: () => info.name,
+      getFoldersByName: name => iterator([...folders].filter(([, item]) =>
+        item.parent === id && item.name === name).map(([child]) => folder(child))),
+      createFolder: name => createFolder(id, name),
+      getFilesByName: name => {
+        const key = keyOf(name);
+        io.push({ operacao: 'lookup', name: key });
+        if (state.failLookup === key) throw new Error('lookup failure');
+        read('drive');
+        let consumed = false;
+        return {
+          hasNext: () => {
+            io.push({ operacao: 'hasNext', name: key });
+            if (state.failIterator === key) throw new Error('iterator failure');
+            return !consumed && files.has(key);
+          },
+          next: () => {
+            assert(!consumed && files.has(key));
+            consumed = true;
+            io.push({ operacao: 'next', name: key });
+            return file(key);
+          }
+        };
+      },
+      createFile: blob => {
+        const key = keyOf(blob.name);
+        io.push({ operacao: 'create', name: key });
+        assert(locked, 'create outside lock');
+        if (state.failCreate === key || (state.failCreateWhen && state.failCreateWhen(key))) {
+          throw new Error('create failure');
+        }
+        assert(!files.has(key), 'duplicate file in fixture');
+        novoId(key, id);
+        file(key).setContent(blob.text);
+        return file(key);
+      }
+    };
+  };
+  const createFolder = (parent, name) => {
+    assert(locked, 'create folder outside lock');
+    if (state.failCreateFolder === name) throw new Error('folder create failure');
+    const id = 'folder' + String(++nextId).padStart(12, '0');
+    const parentPath = parent === 'root' ? '' : folders.get(parent).path + '\\';
+    folders.set(id, { name, parent, path: parentPath + name });
+    io.push({ operacao: 'createFolder', name: parentPath + name });
+    return folder(id);
+  };
   c.pastaRaizProjeto_ = () => ({
+    getId: () => rootId,
+    getFoldersByName: name => iterator([...folders].filter(([, item]) =>
+      item.parent === 'root' && item.name === name).map(([id]) => folder(id))),
+    createFolder: name => createFolder('root', name),
     getFilesByName: name => {
       io.push({ operacao: 'lookup', name });
       if (state.failLookup === name) throw new Error('lookup failure');
@@ -251,7 +328,8 @@ function harness(source = backend, opcoes = {}) {
     trash: name => { meta.get(idOf(name)).trashed = true; ids.delete(name); files.delete(name); },
     rename: (name, novo) => {
       const id = idOf(name);
-      meta.get(id).name = novo;
+      meta.get(id).name = novo.split('\\').pop();
+      if (meta.get(id).parent !== 'root') meta.get(id).key = novo;
       ids.delete(name);
       ids.set(novo, id);
       files.set(novo, files.get(name));
@@ -263,7 +341,7 @@ function harness(source = backend, opcoes = {}) {
   };
   return { c, state, counts, writes, logs, reads, io, files, seed, roster, history, payload,
     useRealRegistry, useRealContextFiles, registryFile, properties, ids, meta, caches, cacheOps, drive, idOf,
-    rootId: () => rootId, locked: () => locked, triggers };
+    rootId: () => rootId, locked: () => locked, triggers, folders };
 }
 
 function participation(pessoa = person('atletas'), equipeId = 'e1') {
