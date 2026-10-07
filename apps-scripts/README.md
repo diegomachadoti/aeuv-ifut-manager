@@ -166,15 +166,15 @@ Superfícies integradas, **somente sob o gate ativo**:
 | --- | --- |
 | Cadastros e transferências RPC | Adição/edição/remoção e transferência por lista completa, resolução por ID permanente e publicação única. Registros particionados exigem IDs válidos; não há migração automática dos antigos. |
 | Histórico global e fila | Snapshot síncrono anterior, fila persistida antes do commit e reconciliação pós-publicação pela mesma fonte. Inscrições/snapshots antigos mantêm seus IDs e dados, inclusive para importação deliberada. |
-| Índice CPF/participação | V2 vivo para elencos, Drive version/MD5 para tabela, fallback seguro enquanto dirty e recálculo manual/agendado. Atualização incremental dos elencos V2 não é implementada: usa dirty + recálculo, intencionalmente. |
+| Índice CPF/participação | V2 usa fingerprint vivo para elencos e Drive version/MD5 para tabela. Com uma base V2 íntegra, inclusão/edição/remoção/transferência atualizam incrementalmente a categoria após o manifesto; o índice fica dirty até confirmar os novos chunks e fontes. Sem base V2 confiável ou após falha, as consultas usam fallback vivo até o recálculo manual/agendado. |
 | Importação e respostas | Listagens/agregadores e candidatos usam listas novas/histórico global; importação explícita passa pelas mesmas guardas e publica partições, sem copiar arquivos legados. |
 | Resultados e súmulas | Leituras diretas de comissão passam pelo adaptador. `ativo` é preservado também pelos normalizadores/edições V2; inativos não entram como participantes disponíveis nem na súmula atual. Resultados históricos salvos não são regravados. |
 | Imagens | Lotes mantêm assinatura e backup anterior; aceitam filtro opcional `fonte.equipeId`. Sem filtro, mantêm o contrato agregado atual. Apenas equipes alteradas recebem versões, com uma publicação por lote e histórico pela fila. Falha do backup impede a gravação. |
 | Cópias esportivas | Mutações marcam pendência; os builders/workers de tabela e participantes recompõem usando a fonte do gate. Cópias anteriores permanecem imutáveis e a releitura continua exibindo a cópia pronta, conforme o contrato existente. |
 | Remoção do campeonato | Exclusão lógica do registro listado, tombstone durável e fila antes da alteração. O worker fecha a presença das inscrições quando o campeonato removido tem tombstone válido. Pasta nova, versões/journals, propriedades antigas, arquivos legados e jogos/tabela são preservados; apenas o namespace do índice removido é limpo. |
 
-Limites ainda não suportados: limpeza física das pastas/versões, consumo
-automático dos journals e atualização incremental de índice V2 de elencos.
+Limites ainda não suportados: limpeza física das pastas/versões e consumo
+automático dos journals.
 Não são necessários para as leituras/gravações com gate, nem estão sendo
 executados. A validação local não substitui autorização, quotas e comportamento
 real dos serviços Google; ativação/publicação de produção permanece fora

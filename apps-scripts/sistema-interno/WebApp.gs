@@ -2570,13 +2570,15 @@ function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado
             return grupo.equipeId === particao.equipeId;
           })) alteracoes.push({ tipo: tipo, equipeId: particao.equipeId, registros: [] });
         });
-        // Durable enrollment queue and dirty checkpoint precede the sole manifest commit.
-        invalidarIndiceValidacao_(campeonatoId);
+        // Keep the index dirty through the sole manifest commit; only a validated
+        // baseline can be republished against the newly committed source identity.
+        const mutacaoIndice = iniciarMutacaoIndiceParticionado_(campeonatoId, recursos);
         if (recursos) delete recursos.indicesValidacao;
         marcarHistoricoElencoPendente_(campeonatoId);
         marcarSnapshotsEsportivosPendentes_();
         if (alteracoes.length) gravarParticoesElenco_(
           campeonatoId, alteracoes, estado.manifesto.revisao, assinatura);
+        concluirMutacaoIndiceParticionado_(mutacaoIndice, tipo, campeonatoId, recursos);
         if (recursos && recursos.estadosElencosParticionados) {
           delete recursos.estadosElencosParticionados[campeonatoId];
         }
@@ -7506,14 +7508,19 @@ function iniciarMutacaoIndiceValidacao_(nome, recursos) {
   return { alvo: alvo, indice: indice, fontes: fontes, meta: meta, checkpoint: checkpoint };
 }
 
-function publicarIndiceValidacao_(id, indice, fontes, checkpoint, anterior) {
+function publicarIndiceValidacao_(id, indice, fontes, checkpoint, anterior, validarFontes) {
   const props = PropertiesService.getScriptProperties(), prefixo = chaveIndiceValidacao_(id);
-  const atual = lerMetaIndiceValidacao_(id);
-  if (!atual.dirty || atual.checkpoint !== checkpoint) throw new Error('Indice alterado durante a reconciliacao.');
+  function confirmarCheckpoint_() {
+    const atual = lerMetaIndiceValidacao_(id);
+    if (!atual.dirty || atual.checkpoint !== checkpoint) throw new Error('Indice alterado durante a reconciliacao.');
+  }
+  confirmarCheckpoint_();
   if (anterior && anterior.dirty === false) {
     indice.token = anterior.token;
     if (digestIndiceValidacao_(JSON.stringify(indice)) === anterior.digest
         && lerPayloadIndiceValidacao_(id, anterior)) {
+      confirmarCheckpoint_();
+      if (validarFontes) validarFontes();
       const meta = Object.assign({}, anterior, { fontes: fontes, checkpoint: checkpoint,
         atualizadoEm: new Date().toISOString() });
       props.setProperty(prefixo + 'meta', JSON.stringify(meta));
@@ -7555,8 +7562,75 @@ function publicarIndiceValidacao_(id, indice, fontes, checkpoint, anterior) {
     fontes: fontes, digest: digestIndiceValidacao_(texto), atualizadoEm: new Date().toISOString() };
   if (!lerPayloadIndiceValidacao_(id, meta)) throw new Error('Falha na leitura de confirmacao do indice.');
   // Single publication point. Dirty metadata survives all earlier failures.
+  confirmarCheckpoint_();
+  if (validarFontes) validarFontes();
   props.setProperty(prefixo + 'meta', JSON.stringify(meta));
   return meta;
+}
+
+function iniciarMutacaoIndiceParticionado_(id, recursos) {
+  let indice = null, meta = null;
+  try {
+    meta = lerMetaIndiceValidacao_(id);
+    if (meta.versao === 2 && meta.dirty === false) {
+      indice = consultarIndiceValidacao_(id, recursos);
+      if (!indice || JSON.stringify(lerMetaIndiceValidacao_(id)) !== JSON.stringify(meta)) {
+        indice = null;
+        meta = null;
+      } else {
+        indice = JSON.parse(JSON.stringify(indice));
+      }
+    } else {
+      meta = null;
+    }
+  } catch (e) {
+    registrarFalhaIndiceValidacao_('incremental_pre_gravacao');
+    indice = null;
+    meta = null;
+  }
+  return { indice: indice, meta: meta, checkpoint: invalidarIndiceValidacao_(id) };
+}
+
+function concluirMutacaoIndiceParticionado_(mutacao, tipo, id, recursos) {
+  if (!mutacao || !mutacao.indice || !mutacao.meta) {
+    registrarFalhaIndiceValidacao_('incremental_sem_base_v2');
+    return;
+  }
+  let fase = 'leitura_estado';
+  try {
+    const posicao = ['atletas', 'comissao'].indexOf(tipo);
+    if (posicao === -1) throw new Error('Categoria de elenco invalida.');
+    const indice = mutacao.indice;
+    fase = 'fingerprint_inicial';
+    const fontesAntes = versoesFontesIndiceValidacao_(id, recursos);
+    const publicados = lerElencoParticionado_(id, tipo);
+    const outroTipo = tipo === 'atletas' ? 'comissao' : 'atletas';
+    const outroPublicado = compactarCadastroIndiceValidacao_(lerElencoParticionado_(id, outroTipo));
+    function assinaturaCadastro_(cadastros) {
+      return JSON.stringify(Object.keys(cadastros).sort().map(function (cpf) {
+        return [cpf, cadastros[cpf].map(function (entrada) { return JSON.stringify(entrada); }).sort()];
+      }));
+    }
+    if (assinaturaCadastro_(outroPublicado) !== assinaturaCadastro_(indice.cadastros[outroTipo])) {
+      throw new Error('A outra categoria mudou durante a gravacao.');
+    }
+    indice.cadastros[tipo] = compactarCadastroIndiceValidacao_(publicados);
+    fase = 'fingerprint';
+    const fontes = versoesFontesIndiceValidacao_(id, recursos);
+    if (JSON.stringify(fontesAntes) !== JSON.stringify(fontes)
+        || JSON.stringify(fontes[2]) !== JSON.stringify(mutacao.meta.fontes[2])) {
+      throw new Error('Uma fonte mudou durante a gravacao.');
+    }
+    fase = 'publicacao';
+    publicarIndiceValidacao_(id, indice, fontes, mutacao.checkpoint, mutacao.meta, function () {
+      if (JSON.stringify(versoesFontesIndiceValidacao_(id, recursos)) !== JSON.stringify(fontes)) {
+        throw new Error('Fontes divergiram durante a publicacao incremental.');
+      }
+    });
+  } catch (e) {
+    // The manifest is already committed; stale or unavailable indexes stay dirty.
+    registrarFalhaIndiceValidacao_('incremental_particionado_' + fase);
+  }
 }
 
 function concluirMutacaoIndiceValidacao_(mutacao, lista, conteudo, recursos) {

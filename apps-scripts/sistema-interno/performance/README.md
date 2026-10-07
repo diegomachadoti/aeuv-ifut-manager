@@ -86,11 +86,17 @@ mas não elimina a janela entre a última leitura e a publicação no Drive.
 
 O fingerprint V2 lê manifesto e blobs publicados; **não há promessa de
 validação sem leituras**. O namespace de propriedades do índice é preservado,
-mas metadados/payloads V1 não autorizam consultas V2. Elencos V2 deixam o índice
-dirty até o recálculo, sem atualização incremental. Não há limpeza física
-nem consumo automático de journals; remoção com gate ativo é somente lógica
-e preserva os arquivos. Ativação remota e validação nos serviços Google reais
-continuam fora desta entrega.
+mas metadados/payloads V1 não autorizam consultas V2. Em mutações de elenco V2,
+o índice fica dirty durante a preparação e a publicação única do manifesto.
+Somente com um índice V2 limpo e validado como base, a aplicação relê o estado
+publicado, atualiza a categoria afetada e confirma novamente fingerprints e
+checkpoint antes de publicar metadados limpos. Falta de base, divergência,
+concorrência, falha ou limite de propriedades preserva o estado dirty e o
+fallback live até reconciliação. Assim, a publicação do índice limpo nunca
+precede o commit do manifesto. Não há limpeza física nem consumo automático de
+journals; remoção com gate ativo é somente lógica e preserva os arquivos.
+Ativação remota e validação nos serviços Google reais continuam fora desta
+entrega.
 
 No cutover futuro da base de testes, os elencos atuais começarão vazios.
 A leitura nova ignora os JSONs e propriedades antigos: não os copia,
@@ -103,10 +109,12 @@ Os testes são exclusivamente locais e não executam ações no Drive remoto.
 ### Regressao do indice de validacao
 
 `validation-index.test.cjs` usa o VM de `save-fixture.cjs`, fontes Drive com
-versao/MD5 e Script Properties com falhas injetadas. Cobre atualizacao
-incremental sincrona, CPF entre categorias, participacao por IDs/CPFs antigos,
-correcao/exclusao de resultados, fallback vivo, checkpoint concorrente,
-limites UTF-8/quota e agenda Admin independente.
+versao/MD5 e Script Properties com falhas injetadas. Cobre atualização
+incremental V1 e, em V2, inclusão/edição/remoção/transferência após commit do
+manifesto, além de falha de publicação que mantém dirty e força fallback live.
+Também cobre CPF entre categorias, participação por IDs/CPFs antigos,
+correção/exclusão de resultados, checkpoint concorrente, limites UTF-8/quota e
+agenda Admin independente.
 Os contadores demonstram leituras de validacao sem blobs de elenco/tabela
 quando o indice e confiavel e ausencia de lock/reescrita na reconciliacao
 ja atual. **Nao** simulam latencia dos servicos Google: nao converter esses

@@ -51,7 +51,10 @@ function fixture(active = false) {
       if (key.includes('INDICE_VALIDACAO_V1_c_')) {
         const phase = key.endsWith('meta') ? (JSON.parse(value).dirty ? 'dirty' : 'publish') : 'chunk';
         if (h.state.failIndexWrite === phase) throw Error('index write 52998224725');
-        if (phase === 'chunk') h.counts.indexChunkWrites++;
+        if (phase === 'chunk') {
+          h.counts.indexChunkWrites++;
+          if (h.state.onIndexChunkWrite) h.state.onIndexChunkWrite();
+        }
         if (phase === 'dirty') assert(h.locked(), 'dirty before source is under the existing lock');
         if (phase === 'publish' && h.state.onPublish) h.state.onPublish();
       }
@@ -145,33 +148,74 @@ test('active V2 index reconciles both partition categories and retains Drive ver
   assert.deepEqual(h.index().participacao, {});
 });
 
-test('active RPC mutations leave V2 dirty until reconciliation; live fallback cannot authorize stale CPF/team data', () => {
+test('active RPC mutations publish V2 only after the manifest and update CPF/team entries incrementally', () => {
   const h = fixture(true);
   h.build();
+  const manifestName = h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json';
+  let dirtyAtManifest = false;
+  h.state.onWrite = name => {
+    if (name === manifestName) {
+      dirtyAtManifest = h.meta().dirty === true;
+    }
+  };
   h.c.salvarCadastroElenco(h.payload('comissao'));
-  assert.equal(h.meta().dirty, true);
-  assert.equal(h.index(), null);
+  h.state.onWrite = null;
+  assert(dirtyAtManifest, 'the index remains dirty at the manifest publication point');
+  assert.equal(h.meta().dirty, false);
+  assert(h.index().cadastros.comissao['11144477735']);
   assert.throws(() => h.c.validarCpfUnicoEntreCadastros_('c1', '11144477735', 'atleta', ''), /comissão técnica/);
-  assert.equal(h.build(), 'reconciliado');
   const staff = h.c.lerElencoBrutoOperacao_('c1', 'comissao')[0];
   h.c.salvarCadastroElenco({ ...h.payload('comissao'), registroId: staff.id, cpf: '12345678909' });
-  assert.equal(h.index(), null);
-  assert.throws(() => h.c.validarCpfUnicoEntreCadastros_('c1', '12345678909', 'atleta', ''), /comissão técnica/);
-  h.build();
+  assert.equal(h.meta().dirty, false);
   assert(!h.index().cadastros.comissao['11144477735']);
+  assert(h.index().cadastros.comissao['12345678909']);
+  assert.throws(() => h.c.validarCpfUnicoEntreCadastros_('c1', '12345678909', 'atleta', ''), /comissão técnica/);
   h.c.removerCadastroElenco({ campeonatoId: 'c1', equipeId: 'e1', tipo: 'comissao', registroId: staff.id });
-  assert.equal(h.meta().dirty, true);
-  h.build();
+  assert.equal(h.meta().dirty, false);
   assert.deepEqual(h.index().cadastros.comissao, {});
   h.c.salvarCadastroElenco(h.payload('atletas'));
   const athlete = h.c.lerElencoBrutoOperacao_('c1', 'atletas')[0];
-  h.build();
   h.c.transferirAtletaElenco({
     campeonatoId: 'c1', equipeId: 'e1', registroId: athlete.id, equipeDestinoId: 'e2'
   });
-  assert.equal(h.index(), null);
-  h.build();
+  assert.equal(h.meta().dirty, false);
   assert.equal(h.index().cadastros.atletas[athlete.cpf][0][1], h.c.chaveEquipe_('Equipe B'));
+});
+
+for (const failure of ['chunk', 'publish']) test(`active V2 incremental ${failure} failure stays dirty and falls back live`, () => {
+  const h = fixture(true);
+  h.build();
+  h.state.failIndexWrite = failure;
+  h.c.salvarCadastroElenco(h.payload('comissao'));
+  assert.equal(h.c.lerElencoParticionado_('c1', 'comissao').length, 1);
+  assert(h.meta().dirty);
+  assert.equal(h.index(), null);
+  assert.throws(() => h.c.validarCpfUnicoEntreCadastros_('c1', '11144477735', 'atleta', ''), /comissão técnica/);
+  h.state.failIndexWrite = null;
+  assert.equal(h.build(), 'reconciliado');
+  assert(h.index().cadastros.comissao['11144477735']);
+});
+
+test('active V2 rechecks all fingerprints immediately before clean publication', () => {
+  const h = fixture(true);
+  activeSeed(h, 'atletas', [person('atletas')]);
+  h.build();
+  let changed = false;
+  h.state.onIndexChunkWrite = () => {
+    if (changed) return;
+    changed = true;
+    h.files.set(activePath(h, 'atletas'), JSON.stringify([person('atletas', {
+      id: 'athlete', cpf: '12345678909', foto: 'external-change'
+    })]));
+  };
+  h.c.salvarCadastroElenco(h.payload('comissao'));
+  h.state.onIndexChunkWrite = null;
+  assert(changed);
+  assert(h.meta().dirty);
+  assert.equal(h.index(), null);
+  assert.throws(() => h.c.validarCpfUnicoEntreCadastros_('c1', '12345678909', 'comissao', ''), /lista de atletas/);
+  assert.equal(h.build(), 'reconciliado');
+  assert(h.index().cadastros.atletas['12345678909']);
 });
 
 test('active gate rejects an otherwise valid old V1 payload automatically and rebuilds from partitions', () => {
