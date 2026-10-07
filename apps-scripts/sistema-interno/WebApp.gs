@@ -3686,6 +3686,7 @@ function diagnosticarRecuperacaoElencosParticionados(campeonatoId) {
       const estadoAtual = lerEstadoElencosParticionados_(id);
       const assinaturaAtual = assinaturaEstadoElencoParticionado_(estadoAtual);
       const propriedades = PropertiesService.getScriptProperties();
+      const destinosValidos = [];
       const journals = encontrados.map(function (entrada) {
         const resultado = { campeonatoId: id, revisao: '', estado: 'invalido', filaHistorico: 'desconhecida' };
         try {
@@ -3739,24 +3740,48 @@ function diagnosticarRecuperacaoElencosParticionados(campeonatoId) {
           const filaBruta = propriedades.getProperty(chaveFilaHistoricoElenco_(id));
           if (filaBruta === null) resultado.filaHistorico = 'ausente';
           else {
-            const fila = JSON.parse(filaBruta);
-            resultado.filaHistorico = fila && fila.versao === 1 && fila.campeonatoId === id
-              && typeof fila.token === 'string' && fila.token ? 'presente' : 'invalida';
+            try {
+              const fila = JSON.parse(filaBruta);
+              resultado.filaHistorico = fila && fila.versao === 1 && fila.campeonatoId === id
+                && typeof fila.token === 'string' && fila.token ? 'presente' : 'invalida';
+            } catch (erroFila) {
+              resultado.filaHistorico = 'invalida';
+            }
           }
           if (estadoAtual.manifesto.revisao === destino.revisao
               && JSON.stringify(estadoAtual.manifesto) === JSON.stringify(destino)) {
             fontesEstadoElencoParticionado_(estadoAtual);
-            resultado.estado = resultado.filaHistorico === 'presente' ? 'publicado' : 'publicado_fila_' + resultado.filaHistorico;
+            resultado.estado = 'publicado';
           } else if (JSON.stringify(estadoAtual.manifesto) === JSON.stringify(snapshot.manifestoAnterior)) {
             resultado.estado = assinaturaAtual === dados.assinaturaAnterior ? 'nao_publicado' : 'divergente';
           } else {
             resultado.estado = 'divergente';
           }
+          destinosValidos.push({
+            resultado: resultado,
+            anterior: anterior,
+            destino: destino
+          });
         } catch (e) {
           resultado.diagnostico = String(e && e.message || 'Documento de recuperacao invalido.');
         }
         return resultado;
       });
+      let manifestoAlvo = JSON.stringify(estadoAtual.manifesto);
+      const manifestosPercorridos = Object.create(null);
+      let revisaoAtiva = true;
+      while (manifestoAlvo && !manifestosPercorridos[manifestoAlvo]) {
+        manifestosPercorridos[manifestoAlvo] = true;
+        const publicado = destinosValidos.find(function (item) {
+          return JSON.stringify(item.destino) === manifestoAlvo;
+        });
+        if (!publicado) break;
+        if (!revisaoAtiva && publicado.resultado.estado === 'divergente') {
+          publicado.resultado.estado = 'substituido';
+        }
+        revisaoAtiva = false;
+        manifestoAlvo = JSON.stringify(publicado.anterior);
+      }
       return { campeonatoId: id, total: encontrados.length, truncado: truncado,
         revisaoAtual: estadoAtual.manifesto.revisao || '', journals: journals };
     } finally { lock.releaseLock(); }

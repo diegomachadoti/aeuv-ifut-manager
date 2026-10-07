@@ -436,7 +436,7 @@ test('Administração isola configuração de imagens, serializa ações e ignor
   const diagnostico = requests.at(-1);
   assert.equal(diagnostico.method, 'diagnosticarRecuperacaoElencosParticionados');
   diagnostico.success({ total: 1, journals: [{ revisao: 'r1', estado: 'publicado', filaHistorico: 'presente' }] });
-  assert.match(elements.statusRecuperacaoElencosAdmin.textContent, /publicado e íntegro/);
+  assert.match(elements.statusRecuperacaoElencosAdmin.textContent, /publicado; manifesto ativo/);
   elements.configurarSnapshotAdmin.onclick();
   const action = requests.at(-1);
   assert.equal(action.method, 'configurarAgendamentoBancoAtletas');

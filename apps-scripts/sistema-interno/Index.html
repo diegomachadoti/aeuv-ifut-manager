@@ -3537,9 +3537,8 @@
 
     function textoDiagnosticoRecuperacaoElencos_(resultado) {
       const rotulos = {
-        publicado: 'publicado e íntegro',
-        publicado_fila_ausente: 'publicado, mas sem pendência de histórico',
-        publicado_fila_invalida: 'publicado, com pendência de histórico inválida',
+        publicado: 'publicado; manifesto ativo',
+        substituido: 'publicado anteriormente; substituído por revisão posterior',
         nao_publicado: 'não publicado; manifesto anterior continua ativo',
         divergente: 'divergente; requer análise manual',
         invalido: 'inválido; requer análise manual'
@@ -3549,7 +3548,9 @@
         + (journals.length ? journals.map(function (item) {
           return (item.revisao || 'revisão desconhecida') + ': '
             + (rotulos[item.estado] || item.estado) + '.'
-            + (item.filaHistorico === 'presente' ? ' Fila do histórico presente.' : '')
+            + (item.filaHistorico === 'presente' ? ' Fila atual do histórico pendente.'
+              : item.filaHistorico === 'ausente' ? ' Sem fila pendente atual.'
+                : item.filaHistorico === 'invalida' ? ' Fila atual do histórico inválida.' : '')
             + (item.diagnostico ? ' ' + item.diagnostico : '');
         }).join(' ') : 'Nenhum journal encontrado.');
     }

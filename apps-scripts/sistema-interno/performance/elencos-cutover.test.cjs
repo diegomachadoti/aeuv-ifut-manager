@@ -356,6 +356,30 @@ test('admin recovery diagnostics classify committed and staged journals without 
   assert(!staged.io.some(item => item.operacao === 'trash'));
 });
 
+test('recovery diagnostics identify superseded commits and do not mistake a cleared queue for a failed publication', () => {
+  const h = fixture();
+  seed(h, 'atletas', [person('atletas')]);
+  h.c.salvarCadastroElenco({ ...h.payload('atletas', true), foto: 'first-edit' });
+  const revisaoAnterior = manifest(h).revisao;
+  h.c.salvarCadastroElenco({ ...h.payload('atletas', true), foto: 'second-edit' });
+  const revisaoAtual = manifest(h).revisao;
+  h.c.processarHistoricoElencoAgora();
+
+  const report = h.c.diagnosticarRecuperacaoElencosParticionados('c1');
+  const anteriores = report.journals.find(item => item.revisao === revisaoAnterior);
+  const atual = report.journals.find(item => item.revisao === revisaoAtual);
+  assert.equal(anteriores.estado, 'substituido');
+  assert.equal(atual.estado, 'publicado');
+  assert.equal(anteriores.filaHistorico, 'ausente');
+  assert.equal(atual.filaHistorico, 'ausente');
+
+  h.c.PropertiesService.getScriptProperties().setProperty(h.c.chaveFilaHistoricoElenco_('c1'), '{invalid');
+  const filaInvalida = h.c.diagnosticarRecuperacaoElencosParticionados('c1')
+    .journals.find(item => item.revisao === revisaoAtual);
+  assert.equal(filaInvalida.estado, 'publicado');
+  assert.equal(filaInvalida.filaHistorico, 'invalida');
+});
+
 test('recovery diagnostics report corrupt journals and enforce admin without exposing roster data', () => {
   const h = fixture();
   h.c.salvarCadastroElenco(h.payload('atletas'));

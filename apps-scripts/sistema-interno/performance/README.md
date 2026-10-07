@@ -79,8 +79,11 @@ continua relendo fontes para não aceitar uma alteração externa intermediária
 com gate ativo, preservando cópias anteriores.
 O diagnóstico administrativo de journals valida snapshot, destino e fontes
 sem escrever/limpar; os testes comparam Drive e Script Properties antes/depois
-para journals publicados, não publicados e corrompidos. Ele não executa
-rollback nem roll-forward.
+para journals publicados, não publicados, substituídos por revisões posteriores
+e corrompidos. A cadeia entre snapshots comprova as substituições; a fila é
+reportada como estado atual independente, pois sua ausência também ocorre após
+o worker concluir a reconciliação. O diagnóstico não executa rollback nem
+roll-forward.
 
 As regressões existentes de credenciais, índices, participação, snapshots
 esportivos e agendas continuam exercitando o comportamento legado. O VM não simula

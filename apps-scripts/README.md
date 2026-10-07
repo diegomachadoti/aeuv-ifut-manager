@@ -142,10 +142,28 @@ sendo evidência de recuperação, não uma segunda fila.
 Na tela **Administração > Histórico de inscrições**, o administrador pode
 selecionar um campeonato e executar **Diagnosticar journals do campeonato**.
 O diagnóstico é somente leitura: confere snapshot, partições preparadas,
-manifesto ativo e presença da fila, classificando cada journal como publicado,
-não publicado, divergente ou inválido. Não publica versões, não reverte dados,
-não limpa filas e não apaga arquivos. Divergências exigem análise manual; a
-rotina não tenta adivinhar se deve confirmar ou descartar uma operação.
+manifesto ativo e a fila atual, classificando cada journal como publicado,
+substituído por publicação posterior, não publicado, divergente ou inválido.
+A ausência da fila atual, isoladamente, não significa erro: ela é removida
+quando o worker conclui a reconciliação. Journals antigos são classificados
+como substituídos somente quando a cadeia de snapshots comprova a sequência
+até o manifesto ativo. Não publica versões, não reverte dados, não limpa filas
+e não apaga arquivos. Divergências ou documentos inválidos exigem análise
+manual; a rotina não tenta adivinhar se deve confirmar ou descartar uma operação.
+
+**Triagem conservadora antes de qualquer cutover:**
+
+| Resultado | Interpretação e próximo passo seguro |
+| --- | --- |
+| `publicado` | Esta é a revisão ativa. Se a fila atual estiver presente, processe as pendências pela ação administrativa existente. |
+| `substituido` | Uma revisão posterior comprovadamente a substituiu; não repita a operação antiga. A fila informada é a fila atual do campeonato, não a fila daquela revisão. |
+| `nao_publicado` | O manifesto anterior permanece ativo e sem alteração de fonte. Recarregue; repita somente a operação que ainda for necessária após conferir os dados atuais. |
+| Fila atual `ausente` | Pode significar que o worker já terminou. Para validar o histórico antes do cutover, execute **Reconciliar campeonato pelo elenco atual**. |
+| Fila atual `invalida`, `divergente` ou `invalido` | Interrompa alterações/cutover e preserve os documentos. Não edite nem exclua journals, snapshots ou propriedades manualmente; encaminhe para análise técnica. |
+
+Se a listagem indicar limite de 100 journals, os resultados que dependem da
+cadeia de revisões podem não estar completos. Não use um relatório truncado
+para autorizar o cutover.
 
 O fingerprint `assinaturaFontesElencoParticionado_` lê as fontes novas
 vivas, inclui o formato/manifesto, o digest de cada partição publicada e
