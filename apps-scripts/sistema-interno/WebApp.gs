@@ -1067,6 +1067,7 @@ function lerRegistroEquipes_(recursos) {
 }
 
 function gravarRegistroEquipes_(lista) {
+  marcarSnapshotsEsportivosPendentes_();
   const localizado = resolverArquivoCadastro_(CONFIG.equipes.arquivoRegistro);
   const json = JSON.stringify(lista);
   if (localizado.arquivo) localizado.arquivo.setContent(json);
@@ -1349,6 +1350,8 @@ function descartarElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
 }
 
 function jogosParticipacaoOperacao_(campeonatoId, recursos) {
+  const indice = consultarIndiceValidacao_(campeonatoId, recursos, 'tabela');
+  if (indice) return { indiceParticipacao: indice.participacao };
   if (!recursos) return jogosParticipacaoCampeonato_(campeonatoId);
   const jogos = recursos.jogos || (recursos.jogos = Object.create(null));
   if (!jogos[campeonatoId]) jogos[campeonatoId] = jogosParticipacaoCampeonato_(campeonatoId);
@@ -1438,6 +1441,7 @@ function definirBloqueioElenco(payload) {
       registros.push(registro);
     }
     registro.bloqueado = dados.bloqueado;
+    marcarSnapshotsEsportivosPendentes_();
     const localizado = resolverArquivoCadastro_(ELENCO_BLOQUEIOS_ARQUIVO);
     const json = JSON.stringify(registros);
     if (localizado.arquivo) localizado.arquivo.setContent(json);
@@ -1485,6 +1489,15 @@ function jogosParticipacaoCampeonato_(campeonatoId) {
 function equipesParticipacaoAtleta_(jogos, atleta) {
   const id = String((atleta && atleta.id) || '').trim();
   const cpf = somenteDigitos_((atleta && atleta.cpf) || '');
+  if (jogos && jogos.indiceParticipacao) {
+    const mapa = jogos.indiceParticipacao;
+    const primeiras = Object.create(null);
+    (mapa[JSON.stringify(['id', id])] || []).concat(mapa[JSON.stringify(['cpf', cpf])] || [])
+      .forEach(function (entrada) {
+        if (primeiras[entrada[0]] === undefined || entrada[1] < primeiras[entrada[0]]) primeiras[entrada[0]] = entrada[1];
+      });
+    return Object.keys(primeiras).sort(function (a, b) { return primeiras[a] - primeiras[b]; });
+  }
   const equipes = [];
   (jogos || []).forEach(function (jogo) {
     if (jogo.status !== 'encerrado' || !jogo.resultado) return;
@@ -1554,11 +1567,19 @@ function equipesDestinoTransferencia_(contexto, lockJaAdquirido, recursos) {
 }
 
 function listarElenco(campeonatoId, equipeId, lockJaAdquirido) {
+  return medirFaseCadastro_('listar_elenco_total', function () {
+    return listarElencoInterno_(campeonatoId, equipeId, lockJaAdquirido);
+  });
+}
+
+function listarElencoInterno_(campeonatoId, equipeId, lockJaAdquirido) {
   const lock = lockJaAdquirido ? null : LockService.getScriptLock();
-  if (lock) lock.waitLock(30000);
+  if (lock) medirFaseCadastro_('listar_elenco_espera_lock', function () { lock.waitLock(30000); });
   try {
     const contexto = sessaoElenco_(campeonatoId, equipeId, true);
-    return montarRespostaElenco_(contexto);
+    return medirFaseCadastro_('listar_elenco_montar_resposta', function () {
+      return montarRespostaElenco_(contexto);
+    });
   } finally {
     if (lock) lock.releaseLock();
   }
@@ -1697,6 +1718,15 @@ function validarIdsMutacaoElenco_(dados, transferencia) {
 }
 
 function salvarCadastroElenco(payload) {
+  const dados = payload || {};
+  const tipo = dados.tipo === 'comissao' ? 'comissao' : 'atleta';
+  const acao = String(dados.registroId || '').trim() ? 'editar' : 'adicionar';
+  return medirFaseCadastro_(acao + '_' + tipo + '_total', function () {
+    return salvarCadastroElencoInterno_(payload);
+  });
+}
+
+function salvarCadastroElencoInterno_(payload) {
   const dados = Object.assign({}, payload || {});
   medirFaseCadastro_('validacao_leitura', function () {
     medirFaseCadastro_('pre_lock_autorizacao', exigirSessaoElenco_);
@@ -1729,6 +1759,12 @@ function salvarCadastroElenco(payload) {
 }
 
 function removerCadastroElenco(payload) {
+  return medirFaseCadastro_('remover_elenco_total', function () {
+    return removerCadastroElencoInterno_(payload);
+  });
+}
+
+function removerCadastroElencoInterno_(payload) {
   const dados = payload || {};
   medirFaseCadastro_('pre_lock_autorizacao', exigirSessaoElenco_);
   const solicitacao = validarIdsMutacaoElenco_(dados, false);
@@ -1795,7 +1831,7 @@ function respostaCadastro_(contexto) {
   return contexto ? listarElenco(contexto.campeonato.id, contexto.equipe.id) : listarCadastroPessoasCampeonato();
 }
 
-const CADASTRO_METRICAS_ATIVAS = false;
+const CADASTRO_METRICAS_ATIVAS = true;
 
 function registrarTempoCadastro_(fase, inicio) {
   if (!CADASTRO_METRICAS_ATIVAS) return;
@@ -2187,7 +2223,10 @@ function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado
     if (recursos) medirFaseCadastro_('gravacao_elenco', gravar);
     else gravar();
   } catch (e) {
-    throw new Error('Não foi possível confirmar a gravação do elenco. Recarregue antes de repetir a operação; o histórico será reconciliado com os dados persistidos. ' + e.message);
+    const orientacao = /Acesso negado:\s*DriveApp/i.test(e.message || '')
+      ? ' A execução usa a conta de quem acessa. Peça ao administrador para verificar a autorização Google e a permissão de edição dessa conta no arquivo de elenco; não compartilhe a pasta inteira como solução.'
+      : '';
+    throw new Error('Não foi possível confirmar a gravação do elenco. Recarregue antes de repetir a operação; o histórico será reconciliado com os dados persistidos. ' + e.message + orientacao);
   }
   try {
     const atualizarHistorico = function () {
@@ -2283,7 +2322,7 @@ function listarImportacaoElenco(payload) {
       return { campeonatoId: item.campeonatoId, nome: item.campeonatoNome, equipeNome: item.equipeNome };
     });
     const candidatos = dados.origemId ? candidatosImportacaoElenco_(historico, contexto, dados.tipo, dados.origemId) : [];
-    const jogos = candidatos.length && dados.tipo === 'atletas' ? jogosParticipacaoCampeonato_(contexto.campeonato.id) : [];
+    const jogos = candidatos.length && dados.tipo === 'atletas' ? jogosParticipacaoOperacao_(contexto.campeonato.id) : [];
     return {
       origens: origens,
       candidatos: candidatos.map(function (item) {
@@ -2327,7 +2366,7 @@ function importarCadastrosElenco(payload) {
     const historico = prepararHistoricoElenco_(cache);
     const candidatos = candidatosImportacaoElenco_(historico, contexto, dados.tipo, dados.origemId);
     const listas = cache[contexto.campeonato.id];
-    const jogos = dados.tipo === 'atletas' ? jogosParticipacaoCampeonato_(contexto.campeonato.id) : [];
+    const jogos = dados.tipo === 'atletas' ? jogosParticipacaoOperacao_(contexto.campeonato.id) : [];
     const novos = dados.inscricaoIds.map(function (id) {
       const inscricao = candidatos.find(function (item) { return item.id === id; });
       if (!inscricao) throw new Error('Inscrição inválida para a origem, equipe e tipo selecionados.');
@@ -2549,6 +2588,7 @@ function removerEquipeInterno_(nome) {
  * @return {Object}
  */
 function gravarEquipes_(lista, sessao) {
+  marcarSnapshotsEsportivosPendentes_();
   const validas = higienizarEquipes_(lista);
 
   PropertiesService.getScriptProperties()
@@ -2917,8 +2957,10 @@ function gravarCampeonatos_(lista) {
 }
 
 function gravarListaCadastroDrive_(nomeArquivo, chaveLegada, lista, recursos, categoria) {
+  marcarSnapshotsEsportivosPendentes_();
   const localizado = localizarArquivoCadastro_(nomeArquivo, recursos, categoria);
   const conteudo = medirEtapaCadastro_(recursos, categoria, 'json_serializar', function () { return JSON.stringify(lista); });
+  const indice = iniciarMutacaoIndiceValidacao_(nomeArquivo, recursos);
 
   // As chamadas de gravação já são protegidas pelo lock de salvar/remover.
   const arquivo = localizado.arquivo;
@@ -2933,6 +2975,7 @@ function gravarListaCadastroDrive_(nomeArquivo, chaveLegada, lista, recursos, ca
   // Só remove o armazenamento legado depois de persistir no Drive com sucesso.
   PropertiesService.getScriptProperties().deleteProperty(chaveLegada);
   registrarTamanhoCadastro_(recursos, categoria, 'gravacao', 'drive', conteudo, lista);
+  concluirMutacaoIndiceValidacao_(indice, lista, conteudo, recursos);
 }
 
 function arquivoCadastroPessoasCampeonato_(campeonatoId, tipo) {
@@ -2944,6 +2987,7 @@ function arquivoCadastroPessoasCampeonato_(campeonatoId, tipo) {
 }
 
 function removerCadastroPessoasCampeonato_(campeonatoId) {
+  invalidarIndiceValidacao_(campeonatoId);
   ['Atletas', 'Comissao Tecnica'].forEach(function (tipo) {
     const nome = arquivoCadastroPessoasCampeonato_(campeonatoId, tipo);
     try {
@@ -3179,6 +3223,7 @@ function removerCampeonato(id) {
       removerCadastroPessoasCampeonato_(idAlvo);
       removerCadastroTabelaCampeonato_(idAlvo);
       PropertiesService.getScriptProperties().deleteProperty(CAMPEONATO_COMISSAO_CHAVE + idAlvo);
+      limparIndiceValidacaoRemovido_(idAlvo);
 
      const tela = montarTelaCampeonatos_(restante, sessao);
      tela.recado = 'Campeonato removido com sucesso.';
@@ -3842,7 +3887,7 @@ function resumirLinhaClassificacao_(linha) {
   return resumo;
 }
 
-function listarTabelaCampeonato(campeonatoId) {
+function carregarTabelaCampeonatoAtual(campeonatoId) {
   sessaoCampeonato_();
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -3850,7 +3895,7 @@ function listarTabelaCampeonato(campeonatoId) {
     const lista = campeonatos_();
     const id = String(campeonatoId || '').trim() || (lista.length ? lista[0].id : '');
     const recursos = recursosTabelaCampeonato_(true);
-    return montarTelaTabela_(lista, id ? contextoTabela_(id, lista, true, recursos) : null);
+    return respostaEsportivaAtual_(montarTelaTabela_(lista, id ? contextoTabela_(id, lista, true, recursos) : null));
   } finally { lock.releaseLock(); }
 }
 
@@ -3953,7 +3998,7 @@ function mutarTabelaCampeonato_(payload, operacao, global) {
       gravarListaCadastroDrive_(arquivoTabelaCampeonato_(contexto.campeonato.id),
         chaveTabelaCampeonato_(contexto.campeonato.id), [contexto.doc]);
     }
-    return montarTelaTabela_(lista, contexto);
+    return respostaEsportivaAtual_(montarTelaTabela_(lista, contexto));
   } finally { lock.releaseLock(); }
 }
 
@@ -4557,6 +4602,7 @@ function impedirRemocaoEquipeTabela_(campeonatoId, nomeChave) {
 }
 
 function removerCadastroTabelaCampeonato_(id) {
+  invalidarIndiceValidacao_(id);
   const arquivos = pastaRaizProjeto_().getFilesByName(arquivoTabelaCampeonato_(id));
   while (arquivos.hasNext()) arquivos.next().setTrashed(true);
   PropertiesService.getScriptProperties().deleteProperty(chaveTabelaCampeonato_(id));
@@ -4841,6 +4887,7 @@ function gerarSumulaJogoCampeonato(payload) {
  }
 
  function gravarTimesCampeonato_(campeonatoId, lista) {
+   marcarSnapshotsEsportivosPendentes_();
    const validos = lista.length ? higienizarEquipes_(lista) : [];
 
    prepararHistoricoElenco_();
@@ -4875,13 +4922,20 @@ function gerarSumulaJogoCampeonato(payload) {
     });
   }
 
- function listarEquipesParticipantes(campeonatoId) {
+ function carregarEquipesParticipantesAtual(campeonatoId) {
+   sessaoCampeonato_();
+   return comLockSnapshotEsportivo_(function () {
+     return respostaEsportivaAtual_(construirEquipesParticipantesAtual_(campeonatoId, true));
+   });
+ }
+
+ function construirEquipesParticipantesAtual_(campeonatoId, lockJaAdquirido) {
    const sessao = identificarUsuario_();
-   if (!sessao.autorizado || ['admin', 'diretoria', 'associado'].indexOf(sessao.usuario.perfil) === -1) {
+   if (!sessao.autorizado || !sessao.usuario || ['admin', 'diretoria', 'associado'].indexOf(sessao.usuario.perfil) === -1) {
      throw new Error('Você não tem permissão para consultar os elencos.');
    }
    const associado = sessao.usuario.perfil === 'associado';
-   const globais = equipesRegistro_();
+   const globais = equipesRegistro_(lockJaAdquirido);
    const ativas = obterEquipes_().map(chaveEquipe_);
    const bloqueios = lerBloqueiosElenco_();
    const campeonatos = campeonatosResumo_().filter(function (campeonato) {
@@ -4930,7 +4984,7 @@ function gerarSumulaJogoCampeonato(payload) {
    } finally {
      lock.releaseLock();
    }
-   return listarEquipesParticipantes(dados.campeonatoId);
+   return carregarEquipesParticipantesAtual(dados.campeonatoId);
  }
 
  function listarTimesCampeonato() {
@@ -5001,6 +5055,7 @@ function gerarSumulaJogoCampeonato(payload) {
    });
 
    if (!jaExisteGlobal) {
+     marcarSnapshotsEsportivosPendentes_();
      globais.push(nomeFinal);
 
      const validas = higienizarEquipes_(globais);
@@ -5154,7 +5209,7 @@ function gerarSumulaJogoCampeonato(payload) {
      registros: campeonatos.map(function (campeonato) {
        const atletas = atletasCampeonato_(campeonato.id);
        const times = timesCampeonato_(campeonato.id) || [];
-       anotarVinculoCompeticaoAtletas_(campeonato, atletas, atletas.length ? jogosParticipacaoCampeonato_(campeonato.id) : []);
+       anotarVinculoCompeticaoAtletas_(campeonato, atletas, atletas.length ? jogosParticipacaoOperacao_(campeonato.id) : []);
 
        return {
          campeonatoId: campeonato.id,
@@ -5240,6 +5295,16 @@ function existeCpfNoCadastro_(lista, cpf, idIgnorado) {
 }
 
 function validarCpfUnicoEntreCadastros_(campeonatoId, cpf, origem, idIgnorado, recursos) {
+  const indice = consultarIndiceValidacao_(campeonatoId, recursos, origem === 'atleta' ? 'comissao' : 'atletas');
+  if (indice) {
+    const tipo = origem === 'atleta' ? 'comissao' : 'atletas';
+    const duplicado = (indice.cadastros[tipo][somenteDigitos_(cpf)] || []).some(function (item) {
+      return !idIgnorado || item[0] !== idIgnorado;
+    });
+    if (duplicado) throw new Error('Este CPF já está cadastrado na '
+      + (origem === 'atleta' ? 'comissão técnica' : 'lista de atletas') + ' deste campeonato.');
+    return;
+  }
   const outraLista = medirRecursoCadastro_(recursos, 'lock_cpf_categorias', function () {
     return origem === 'atleta'
       ? comissaoTecnicaCampeonato_(campeonatoId, false, recursos)
@@ -5551,7 +5616,7 @@ function listarCadastroPessoasCampeonato() {
     const timesDoCampeonato = timesCampeonato_(campeonato.id) || [];
     times[campeonato.id] = timesDoCampeonato;
     const atletas = atletasCampeonato_(campeonato.id);
-    anotarVinculoCompeticaoAtletas_(campeonato, atletas, atletas.length ? jogosParticipacaoCampeonato_(campeonato.id) : []);
+    anotarVinculoCompeticaoAtletas_(campeonato, atletas, atletas.length ? jogosParticipacaoOperacao_(campeonato.id) : []);
 
     return {
       campeonatoId: campeonato.id,
@@ -5688,89 +5753,108 @@ const SOLICITACOES_ACOES = ['Inclusao', 'Remocao', 'Portabilidade'];
  *           limite: number, pastaUrl: string}}
  */
 function listarSolicitacoes() {
-  const sessao = identificarUsuario_();
+  return lerSolicitacoes_(false);
+}
 
-  if (!sessao.autorizado || !moduloLiberado_('solicitacoes', sessao.usuario.perfil)) {
-    throw new Error('Você não tem permissão para consultar as solicitacoes de inscrição.');
-  }
+function lerSolicitacoes_(paraAtletas) {
+  const metricas = criarMetricasFonteAtleta_(paraAtletas, 'solicitacoes');
+  return medirFonteAtleta_(metricas, 'leitura', function () {
+    medirFonteAtleta_(metricas, 'autorizacao', function () {
+      const sessao = identificarUsuario_();
 
-  const raiz = pastaSolicitacoes_();
-  const achados = [];
-  const nomesVistos = {};
+      if (!sessao.autorizado || !moduloLiberado_('solicitacoes', sessao.usuario.perfil)) {
+        throw new Error('Você não tem permissão para consultar as solicitacoes de inscrição.');
+      }
+    });
 
-  SOLICITACOES_PASTAS.forEach(function (origem) {
-    const pastas = raiz.getFoldersByName(origem.pasta);
+    const raiz = medirFonteAtleta_(metricas, 'localizar', pastaSolicitacoes_);
+    const achados = [];
+    const nomesVistos = {};
 
-    // A pasta tambem recebe PDFs e anexos; so os TXT das inscricoes interessam.
-    // O formulario nomeia o arquivo como "<EQUIPE>-<data>-<milissegundos>.txt"
-    if (!pastas.hasNext()) {
-      return;
-    }
+    medirFonteAtleta_(metricas, 'enumerar', function () {
+      SOLICITACOES_PASTAS.forEach(function (origem) {
+        const pastas = raiz.getFoldersByName(origem.pasta);
 
-    const iterador = pastas.next().getFiles();
+        // A pasta tambem recebe PDFs e anexos; so os TXT das inscricoes interessam.
+        // O formulario nomeia o arquivo como "<EQUIPE>-<data>-<milissegundos>.txt"
+        if (!pastas.hasNext()) {
+          return;
+        }
 
-    while (iterador.hasNext()) {
-      const arquivo = iterador.next();
-      const nome = arquivo.getName();
+        const iterador = pastas.next().getFiles();
 
-      // Arquivo de solicitacao tem carimbo de millisegundos no final do nome
-      if (carimboDoNome_(nome) === 0) {
-        continue;
+        while (iterador.hasNext()) {
+          const arquivo = iterador.next();
+          const nome = arquivo.getName();
+
+          // Arquivo de solicitacao tem carimbo de millisegundos no final do nome
+          if (carimboDoNome_(nome) === 0) {
+            continue;
+          }
+
+          nomesVistos[nome] = true;
+          achados.push({
+            arquivo: arquivo,
+            nome: nome,
+            situacao: origem.situacao,
+            icone: origem.icone,
+            ordem: carimboDoNome_(nome)
+          });
+        }
+      });
+
+      // Arquivos na raiz da pasta que ainda aguardam processamento pela automacao.
+      const iteradorRaiz = raiz.getFiles();
+      while (iteradorRaiz.hasNext()) {
+        const arquivo = iteradorRaiz.next();
+        const nome = arquivo.getName();
+
+        if (carimboDoNome_(nome) === 0 || nomesVistos[nome]) {
+          continue;
+        }
+
+        nomesVistos[nome] = true;
+        achados.push({
+          arquivo: arquivo,
+          nome: nome,
+          situacao: 'Aguardando',
+          icone: '🕒',
+          ordem: carimboDoNome_(nome)
+        });
       }
 
-      nomesVistos[nome] = true;
-      achados.push({
-        arquivo: arquivo,
-        situacao: origem.situacao,
-        icone: origem.icone,
-        ordem: carimboDoNome_(nome)
+      // Mais recentes primeiro. O nome do arquivo termina com o horario do
+      // envio em milissegundos, entao da para ordenar sem abrir nenhum deles.
+      achados.sort(function (a, b) {
+        return b.ordem - a.ordem;
       });
-    }
-  });
-
-  // Arquivos na raiz da pasta que ainda aguardam processamento pela automacao.
-  const iteradorRaiz = raiz.getFiles();
-  while (iteradorRaiz.hasNext()) {
-    const arquivo = iteradorRaiz.next();
-    const nome = arquivo.getName();
-
-    if (carimboDoNome_(nome) === 0 || nomesVistos[nome]) {
-      continue;
-    }
-
-    nomesVistos[nome] = true;
-    achados.push({
-      arquivo: arquivo,
-      situacao: 'Aguardando',
-      icone: '🕒',
-      ordem: carimboDoNome_(nome)
     });
-  }
 
-  // Mais recentes primeiro. O nome do arquivo termina com o horario do
-  // envio em milissegundos, entao da para ordenar sem abrir nenhum deles.
-  achados.sort(function (a, b) {
-    return b.ordem - a.ordem;
+    const limite = CONFIG.solicitacoes.maxLeitura;
+    const selecionados = achados.slice(0, limite);
+    const nomesResultados = {};
+    selecionados.forEach(function (achado) { nomesResultados[nomeBase_(achado.nome)] = true; });
+    const resultados = medirFonteAtleta_(metricas, 'resultados', function () {
+      return indiceResultados_(raiz, paraAtletas ? nomesResultados : null);
+    });
+    const registros = selecionados.map(function (achado) {
+      achado.resultado = resultados[nomeBase_(achado.nome)] || null;
+      const conteudo = lerTextoFonteAtleta_(achado.arquivo, metricas);
+      return medirFonteAtleta_(metricas, 'interpretar', function () {
+        return interpretarSolicitacao_(conteudo, achado, paraAtletas, metricas);
+      });
+    });
+
+    registrarMetricasFonteAtleta_(metricas, achados.length, registros.length);
+    return {
+      registros: registros,
+      situacoes: SOLICITACOES_PASTAS,
+      acoes: SOLICITACOES_ACOES,
+      total: achados.length,
+      limite: limite,
+      pastaUrl: raiz.getUrl()
+    };
   });
-
-  const limite = CONFIG.solicitacoes.maxLeitura;
-  const resultados = indiceResultados_(raiz);
-  const registros = achados.slice(0, limite).map(function (achado) {
-    achado.resultado = resultados[nomeBase_(achado.arquivo.getName())] || null;
-    return interpretarSolicitacao_(
-      achado.arquivo.getBlob().getDataAsString('UTF-8'),
-      achado
-    );
-  });
-
-  return {
-    registros: registros,
-    situacoes: SOLICITACOES_PASTAS,
-    acoes: SOLICITACOES_ACOES,
-    total: achados.length,
-    limite: limite,
-    pastaUrl: raiz.getUrl()
-  };
 }
 
 /**
@@ -5802,7 +5886,7 @@ function pastaSolicitacoes_() {
  * @param {DriveApp.Folder} raiz Pasta raiz das inscricoes.
  * @return {Object<string, {txtUrl: string, pdfUrl: string}>}
  */
-function indiceResultados_(raiz) {
+function indiceResultados_(raiz, nomesSelecionados) {
   const indice = {};
   const pastas = raiz.getFoldersByName('Resultados');
 
@@ -5814,13 +5898,17 @@ function indiceResultados_(raiz) {
 
   while (arquivos.hasNext()) {
     const arquivo = arquivos.next();
-    const achado = String(arquivo.getName()).match(/^(.+)-resultado-\d{8}-\d{6}\.(txt|pdf)$/i);
+    const nome = arquivo.getName();
+    const achado = String(nome).match(/^(.+)-resultado-\d{8}-\d{6}\.(txt|pdf)$/i);
 
     if (!achado) {
       continue;
     }
 
     const chave = achado[1];
+    if (nomesSelecionados && !nomesSelecionados[chave]) {
+      continue;
+    }
     const campo = achado[2].toLowerCase() === 'pdf' ? 'pdfUrl' : 'txtUrl';
 
     if (!indice[chave]) {
@@ -5829,9 +5917,9 @@ function indiceResultados_(raiz) {
 
     // Se houver mais de um processamento do mesmo arquivo, fica o mais
     // recente: o carimbo no nome cresce com o tempo.
-    if (!indice[chave][campo] || arquivo.getName() > indice[chave][campo + 'Nome']) {
+    if (!indice[chave][campo] || nome > indice[chave][campo + 'Nome']) {
       indice[chave][campo] = arquivo.getUrl();
-      indice[chave][campo + 'Nome'] = arquivo.getName();
+      indice[chave][campo + 'Nome'] = nome;
     }
   }
 
@@ -5870,7 +5958,7 @@ function carimboDoNome_(nome) {
  * @param {{situacao: string, icone: string, arquivo: DriveApp.File}} achado
  * @return {Object}
  */
-function interpretarSolicitacao_(conteudo, achado) {
+function interpretarSolicitacao_(conteudo, achado, paraAtletas, metricas) {
   const cabecalho = {};
   const pessoas = [];
   let atual = null;
@@ -5915,33 +6003,35 @@ function interpretarSolicitacao_(conteudo, achado) {
     };
   });
 
-  const resumo = {};
-
-  SOLICITACOES_ACOES.forEach(function (acao) {
-    resumo[acao] = registros.filter(function (registro) {
-      return registro.acao === acao;
-    }).length;
-  });
-
-  return {
+  const registro = {
     situacao: achado.situacao,
-    icone: achado.icone,
     protocolo: cabecalho['PROTOCOLO'] || '',
     dataHora: cabecalho['DATA/HORA'] || '',
     ordem: achado.ordem,
     competicao: cabecalho['COMPETICAO'] || '',
     equipe: cabecalho['EQUIPE'] || '',
     responsavel: cabecalho['RESPONSAVEL'] || '',
-    telefone: cabecalho['TELEFONE/WHATSAPP'] || '',
-    comprovanteUrl: cabecalho['COMPROVANTE PIX'] || '',
-    arquivoNome: achado.arquivo.getName(),
-    arquivoUrl: achado.arquivo.getUrl(),
+    arquivoUrl: medirFonteAtleta_(metricas, 'metadados', function () { return achado.arquivo.getUrl(); }),
     resultadoTxtUrl: achado.resultado ? achado.resultado.txtUrl : '',
     resultadoPdfUrl: achado.resultado ? achado.resultado.pdfUrl : '',
-    quantidade: registros.length,
-    resumo: resumo,
     pessoas: registros
   };
+  if (paraAtletas) return registro;
+
+  const resumo = {};
+  SOLICITACOES_ACOES.forEach(function (acao) {
+    resumo[acao] = registros.filter(function (registro) {
+      return registro.acao === acao;
+    }).length;
+  });
+
+  registro.icone = achado.icone;
+  registro.telefone = cabecalho['TELEFONE/WHATSAPP'] || '';
+  registro.comprovanteUrl = cabecalho['COMPROVANTE PIX'] || '';
+  registro.arquivoNome = achado.nome === undefined ? achado.arquivo.getName() : achado.nome;
+  registro.quantidade = registros.length;
+  registro.resumo = resumo;
+  return registro;
 }
 
 /**
@@ -5983,99 +6073,116 @@ const SUMULAS_PASTAS = [
  *           total: number, limite: number, pastaUrl: string}}
  */
 function listarSumulas() {
-  const sessao = identificarUsuario_();
+  return lerSumulas_(false);
+}
 
-  if (!sessao.autorizado || !moduloLiberado_('sumulas', sessao.usuario.perfil)) {
-    throw new Error('Você não tem permissão para consultar as súmulas digitais.');
-  }
+function lerSumulas_(paraAtletas) {
+  const metricas = criarMetricasFonteAtleta_(paraAtletas, 'sumulas');
+  return medirFonteAtleta_(metricas, 'leitura', function () {
+    medirFonteAtleta_(metricas, 'autorizacao', function () {
+      const sessao = identificarUsuario_();
 
-  const raiz = pastaSumulas_();
-  const achados = [];
-  const nomesVistos = {};
+      if (!sessao.autorizado || !moduloLiberado_('sumulas', sessao.usuario.perfil)) {
+        throw new Error('Você não tem permissão para consultar as súmulas digitais.');
+      }
+    });
 
-  SUMULAS_PASTAS.forEach(function (origem) {
-    const pastas = raiz.getFoldersByName(origem.pasta);
+    const raiz = medirFonteAtleta_(metricas, 'localizar', pastaSumulas_);
+    const achados = [];
+    const nomesVistos = {};
 
-    // "Processados" e "Falhas" so existem depois que a automacao roda
-    // pela primeira vez; a ausencia delas nao e erro.
-    if (!pastas.hasNext()) {
-      return;
-    }
+    medirFonteAtleta_(metricas, 'enumerar', function () {
+      SUMULAS_PASTAS.forEach(function (origem) {
+        const pastas = raiz.getFoldersByName(origem.pasta);
 
-    const iterador = pastas.next().getFiles();
+        // "Processados" e "Falhas" so existem depois que a automacao roda
+        // pela primeira vez; a ausencia delas nao e erro.
+        if (!pastas.hasNext()) {
+          return;
+        }
 
-    while (iterador.hasNext()) {
-      const arquivo = iterador.next();
-      const nome = arquivo.getName();
+        const iterador = pastas.next().getFiles();
 
-      // A pasta tambem recebe PDFs e anexos; so os TXT da sumula interessam.
-      if (!/^SUMULA_.+\.txt$/i.test(nome)) {
-        continue;
+        while (iterador.hasNext()) {
+          const arquivo = iterador.next();
+          const nome = arquivo.getName();
+
+          // A pasta tambem recebe PDFs e anexos; so os TXT da sumula interessam.
+          if (!/^SUMULA_.+\.txt$/i.test(nome)) {
+            continue;
+          }
+
+          nomesVistos[nome] = true;
+          achados.push({
+            arquivo: arquivo,
+            nome: nome,
+            situacao: origem.situacao,
+            icone: origem.icone,
+
+            // O nome do arquivo tem a data, mas nao a hora, entao dois envios
+            // do mesmo dia ficariam empatados. A data de criacao no Drive e
+            // metadado: da para ordenar sem abrir o arquivo.
+            ordem: arquivo.getDateCreated().getTime()
+          });
+        }
+      });
+
+      // Arquivos na raiz da pasta que ainda aguardam processamento pela automacao.
+      const iteradorRaiz = raiz.getFiles();
+      while (iteradorRaiz.hasNext()) {
+        const arquivo = iteradorRaiz.next();
+        const nome = arquivo.getName();
+
+        if (!/^SUMULA_.+\.txt$/i.test(nome) || nomesVistos[nome]) {
+          continue;
+        }
+
+        nomesVistos[nome] = true;
+        achados.push({
+          arquivo: arquivo,
+          nome: nome,
+          situacao: 'Aguardando',
+          icone: '🕒',
+          ordem: arquivo.getDateCreated().getTime()
+        });
       }
 
-      nomesVistos[nome] = true;
-      achados.push({
-        arquivo: arquivo,
-        situacao: origem.situacao,
-        icone: origem.icone,
+      achados.sort(function (a, b) {
+        return b.ordem - a.ordem;
+      });
+    });
 
-        // O nome do arquivo tem a data, mas nao a hora, entao dois envios
-        // do mesmo dia ficariam empatados. A data de criacao no Drive e
-        // metadado: da para ordenar sem abrir o arquivo.
-        ordem: arquivo.getDateCreated().getTime()
+    const limite = CONFIG.sumulas.maxLeitura;
+    const registros = achados.slice(0, limite).map(function (achado) {
+      const conteudo = lerTextoFonteAtleta_(achado.arquivo, metricas);
+      return medirFonteAtleta_(metricas, 'interpretar', function () {
+        return interpretarSumula_(conteudo, achado, paraAtletas, metricas);
+      });
+    });
+
+    // Notas/punidos enriquecem a tela de súmulas, mas o banco já usa listarPunicoes.
+    if (!paraAtletas) {
+      const notas = indiceNotas_();
+
+      registros.forEach(function (registro) {
+        const achado = notas[chaveProtocolo_(registro.protocolo)];
+
+        registro.notas = achado ? achado.notas : [];
+        registro.dataNota = achado ? achado.dataNota : '';
+        registro.punidos = achado ? achado.punidos : [];
       });
     }
+
+    registrarMetricasFonteAtleta_(metricas, achados.length, registros.length);
+    return {
+      registros: registros,
+      situacoes: SUMULAS_PASTAS,
+      equipes: paraAtletas ? [] : equipesDasSumulas_(registros),
+      total: achados.length,
+      limite: limite,
+      pastaUrl: raiz.getUrl()
+    };
   });
-
-  // Arquivos na raiz da pasta que ainda aguardam processamento pela automacao.
-  const iteradorRaiz = raiz.getFiles();
-  while (iteradorRaiz.hasNext()) {
-    const arquivo = iteradorRaiz.next();
-    const nome = arquivo.getName();
-
-    if (!/^SUMULA_.+\.txt$/i.test(nome) || nomesVistos[nome]) {
-      continue;
-    }
-
-    nomesVistos[nome] = true;
-    achados.push({
-      arquivo: arquivo,
-      situacao: 'Aguardando',
-      icone: '🕒',
-      ordem: arquivo.getDateCreated().getTime()
-    });
-  }
-
-  achados.sort(function (a, b) {
-    return b.ordem - a.ordem;
-  });
-
-  const limite = CONFIG.sumulas.maxLeitura;
-  const registros = achados.slice(0, limite).map(function (achado) {
-    return interpretarSumula_(
-      achado.arquivo.getBlob().getDataAsString('UTF-8'),
-      achado
-    );
-  });
-
-  const notas = indiceNotas_();
-
-  registros.forEach(function (registro) {
-    const achado = notas[chaveProtocolo_(registro.protocolo)];
-
-    registro.notas = achado ? achado.notas : [];
-    registro.dataNota = achado ? achado.dataNota : '';
-    registro.punidos = achado ? achado.punidos : [];
-  });
-
-  return {
-    registros: registros,
-    situacoes: SUMULAS_PASTAS,
-    equipes: equipesDasSumulas_(registros),
-    total: achados.length,
-    limite: limite,
-    pastaUrl: raiz.getUrl()
-  };
 }
 
 /**
@@ -6200,7 +6307,7 @@ function equipesDasSumulas_(registros) {
  * @param {{situacao: string, icone: string, ordem: number, arquivo: DriveApp.File}} achado
  * @return {Object}
  */
-function interpretarSumula_(conteudo, achado) {
+function interpretarSumula_(conteudo, achado, paraAtletas, metricas) {
   const cabecalho = {};
   const partida = {};
   const pessoas = [];
@@ -6243,7 +6350,7 @@ function interpretarSumula_(conteudo, achado) {
     // O relato e copiado como veio, inclusive as quebras de linha: e o
     // texto que a comissao le para decidir a punicao.
     if (secao === 'fatos') {
-      fatos.push(linha.replace(/\s+$/, ''));
+      if (!paraAtletas) fatos.push(linha.replace(/\s+$/, ''));
       return;
     }
 
@@ -6296,35 +6403,37 @@ function interpretarSumula_(conteudo, achado) {
     };
   });
 
-  const equipes = times.slice();
+  const registro = {
+    situacao: achado.situacao,
+    ordem: achado.ordem,
+    protocolo: cabecalho['PROTOCOLO'] || '',
+    dataEnvio: cabecalho['DATA ENVIO'] || '',
+    confronto: confronto,
+    dataJogo: partida['DATA'] || '',
+    envolvidos: envolvidos,
+    pdfUrl: pdfUrl,
+    arquivoUrl: medirFonteAtleta_(metricas, 'metadados', function () { return achado.arquivo.getUrl(); })
+  };
+  if (paraAtletas) return registro;
 
+  const equipes = times.slice();
   envolvidos.forEach(function (envolvido) {
     if (envolvido.equipe && equipes.indexOf(envolvido.equipe) === -1) {
       equipes.push(envolvido.equipe);
     }
   });
 
-  return {
-    situacao: achado.situacao,
-    icone: achado.icone,
-    ordem: achado.ordem,
-    protocolo: cabecalho['PROTOCOLO'] || '',
-    dataEnvio: cabecalho['DATA ENVIO'] || '',
-    arbitro: cabecalho['ÁRBITRO'] || cabecalho['ARBITRO'] || '',
-    documento: cabecalho['DOCUMENTO'] || '',
-    confronto: confronto,
-    mandante: times[0] || '',
-    visitante: times[1] || '',
-    dataJogo: partida['DATA'] || '',
-    horaJogo: partida['HORA'] || '',
-    fatos: aparar_(fatos).join('\n'),
-    equipes: equipes,
-    quantidade: envolvidos.length,
-    envolvidos: envolvidos,
-    pdfUrl: pdfUrl,
-    arquivoNome: achado.arquivo.getName(),
-    arquivoUrl: achado.arquivo.getUrl()
-  };
+  registro.icone = achado.icone;
+  registro.arbitro = cabecalho['ÁRBITRO'] || cabecalho['ARBITRO'] || '';
+  registro.documento = cabecalho['DOCUMENTO'] || '';
+  registro.mandante = times[0] || '';
+  registro.visitante = times[1] || '';
+  registro.horaJogo = partida['HORA'] || '';
+  registro.fatos = aparar_(fatos).join('\n');
+  registro.equipes = equipes;
+  registro.quantidade = envolvidos.length;
+  registro.arquivoNome = achado.nome === undefined ? achado.arquivo.getName() : achado.nome;
+  return registro;
 }
 
 /**
@@ -6368,17 +6477,1111 @@ function aparar_(linhas) {
  * ATLETAS CONSOLIDADOS
  ******************************************************/
 
-function listarAtletas() {
-  const sessao = identificarUsuario_();
+function medirFaseAtletaBanco_(fase, operacao) {
+  if (!CADASTRO_METRICAS_ATIVAS) return operacao();
+  const inicio = Date.now();
+  try { return operacao(); }
+  finally {
+    console.log(JSON.stringify({ metrica: 'atleta_banco', fase: fase, duracaoMs: Date.now() - inicio }));
+  }
+}
 
-  if (!sessao.autorizado || !moduloLiberado_('atletas', sessao.usuario.perfil)) {
+function criarMetricasFonteAtleta_(ativa, categoria) {
+  return ativa && CADASTRO_METRICAS_ATIVAS
+    ? { categoria: categoria, fases: {}, arquivosLidos: 0, bytesLidos: 0 } : null;
+}
+
+function medirFonteAtleta_(metricas, fase, operacao) {
+  if (!metricas) return operacao();
+  const inicio = Date.now();
+  try { return operacao(); }
+  finally {
+    metricas.fases[fase] = (metricas.fases[fase] || 0) + Date.now() - inicio;
+    if (fase === 'leitura') {
+      Object.keys(metricas.fases).forEach(function (nome) {
+        console.log(JSON.stringify({
+          metrica: 'atleta_banco', categoria: metricas.categoria, fase: nome,
+          duracaoMs: metricas.fases[nome], arquivosLidos: metricas.arquivosLidos,
+          bytesLidos: metricas.bytesLidos, total: metricas.total, selecionados: metricas.selecionados
+        }));
+      });
+    }
+  }
+}
+
+function lerTextoFonteAtleta_(arquivo, metricas) {
+  const texto = medirFonteAtleta_(metricas, 'drive_ler', function () {
+    return arquivo.getBlob().getDataAsString('UTF-8');
+  });
+  if (metricas) {
+    metricas.arquivosLidos++;
+    medirFonteAtleta_(metricas, 'tamanho_utf8', function () {
+      metricas.bytesLidos += bytesUtf8Cadastro_(texto);
+    });
+  }
+  return texto;
+}
+
+function registrarMetricasFonteAtleta_(metricas, total, selecionados) {
+  if (!metricas) return;
+  metricas.total = total;
+  metricas.selecionados = selecionados;
+}
+
+// Server-only, bounded PropertiesService payloads: no Drive sharing or client CPF index.
+const INDICE_VALIDACAO_PREFIXO = 'INDICE_VALIDACAO_V1_';
+const INDICE_VALIDACAO_AGENDA = INDICE_VALIDACAO_PREFIXO + 'agenda';
+const INDICE_VALIDACAO_STATUS = INDICE_VALIDACAO_PREFIXO + 'status';
+const INDICE_VALIDACAO_HANDLER = 'reconciliarIndicesValidacaoAgendado';
+const INDICE_VALIDACAO_CHUNK_BYTES = 8000;
+const INDICE_VALIDACAO_LIMITE_BYTES = 180000;
+
+function chaveIndiceValidacao_(id) {
+  return INDICE_VALIDACAO_PREFIXO + 'c_' + digestIndiceValidacao_(String(id)) + '_';
+}
+
+function lerMetaIndiceValidacao_(id) {
+  const texto = PropertiesService.getScriptProperties().getProperty(chaveIndiceValidacao_(id) + 'meta');
+  if (!texto) return {};
+  const meta = JSON.parse(texto);
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw new Error('Metadados do indice invalidos.');
+  return meta;
+}
+
+function registrarFalhaIndiceValidacao_(fase) {
+  // Never log source contents, CPF, IDs, or exception messages.
+  console.log(JSON.stringify({ metrica: 'indice_validacao', fase: fase, resultado: 'fallback_fonte' }));
+}
+
+function fontesIndiceValidacao_(id) {
+  return [
+    { tipo: 'atletas', nome: arquivoCadastroPessoasCampeonato_(id, 'Atletas'), chave: chaveAtletasCampeonato_(id) },
+    { tipo: 'comissao', nome: arquivoCadastroPessoasCampeonato_(id, 'Comissao Tecnica'), chave: chaveComissaoTecnicaCampeonato_(id) },
+    { tipo: 'tabela', nome: arquivoTabelaCampeonato_(id), chave: chaveTabelaCampeonato_(id) }
+  ];
+}
+
+function digestIndiceValidacao_(texto, algoritmo) {
+  return Utilities.base64EncodeWebSafe(Utilities.computeDigest(
+    algoritmo || Utilities.DigestAlgorithm.SHA_256, texto, Utilities.Charset.UTF_8));
+}
+
+function md5IndiceValidacao_(texto) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, texto, Utilities.Charset.UTF_8)
+    .map(function (byte) { return ('0' + ((byte + 256) % 256).toString(16)).slice(-2); }).join('');
+}
+
+function versoesFontesIndiceValidacao_(id, recursos, posicoes) {
+  if (typeof Drive === 'undefined') throw new Error('Ative o servico avancado Drive v3 para usar o indice.');
+  const fontes = fontesIndiceValidacao_(id);
+  return (posicoes || [0, 1, 2]).map(function (posicao) {
+    const fonte = fontes[posicao];
+    const arquivo = localizarArquivoCadastro_(fonte.nome, recursos, fonte.tipo).arquivo;
+    // Absence is resolved again on every request; never persist/cache a negative file lookup.
+    if (!arquivo) {
+      const legado = PropertiesService.getScriptProperties().getProperty(fonte.chave);
+      return ['legado', digestIndiceValidacao_(JSON.stringify([fonte.chave, legado])), md5IndiceValidacao_(legado || '')];
+    }
+    const meta = Drive.Files.get(arquivo.getId(), {
+      fields: 'id,name,trashed,parents,version,md5Checksum', supportsAllDrives: true
+    });
+    if (meta.name !== fonte.nome || meta.trashed || !meta.parents
+        || meta.parents.indexOf(CONFIG.pastaRaizId) === -1 || !meta.version || !meta.md5Checksum) {
+      throw new Error('Fonte do indice indisponivel ou sem versao verificavel.');
+    }
+    return [String(meta.id), String(meta.version), meta.md5Checksum];
+  });
+}
+
+function compactarCadastroIndiceValidacao_(lista) {
+  const mapa = Object.create(null);
+  lista.forEach(function (pessoa) {
+    if (!pessoa || typeof pessoa !== 'object' || !String(pessoa.nome || '').trim()) return;
+    const cpf = somenteDigitos_(pessoa.cpf || '');
+    const entrada = [String(pessoa.id || '').trim(), chaveEquipe_(pessoa.timeVinculado || '')];
+    (mapa[cpf] || (mapa[cpf] = [])).push(entrada);
+  });
+  return mapa;
+}
+
+function compactarParticipacaoIndiceValidacao_(jogos) {
+  const mapa = Object.create(null);
+  let ordem = 0;
+  jogos.forEach(function (jogo) {
+    if (Object.prototype.hasOwnProperty.call(jogo, 'resultado')) validarResultadoSalvoTabela_(jogo.resultado, jogo);
+    if (jogo.status !== 'encerrado' || !jogo.resultado) return;
+    jogo.resultado.equipes.forEach(function (equipe) {
+      const posicao = ordem++;
+      equipe.atletas.forEach(function (pessoa) {
+        if (pessoa.participou !== true) return;
+        [['id', pessoa.id], ['cpf', somenteDigitos_(pessoa.cpf || '')]].forEach(function (par) {
+          if (!par[1]) return;
+          const chave = JSON.stringify(par), times = mapa[chave] || (mapa[chave] = []);
+          if (!times.some(function (entrada) { return entrada[0] === equipe.id; })) times.push([equipe.id, posicao]);
+        });
+      });
+    });
+  });
+  return mapa;
+}
+
+function lerPayloadIndiceValidacao_(id, meta) {
+  if (meta.versao !== 1 || meta.dirty !== false || !meta.token
+      || !Number.isInteger(meta.chunks) || meta.chunks < 1 || meta.chunks > 24
+      || !Array.isArray(meta.fontes) || meta.fontes.length !== 3 || !meta.digest) return null;
+  const props = PropertiesService.getScriptProperties(), prefixo = chaveIndiceValidacao_(id) + meta.token + '_';
+  let texto = '';
+  for (let i = 0; i < meta.chunks; i++) {
+    const parte = props.getProperty(prefixo + i);
+    if (parte === null) return null;
+    texto += parte;
+  }
+  if (digestIndiceValidacao_(texto) !== meta.digest) return null;
+  let indice;
+  try { indice = JSON.parse(texto); }
+  catch (e) {
+    registrarFalhaIndiceValidacao_('payload_corrompido');
+    return null;
+  }
+  if (indice.versao !== 1 || indice.campeonatoId !== id || indice.token !== meta.token
+      || !indice.cadastros || !indice.cadastros.atletas || !indice.cadastros.comissao || !indice.participacao) return null;
+  return indice;
+}
+
+function consultarIndiceValidacao_(id, recursos, tipo) {
+  try {
+    // Reuse only within the existing synchronous lock, never across requests.
+    const reutilizar = recursos && LockService.getScriptLock().hasLock();
+    const cache = reutilizar && recursos.indicesValidacao;
+    let entrada = cache && cache[id];
+    if (!entrada) {
+      const meta = lerMetaIndiceValidacao_(id);
+      entrada = { meta: meta, indice: lerPayloadIndiceValidacao_(id, meta), verificadas: [] };
+    }
+    const posicoes = (tipo ? [['atletas', 'comissao', 'tabela'].indexOf(tipo)] : [0, 1, 2])
+      .filter(function (posicao) { return entrada.verificadas.indexOf(posicao) === -1; });
+    if (entrada.indice && posicoes.length) {
+      const fontes = versoesFontesIndiceValidacao_(id, recursos, posicoes);
+      if (fontes.some(function (fonte, i) {
+        return JSON.stringify(fonte) !== JSON.stringify(entrada.meta.fontes[posicoes[i]]);
+      }) || JSON.stringify(lerMetaIndiceValidacao_(id)) !== JSON.stringify(entrada.meta)) entrada.indice = null;
+      else entrada.verificadas = entrada.verificadas.concat(posicoes);
+    }
+    if (reutilizar) {
+      if (!recursos.indicesValidacao) recursos.indicesValidacao = Object.create(null);
+      recursos.indicesValidacao[id] = entrada;
+    }
+    return entrada.indice;
+  } catch (e) {
+    registrarFalhaIndiceValidacao_('leitura');
+    return null;
+  }
+}
+
+function invalidarIndiceValidacao_(id) {
+  const checkpoint = Utilities.getUuid();
+  PropertiesService.getScriptProperties().setProperty(chaveIndiceValidacao_(id) + 'meta',
+    JSON.stringify({ versao: 1, dirty: true, checkpoint: checkpoint }));
+  return checkpoint;
+}
+
+function limparIndiceValidacaoRemovido_(id) {
+  try {
+    const props = PropertiesService.getScriptProperties(), prefixo = chaveIndiceValidacao_(id);
+    Object.keys(props.getProperties()).forEach(function (chave) {
+      if (chave.indexOf(prefixo) === 0) props.deleteProperty(chave);
+    });
+  } catch (e) { registrarFalhaIndiceValidacao_('limpeza'); }
+}
+
+function alvoArquivoIndiceValidacao_(nome) {
+  const elenco = nome.match(/^AEUV - Campeonato - (\S+) - (Atletas|Comissao Tecnica)\.json$/);
+  if (elenco) return { id: decodeURIComponent(elenco[1]), tipo: elenco[2] === 'Atletas' ? 'atletas' : 'comissao' };
+  const tabela = nome.match(/^AEUV - Campeonato - (\S+) - Tabela\.json$/);
+  return tabela ? { id: decodeURIComponent(tabela[1]), tipo: 'tabela' } : null;
+}
+
+function iniciarMutacaoIndiceValidacao_(nome, recursos) {
+  const alvo = alvoArquivoIndiceValidacao_(nome);
+  if (!alvo) return null;
+  let indice = null, fontes = null, meta = null;
+  try {
+    meta = lerMetaIndiceValidacao_(alvo.id);
+    const entrada = recursos && recursos.indicesValidacao && recursos.indicesValidacao[alvo.id];
+    indice = entrada && JSON.stringify(entrada.meta) === JSON.stringify(meta)
+      ? entrada.indice : lerPayloadIndiceValidacao_(alvo.id, meta);
+    if (indice) fontes = meta.fontes;
+  } catch (e) { registrarFalhaIndiceValidacao_('pre_gravacao'); }
+  const checkpoint = invalidarIndiceValidacao_(alvo.id);
+  if (recursos) {
+    delete recursos.indicesValidacao;
+    if (alvo.tipo === 'tabela' && recursos.jogos) delete recursos.jogos[alvo.id];
+  }
+  return { alvo: alvo, indice: indice, fontes: fontes, meta: meta, checkpoint: checkpoint };
+}
+
+function publicarIndiceValidacao_(id, indice, fontes, checkpoint, anterior) {
+  const props = PropertiesService.getScriptProperties(), prefixo = chaveIndiceValidacao_(id);
+  const atual = lerMetaIndiceValidacao_(id);
+  if (!atual.dirty || atual.checkpoint !== checkpoint) throw new Error('Indice alterado durante a reconciliacao.');
+  if (anterior && anterior.dirty === false) {
+    indice.token = anterior.token;
+    if (digestIndiceValidacao_(JSON.stringify(indice)) === anterior.digest
+        && lerPayloadIndiceValidacao_(id, anterior)) {
+      const meta = Object.assign({}, anterior, { fontes: fontes, checkpoint: checkpoint,
+        atualizadoEm: new Date().toISOString() });
+      props.setProperty(prefixo + 'meta', JSON.stringify(meta));
+      return meta;
+    }
+  }
+  const token = Utilities.getUuid();
+  indice.token = token;
+  const texto = JSON.stringify(indice), partes = [];
+  // Chunk by UTF-8 bytes, not JS characters (team names can be non-ASCII).
+  let parte = '', bytes = 0;
+  for (const caractere of texto) {
+    const tamanho = bytesUtf8Cadastro_(caractere);
+    if (bytes + tamanho > INDICE_VALIDACAO_CHUNK_BYTES) { partes.push(parte); parte = ''; bytes = 0; }
+    parte += caractere; bytes += tamanho;
+  }
+  partes.push(parte);
+  if (partes.length > 24) throw new Error('Indice excede o limite compacto por campeonato.');
+  const todas = props.getProperties();
+  // Already dirty: discard only this championship's superseded/orphan chunks before reserving quota.
+  Object.keys(todas).forEach(function (chave) {
+    if (chave.indexOf(prefixo) === 0 && chave !== prefixo + 'meta') {
+      props.deleteProperty(chave);
+      delete todas[chave];
+    }
+  });
+  let total = 0, indices = 0;
+  Object.keys(todas).forEach(function (chave) {
+    const tamanho = bytesUtf8Cadastro_(chave) + bytesUtf8Cadastro_(todas[chave]);
+    total += tamanho;
+    if (chave.indexOf(INDICE_VALIDACAO_PREFIXO) === 0) indices += tamanho;
+  });
+  const adicional = bytesUtf8Cadastro_(texto) + partes.length * (prefixo.length + token.length + 12) + 2000;
+  if (indices + adicional > INDICE_VALIDACAO_LIMITE_BYTES || total + adicional > 450000) {
+    throw new Error('Sem espaco seguro nas propriedades para publicar o indice.');
+  }
+  partes.forEach(function (valor, i) { props.setProperty(prefixo + token + '_' + i, valor); });
+  const meta = { versao: 1, dirty: false, checkpoint: checkpoint, token: token, chunks: partes.length,
+    fontes: fontes, digest: digestIndiceValidacao_(texto), atualizadoEm: new Date().toISOString() };
+  if (!lerPayloadIndiceValidacao_(id, meta)) throw new Error('Falha na leitura de confirmacao do indice.');
+  // Single publication point. Dirty metadata survives all earlier failures.
+  props.setProperty(prefixo + 'meta', JSON.stringify(meta));
+  return meta;
+}
+
+function concluirMutacaoIndiceValidacao_(mutacao, lista, conteudo, recursos) {
+  if (!mutacao || !mutacao.indice || !mutacao.fontes) return;
+  try {
+    const alvo = mutacao.alvo, antes = mutacao.fontes, depois = versoesFontesIndiceValidacao_(alvo.id, recursos);
+    const posicao = ['atletas', 'comissao', 'tabela'].indexOf(alvo.tipo);
+    if (depois.some(function (versao, i) {
+      return i === posicao ? versao[2] !== md5IndiceValidacao_(conteudo)
+        : JSON.stringify(versao) !== JSON.stringify(antes[i]);
+    })) throw new Error('Fontes divergiram durante a gravacao.');
+    const indice = mutacao.indice;
+    if (alvo.tipo === 'tabela') indice.participacao = compactarParticipacaoIndiceValidacao_(lista[0].jogos);
+    else indice.cadastros[alvo.tipo] = compactarCadastroIndiceValidacao_(lista);
+    const meta = publicarIndiceValidacao_(alvo.id, indice, depois, mutacao.checkpoint, mutacao.meta);
+    if (recursos) {
+      recursos.indicesValidacao = Object.create(null);
+      recursos.indicesValidacao[alvo.id] = { indice: indice, meta: meta, verificadas: [0, 1, 2] };
+    }
+  } catch (e) {
+    // The source already committed. Index maintenance must not report a failed roster/result save.
+    registrarFalhaIndiceValidacao_('incremental');
+  }
+}
+
+function tentarLockIndiceValidacao_(operacao) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1)) return false;
+  try { operacao(); return true; }
+  finally { lock.releaseLock(); }
+}
+
+function reconciliarIndiceValidacao_(id) {
+  const props = PropertiesService.getScriptProperties(), chaveMeta = chaveIndiceValidacao_(id) + 'meta';
+  const brutoAntes = props.getProperty(chaveMeta);
+  let antes;
+  try { antes = lerMetaIndiceValidacao_(id); }
+  catch (e) { registrarFalhaIndiceValidacao_('metadados'); antes = {}; }
+  const fontes = versoesFontesIndiceValidacao_(id);
+  try {
+    if (lerPayloadIndiceValidacao_(id, antes)
+        && JSON.stringify(fontes) === JSON.stringify(antes.fontes)) return 'atual';
+  } catch (e) { registrarFalhaIndiceValidacao_('payload_reconciliacao'); }
+  // Never hold ScriptLock while reading/parsing large roster/table files.
+  const indice = { versao: 1, campeonatoId: id, cadastros: {
+    atletas: compactarCadastroIndiceValidacao_(lerElencoBrutoOperacao_(id, 'atletas')),
+    comissao: compactarCadastroIndiceValidacao_(lerElencoBrutoOperacao_(id, 'comissao'))
+  }, participacao: compactarParticipacaoIndiceValidacao_(jogosParticipacaoCampeonato_(id)) };
+  if (JSON.stringify(versoesFontesIndiceValidacao_(id)) !== JSON.stringify(fontes)) return 'concorrente';
+  if (!campeonatos_().some(function (item) { return item.id === id; })) return 'concorrente';
+  let publicado = false;
+  const adquiriu = tentarLockIndiceValidacao_(function () {
+    // App writes invalidate the checkpoint under this same lock. Keep Drive/API
+    // calls and full championship reads outside it to avoid blocking user edits.
+    if (props.getProperty(chaveMeta) !== brutoAntes) return;
+    const checkpoint = invalidarIndiceValidacao_(id);
+    publicarIndiceValidacao_(id, indice, fontes, checkpoint, antes);
+    publicado = true;
+  });
+  return adquiriu && publicado ? 'reconciliado' : 'concorrente';
+}
+
+function obterStatusIndicesValidacao() {
+  exigirAdministracao_();
+  const props = PropertiesService.getScriptProperties();
+  const agenda = JSON.parse(props.getProperty(INDICE_VALIDACAO_AGENDA) || '{}');
+  const estado = JSON.parse(props.getProperty(INDICE_VALIDACAO_STATUS) || '{}');
+  return { agendado: !!agenda.triggerId, responsavel: agenda.owner || '',
+    ultimaExecucao: estado.ultimaExecucao || '', erro: estado.erro || '', resultados: estado.resultados || {},
+    campeonatos: campeonatos_().map(function (campeonato) {
+      let meta;
+      try { meta = lerMetaIndiceValidacao_(campeonato.id); }
+      catch (e) { registrarFalhaIndiceValidacao_('status'); meta = {}; }
+      return { id: campeonato.id, nome: campeonato.nome, pendente: meta.dirty !== false,
+        atualizadoEm: meta.atualizadoEm || '' };
+    }) };
+}
+
+function executarReconciliacaoIndicesValidacao_() {
+  try { return processarReconciliacaoIndicesValidacao_(); }
+  catch (e) {
+    const mensagem = 'Nao foi possivel concluir a reconciliacao do indice. Validacoes continuam pelas fontes atuais; confira acesso e quotas.';
+    try {
+      PropertiesService.getScriptProperties().setProperty(INDICE_VALIDACAO_STATUS,
+        JSON.stringify({ ultimaExecucao: new Date().toISOString(), erro: mensagem }));
+    } catch (falhaStatus) { registrarFalhaIndiceValidacao_('registro_status'); }
+    const erro = new Error(mensagem);
+    erro.cause = e;
+    throw erro;
+  }
+}
+
+function processarReconciliacaoIndicesValidacao_() {
+  const props = PropertiesService.getScriptProperties(), inicio = Date.now();
+  const resultados = { atual: 0, reconciliado: 0, concorrente: 0, falhas: 0 };
+  const lista = campeonatos_();
+  const anterior = JSON.parse(props.getProperty(INDICE_VALIDACAO_STATUS) || '{}');
+  const cursor = Number.isInteger(anterior.cursor) ? anterior.cursor % Math.max(1, lista.length) : 0;
+  let processados = 0;
+  for (; processados < lista.length && Date.now() - inicio < 180000; processados++) {
+    try { resultados[reconciliarIndiceValidacao_(lista[(cursor + processados) % lista.length].id)]++; }
+    catch (e) { resultados.falhas++; registrarFalhaIndiceValidacao_('reconciliacao'); }
+  }
+  props.setProperty(INDICE_VALIDACAO_STATUS, JSON.stringify({
+    ultimaExecucao: new Date().toISOString(), resultados: resultados,
+    cursor: lista.length ? (cursor + processados) % lista.length : 0,
+    erro: resultados.falhas ? 'Falha ao reconciliar fontes/indice. Validacoes continuam pelas fontes atuais; confira Drive v3, acesso e quotas.' : ''
+  }));
+  return obterStatusIndicesValidacao();
+}
+
+function reconciliarIndicesValidacaoAgora() {
+  exigirAdministracao_();
+  return executarReconciliacaoIndicesValidacao_();
+}
+
+function configurarAgendamentoIndicesValidacao() {
+  const sessao = exigirAdministracao_();
+  const executar = function () {
+    const props = PropertiesService.getScriptProperties();
+    const agenda = JSON.parse(props.getProperty(INDICE_VALIDACAO_AGENDA) || '{}');
+    const owner = exigirDonoAgendaBancoAtletas_(sessao, agenda);
+    const proprios = ScriptApp.getProjectTriggers().filter(function (trigger) {
+      return trigger.getHandlerFunction() === INDICE_VALIDACAO_HANDLER && trigger.getEventType() === ScriptApp.EventType.CLOCK;
+    });
+    const trigger = proprios.find(function (item) { return String(item.getUniqueId()) === agenda.triggerId; })
+      || proprios[0]
+      || ScriptApp.newTrigger(INDICE_VALIDACAO_HANDLER).timeBased().everyMinutes(5).create();
+    props.setProperty(INDICE_VALIDACAO_AGENDA, JSON.stringify({ owner: owner, triggerId: String(trigger.getUniqueId()) }));
+    proprios.forEach(function (item) {
+      if (item.getUniqueId() !== trigger.getUniqueId()) ScriptApp.deleteTrigger(item);
+    });
+  };
+  if (!tentarLockIndiceValidacao_(executar)) throw new Error('Sistema ocupado. Tente configurar novamente.');
+  return obterStatusIndicesValidacao();
+}
+
+function desativarAgendamentoIndicesValidacao() {
+  const sessao = exigirAdministracao_();
+  if (!tentarLockIndiceValidacao_(function () {
+    const props = PropertiesService.getScriptProperties();
+    exigirDonoAgendaBancoAtletas_(sessao, JSON.parse(props.getProperty(INDICE_VALIDACAO_AGENDA) || '{}'));
+    ScriptApp.getProjectTriggers().filter(function (trigger) {
+      return trigger.getHandlerFunction() === INDICE_VALIDACAO_HANDLER && trigger.getEventType() === ScriptApp.EventType.CLOCK;
+    }).forEach(function (trigger) { ScriptApp.deleteTrigger(trigger); });
+    props.deleteProperty(INDICE_VALIDACAO_AGENDA);
+  })) throw new Error('Sistema ocupado. Tente desativar novamente.');
+  return obterStatusIndicesValidacao();
+}
+
+function reconciliarIndicesValidacaoAgendado(evento) {
+  const sessao = exigirAdministracao_();
+  const props = PropertiesService.getScriptProperties();
+  const agenda = JSON.parse(props.getProperty(INDICE_VALIDACAO_AGENDA) || '{}');
+  validarGatilhoAgendado_(sessao, agenda, INDICE_VALIDACAO_HANDLER, evento,
+    'Gatilho do indice de validacao nao configurado para esta conta.');
+  const status = executarReconciliacaoIndicesValidacao_();
+  if (status.erro) throw new Error(status.erro);
+  return status;
+}
+
+const SNAPSHOTS_ESPORTIVOS = {
+  tabela: { nome: 'Tabela de Classificação', minutos: 5, handler: 'atualizarTabelaAgendada' },
+  participantes: { nome: 'Equipes Participantes', minutos: 15, handler: 'atualizarParticipantesAgendado' }
+};
+const SNAPSHOTS_ESPORTIVOS_REVISAO = 'SNAPSHOTS_ESPORTIVOS_REVISAO_V1';
+const SNAPSHOTS_ESPORTIVOS_ORCAMENTO_MS = 210000;
+
+function respostaEsportivaAtual_(dados) {
+  dados.contextoAtual = true;
+  dados.consultadoEm = new Date().toISOString();
+  return dados;
+}
+
+function marcarSnapshotsEsportivosPendentes_() {
+  // Antes da persistência, inclusive se uma gravação composta falhar parcialmente.
+  PropertiesService.getScriptProperties().setProperty(SNAPSHOTS_ESPORTIVOS_REVISAO, Utilities.getUuid());
+}
+
+function revisaoSnapshotsEsportivos_() {
+  return PropertiesService.getScriptProperties().getProperty(SNAPSHOTS_ESPORTIVOS_REVISAO) || 'inicial';
+}
+
+function chaveSnapshotEsportivo_(tipo, id) {
+  if (!SNAPSHOTS_ESPORTIVOS[tipo]) throw new Error('Categoria de cópia inválida.');
+  return 'SNAPSHOT_ESPORTIVO_V1_' + tipo + '_campeonato_' + encodeURIComponent(id);
+}
+
+function chaveMetaSnapshotEsportivo_(tipo, nome) {
+  if (!SNAPSHOTS_ESPORTIVOS[tipo]) throw new Error('Categoria de cópia inválida.');
+  return 'SNAPSHOT_ESPORTIVO_V1_' + tipo + '_meta_' + nome;
+}
+
+function lerEstadoSnapshotEsportivo_(chave) {
+  const texto = PropertiesService.getScriptProperties().getProperty(chave);
+  if (!texto) return {};
+  try {
+    const estado = JSON.parse(texto);
+    if (estado && typeof estado === 'object' && !Array.isArray(estado)) return estado;
+  } catch (e) {}
+  throw new Error('Metadados da cópia esportiva inválidos. Peça ao administrador para corrigir a configuração.');
+}
+
+function gravarEstadoSnapshotEsportivo_(chave, estado) {
+  PropertiesService.getScriptProperties().setProperty(chave, JSON.stringify(estado));
+}
+
+function comLockSnapshotEsportivo_(acao) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try { return acao(); } finally { lock.releaseLock(); }
+}
+
+function statusSnapshotEsportivo_(tipo, id) {
+  const estado = lerEstadoSnapshotEsportivo_(chaveSnapshotEsportivo_(tipo, id));
+  const agenda = lerEstadoSnapshotEsportivo_(chaveMetaSnapshotEsportivo_(tipo, 'agenda'));
+  const execucao = lerEstadoSnapshotEsportivo_(chaveMetaSnapshotEsportivo_(tipo, 'execucao'));
+  const agora = Date.now();
+  return {
+    disponivel: !!estado.currentId, generatedAt: estado.generatedAt || '',
+    pendente: !estado.currentId || estado.sourceRevision !== revisaoSnapshotsEsportivos_(),
+    emRecalculo: !!(execucao.lease && execucao.lease.expiresAt > agora),
+    ultimaTentativaEm: estado.lastAttemptAt || '',
+    ultimoErro: execucao.lease && execucao.lease.expiresAt <= agora
+      ? 'O recálculo não terminou no prazo; a cópia anterior foi preservada.' : (estado.lastError || ''),
+    agendado: !!agenda.triggerId, responsavel: agenda.owner || ''
+  };
+}
+
+function validarSnapshotEsportivo_(tipo, id, documento) {
+  const dados = documento && documento.dados;
+  if (!documento || documento.schema !== 1 || documento.tipo !== tipo || documento.campeonatoId !== id
+      || typeof documento.generatedAt !== 'string' || !Number.isFinite(Date.parse(documento.generatedAt))
+      || typeof documento.sourceRevision !== 'string' || !dados || dados.campeonatoId !== id
+      || !Array.isArray(dados.campeonatos)
+      || (tipo === 'tabela' && (!Array.isArray(dados.jogos) || !Array.isArray(dados.equipes)
+        || !Array.isArray(dados.grupos) || !Array.isArray(dados.fases) || !Array.isArray(dados.campos)
+        || !Array.isArray(dados.criterioOpcoes) || !Array.isArray(dados.avisos)
+        || typeof dados.revisao !== 'string' || !dados.campeonato || dados.campeonato.id !== id
+        || !dados.criterios || !dados.classificacao || !Array.isArray(dados.classificacao.geral)
+        || !Array.isArray(dados.classificacao.grupos)))
+      || (tipo === 'participantes' && (!Array.isArray(dados.registros) || dados.registros.length !== 1
+        || !dados.registros[0] || dados.registros[0].campeonatoId !== id
+        || !Array.isArray(dados.registros[0].times) || !Array.isArray(dados.registros[0].timesDetalhados)
+        || dados.registros[0].timesDetalhados.some(function (time) {
+          return !time || typeof time.id !== 'string' || !time.id || typeof time.nome !== 'string'
+            || typeof time.escudo !== 'string' || !Number.isSafeInteger(time.totalAtletas) || time.totalAtletas < 0
+            || !Number.isSafeInteger(time.totalComissao) || time.totalComissao < 0;
+        })))) {
+    throw new Error('Cópia de ' + SNAPSHOTS_ESPORTIVOS[tipo].nome + ' inválida. Use Recalcular agora.');
+  }
+  return documento;
+}
+
+function lerSnapshotEsportivo_(tipo, id) {
+  const estado = lerEstadoSnapshotEsportivo_(chaveSnapshotEsportivo_(tipo, id));
+  if (!estado.currentId) throw new Error(SNAPSHOTS_ESPORTIVOS[tipo].nome
+    + ' ainda não possui cópia para este campeonato. Admin/diretoria devem usar Recalcular agora.');
+  try {
+    const arquivo = DriveApp.getFileById(estado.currentId);
+    if (arquivo.isTrashed() || !arquivoNaPastaRaiz_(arquivo)) throw new Error('Arquivo indisponível.');
+    const documento = validarSnapshotEsportivo_(tipo, id, JSON.parse(arquivo.getBlob().getDataAsString('UTF-8')));
+    if (documento.generatedAt !== estado.generatedAt || documento.sourceRevision !== estado.sourceRevision) {
+      throw new Error('Versão da cópia inconsistente.');
+    }
+    return documento.dados;
+  } catch (e) {
+    throw new Error('Não foi possível ler a cópia de ' + SNAPSHOTS_ESPORTIVOS[tipo].nome
+      + '. A cópia anterior foi preservada; admin/diretoria devem usar Recalcular agora.');
+  }
+}
+
+function listarTabelaCampeonato(campeonatoId) {
+  sessaoCampeonato_();
+  const lista = campeonatos_();
+  const id = String(campeonatoId || '').trim() || (lista[0] || {}).id || '';
+  if (!id) return montarTelaTabela_(lista, null);
+  if (!lista.some(function (item) { return item.id === id; })) throw new Error('Campeonato não encontrado. Atualize a lista.');
+  const dados = lerSnapshotEsportivo_('tabela', id);
+  dados.campeonatos = lista.map(function (item) {
+    return { id: item.id, nome: item.nome, temporada: item.temporada, status: item.status };
+  });
+  dados.podeEditar = true;
+  dados.snapshotStatus = statusSnapshotEsportivo_('tabela', id);
+  return dados;
+}
+
+function listarEquipesParticipantes(campeonatoId) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !sessao.usuario || ['admin', 'diretoria', 'associado'].indexOf(sessao.usuario.perfil) === -1) {
+    throw new Error('Você não tem permissão para consultar os elencos.');
+  }
+  const associado = sessao.usuario.perfil === 'associado';
+  // Identidade, vínculos e bloqueios são sempre atuais, nunca autorizados pela cópia.
+  const globais = equipesRegistro_(), ativas = obterEquipes_().map(chaveEquipe_);
+  const bloqueios = lerBloqueiosElenco_();
+  const campeonatos = campeonatosResumo_().filter(function (campeonato) {
+    return !associado || timesCampeonato_(campeonato.id).some(function (nome) {
+      return chaveEquipe_(nome) === chaveEquipe_(sessao.usuario.equipe);
+    });
+  });
+  const selecionado = campeonatos.find(function (item) { return item.id === String(campeonatoId || '').trim(); }) || campeonatos[0];
+  const resposta = {
+    campeonatos: campeonatos, campeonatoId: selecionado ? selecionado.id : '',
+    equipesGlobais: associado ? [] : globais.filter(function (item) {
+      return ativas.indexOf(chaveEquipe_(item.nome)) !== -1;
+    }).map(function (item) { return { id: item.id, nome: item.nome }; }),
+    podeEditar: !associado, registros: []
+  };
+  if (!selecionado) return resposta;
+  const nomes = timesCampeonato_(selecionado.id).filter(function (nome) {
+    return !associado || chaveEquipe_(nome) === chaveEquipe_(sessao.usuario.equipe);
+  });
+  const identidades = globais.filter(function (item) {
+    return nomes.some(function (nome) { return chaveEquipe_(nome) === chaveEquipe_(item.nome); });
+  });
+  const dados = lerSnapshotEsportivo_('participantes', selecionado.id);
+  const times = dados.registros[0].timesDetalhados.filter(function (time) {
+    return identidades.some(function (equipe) { return equipe.id === time.id; });
+  }).map(function (time) {
+    const equipe = identidades.find(function (item) { return item.id === time.id; });
+    return { id: equipe.id, nome: equipe.nome, escudo: time.escudo,
+      bloqueado: elencoBloqueado_(selecionado.id, equipe.id, bloqueios),
+      totalAtletas: time.totalAtletas, totalComissao: time.totalComissao };
+  });
+  resposta.registros = [{ campeonatoId: selecionado.id, campeonatoNome: selecionado.nome,
+    times: nomes, timesDetalhados: times }];
+  resposta.snapshotStatus = statusSnapshotEsportivo_('participantes', selecionado.id);
+  return resposta;
+}
+
+function limparVersaoSnapshotEsportivo_(tipo, campeonatoId, id) {
+  if (!id) return;
+  try {
+    comLockSnapshotEsportivo_(function () {
+      const estado = lerEstadoSnapshotEsportivo_(chaveSnapshotEsportivo_(tipo, campeonatoId));
+      if (id === estado.currentId || id === estado.previousId) return;
+      const arquivo = DriveApp.getFileById(id);
+      if (arquivoNaPastaRaiz_(arquivo)) arquivo.setTrashed(true);
+    });
+  } catch (e) { console.log('Cópia esportiva: limpeza adiada; versões publicadas preservadas.'); }
+}
+
+function gerarSnapshotEsportivo_(tipo, campeonatoId) {
+  sessaoCampeonato_();
+  const id = String(campeonatoId || '').trim() || (campeonatos_()[0] || {}).id || '';
+  if (!id || !campeonatos_().some(function (item) { return item.id === id; })) throw new Error('Escolha um campeonato válido.');
+  const chave = chaveSnapshotEsportivo_(tipo, id), execucaoChave = chaveMetaSnapshotEsportivo_(tipo, 'execucao');
+  const token = Utilities.getUuid();
+  const sourceRevision = comLockSnapshotEsportivo_(function () {
+    const execucao = lerEstadoSnapshotEsportivo_(execucaoChave);
+    if (execucao.lease && execucao.lease.expiresAt > Date.now()) {
+      throw new Error(SNAPSHOTS_ESPORTIVOS[tipo].nome + ' já está sendo recalculada. Aguarde e use Atualizar.');
+    }
+    execucao.lease = { token: token, expiresAt: Date.now() + 600000 };
+    gravarEstadoSnapshotEsportivo_(execucaoChave, execucao);
+    const estado = lerEstadoSnapshotEsportivo_(chave);
+    estado.lastAttemptAt = new Date().toISOString();
+    gravarEstadoSnapshotEsportivo_(chave, estado);
+    return revisaoSnapshotsEsportivos_();
+  });
+  let novoArquivo;
+  try {
+    // Builders podem adquirir ScriptLock: não reter o lock da lease.
+    const dados = tipo === 'tabela' ? carregarTabelaCampeonatoAtual(id) : carregarEquipesParticipantesAtual(id);
+    delete dados.podeEditar;
+    delete dados.equipesGlobais;
+    delete dados.contextoAtual;
+    delete dados.consultadoEm;
+    const documento = { schema: 1, tipo: tipo, campeonatoId: id, sourceRevision: sourceRevision,
+      generatedAt: new Date().toISOString(), dados: dados };
+    validarSnapshotEsportivo_(tipo, id, documento);
+    novoArquivo = pastaRaizProjeto_().createFile(Utilities.newBlob(JSON.stringify(documento),
+      'application/json', 'AEUV - Copia ' + tipo + ' - ' + encodeURIComponent(id) + ' - ' + token + '.json'));
+    const confirmado = validarSnapshotEsportivo_(tipo, id, JSON.parse(novoArquivo.getBlob().getDataAsString('UTF-8')));
+    if (JSON.stringify(confirmado) !== JSON.stringify(documento)) throw new Error('A verificação da cópia completa falhou.');
+    const obsoleto = comLockSnapshotEsportivo_(function () {
+      const execucao = lerEstadoSnapshotEsportivo_(execucaoChave);
+      if (!execucao.lease || execucao.lease.token !== token || execucao.lease.expiresAt <= Date.now()) {
+        throw new Error('O prazo do recálculo expirou. Tente novamente.');
+      }
+      const estado = lerEstadoSnapshotEsportivo_(chave), anterior = estado.previousId;
+      estado.previousId = estado.currentId || '';
+      estado.currentId = novoArquivo.getId();
+      estado.generatedAt = documento.generatedAt;
+      // Não apagar marcações: a comparação com a revisão atual mantém writes concorrentes pendentes.
+      estado.sourceRevision = sourceRevision;
+      estado.lastError = '';
+      gravarEstadoSnapshotEsportivo_(chave, estado);
+      delete execucao.lease;
+      try { gravarEstadoSnapshotEsportivo_(execucaoChave, execucao); }
+      catch (e) { console.log('Cópia esportiva publicada; liberação da lease adiada até expirar.'); }
+      return anterior;
+    });
+    limparVersaoSnapshotEsportivo_(tipo, id, obsoleto);
+    return statusSnapshotEsportivo_(tipo, id);
+  } catch (erro) {
+    try {
+      comLockSnapshotEsportivo_(function () {
+        const execucao = lerEstadoSnapshotEsportivo_(execucaoChave);
+        if (!execucao.lease || execucao.lease.token !== token) return;
+        const estado = lerEstadoSnapshotEsportivo_(chave);
+        estado.lastError = 'O último recálculo falhou; a cópia anterior foi preservada. Use Recalcular agora.';
+        gravarEstadoSnapshotEsportivo_(chave, estado);
+        delete execucao.lease;
+        gravarEstadoSnapshotEsportivo_(execucaoChave, execucao);
+      });
+    } catch (e) { console.log('Cópia esportiva: não foi possível registrar a falha.'); }
+    if (novoArquivo) limparVersaoSnapshotEsportivo_(tipo, id, novoArquivo.getId());
+    throw erro;
+  }
+}
+
+function recalcularTabelaCampeonato(id) { return gerarSnapshotEsportivo_('tabela', id); }
+function recalcularEquipesParticipantes(id) { return gerarSnapshotEsportivo_('participantes', id); }
+
+function obterStatusSnapshotsEsportivos() {
+  sessaoCampeonato_();
+  const campeonatos = campeonatosResumo_();
+  return { campeonatos: campeonatos, categorias: Object.keys(SNAPSHOTS_ESPORTIVOS).map(function (tipo) {
+    return { tipo: tipo, nome: SNAPSHOTS_ESPORTIVOS[tipo].nome,
+      estado: statusSnapshotEsportivo_(tipo, (campeonatos[0] || {}).id || ''),
+      campeonatos: campeonatos.map(function (item) { return { id: item.id, estado: statusSnapshotEsportivo_(tipo, item.id) }; }) };
+  }) };
+}
+
+function agendaSnapshotEsportivo_(tipo, desativar) {
+  const sessao = exigirAdministracao_(), config = SNAPSHOTS_ESPORTIVOS[tipo];
+  return comLockSnapshotEsportivo_(function () {
+    const chave = chaveMetaSnapshotEsportivo_(tipo, 'agenda'), agenda = lerEstadoSnapshotEsportivo_(chave);
+    const owner = exigirDonoAgendaBancoAtletas_(sessao, agenda);
+    const proprios = ScriptApp.getProjectTriggers().filter(function (trigger) {
+      return trigger.getHandlerFunction() === config.handler && trigger.getEventType() === ScriptApp.EventType.CLOCK;
+    });
+    if (desativar) {
+      proprios.forEach(function (trigger) { ScriptApp.deleteTrigger(trigger); });
+      PropertiesService.getScriptProperties().deleteProperty(chave);
+    } else {
+      const trigger = proprios.find(function (item) { return String(item.getUniqueId()) === agenda.triggerId; })
+        || proprios[0]
+        || ScriptApp.newTrigger(config.handler).timeBased().everyMinutes(config.minutos).create();
+      gravarEstadoSnapshotEsportivo_(chave, { owner: owner, triggerId: String(trigger.getUniqueId()),
+        installedAt: agenda.installedAt || new Date().toISOString(), cursor: agenda.cursor || '' });
+      proprios.forEach(function (item) { if (item.getUniqueId() !== trigger.getUniqueId()) ScriptApp.deleteTrigger(item); });
+    }
+    return { agendado: !desativar, responsavel: owner };
+  });
+}
+
+function configurarAgendamentoTabela() { return agendaSnapshotEsportivo_('tabela', false); }
+function desativarAgendamentoTabela() { return agendaSnapshotEsportivo_('tabela', true); }
+function configurarAgendamentoParticipantes() { return agendaSnapshotEsportivo_('participantes', false); }
+function desativarAgendamentoParticipantes() { return agendaSnapshotEsportivo_('participantes', true); }
+
+function atualizarSnapshotEsportivoAgendado_(tipo, evento) {
+  const sessao = exigirAdministracao_(), chave = chaveMetaSnapshotEsportivo_(tipo, 'agenda');
+  const agenda = lerEstadoSnapshotEsportivo_(chave);
+  validarGatilhoAgendado_(sessao, agenda, SNAPSHOTS_ESPORTIVOS[tipo].handler, evento,
+    'Gatilho esportivo não configurado para esta conta.');
+  const inicio = Date.now(), lista = campeonatos_();
+  const anterior = lista.findIndex(function (item) { return item.id === agenda.cursor; });
+  const resultados = [];
+  let falhas = 0;
+  for (let i = 0; i < lista.length && Date.now() - inicio < SNAPSHOTS_ESPORTIVOS_ORCAMENTO_MS; i++) {
+    const campeonato = lista[(anterior + 1 + i) % lista.length];
+    // Checkpoint antes da execução: se houver timeout, o próximo disparo não fica preso no mesmo campeonato.
+    comLockSnapshotEsportivo_(function () {
+      const atual = lerEstadoSnapshotEsportivo_(chave);
+      if (atual.triggerId !== agenda.triggerId || atual.owner !== agenda.owner) throw new Error('Agendamento alterado durante a execução.');
+      atual.cursor = campeonato.id;
+      gravarEstadoSnapshotEsportivo_(chave, atual);
+    });
+    exigirAdministracao_();
+    try {
+      gerarSnapshotEsportivo_(tipo, campeonato.id);
+      resultados.push({ campeonatoId: campeonato.id, atualizado: true });
+    } catch (e) {
+      falhas++;
+      resultados.push({ campeonatoId: campeonato.id, atualizado: false });
+      console.log('Cópia esportiva: tentativa não concluída; conferir status e Execuções.');
+      const execucao = lerEstadoSnapshotEsportivo_(chaveMetaSnapshotEsportivo_(tipo, 'execucao'));
+      if (execucao.lease && execucao.lease.expiresAt > Date.now()) break;
+    }
+  }
+  if (falhas) {
+    throw new Error(SNAPSHOTS_ESPORTIVOS[tipo].nome + ': ' + falhas
+      + ' recálculo(s) não concluído(s). As demais tentativas foram realizadas e as cópias anteriores preservadas. Consulte os estados na Administração.');
+  }
+  return resultados;
+}
+
+function atualizarTabelaAgendada(evento) { return atualizarSnapshotEsportivoAgendado_('tabela', evento); }
+function atualizarParticipantesAgendado(evento) { return atualizarSnapshotEsportivoAgendado_('participantes', evento); }
+
+const BANCO_ATLETAS_ESTADO = 'BANCO_ATLETAS_SNAPSHOT_V1';
+const BANCO_ATLETAS_AGENDA = 'BANCO_ATLETAS_AGENDA_V1';
+const BANCO_ATLETAS_HANDLER = 'atualizarBancoAtletasAgendado';
+// Superior ao limite de execução de seis minutos, inferior ao próximo disparo.
+const BANCO_ATLETAS_LEASE_MS = 10 * 60 * 1000;
+
+function exigirBancoAtletas_() {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !sessao.usuario || !moduloLiberado_('atletas', sessao.usuario.perfil)) {
     throw new Error('Você não tem permissão para consultar o cadastro consolidado de atletas.');
   }
+  return sessao;
+}
 
-  const elenco = vinculosAtletasElenco_();
-  const dadosSolicitacoes = listarSolicitacoes();
-  const dadosPunicoes = listarPunicoes();
-  const dadosSumulas = listarSumulas();
+function lerEstadoBancoAtletas_(chave) {
+  const texto = PropertiesService.getScriptProperties().getProperty(chave);
+  if (!texto) return {};
+  let estado;
+  try { estado = JSON.parse(texto); }
+  catch (e) { throw new Error('Metadados do Banco de Atletas inválidos. Peça ao administrador para corrigir a configuração.'); }
+  if (!estado || typeof estado !== 'object' || Array.isArray(estado)) {
+    throw new Error('Metadados do Banco de Atletas inválidos. Peça ao administrador para corrigir a configuração.');
+  }
+  return estado;
+}
+
+function comLockBancoAtletas_(acao) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try { return acao(); }
+  finally { lock.releaseLock(); }
+}
+
+function gravarEstadoBancoAtletas_(chave, estado) {
+  PropertiesService.getScriptProperties().setProperty(chave, JSON.stringify(estado));
+}
+
+function statusBancoAtletas_(estado, agenda) {
+  const agora = Date.now();
+  return {
+    disponivel: !!estado.currentId,
+    generatedAt: estado.generatedAt || '',
+    emRecalculo: !!(estado.lease && estado.lease.expiresAt > agora),
+    ultimaTentativaEm: estado.lastAttemptAt || '',
+    ultimoErro: estado.lease && estado.lease.expiresAt <= agora
+      ? 'O último recálculo não terminou dentro do prazo. A cópia anterior foi preservada; use Recalcular agora.'
+      : (estado.lastError || ''),
+    agendado: !!agenda.triggerId,
+    responsavel: agenda.owner || ''
+  };
+}
+
+function obterStatusBancoAtletas() {
+  exigirBancoAtletas_();
+  return statusBancoAtletas_(lerEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO), lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA));
+}
+
+function validarSnapshotBancoAtletas_(dados) {
+  const invalido = function () {
+    throw new Error('Snapshot do Banco de Atletas inválido. Use Recalcular agora para gerar uma nova cópia completa.');
+  };
+  const objeto = function (valor) { return valor && typeof valor === 'object' && !Array.isArray(valor); };
+  const contagem = function (valor) { return Number.isSafeInteger(valor) && valor >= 0; };
+  if (!objeto(dados) || dados.schema !== 1 || typeof dados.generatedAt !== 'string'
+      || !Number.isFinite(Date.parse(dados.generatedAt)) || !Array.isArray(dados.registros)
+      || dados.total !== dados.registros.length || !objeto(dados.fontes)) invalido();
+  if (new Date(dados.generatedAt).toISOString() !== dados.generatedAt) invalido();
+  const f = dados.fontes;
+  ['solicitacoesLidas', 'solicitacoesTotal', 'punicoesTotal', 'sumulasLidas', 'sumulasTotal',
+    'elencoCampeonatos', 'elencoInscricoesAtuais', 'elencoInscricoesAnteriores'].forEach(function (campo) {
+    if (!contagem(f[campo])) invalido();
+  });
+  ['solicitacoesPastaUrl', 'punicoesArquivoUrl', 'punicoesAtualizadoEm', 'sumulasPastaUrl'].forEach(function (campo) {
+    if (typeof f[campo] !== 'string') invalido();
+  });
+  if (f.solicitacoesLidas > f.solicitacoesTotal || f.sumulasLidas > f.sumulasTotal) invalido();
+  const chaves = new Set();
+  dados.registros.forEach(function (registro) {
+    if (!objeto(registro) || typeof registro.chave !== 'string' || !registro.chave
+        || chaves.has(registro.chave) || typeof registro.nome !== 'string'
+        || typeof registro.cpf !== 'string') invalido();
+    chaves.add(registro.chave);
+    ['nascimento', 'tipo', 'equipeAtual', 'competicaoAtual', 'situacaoAtual', 'situacaoCadastro',
+      'situacaoDisciplina', 'situacaoElenco', 'ultimaMovimentacao', 'ultimaAcao', 'ultimaSolicitacaoSituacao',
+      'ultimaSolicitacaoProtocolo', 'ultimaSumulaData'].forEach(function (campo) {
+      if (typeof registro[campo] !== 'string') invalido();
+    });
+    ['totalMovimentacoes', 'pendenciasCadastro', 'aguardandoCadastro', 'falhasCadastro', 'totalPunicoes',
+      'punicoesACumprir', 'punicoesPendentes', 'totalSumulas'].forEach(function (campo) {
+      if (!contagem(registro[campo])) invalido();
+    });
+    ['vinculos', 'movimentacoes', 'punicoes', 'sumulas', 'equipesHistorico', 'competicoesHistorico',
+      'equipesAtuais', 'competicoesAtuais'].forEach(function (campo) {
+      if (!Array.isArray(registro[campo])) invalido();
+    });
+    ['vinculos', 'movimentacoes', 'punicoes', 'sumulas'].forEach(function (campo) {
+      if (!registro[campo].every(objeto)) invalido();
+    });
+    const detalhes = {
+      vinculos: ['id', 'registroId', 'situacao', 'campeonatoId', 'campeonatoNome', 'campeonatoNomeOriginal',
+        'campeonatoNomeRegistrado', 'temporada', 'campeonatoStatus', 'equipeId', 'equipeNome',
+        'equipeNomeOriginal', 'equipeNomeRegistrado', 'nome', 'apelido', 'posicao', 'cpf',
+        'dataNascimento', 'registradoEm', 'atualizadoEm'],
+      movimentacoes: ['protocolo', 'dataHora', 'situacaoSolicitacao', 'acao', 'tipo', 'equipe',
+        'competicao', 'competicaoAnterior', 'arquivoUrl', 'resultadoPdfUrl', 'resultadoTxtUrl'],
+      punicoes: ['nota', 'dataNota', 'competicao', 'dataJogo', 'partida', 'equipe', 'tipo',
+        'artigo', 'tempo', 'decisao', 'status', 'situacao', 'sumula'],
+      sumulas: ['situacao', 'protocolo', 'dataJogo', 'dataEnvio', 'confronto', 'equipe', 'tipo', 'pdfUrl', 'arquivoUrl']
+    };
+    Object.keys(detalhes).forEach(function (campo) {
+      registro[campo].forEach(function (detalhe) {
+        detalhes[campo].forEach(function (atributo) {
+          if (typeof detalhe[atributo] !== 'string') invalido();
+        });
+      });
+    });
+    registro.vinculos.forEach(function (vinculo) {
+      ['atual', 'ativo', 'noHistorico', 'campeonatoExcluido', 'equipeAssociada'].forEach(function (campo) {
+        if (typeof vinculo[campo] !== 'boolean') invalido();
+      });
+    });
+    ['equipesHistorico', 'competicoesHistorico', 'equipesAtuais', 'competicoesAtuais'].forEach(function (campo) {
+      if (!registro[campo].every(function (valor) { return typeof valor === 'string'; })) invalido();
+    });
+    if (!contagem(registro.totalVinculos) || !contagem(registro.vinculosAtuais)
+        || registro.totalVinculos !== registro.vinculos.length
+        || registro.vinculosAtuais !== registro.vinculos.filter(function (v) { return v.atual; }).length
+        || registro.totalMovimentacoes < registro.movimentacoes.length
+        || registro.totalPunicoes < registro.punicoes.length || registro.totalSumulas < registro.sumulas.length) invalido();
+  });
+  return dados;
+}
+
+function listarAtletas() {
+  exigirBancoAtletas_();
+  const estado = lerEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO);
+  if (!estado.currentId) {
+    throw new Error('O Banco de Atletas ainda não possui snapshot. Use Recalcular agora para a primeira geração.');
+  }
+  return medirFaseAtletaBanco_('snapshot', function () {
+    const arquivo = DriveApp.getFileById(estado.currentId);
+    if (arquivo.isTrashed() || !arquivoNaPastaRaiz_(arquivo)) {
+      throw new Error('Snapshot do Banco de Atletas indisponível. Use Recalcular agora.');
+    }
+    let dados;
+    try { dados = JSON.parse(arquivo.getBlob().getDataAsString('UTF-8')); }
+    catch (e) {
+      throw new Error('Não foi possível ler o snapshot do Banco de Atletas. Use Recalcular agora. Detalhe: ' + e.message);
+    }
+    validarSnapshotBancoAtletas_(dados);
+    if (dados.generatedAt !== estado.generatedAt) {
+      throw new Error('Snapshot do Banco de Atletas inválido. Use Recalcular agora.');
+    }
+    dados.snapshotStatus = statusBancoAtletas_(estado, lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA));
+    return dados;
+  });
+}
+
+function recalcularBancoAtletas() {
+  exigirBancoAtletas_();
+  return gerarSnapshotBancoAtletas_();
+}
+
+function gerarSnapshotBancoAtletas_() {
+  const token = Utilities.getUuid();
+  comLockBancoAtletas_(function () {
+    const estado = lerEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO);
+    const agora = Date.now();
+    if (estado.lease && estado.lease.expiresAt > agora) {
+      throw new Error('O Banco de Atletas já está sendo recalculado. Aguarde e use Atualizar para reler a cópia pronta.');
+    }
+    estado.lease = { token: token, expiresAt: agora + BANCO_ATLETAS_LEASE_MS };
+    estado.lastAttemptAt = new Date(agora).toISOString();
+    gravarEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO, estado);
+  });
+  let novoArquivo;
+  try {
+    // Não manter ScriptLock aqui: a reconciliação de histórico usa o mesmo lock.
+    const dados = construirBancoAtletas_();
+    dados.schema = 1;
+    dados.generatedAt = new Date().toISOString();
+    validarSnapshotBancoAtletas_(dados);
+    novoArquivo = pastaRaizProjeto_().createFile(Utilities.newBlob(JSON.stringify(dados),
+      'application/json', 'AEUV - Banco de Atletas - ' + token + '.json'));
+    const id = novoArquivo.getId();
+    // Confirma que o arquivo está completo antes de trocar o único ponteiro.
+    const confirmado = validarSnapshotBancoAtletas_(JSON.parse(novoArquivo.getBlob().getDataAsString('UTF-8')));
+    if (JSON.stringify(confirmado) !== JSON.stringify(dados)) throw new Error('A verificação do novo snapshot falhou.');
+    const resultado = comLockBancoAtletas_(function () {
+      const estado = lerEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO);
+      if (!estado.lease || estado.lease.token !== token || estado.lease.expiresAt <= Date.now()) {
+        throw new Error('O prazo do recálculo expirou ou outra execução assumiu a atualização. Tente novamente.');
+      }
+      // Publicação em uma única propriedade; jamais sobrescreve o arquivo anterior.
+      const anteriorObsoleto = estado.previousId;
+      estado.previousId = estado.currentId || '';
+      estado.currentId = id;
+      estado.generatedAt = dados.generatedAt;
+      estado.lastError = '';
+      delete estado.lease;
+      gravarEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO, estado);
+      return { generatedAt: dados.generatedAt, anteriorObsoleto: anteriorObsoleto || '' };
+    });
+    if (resultado.anteriorObsoleto) limparVersaoBancoAtletas_(resultado.anteriorObsoleto);
+    return { generatedAt: resultado.generatedAt };
+  } catch (erro) {
+    // A limpeza de estado não substitui a exceção original nem apaga leases alheios.
+    try {
+      comLockBancoAtletas_(function () {
+        const estado = lerEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO);
+        if (estado.lease && estado.lease.token === token) {
+          delete estado.lease;
+          estado.lastError = 'O último recálculo falhou. A cópia anterior foi preservada; tente Recalcular agora.';
+          gravarEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO, estado);
+        }
+      });
+    } catch (falhaEstado) {
+      console.log('Banco de Atletas: não foi possível registrar o estado da falha.');
+    }
+    if (novoArquivo) {
+      try { limparVersaoBancoAtletas_(novoArquivo.getId()); }
+      catch (falhaLimpeza) { console.log('Banco de Atletas: arquivo não publicado aguardando limpeza administrativa.'); }
+    }
+    throw erro;
+  }
+}
+
+function limparVersaoBancoAtletas_(id) {
+  // Apenas IDs desta rotina; nunca enumera ou remove outros arquivos da pasta.
+  // A publicação já ocorreu: falha de limpeza não transforma sucesso em falha.
+  try {
+    comLockBancoAtletas_(function () {
+      const estado = lerEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO);
+      if (id === estado.currentId || id === estado.previousId) return;
+      const arquivo = DriveApp.getFileById(id);
+      if (arquivoNaPastaRaiz_(arquivo)) arquivo.setTrashed(true);
+    });
+  } catch (e) {
+    console.log('Banco de Atletas: uma versão obsoleta não pôde ser removida; cópias publicadas preservadas.');
+  }
+}
+
+function exigirDonoAgendaBancoAtletas_(sessao, agenda) {
+  const efetivo = normalizarEmail_(Session.getEffectiveUser().getEmail());
+  if (!efetivo || efetivo !== sessao.email || (agenda.owner && agenda.owner !== efetivo)) {
+    throw new Error('O agendamento pertence a outra conta. Somente o administrador responsável pode configurar ou desativar seus próprios gatilhos.');
+  }
+  return efetivo;
+}
+
+function validarGatilhoAgendado_(sessao, agenda, handler, evento, mensagemErro) {
+  exigirDonoAgendaBancoAtletas_(sessao, agenda);
+  const uid = evento && evento.triggerUid != null ? String(evento.triggerUid) : '';
+  const encontrado = !!agenda.triggerId && !!uid && ScriptApp.getProjectTriggers().some(function (trigger) {
+    return String(trigger.getUniqueId()) === uid
+      && trigger.getHandlerFunction() === handler
+      && trigger.getEventType() === ScriptApp.EventType.CLOCK;
+  });
+  if (!encontrado) throw new Error(mensagemErro);
+}
+
+function configurarAgendamentoBancoAtletas() {
+  const sessao = exigirAdministracao_();
+  return comLockBancoAtletas_(function () {
+    const agenda = lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA);
+    const owner = exigirDonoAgendaBancoAtletas_(sessao, agenda);
+    // getProjectTriggers só mostra gatilhos do usuário atual, nunca de outros donos.
+    const proprios = ScriptApp.getProjectTriggers().filter(function (trigger) {
+      return trigger.getHandlerFunction() === BANCO_ATLETAS_HANDLER && trigger.getEventType() === ScriptApp.EventType.CLOCK;
+    });
+    const trigger = proprios.find(function (item) { return String(item.getUniqueId()) === agenda.triggerId; })
+      || proprios[0]
+      || ScriptApp.newTrigger(BANCO_ATLETAS_HANDLER).timeBased().everyMinutes(15).create();
+    gravarEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA, {
+      owner: owner, triggerId: String(trigger.getUniqueId()), installedAt: new Date().toISOString()
+    });
+    proprios.forEach(function (item) {
+      if (item.getUniqueId() !== trigger.getUniqueId()) ScriptApp.deleteTrigger(item);
+    });
+    return statusBancoAtletas_(lerEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO), lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA));
+  });
+}
+
+function desativarAgendamentoBancoAtletas() {
+  const sessao = exigirAdministracao_();
+  return comLockBancoAtletas_(function () {
+    const agenda = lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA);
+    exigirDonoAgendaBancoAtletas_(sessao, agenda);
+    ScriptApp.getProjectTriggers().filter(function (trigger) {
+      return trigger.getHandlerFunction() === BANCO_ATLETAS_HANDLER && trigger.getEventType() === ScriptApp.EventType.CLOCK;
+    }).forEach(function (trigger) { ScriptApp.deleteTrigger(trigger); });
+    PropertiesService.getScriptProperties().deleteProperty(BANCO_ATLETAS_AGENDA);
+    return statusBancoAtletas_(lerEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO), {});
+  });
+}
+
+function atualizarBancoAtletasAgendado(evento) {
+  const sessao = exigirAdministracao_();
+  const agenda = lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA);
+  validarGatilhoAgendado_(sessao, agenda, BANCO_ATLETAS_HANDLER, evento,
+    'Gatilho do Banco de Atletas não configurado para esta conta.');
+  return gerarSnapshotBancoAtletas_();
+}
+
+function construirBancoAtletas_() {
+  exigirBancoAtletas_();
+
+  const elenco = medirFaseAtletaBanco_('elenco', vinculosAtletasElenco_);
+  const dadosSolicitacoes = medirFaseAtletaBanco_('solicitacoes', function () { return lerSolicitacoes_(true); });
+  const dadosPunicoes = medirFaseAtletaBanco_('punicoes', listarPunicoes);
+  const dadosSumulas = medirFaseAtletaBanco_('sumulas', function () { return lerSumulas_(true); });
+  return medirFaseAtletaBanco_('consolidacao', function () {
+    return consolidarAtletasBanco_(elenco, dadosSolicitacoes, dadosPunicoes, dadosSumulas);
+  });
+}
+
+function consolidarAtletasBanco_(elenco, dadosSolicitacoes, dadosPunicoes, dadosSumulas) {
   const mapa = {};
   const lista = [];
   const indiceNome = {};
@@ -6718,6 +7921,8 @@ function listarAtletas() {
 function vinculosAtletasElenco_() {
   const lock = LockService.getScriptLock();
   const cache = {};
+  // Apenas listas desta reconciliação; não representa contexto autorizado nem reutiliza handles.
+  const recursos = {};
   let historico;
   let campeonatos;
   let equipes;
@@ -6725,9 +7930,9 @@ function vinculosAtletasElenco_() {
   lock.waitLock(30000);
 
   try {
-    historico = prepararHistoricoElenco_(cache);
-    campeonatos = campeonatos_();
-    equipes = equipesRegistro_(true);
+    historico = prepararHistoricoElenco_(cache, recursos);
+    campeonatos = recursos.campeonatos;
+    equipes = recursos.equipes;
   } finally {
     lock.releaseLock();
   }

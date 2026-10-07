@@ -322,7 +322,7 @@ test('acao administrativa processa lotes sequenciais e informa interrupcoes', as
     const selector = { value: '', disabled: false, isConnected: true };
     const c = vm.createContext({
       confirmacaoElencoAtual: false, moduloAtual: 'administracao', CONFIG: { usuario: { perfil: 'admin' } },
-      administracaoOcupada_: false,
+      administracaoOcupada_: false, administracaoSnapshotOcupada_: false,
       administracaoFontes_: [{ tipo: 'equipes', rotulo: 'Equipes' }, { tipo: 'atletas', rotulo: 'Atletas' }],
       document: { getElementById: id => id === 'adminCampeonato' ? selector
         : id === 'avisoAdministracao' ? notice : area },

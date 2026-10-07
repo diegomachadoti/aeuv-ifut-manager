@@ -29,6 +29,34 @@ test('desligar metricas elimina logs e calculo de tamanho sem mudar persistencia
   assert.equal(h.logs.length, 0);
 });
 
+test('totais ponta a ponta medem abrir elenco, salvar e remover pela flag comum', () => {
+  const h = harness();
+  h.c.listarElenco('c1', 'e1');
+  for (const phase of ['listar_elenco_total', 'listar_elenco_espera_lock', 'listar_elenco_montar_resposta']) {
+    assert(h.logs.some(log => log.fase === phase), phase);
+  }
+  const criado = h.c.salvarCadastroElenco(h.payload('atletas'));
+  assert(h.logs.some(log => log.fase === 'adicionar_atleta_total'));
+  const idAtleta = criado.registros[0].atletas[0].id;
+  const payloadEdicao = h.payload('atletas', true);
+  payloadEdicao.registroId = idAtleta;
+  payloadEdicao.atletaId = idAtleta;
+  h.c.salvarCadastroElenco(payloadEdicao);
+  assert(h.logs.some(log => log.fase === 'editar_atleta_total'));
+  h.c.removerCadastroElenco({
+    campeonatoId: 'c1', equipeId: 'e1', tipo: 'atletas', registroId: criado.registros[0].atletas[0].id
+  });
+  assert(h.logs.some(log => log.fase === 'remover_elenco_total'));
+  for (const log of h.logs.filter(item => [
+    'listar_elenco_total', 'adicionar_atleta_total', 'editar_atleta_total', 'remover_elenco_total'
+  ].includes(item.fase))) {
+    assert.deepEqual(Object.keys(log).sort(), ['duracaoMs', 'fase', 'metrica']);
+    assert.equal(log.metrica, 'cadastro_elenco');
+    assert(Number.isFinite(log.duracaoMs) && log.duracaoMs >= 0);
+    assert(!JSON.stringify(log).includes('Equipe A'));
+  }
+});
+
 for (const tipo of ['atletas', 'comissao']) {
   for (const edit of [false, true]) {
     test(`${tipo} ${edit ? 'edicao' : 'criacao'} reduz leituras e responde com dados persistidos`, () => {
@@ -717,7 +745,8 @@ test('leitura legada e criacao de lista sao medidas sem novas leituras e limpeza
     h.files.delete(nome);
     let reads = 0, deletes = 0;
     h.c.PropertiesService.getScriptProperties = () => ({
-      getProperty: () => { reads++; return raw; }, deleteProperty: () => { deletes++; }
+      getProperty: () => { reads++; return raw; }, deleteProperty: () => { deletes++; },
+      setProperty: (key, value) => h.properties.set(key, value)
     });
     const lista = h.c.lerListaCadastroDrive_(nome, 'legacy', {}, 'atletas');
     assert.equal(reads, 1);

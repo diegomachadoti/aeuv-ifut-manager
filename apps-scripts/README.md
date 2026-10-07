@@ -57,6 +57,15 @@ correspondente no provedor de DNS e atualizar a tabela acima; os caminhos
 
 ## Publicação e permissões
 
+O sistema interno inclui um **indice privado de validacao de CPF/participacao**,
+atualizado nas gravacoes sincronas e reconciliado por agenda independente de
+cinco minutos. Requer o servico avancado **Drive v3** declarado no manifesto;
+nao muda a identidade de execucao nem compartilhamento. Para primeira geracao,
+autorizacao, limites, fallback e controles Admin, consulte
+[Indice privado de validacao](sistema-interno/campeonato/README.md#indice-privado-de-validacao-cpf-e-participacao).
+As agendas de tabela, participantes e Banco de Atletas permanecem independentes
+e nao sao desativadas por essa manutencao.
+
 Repita estes passos para cada aplicativo:
 
 1. Crie um projeto independente em [Google Apps Script](https://script.google.com/).
@@ -555,7 +564,9 @@ Banco de Dados de Atletas e Usuários do sistema.
 #### Banco de Dados de Atletas
 
 Consulta somente leitura (admin/diretoria; a permissão é verificada antes de
-qualquer leitura). `listarAtletas()` reúne:
+qualquer leitura). `listarAtletas()` lê **somente o snapshot pronto**, nunca
+as fontes nem a reconciliação do histórico. O construtor interno
+`construirBancoAtletas_()`, usado no recálculo manual/programado, reúne:
 
 - **todos os atletas dos elencos de todos os campeonatos**, inclusive cadastros
   inativos, sem equipe informada ou de equipes fora da lista atual de associadas;
@@ -583,10 +594,235 @@ solicitações, punições e súmulas do atleta. Filtros: busca por nome, apelid
 ou CPF, equipe, competição e tipo de vínculo. A lista mostra CPF mascarado;
 o completo aparece só no detalhe. Fotos e RG não saem do servidor.
 
-A consulta reconcilia o histórico permanente sob o ScriptLock (o mesmo
+A tabela usa **paginação local**, inicialmente 25 atletas por página, com
+opção de 50 e navegação Anterior/Próxima indicando página e intervalo.
+Todos os filtros e indicadores consideram o conjunto carregado inteiro,
+antes do recorte da página; nenhum filtro se limita aos atletas visíveis.
+Trocar filtros ou atualizar reinicia na primeira página. Detalhes abertos
+ficam associados ao atleta original ao navegar ou filtrar, mas só são
+renderizados quando o atleta está na página visível; atualizar os fecha.
+Paginar, filtrar e expandir não fazem RPC adicional nem nova consolidação.
+**Atualizar** relê a cópia pronta, sem recalcular; a busca recebida de outro módulo continua
+aplicada após carregar os dados.
+
+O **recálculo**, não a abertura da tela, reconcilia o histórico permanente sob o ScriptLock (o mesmo
 processo das importações de elenco, podendo gravar o histórico e IDs
 legados) e libera o lock antes de ler as fontes legadas. Falhas de leitura
-são exibidas como erro, sem lista parcial.
+são exibidas como erro, sem publicar uma lista parcial. **Recalcular agora**
+refaz todas as fontes atuais e publica a cópia completa; admin/diretoria
+podem acioná-lo, com nova verificação de permissão no servidor. A ação longa
+tem aviso próprio, impede repetição/navegação durante a execução e, no sucesso,
+relê a cópia publicada e reinicia paginação/detalhes.
+
+A tela informa **última atualização**, agendamento registrado, estimativa
+aproximada de próxima tentativa, recálculo em andamento e último erro
+sanitizado. A estimativa não é um horário garantido; se vencida há um aviso
+para conferir gatilhos/permissões/quotas. Sem snapshot, exibe mensagem explícita
+e o botão para primeira geração. Snapshot corrompido/incompleto é erro com
+possibilidade de recálculo, não uma lista vazia nem fallback silencioso às fontes.
+Se o recálculo falhar, a cópia anterior conserva o timestamp e o erro original
+é propagado (inclusive nas Execuções do gatilho); não há sucesso parcial.
+
+Este é um **modelo de leitura compartilhado somente por admin/diretoria**,
+que aceita dados defasados. Não valida transações: inscrição, edição, remoção,
+transferência, punições e demais endpoints continuam usando seus dados atuais,
+locks e guardas existentes, **nunca este snapshot**. Não há polling automático
+da tela nem atualização automática do navegador após um gatilho.
+
+##### Ativação do snapshot programado de atletas
+
+1. Atualizar **Index.html e WebApp.gs juntos** no projeto Sistema Interno,
+   gerar nova versão da implantação existente, mantendo execução como
+   **usuário que acessa**. Autorizar os novos escopos de gatilhos quando solicitado.
+2. Entrar como admin (ou diretoria), abrir **Banco de Dados de Atletas** e usar
+   **Recalcular agora** para a primeira geração. Conferir o timestamp da cópia
+   pronta antes de considerá-la disponível.
+3. Entrar como **admin responsável**, com acesso às pastas de todas as fontes
+   e à raiz privada do projeto, abrir **Administração** e clicar
+   **Configurar agendamento**. Alternativa no editor, com a mesma conta
+   admin: executar `configurarAgendamentoBancoAtletas()` uma vez e autorizar.
+   Configurar não gera a primeira cópia; não é executado automaticamente ao publicar.
+4. Nas **Execuções/Gatilhos** do Apps Script, conferir
+   `atualizarBancoAtletasAgendado`, definir/conferir o intervalo desejado e
+   acompanhar seu primeiro sucesso. A interface informa se o agendamento está
+   registrado, mas não consegue detectar alterações de intervalo feitas no editor.
+   O botão reutiliza o gatilho registrado; se precisar criar um novo, confira
+   novamente a frequência em **Acionadores**. Execuções estão sujeitas a quotas
+   de Drive, tempo de execução e tempo diário de gatilhos da conta criadora.
+   Uma consolidação que ultrapasse o limite de execução não substitui a cópia pronta.
+
+Configurar novamente reutiliza o gatilho registrado da própria conta e remove
+apenas duplicatas próprias desse handler de relógio. Não toca gatilhos de outros
+handlers/eventos/usuários. **Desativar meu agendamento** é admin-only e exige
+a mesma conta responsável. O Apps Script só permite enxergar os gatilhos do
+usuário atual: o status compartilhado mostra a configuração registrada, não
+garante a presença de um gatilho que outra pessoa apagou no editor. Se o dono
+apagou o gatilho, configurar novamente com essa conta recria-o. Antes de revogar
+o acesso do dono, desativar por essa conta; não há tomada automática de gatilhos
+alheios. Se a conta ficou indisponível, a troca de responsável exige intervenção
+deliberada do administrador do projeto nas propriedades/gatilhos, não este botão.
+Cada disparo valida novamente a conta efetiva do criador e seu perfil admin;
+a ausência de sessão ativa usa o fallback efetivo já existente na identificação.
+Conta revogada/rebaixada, dono diferente ou UID não registrado são rejeitados,
+sem acesso às fontes. Se o gatilho for removido e recriado diretamente no editor,
+os disparos só serão aceitos quando o UID corresponder a um acionador CLOCK ativo
+do mesmo handler e pertencente à conta responsável. **Configurar agendamento**
+reutiliza esse acionador existente, sincroniza seu UID e remove duplicatas próprias,
+sem substituir a frequência configurada no editor. Confira a falha nas Execuções
+se nenhum acionador correspondente estiver ativo.
+
+O JSON versionado contém `schema: 1`, `generatedAt` ISO e o mesmo contrato
+consolidado (`registros`, `total`, `fontes`, contagens e detalhes/recortes legados).
+É gravado como arquivo **imutável** `AEUV - Banco de Atletas - <UUID>.json`
+na raiz privada já usada pelo projeto, com CPF completo e as mesmas permissões
+dos dados existentes; não mudar para compartilhamento público nem expor URLs
+do snapshot. Um único ponteiro nas Script Properties é trocado sob lock apenas
+após escrita e releitura validadas; o arquivo anterior nunca é sobrescrito.
+Normalmente ficam a versão atual e a anterior; somente o ID obsoleto conhecido
+é enviado à lixeira após publicar. Falhas de limpeza não anulam a publicação
+e geram aviso técnico sanitizado; interrupção/quotas podem deixar órfãos,
+que exigem limpeza administrativa preservando os IDs `currentId`/`previousId`
+da propriedade `BANCO_ATLETAS_SNAPSHOT_V1`. A lixeira também consome espaço
+até ser esvaziada pela manutenção habitual do Drive.
+
+O recálculo usa lease persistida de UUID por dez minutos, adquirida/publicada
+com ScriptLock curto; libera-o **antes** da consolidação, evitando deadlock com
+o lock de histórico. Expiração permite recuperação após interrupção; uma
+execução antiga não publica nem remove a lease de outra. Metadados de estado
+e agenda ficam separados do JSON; último erro persistido é genérico, sem
+nomes/CPF/conteúdo. Não há cache de dados de negócio entre usuários.
+
+Campeonatos, equipes e listas de elenco já lidos na reconciliação são
+reutilizados **somente nessa operação**. Não há cache de conteúdo entre
+usuários, contexto autorizado artificial nem reutilização de handles sem
+contexto validado. A varredura histórica continua global, incluindo comissão
+para preservar o histórico; somente atletas entram na resposta. A paginação
+não reduz a leitura durante o recálculo, o payload completo ou os limites já existentes
+das fontes legadas/detalhes: não é paginação de backend nem detalhe sob demanda.
+
+Solicitações e súmulas usam os mesmos leitores/parsers das telas completas,
+com uma **projeção interna** para a consolidação. A autorização de cada módulo
+continua verificada na própria leitura. Nomes de arquivos já encontrados são
+reutilizados; o índice de resultados continua varrido integralmente, mas só
+resolve URLs dos resultados das solicitações selecionadas pelo limite legado.
+URLs de solicitações, resultados TXT/PDF e súmulas permanecem no histórico
+do atleta, pois são usadas no detalhe. As súmulas não repetem a leitura do
+controle de punições para montar notas/punidos que a consolidação não utiliza;
+punições continuam sendo lidas pela fonte própria. Comprovantes, telefone,
+relato e dados da arbitragem não são projetados. As telas de solicitações e
+súmulas mantêm seus contratos completos, incluindo anexos e notas.
+Nenhuma fonte, TXT selecionado, vínculo ou reconciliação histórica é eliminado.
+
+`CADASTRO_METRICAS_ATIVAS = true` em `WebApp.gs` também habilita os tempos
+`atleta_banco` no recálculo: `elenco`, `solicitacoes`, `punicoes`, `sumulas` e `consolidacao`.
+Na consulta pronta, apenas a fase `snapshot` mede leitura/validação da cópia.
+Cada fase mede apenas sua operação, sem sobrepor as outras quatro.
+As fontes de solicitações/súmulas também emitem subfases agregadas por categoria,
+com duração, quantidades e bytes UTF-8 dos TXT já lidos, nunca caminhos, URLs,
+nomes, IDs, CPF ou conteúdo. `leitura` inclui todas as subfases da fonte;
+`metadados` está dentro de `interpretar`. Não somar filhos aos pais nem somar
+essas etapas às cinco fases principais. Etapas internas `cadastro_elenco`
+estão incluídas em `elenco`. Definir a flag como `false` desliga os dois grupos,
+inclusive cálculos de tamanho, sem mudar regras, IO ou resultados.
+Veja fases e contagens do fixture em `sistema-interno/performance/README.md`.
+Para operações do elenco, os pais `listar_elenco_total`,
+`adicionar_atleta_total`, `editar_atleta_total`, `remover_elenco_total` e
+`transferencia_total` medem o
+tempo de ponta a ponta no servidor. Consulte as subfases `cadastro_elenco`
+para separar espera do lock, validações, histórico e gravações; os totais são
+inclusivos e não devem ser somados às suas próprias subfases.
+Os 13,340 s de solicitações e 3,807 s de súmulas observados antes não distinguem
+varredura, abertura dos TXT e metadados; a nova instrumentação permite separá-los.
+O ganho de latência real permanece **não medido**, sem promessa de redução.
+
+Para disponibilizar a mudança, atualizar **Index.html e WebApp.gs** juntos no
+projeto do Sistema Interno e gerar uma nova versão da implantação existente.
+Os testes locais não estimam a latência real; nenhuma implantação é realizada
+pelo executor de testes.
+
+#### Cópias de Equipes Participantes e Tabela de Classificação
+
+As listas `listarEquipesParticipantes(campeonatoId)` e
+`listarTabelaCampeonato(campeonatoId)` consultam **cópias prontas por campeonato**.
+**Atualizar** apenas relê a cópia; **Recalcular agora** é exclusivo de
+admin/diretoria. A tela informa timestamp, recálculo em andamento, erro e
+alterações pendentes. Sem cópia há erro explícito, nunca cálculo automático
+durante a consulta. Em Administração, o admin pode selecionar cada campeonato
+e gerar sua primeira cópia, inclusive quando a lista ainda não abre.
+
+Publicar **WebApp.gs e Index.html juntos**, preservando o escopo
+`script.scriptapp` do manifesto. Depois, com a conta **admin responsável**
+atual, efetiva e com acesso à raiz privada/fontes do Drive:
+
+1. Em **Administração**, selecionar cada campeonato nas duas categorias e usar
+   **Recalcular campeonato agora**; conferir o timestamp.
+2. Configurar separadamente as agendas:
+   - Tabela: `configurarAgendamentoTabela()` /
+     `atualizarTabelaAgendada`;
+   - Participantes: `configurarAgendamentoParticipantes()` /
+     `atualizarParticipantesAgendado`;
+   - Banco de Atletas mantém sua agenda existente.
+3. Conferir as Execuções/Gatilhos reais. Os testes locais não instalam gatilhos,
+   não publicam e não consultam nem escrevem dados reais.
+
+O código define uma frequência padrão apenas quando precisa criar um gatilho
+novo. A frequência que vale é a exibida/configurada em **Apps Script >
+Acionadores**; a interface do sistema não consegue detectar alterações feitas
+diretamente nessa tela. Após criar ou alterar um gatilho, confira ali o intervalo.
+
+Configuração é idempotente por categoria: reutiliza o UID registrado ou, se o
+gatilho foi recriado no editor, adota um CLOCK existente do mesmo handler; remove
+somente duplicatas CLOCK do **próprio usuário e handler correspondente**.
+Desativar uma agenda não afeta as outras. Conta diferente do dono, perfil
+revogado/rebaixado, UID inexistente ou acionador de outro handler são recusados.
+O registro de agenda não prova que um gatilho apagado externamente ainda exista;
+o dono deve configurar novamente ou criar um acionador CLOCK para o handler.
+Não há transferência automática de propriedade.
+
+Os três acionadores compartilham quotas/runtime/ScriptLock; separá-los **não
+garante atualização em um intervalo específico**. Cada execução esportiva verifica
+um orçamento de **210 segundos antes de começar outro campeonato**, com
+checkpoint persistido antes de cada tentativa e rodízio no disparo seguinte.
+Um único campeonato ainda pode atingir o limite do Apps Script. A lease por
+categoria dura dez minutos; execução interrompida impede novas gerações dessa
+categoria até expirar, sem substituir cópias publicadas. Erros por campeonato
+preservam sua cópia, registram status sanitizado e permitem tentar os demais.
+Ao final, se alguma tentativa falhou, a execução do acionador é sinalizada
+como erro; as cópias dos campeonatos atualizados com sucesso permanecem publicadas.
+As fontes externas são sempre relidas a cada geração visitada, mesmo sem
+marcação local; não há detecção imediata de alterações feitas fora do sistema.
+
+Os cálculos/regras existentes foram preservados. Edição de jogos, campos,
+grupos, critérios e desempates carrega o contexto atual; se a revisão mudou,
+a tela avisa e pede conferir/reabrir a edição. Resultados/súmulas/elencos e
+retornos de mutações continuam atuais. A revisão otimista existente recusa
+gravação com contexto antigo, mesmo se a cópia permanece defasada.
+`carregarTabelaCampeonatoAtual` e `carregarEquipesParticipantesAtual` são
+endpoints vivos reautenticados de admin/diretoria, não caminhos para evitar
+permissões; associado não pode recalcular nem chamar o builder vivo da lista.
+
+Participantes conserva autorização atual em **toda consulta**: perfil,
+identidade da equipe, campeonatos/vínculos e bloqueios são relidos; associado
+recebe somente sua identidade atualmente vinculada e nunca equipes globais.
+Contagens/escudos vêm da cópia, mas ela não concede acesso. Equipes sem resumo
+após novo vínculo aguardam recálculo, com aviso explícito; **Gerenciar elenco**
+continua consultando os dados atuais. Não foi criado cache de autorização.
+
+Gravações de listas/cadastros, participantes, registro/equipes e bloqueios
+marcam uma revisão compartilhada conservadora das duas categorias. Isso pode
+indicar pendência também em campeonatos/categorias não afetados diretamente.
+A publicação guarda a revisão capturada no início: writes durante a geração
+continuam pendentes, nunca são apagados pela troca da cópia.
+
+Cada JSON `AEUV - Copia <categoria> - <campeonato> - <UUID>.json` é imutável
+na raiz **privada**, validado e relido antes da troca de um único ponteiro por
+campeonato. Estado: `SNAPSHOT_ESPORTIVO_V1_<categoria>_campeonato_<id>`; agenda
+e lease usam propriedades `_meta_agenda` e `_meta_execucao`.
+Normalmente são conservadas atual e anterior; a limpeza só remove o ID
+obsoleto conhecido, jamais enumera a pasta. Falhas/interrupções podem deixar
+órfãos/lixeira: manutenção administrativa deve preservar `currentId` e
+`previousId`, não apagar arquivos de cadastro/histórico. Não compartilhar
+arquivos de cópia publicamente nem expor seus IDs/URLs na tela.
 
 #### Atas de reuniões
 
@@ -1422,6 +1658,16 @@ em `ASSOCIADOS_PERFIS_EDICAO` e é verificada de novo no servidor, dentro de
 > então a gravação acontece com a conta de quem está usando a tela. Admins e
 > diretoria precisam de acesso de **Editor** à pasta `AEUV - Automação`; quem só
 > consulta precisa de **Leitor**. Sem isso a tela abre, mas falha ao salvar.
+
+No gerenciamento de elenco, uma falha de confirmação da gravação ou da
+atualização do histórico exige **Recarregar elenco** antes de outra alteração.
+O aviso substitui mensagens anteriores; erros de validação comuns continuam
+permitindo corrigir o formulário. A releitura não corrige permissões do Drive.
+Se um associado receber `Acesso negado: DriveApp`, conferir a autorização
+Google e o acesso de edição da conta ao arquivo de elenco afetado, pois o
+perfil do sistema não concede permissões Google. Não compartilhar a pasta
+raiz inteira nem trocar a identidade de execução como atalho; acesso direto
+de Editor ao JSON também permite alterar dados fora das regras do sistema.
 
 #### Quando a tela acusa erro
 

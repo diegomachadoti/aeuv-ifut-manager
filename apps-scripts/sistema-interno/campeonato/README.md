@@ -23,6 +23,98 @@ de pontuação/desempate no contexto do campeonato selecionado.
 
 ### Consultas e desempenho
 
+#### Indice privado de validacao (CPF e participacao)
+
+O cadastro, a edicao, a exclusao, a importacao e a transferencia continuam
+**sincronos**, sob o `ScriptLock` existente. Nao ha fila de solicitacoes.
+Por campeonato, o indice guarda apenas CPF normalizado, ID, chave de equipe
+e equipes/ordem da evidencia de participacao por **ID OU CPF**. Inclui os
+IDs/CPFs dos snapshots antigos de resultados, nao apenas os do elenco atual.
+Somente resultado detalhado valido de jogo encerrado com `participou === true`
+conta. Corrigir resultados ou excluir jogos substitui toda a evidencia de
+participacao daquele campeonato, retirando tambem a evidencia antiga.
+
+O payload fica em **Script Properties privadas**, nunca em arquivo compartilhado,
+CacheService global, resposta ao associado ou log. Nomes, fotos e historico
+nao entram no indice. As partes imutaveis de cada geracao usam no maximo 8.000
+bytes UTF-8; digest e token no unico metadado publicado confirmam a geracao
+completa. O limite global do indice e 180.000 bytes, com reserva para nao
+ultrapassar 450.000 bytes de propriedades totais (quota do servico: 500 KB,
+9 KB por valor). Se nao couber, nao ha truncamento: a fonte permanece
+obrigatoria. Geracoes antigas/orfas sao limpas na proxima publicacao e indices
+de campeonatos excluidos sao removidos sem tocar outras propriedades.
+
+Antes de usar uma parte do indice, o servidor confere **ID, nome, pasta,
+lixeira, versao monotona e MD5 atuais** da fonte usando o servico avancado
+**Drive v3**; fontes legadas/ausentes sao verificadas novamente, sem cache
+negativo. A conferencia de CPF entre categorias consulta a fonte da outra
+categoria; a de participacao consulta a tabela. Reuso ocorre somente na
+mesma operacao sob lock. Permissoes, equipe ativa, vinculo ao campeonato,
+bloqueios, propriedade do registro, duplicatas/nome similar no elenco atual
+e regras de remocao de equipes continuam usando as verificacoes vivas
+originais. O indice nao autoriza acesso.
+
+Toda gravacao relevante marca o indice **dirty antes** da fonte, no mesmo
+lock. Depois da fonte persistir, substitui somente a categoria alterada
+(ou a participacao completa para tabelas), confere o checksum escrito e as
+versoes das demais fontes, escreve/confere as partes e publica um unico
+metadado. Se os dados compactos nao mudaram (por exemplo, apenas foto/nome),
+reaproveita a geracao verificada e atualiza somente o metadado das fontes.
+Se a marcacao previa falhar, a fonte nao e gravada. Se a manutencao
+falhar depois de a fonte persistir, nao transforma o cadastro salvo em erro:
+o indice permanece pendente e a validacao volta a fonte. As mensagens e a
+recuperacao de falha parcial do **historico** continuam como antes.
+
+**Instalar e operar:**
+
+1. Copie os arquivos atualizados e o manifesto para o projeto GAS do sistema
+   interno. Confirme **Servicos > Drive API v3** (declarado no manifesto).
+   Se usar projeto Cloud padrao proprio, habilite tambem Google Drive API nele.
+   Nao mude `USER_ACCESSING`, permissoes de arquivos ou compartilhamento.
+2. Autorize a conta administradora com acesso a todas as fontes. Em
+   **Admin > Indice privado de validacao**, use **Reconciliar agora** para a
+   primeira geracao; confira timestamp, falhas e pendencias. Sem geracao ou
+   Drive v3 disponivel, as validacoes originais continuam obrigatorias.
+3. Use **Configurar agendamento**. O handler independente e
+   `reconciliarIndicesValidacaoAgendado`; confira sua execucao e o intervalo em
+   **Apps Script > Acionadores**. A interface nao detecta mudancas feitas la.
+   O gatilho precisa pertencer ao administrador responsavel e continuar usando
+   o handler CLOCK correto; se for recriado no editor, o proximo disparo valido
+   continua funcionando e **Configurar agendamento** sincroniza seu UID sem
+   substituir o intervalo. Somente o dono administrador pode configurar/
+   desativar seus gatilhos. Outros handlers nao sao alterados.
+4. **Desativar meu agendamento** remove somente esta agenda, nao desliga
+   atualizacoes incrementais nem validacoes. Para falhas, confira o status
+   independente, autorizacao, fontes e quotas, corrija e reconcilie novamente.
+   Os logs `indice_validacao` registram apenas a etapa/fallback, sem PII.
+
+O contador de pendencias da tela corresponde a marcacao local do metadado,
+nao a uma certificacao de frescor das fontes. A conferencia obrigatoria
+acontece durante cada validacao e durante a reconciliacao.
+
+A agenda confere fontes externas e repara indices pendentes conforme o intervalo
+configurado em **Acionadores**. Indices ja atuais nao sao regravados nem adquirem lock.
+Leituras/construcao completas ficam **fora do ScriptLock**; somente
+conferencia final e publicacao usam `tryLock(1)`. Se ocupado ou se fontes/
+checkpoint mudarem, adia em vez de esperar ou publicar dados obsoletos.
+Ha orcamento de tres minutos e rodizio entre campeonatos; a periodicidade
+nao garante que toda a base termine em um unico disparo. Falhas por campeonato
+ficam no status e fazem a execucao agendada sinalizar erro.
+
+**Nao se usa a janela de cinco minutos para autorizar mutacoes.** Uma versao
+divergente, payload incompleto/corrompido, fonte sem acesso ou falha de
+conferencia exige leitura viva (que pode recusar a operacao). O ScriptLock
+coordena escritas deste projeto, nao edicoes manuais no Drive ou outros
+projetos: nao cria transacao atomica com escritores externos. Evite editar
+fontes manualmente enquanto ha operacoes em andamento; o proximo uso
+confere novamente suas versoes, independentemente do gatilho.
+
+A preparacao historica global e as fotos nas respostas permanecem; o indice
+nao elimina seu custo. As conferencias de metadados e escritas de propriedades
+tambem tem custo e quotas. Compare capturas de ponta a ponta da mesma operacao
+antes/depois de publicar; tempos de fases intercaladas e duracao de execucao
+da UI nao permitem prever uma reducao em segundos.
+
 - **Equipes participantes** retorna os campeonatos permitidos para o seletor,
   mas carrega cards e contagens somente do campeonato selecionado. Trocar o
   campeonato faz uma nova consulta; voltar do elenco mantém a seleção.
@@ -38,8 +130,9 @@ de pontuação/desempate no contexto do campeonato selecionado.
 - As alterações de elenco reutilizam as listas já lidas na reconciliação
   histórica. A reconciliação global, os snapshots, a recuperação após falhas e
   as verificações de participação continuam ativos.
-- Não há cache persistente de permissões, elencos ou tabelas; só IDs de
-  arquivos ficam memorizados por usuário (veja **IDs de arquivos entre chamadas**).
+- Não há cache persistente de permissões ou respostas de elencos/tabelas.
+  Além dos IDs de arquivos por usuário, há o índice privado validado por
+  versões das fontes descrito acima (veja **IDs de arquivos entre chamadas**).
   Fotos do elenco continuam sendo enviadas na consulta e na resposta de
   cadastro/remoção/transferência; bases com imagens grandes ainda podem ter
   custo significativo nesses fluxos.
@@ -61,8 +154,9 @@ dados frescos antes de qualquer escrita, inclusive histórica. O time gravado
 é forçado pelo nome da equipe assim validada, nunca pelo payload. Consultas
 mantêm seus fluxos; os endpoints
 legados de atletas/comissão continuam restritos a admin/diretoria e validam o
-time informado. Não há cache de dados global nem entre
-requisições (apenas IDs de arquivos, descritos abaixo). A resposta só reutiliza recursos vinculados ao contexto
+time informado. O índice privado entre requisições é conferido contra as
+fontes atuais antes de uso; ele não contém autorização nem fotos.
+A resposta só reutiliza recursos vinculados ao contexto
 produzido pela revalidação sob lock; qualquer outro contexto relê bloqueio,
 destinos e participação. Fotos são mantidas.
 
@@ -163,7 +257,11 @@ Contadores `tamanho_json` têm
 `origem` (`drive`/`legado`), `bytesJson` e `registros` para listas ou
 `participacoes`/`inscricoes` para histórico. Não registram nomes, arquivos,
 IDs, CPF, fotos, payloads ou conteúdo de erros.
-As fases são `espera_lock`, `validacao_leitura`, `preparacao_historico`,
+Os totais ponta a ponta são `listar_elenco_total`,
+`adicionar_atleta_total`, `editar_atleta_total`, `remover_elenco_total` e
+`transferencia_total`. A abertura também detalha
+`listar_elenco_espera_lock` e `listar_elenco_montar_resposta`. As fases internas
+são `espera_lock`, `validacao_leitura`, `preparacao_historico`,
 `gravacao_elenco`, `gravacao_historico` e `resposta`. A validação possui
 medidas antes e depois da espera do lock. Subfases aninhadas detalham o custo:
 `pre_lock_autorizacao`/`lock_autorizacao` (sessão e perfil),
@@ -175,6 +273,9 @@ mais `pre_lock_vinculo`),
 já foram lidos na validação sob o mesmo lock, não há nova leitura). A preparação pode conter uma
 gravação histórica de reconciliação, medida também como `gravacao_historico`;
 esses intervalos são aninhados e não devem ser somados para obter o total.
+A mesma ação pode emitir um total inclusivo e suas subfases: use o total para
+comparar a duração geral e as subfases para localizar o gargalo, sem somar os
+dois níveis.
 A resposta inclui a montagem no servidor, não transporte nem renderização.
 Operações interrompidas não produzem todas as fases. Compare a mesma base,
 perfil e ação depois da publicação; não repita gravações reais por benchmark.

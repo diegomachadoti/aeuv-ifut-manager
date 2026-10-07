@@ -590,6 +590,10 @@
 
     .atleta-bd-titulo:first-child { margin-top: 0; }
 
+    .atletas-bd-paginacao { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+    .atletas-bd-paginacao select { font: inherit; padding: 6px; }
+    .atletas-bd-paginacao button:disabled { opacity: 0.5; cursor: default; }
+
     /* ----- Notas oficiais ----- */
 
     /* Cinco colunas: número e data são curtos, a partida e os punidos
@@ -2424,6 +2428,16 @@
         + '</div>';
     }
 
+    function focarAvisoOuFormulario_(elemento) {
+      if (!elemento) return;
+      elemento.setAttribute('tabindex', '-1');
+      elemento.focus({ preventScroll: true });
+      elemento.scrollIntoView({
+        block: 'center',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+      });
+    }
+
     function acompanharFocoCarregamento() {
       let visiveis = new Set();
       let agendado = false;
@@ -2435,11 +2449,8 @@
         const novo = atuais.find(function (bloco) { return !visiveis.has(bloco); });
         visiveis = new Set(atuais);
         if (!novo) return;
-        novo.focus({ preventScroll: true });
-        novo.scrollIntoView({
-          block: 'center',
-          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
-        });
+        if (novo.contains(document.activeElement)) return;
+        focarAvisoOuFormulario_(novo);
       }
       const observador = new MutationObserver(function () {
         if (agendado) return;
@@ -2697,7 +2708,7 @@
         return;
       }
 
-      if (administracaoOcupada_) {
+      if (administracaoOcupada_ || administracaoSnapshotOcupada_ || atletasBdOcupado_) {
         if (window.location.hash !== '#' + moduloAtual) window.location.hash = moduloAtual;
         return;
       }
@@ -3378,6 +3389,9 @@
     }
 
     let administracaoOcupada_ = false;
+    let administracaoSnapshotOcupada_ = false;
+    let administracaoRequisicao_ = 0;
+    let administracaoStatusRequisicao_ = 0;
     let administracaoFontes_ = null;
 
     function carregarAdministracao_() {
@@ -3385,12 +3399,54 @@
         document.getElementById('areaAdministracao').textContent = 'Acesso exclusivo do administrador.';
         return;
       }
+      const requisicao = ++administracaoRequisicao_;
+      const statusRequisicao = ++administracaoStatusRequisicao_;
       administracaoFontes_ = null;
+      document.getElementById('areaAdministracao').innerHTML = '<section class="formulario">'
+        + '<h3>Banco de Atletas — atualização programada</h3>'
+        + '<p class="apoio">Cópia de consulta para admin/diretoria, atualizada pelo acionador configurado no Apps Script. '
+        + 'Confira ou altere o intervalo efetivo em Apps Script &gt; Acionadores; esta tela não detecta mudanças feitas lá. '
+        + 'Instale com a conta administradora que possui acesso a todas as fontes no Drive. '
+        + 'O gatilho pertence a essa conta; outros administradores não podem removê-lo por esta tela.</p>'
+        + '<p id="statusSnapshotAdmin" class="apoio" role="status" aria-live="polite">Consultando configuração...</p>'
+        + '<div class="barra-acoes"><button type="button" class="botao-principal" id="configurarSnapshotAdmin">Configurar agendamento</button>'
+        + '<button type="button" class="botao-apoio" id="desativarSnapshotAdmin">Desativar meu agendamento</button></div>'
+        + '<p class="apoio">Para a primeira geração ou atualização imediata, abra Banco de Atletas e use Recalcular agora. '
+        + 'Configurar o gatilho não gera a primeira cópia nem atualiza a tela automaticamente. Se um novo gatilho for criado, confira seu intervalo em Acionadores.</p>'
+        + '</section><section class="formulario"><h3>Indice privado de validacao</h3>'
+        + '<p class="apoio">CPF entre atletas/comissao e participacao por ID ou CPF. Alteracoes continuam sincronas. '
+        + 'Reconciliacao independente por acionador, com conferencia de versoes das fontes em cada operacao. '
+        + 'Confira ou altere o intervalo efetivo em Apps Script &gt; Acionadores; esta tela não detecta mudanças feitas lá. '
+        + 'Se o indice estiver pendente ou indisponivel, as fontes atuais continuam obrigatorias. '
+        + 'Ative o servico avancado Drive v3 e gere o primeiro indice com a conta administradora.</p>'
+        + '<p id="adminStatusIndice" class="apoio" role="status" aria-live="polite">Consultando configuracao...</p>'
+        + '<div class="barra-acoes">'
+        + '<button type="button" class="botao-apoio" data-indice-validacao="configurarAgendamentoIndicesValidacao">Configurar agendamento</button>'
+        + '<button type="button" class="botao-apoio" data-indice-validacao="desativarAgendamentoIndicesValidacao">Desativar meu agendamento</button>'
+        + '<button type="button" class="botao-principal" data-indice-validacao="reconciliarIndicesValidacaoAgora">Reconciliar agora</button>'
+        + '</div></section><div id="adminSnapshotsEsportivos"></div><div id="adminImagens"></div>';
+      carregarIndiceValidacaoAdmin_(requisicao);
+      carregarAgendasEsportivasAdmin_(requisicao);
+      document.getElementById('configurarSnapshotAdmin').onclick = function () {
+        executarAgendaSnapshotAdmin_('configurarAgendamentoBancoAtletas', requisicao);
+      };
+      document.getElementById('desativarSnapshotAdmin').onclick = function () {
+        executarAgendaSnapshotAdmin_('desativarAgendamentoBancoAtletas', requisicao);
+      };
+      google.script.run.withSuccessHandler(function (estado) {
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_
+            || statusRequisicao !== administracaoStatusRequisicao_) return;
+        document.getElementById('statusSnapshotAdmin').textContent = textoStatusSnapshot_(estado);
+      }).withFailureHandler(function (erro) {
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_
+            || statusRequisicao !== administracaoStatusRequisicao_) return;
+        document.getElementById('statusSnapshotAdmin').textContent = erro.message || String(erro);
+      }).obterStatusBancoAtletas();
       google.script.run.withSuccessHandler(function (fontes) {
-        if (moduloAtual !== 'administracao') return;
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
         administracaoFontes_ = fontes;
         const campeonatos = fontes.filter(function (fonte) { return fonte.tipo === 'atletas'; });
-        document.getElementById('areaAdministracao').innerHTML = '<section class="formulario">'
+        document.getElementById('adminImagens').innerHTML = '<section class="formulario">'
           + '<h3>Manutencao de imagens</h3><p class="apoio">Originais preservados em backups no Drive. '
           + 'Sumulas e snapshots historicos nao sao alterados. Mantenha esta tela aberta durante a operacao.</p>'
           + '<div class="grupo"><label for="adminCampeonato">Campeonato para fotos de atletas e comissao</label>'
@@ -3410,10 +3466,134 @@
         });
         document.getElementById('otimizarLogoSistema').addEventListener('click', otimizarLogoSistema_);
       }).withFailureHandler(function (erro) {
-        if (moduloAtual !== 'administracao') return;
-        document.getElementById('areaAdministracao').innerHTML = '<p class="alerta">'
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+        document.getElementById('adminImagens').innerHTML = '<p class="alerta">'
           + escapar(erro.message || String(erro)) + '</p>';
       }).listarFontesOtimizacaoImagens();
+    }
+
+    function executarAgendaSnapshotAdmin_(metodo, requisicao) {
+      if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_
+          || administracaoOcupada_ || administracaoSnapshotOcupada_) return;
+      administracaoSnapshotOcupada_ = true;
+      administracaoStatusRequisicao_++;
+      const area = document.getElementById('areaAdministracao');
+      const controles = Array.from(area.querySelectorAll('button, select'));
+      const anteriores = controles.map(function (item) { return item.disabled; });
+      controles.forEach(function (item) { item.disabled = true; });
+      document.getElementById('statusSnapshotAdmin').textContent = 'Alterando agendamento do Banco de Atletas...';
+      const concluir = function (estado, erro) {
+        administracaoSnapshotOcupada_ = false;
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+        controles.forEach(function (item, indice) { if (item.isConnected) item.disabled = anteriores[indice]; });
+        document.getElementById('statusSnapshotAdmin').textContent = erro
+          ? (erro.message || String(erro)) : textoStatusSnapshot_(estado);
+      };
+      google.script.run.withSuccessHandler(function (estado) { concluir(estado); })
+        .withFailureHandler(function (erro) { concluir(null, erro); })[metodo]();
+    }
+
+    function textoStatusIndiceValidacao_(estado) {
+      const resultados = estado.resultados || {};
+      return (estado.agendado ? 'Agendamento ativo, responsável: ' + estado.responsavel + '. '
+        + 'Confira o intervalo em Apps Script > Acionadores. ' : 'Sem agendamento. ')
+        + 'Ultima reconciliacao: ' + (estado.ultimaExecucao || 'ainda nao executada') + '. '
+        + 'Atualizados: ' + (resultados.reconciliado || 0) + '; ja atuais: ' + (resultados.atual || 0)
+        + '; adiados por concorrencia: ' + (resultados.concorrente || 0) + '; falhas: ' + (resultados.falhas || 0) + '. '
+        + (estado.campeonatos || []).filter(function (item) { return item.pendente; }).length + ' campeonato(s) pendente(s). '
+        + (estado.erro || '');
+    }
+
+    function carregarIndiceValidacaoAdmin_(requisicao) {
+      let versao = 0;
+      const atual = function () { return moduloAtual === 'administracao' && requisicao === administracaoRequisicao_; };
+      const consulta = ++versao;
+      google.script.run.withSuccessHandler(function (estado) {
+        if (atual() && versao === consulta) document.getElementById('adminStatusIndice').textContent = textoStatusIndiceValidacao_(estado);
+      }).withFailureHandler(function (erro) {
+        if (atual() && versao === consulta) document.getElementById('adminStatusIndice').textContent = erro.message || String(erro);
+      }).obterStatusIndicesValidacao();
+      document.querySelectorAll('[data-indice-validacao]').forEach(function (botao) {
+        botao.onclick = function () {
+          if (!atual() || administracaoOcupada_ || administracaoSnapshotOcupada_) return;
+          versao++;
+          administracaoSnapshotOcupada_ = true;
+          const controles = Array.from(document.getElementById('areaAdministracao').querySelectorAll('button,select'));
+          const anteriores = controles.map(function (item) { return item.disabled; });
+          controles.forEach(function (item) { item.disabled = true; });
+          document.getElementById('adminStatusIndice').textContent = 'Executando...';
+          const concluir = function (estado, erro) {
+            administracaoSnapshotOcupada_ = false;
+            if (!atual()) return;
+            controles.forEach(function (item, i) { if (item.isConnected) item.disabled = anteriores[i]; });
+            document.getElementById('adminStatusIndice').textContent = erro
+              ? (erro.message || String(erro)) : textoStatusIndiceValidacao_(estado);
+          };
+          google.script.run.withSuccessHandler(function (estado) { concluir(estado); })
+            .withFailureHandler(function (erro) { concluir(null, erro); })[botao.dataset.indiceValidacao]();
+        };
+      });
+    }
+
+    function carregarAgendasEsportivasAdmin_(requisicao) {
+      google.script.run.withSuccessHandler(function (dados) {
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+        const area = document.getElementById('adminSnapshotsEsportivos');
+        area.innerHTML = dados.categorias.map(function (categoria) {
+          const tipo = categoria.tipo, tabela = tipo === 'tabela';
+          return '<section class="formulario"><h3>' + escapar(categoria.nome) + ' — cópias por campeonato</h3>'
+            + '<p class="apoio">Agendamento separado. Confira ou altere o intervalo efetivo em Apps Script &gt; Acionadores; esta tela não detecta mudanças feitas lá. '
+            + 'Compartilha quotas e tempo de execução com os outros gatilhos. Campeonatos são processados em rodízio quando o orçamento termina; horários não são garantidos.</p>'
+            + '<p class="apoio" role="status" aria-live="polite" id="adminStatus-' + tipo + '">' + escapar(textoStatusSnapshot_(categoria.estado)) + '</p>'
+            + '<select id="adminCampeonato-' + tipo + '">' + opcoesSelect(dados.campeonatos, '', '') + '</select>'
+            + '<div class="barra-acoes">'
+            + [['Configurar agendamento', tabela ? 'configurarAgendamentoTabela' : 'configurarAgendamentoParticipantes'],
+              ['Desativar meu agendamento', tabela ? 'desativarAgendamentoTabela' : 'desativarAgendamentoParticipantes'],
+              ['Recalcular campeonato agora', tabela ? 'recalcularTabelaCampeonato' : 'recalcularEquipesParticipantes']].map(function (acao) {
+                return '<button type="button" class="botao-apoio" data-agenda-esportiva="' + acao[1]
+                  + '" data-categoria="' + tipo + '">' + acao[0] + '</button>';
+              }).join('') + '</div></section>';
+        }).join('');
+        area.querySelectorAll('[data-agenda-esportiva]').forEach(function (botao) {
+          botao.onclick = function () {
+            if (administracaoOcupada_ || administracaoSnapshotOcupada_ || moduloAtual !== 'administracao'
+                || requisicao !== administracaoRequisicao_) return;
+            const tipo = botao.dataset.categoria, metodo = botao.dataset.agendaEsportiva;
+            const id = document.getElementById('adminCampeonato-' + tipo).value;
+            if (metodo.indexOf('recalcular') === 0 && !id) return;
+            administracaoSnapshotOcupada_ = true;
+            administracaoStatusRequisicao_++;
+            const controles = Array.from(document.getElementById('areaAdministracao').querySelectorAll('button,select'));
+            const anteriores = controles.map(function (item) { return item.disabled; });
+            controles.forEach(function (item) { item.disabled = true; });
+            document.getElementById('adminStatus-' + tipo).textContent = 'Executando...';
+            const concluir = function (estado, erro) {
+              administracaoSnapshotOcupada_ = false;
+              if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+              controles.forEach(function (item, indice) { if (item.isConnected) item.disabled = anteriores[indice]; });
+              const categoria = dados.categorias.find(function (item) { return item.tipo === tipo; });
+              const selecionado = categoria.campeonatos.find(function (item) { return item.id === id; });
+              if (!erro && metodo.indexOf('recalcular') === 0 && selecionado) selecionado.estado = estado;
+              if (!erro && metodo.indexOf('recalcular') !== 0) {
+                categoria.campeonatos.forEach(function (item) { Object.assign(item.estado, estado); });
+              }
+              document.getElementById('adminStatus-' + tipo).textContent = erro
+                ? (erro.message || String(erro)) : textoStatusSnapshot_(selecionado ? selecionado.estado : estado);
+            };
+            google.script.run.withSuccessHandler(function (estado) { concluir(estado); })
+              .withFailureHandler(function (erro) { concluir(null, erro); })[metodo](id);
+          };
+        });
+        dados.categorias.forEach(function (categoria) {
+          document.getElementById('adminCampeonato-' + categoria.tipo).onchange = function () {
+            const item = categoria.campeonatos.find(function (registro) { return registro.id === this.value; });
+            document.getElementById('adminStatus-' + categoria.tipo).textContent = textoStatusSnapshot_(item ? item.estado : categoria.estado);
+          };
+        });
+      }).withFailureHandler(function (erro) {
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+        document.getElementById('adminSnapshotsEsportivos').textContent = erro.message || String(erro);
+      }).obterStatusSnapshotsEsportivos();
     }
 
     function selecionarFontesOtimizacao_(fontes, tipo, campeonatoId) {
@@ -3424,7 +3604,7 @@
     }
 
     async function otimizarLogoSistema_() {
-      if (confirmacaoElencoAtual || administracaoOcupada_ || moduloAtual !== 'administracao'
+      if (confirmacaoElencoAtual || administracaoOcupada_ || administracaoSnapshotOcupada_ || moduloAtual !== 'administracao'
           || CONFIG.usuario.perfil !== 'admin') return;
       const area = document.getElementById('areaAdministracao');
       const aviso = document.getElementById('avisoAdministracao');
@@ -3434,7 +3614,8 @@
           + 'O arquivo original dos documentos nao sera modificado. A versao leve sera usada nas proximas aberturas.',
         confirmar: 'Otimizar logo'
       });
-      if (!confirmado || moduloAtual !== 'administracao' || !area.isConnected) return;
+      if (!confirmado || moduloAtual !== 'administracao' || !area.isConnected
+          || administracaoOcupada_ || administracaoSnapshotOcupada_) return;
       administracaoOcupada_ = true;
       const controles = Array.from(area.querySelectorAll('button, select'));
       const estados = controles.map(function (item) { return item.disabled; });
@@ -3468,7 +3649,7 @@
     }
 
     async function otimizarImagensBase_(tipo) {
-      if (confirmacaoElencoAtual || administracaoOcupada_ || moduloAtual !== 'administracao'
+      if (confirmacaoElencoAtual || administracaoOcupada_ || administracaoSnapshotOcupada_ || moduloAtual !== 'administracao'
           || CONFIG.usuario.perfil !== 'admin' || !administracaoFontes_) return;
       const fontesOrigem = administracaoFontes_;
       const area = document.getElementById('areaAdministracao');
@@ -3485,6 +3666,7 @@
         confirmar: 'Otimizar imagens'
       });
       if (!confirmado || moduloAtual !== 'administracao' || fontesOrigem !== administracaoFontes_ || !area.isConnected) return;
+      if (administracaoOcupada_ || administracaoSnapshotOcupada_) return;
       administracaoOcupada_ = true;
       const botoes = Array.from(area.querySelectorAll('button'));
       const estados = botoes.map(function (item) { return item.disabled; });
@@ -3784,7 +3966,7 @@
       });
     }
 
-    function carregarTabelaCampeonato_(id, resultadoId, recado) {
+    function carregarTabelaCampeonato_(id, resultadoId, recado, atual) {
       if (tabelaEstado.ocupado) return;
       const area = document.getElementById('areaTabelaCampeonato');
       if (!area) return;
@@ -3809,11 +3991,47 @@
         tabelaOcupada_(false);
         if (modulo === 'sumula-campeonato' && sumulasEstado.dados) montarSumulasCampeonato_();
         else if (tabelaEstado.dados) montarTabelaCampeonato_();
-        else area.innerHTML = '<div id="tabelaLoading"></div><div id="tabelaMensagem"></div><button type="button" class="botao-apoio" id="tabelaTentar">Tentar novamente</button>';
+        else area.innerHTML = '<div id="tabelaLoading"></div><div id="tabelaMensagem"></div><button type="button" class="botao-apoio" id="tabelaTentar">Tentar novamente</button>'
+          + '<button type="button" class="botao-apoio" id="tabelaPrimeiroRecalculo">Recalcular agora</button>';
         const tentar = document.getElementById('tabelaTentar');
         if (tentar) tentar.onclick = function () { carregarTabelaCampeonato_(id, resultadoId); };
+        const recalcular = document.getElementById('tabelaPrimeiroRecalculo');
+        if (recalcular) recalcular.onclick = function () { recalcularTabelaAgora_(id); };
         tabelaErro_(erro);
-      }).listarTabelaCampeonato(id || '');
+      })[atual === true || modulo === 'sumula-campeonato' ? 'carregarTabelaCampeonatoAtual' : 'listarTabelaCampeonato'](id || '');
+    }
+
+    function recalcularTabelaAgora_(campeonatoId) {
+      if (tabelaEstado.ocupado || confirmacaoElencoAtual) return;
+      tabelaNavegar_(function () {
+        const id = campeonatoId || tabelaEstado.campeonatoId, modulo = moduloAtual, requisicao = ++tabelaEstado.requisicao;
+        tabelaOcupada_(true);
+        google.script.run.withSuccessHandler(function () {
+          if (requisicao !== tabelaEstado.requisicao || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
+          tabelaOcupada_(false);
+          carregarTabelaCampeonato_(id);
+        }).withFailureHandler(function (erro) {
+          if (requisicao !== tabelaEstado.requisicao || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
+          tabelaOcupada_(false); tabelaErro_(erro);
+        }).recalcularTabelaCampeonato(id);
+      });
+    }
+
+    function tabelaContextoAtual_(continuar) {
+      if (tabelaEstado.ocupado || !tabelaEstado.dados) return;
+      const id = tabelaEstado.campeonatoId, modulo = moduloAtual, revisao = tabelaEstado.dados.revisao;
+      const requisicao = ++tabelaEstado.requisicao;
+      tabelaOcupada_(true);
+      google.script.run.withSuccessHandler(function (dados) {
+        if (requisicao !== tabelaEstado.requisicao || id !== tabelaEstado.campeonatoId || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
+        tabelaOcupada_(false);
+        tabelaEstado.dados = dados;
+        montarTabelaCampeonato_(revisao !== dados.revisao ? 'Os dados mudaram desde a cópia. Confira os dados atuais e abra a edição novamente.' : '');
+        if (revisao === dados.revisao) continuar();
+      }).withFailureHandler(function (erro) {
+        if (requisicao !== tabelaEstado.requisicao || id !== tabelaEstado.campeonatoId || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
+        tabelaOcupada_(false); tabelaErro_(erro);
+      }).carregarTabelaCampeonatoAtual(id);
     }
 
     function tabelaExecutar_(metodo, payload, pdf) {
@@ -3900,7 +4118,11 @@
       const abas = [['jogos', 'Jogos e rodadas'], ['classificacao', 'Classificação'], ['grupos', 'Grupos e fases'], ['campos', 'Campos'], ['criterios', 'Critérios']];
       area.innerHTML = '<div class="tabela-barra">'
         + tabelaSelect_('tabelaCampeonato', 'Campeonato', (dados.campeonatos || []).map(function (item) { return { id: item.id, nome: item.nome + (item.temporada ? ' · ' + item.temporada : '') }; }), tabelaEstado.campeonatoId, dados.campeonatos.length ? '' : 'Nenhum campeonato')
-        + tabelaBotao_('Atualizar', 'atualizar') + '</div><div id="tabelaLoading"></div><div id="tabelaMensagem" aria-live="polite">'
+        + tabelaBotao_('Atualizar', 'atualizar') + tabelaBotao_('Recalcular agora', 'recalcular')
+        + '</div><p class="apoio" role="status">' + escapar(dados.snapshotStatus
+          ? textoStatusSnapshot_(dados.snapshotStatus) : 'Dados atuais consultados em ' + dataSnapshot_(dados.consultadoEm)
+            + '. A cópia pode estar pendente; Atualizar relê a cópia pronta, possivelmente anterior às alterações salvas.')
+        + '</p><div id="tabelaLoading"></div><div id="tabelaMensagem" aria-live="polite">'
         + (recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '') + tabelaAvisosHTML_(dados.avisos || []) + '</div>'
         + (dados.campeonato ? '<div class="tabela-abas" aria-label="Seções da tabela">' + abas.map(function (aba) {
           return '<button type="button" class="botao-apoio" data-tabela-aba="' + aba[0] + '" aria-pressed="' + (tabelaEstado.aba === aba[0] ? 'true' : 'false') + '">' + aba[1] + '</button>';
@@ -4130,6 +4352,7 @@
             return tabelaNavegar_(function () { tabelaEstado.rodada = String(destino); montarTabelaCampeonato_(); });
           }
           if (acao === 'atualizar') return tabelaNavegar_(function () { carregarTabelaCampeonato_(tabelaEstado.campeonatoId); });
+          if (acao === 'recalcular') return recalcularTabelaAgora_();
           if (acao === 'campeonatos' || acao === 'times-campeonato') return abrirModulo(acao);
           if (acao === 'ir-campos') return tabelaNavegar_(function () { tabelaEstado.aba = 'campos'; montarTabelaCampeonato_(); });
           if (acao === 'pdf') return tabelaExecutar_('gerarSumulaJogoCampeonato', { id: id }, true);
@@ -4207,7 +4430,8 @@
       });
     }
 
-    function abrirTabelaJogo_(id) {
+    function abrirTabelaJogo_(id, atualizado) {
+      if (atualizado !== true) return tabelaContextoAtual_(function () { abrirTabelaJogo_(id, true); });
       const dados = tabelaEstado.dados;
       const jogo = dados.jogos.find(function (item) { return item.id === id; }) || {
         id: '', faseId: tabelaEstado.fase || (dados.fases[0] || {}).id || '', grupoId: tabelaEstado.grupo,
@@ -4606,7 +4830,8 @@
       };
     }
 
-    function abrirTabelaCampo_(id) {
+    function abrirTabelaCampo_(id, atualizado) {
+      if (atualizado !== true) return tabelaContextoAtual_(function () { abrirTabelaCampo_(id, true); });
       const campo = tabelaEstado.dados.campos.find(function (item) { return item.id === id; }) || { id: '', nome: '', endereco: '', ativo: true };
       tabelaMontarFormulario_(id ? 'Editar campo global' : 'Cadastrar campo global',
         '<div class="campos">' + campoTexto('tcNome', 'Nome', campo.nome, '', '', 'text')
@@ -4622,7 +4847,8 @@
       document.getElementById('tcEndereco').maxLength = 300;
     }
 
-    function abrirTabelaGrupos_() {
+    function abrirTabelaGrupos_(atualizado) {
+      if (atualizado !== true) return tabelaContextoAtual_(function () { abrirTabelaGrupos_(true); });
       const dados = tabelaEstado.dados;
       tabelaMontarFormulario_('Distribuir times nos grupos', '<p class="apoio">Cada time pode pertencer a um único grupo ou ficar sem grupo. Alterações incompatíveis com jogos existentes serão recusadas: edite ou remova os confrontos antes de mover seus times.</p>'
         + dados.equipes.map(function (equipe, i) {
@@ -4638,7 +4864,8 @@
         });
     }
 
-    function abrirTabelaCriterios_() {
+    function abrirTabelaCriterios_(atualizado) {
+      if (atualizado !== true) return tabelaContextoAtual_(function () { abrirTabelaCriterios_(true); });
       const dados = tabelaEstado.dados;
       if (!dados || !dados.podeEditar || tabelaEstado.ocupado) return;
       const campeonatoId = tabelaEstado.campeonatoId, revisao = dados.revisao;
@@ -4723,7 +4950,8 @@
       renderizar();
     }
 
-    function abrirTabelaDesempateOrganizacao_(indice) {
+    function abrirTabelaDesempateOrganizacao_(indice, atualizado) {
+      if (atualizado !== true) return tabelaContextoAtual_(function () { abrirTabelaDesempateOrganizacao_(indice, true); });
       const dados = tabelaEstado.dados;
       const empate = dados && (dados.empatesOrganizacao || [])[indice];
       if (!dados || !dados.podeEditar || tabelaEstado.ocupado || !empate || !Array.isArray(empate.equipes) || empate.equipes.length < 2) return;
@@ -5257,7 +5485,7 @@
       if (conteudo) conteudo.replaceChildren();
     }
 
-    function carregarTimesCampeonato() {
+    function carregarTimesCampeonato(atual) {
       if (rotaElencoPendente) {
         rotaElencoPendente = false;
         abrirElenco(CONFIG.elenco.campeonatoId, CONFIG.elenco.equipeId);
@@ -5282,10 +5510,38 @@
             return;
           }
 
-          document.getElementById('statusTimesCampeonato').outerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+          document.getElementById('areaTimesCampeonato').innerHTML =
+            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>'
+            + '<button type="button" class="botao-apoio" id="epAtualizar">Atualizar</button>'
+            + (CONFIG.usuario.perfil === 'admin' || CONFIG.usuario.perfil === 'diretoria'
+              ? '<button type="button" class="botao-apoio" id="epRecalcular">Recalcular agora</button>' : '');
+          document.getElementById('epAtualizar').onclick = carregarTimesCampeonato;
+          const recalcular = document.getElementById('epRecalcular');
+          if (recalcular) recalcular.onclick = recalcularParticipantesAgora_;
         })
-        .listarEquipesParticipantes(campeonatoId);
+        [atual === true ? 'carregarEquipesParticipantesAtual' : 'listarEquipesParticipantes'](campeonatoId);
+    }
+
+    let participantesRecalculando_ = false;
+    function recalcularParticipantesAgora_() {
+      if (participantesRecalculando_ || confirmacaoElencoAtual || elencoAtual || moduloAtual !== 'times-campeonato'
+          || !['admin', 'diretoria'].includes(CONFIG.usuario.perfil)) return;
+      participantesRecalculando_ = true;
+      const requisicao = ++participantesRequisicao, id = campeonatoParticipantesAtual;
+      const area = document.getElementById('areaTimesCampeonato');
+      const controles = Array.from(area.querySelectorAll('button,select'));
+      const anteriores = controles.map(function (item) { return item.disabled; });
+      controles.forEach(function (item) { item.disabled = true; });
+      google.script.run.withSuccessHandler(function () {
+        participantesRecalculando_ = false;
+        if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual || id !== campeonatoParticipantesAtual) return;
+        carregarTimesCampeonato();
+      }).withFailureHandler(function (erro) {
+        participantesRecalculando_ = false;
+        if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual || id !== campeonatoParticipantesAtual) return;
+        controles.forEach(function (item, indice) { if (item.isConnected) item.disabled = anteriores[indice]; });
+        area.insertAdjacentHTML('afterbegin', '<div class="erro">' + escapar(erro.message || String(erro)) + '</div>');
+      }).recalcularEquipesParticipantes(id);
     }
 
     function montarTelaTimesCampeonato(recado) {
@@ -5308,6 +5564,11 @@
         + opcoesSelect(campeonatos, campeonatoParticipantesAtual, '') + '</select></div>'
         + '<div class="barra-acoes participantes-acoes">' + (timesCampeonato.podeEditar ? '<button type="button" class="botao-principal" id="epVincular">Vincular equipe existente</button>' : '')
         + '<button type="button" class="botao-apoio" id="epAtualizar">Atualizar</button></div>'
+        + '<p class="apoio" role="status">' + escapar(timesCampeonato.snapshotStatus
+          ? textoStatusSnapshot_(timesCampeonato.snapshotStatus) : 'Dados atuais consultados em ' + dataSnapshot_(timesCampeonato.consultadoEm)
+            + '. A cópia pode estar pendente; Atualizar relê a cópia pronta, possivelmente anterior às alterações salvas.')
+        + '</p>' + (timesCampeonato.podeEditar
+          ? '<button type="button" class="botao-apoio" id="epRecalcular">Recalcular agora</button>' : '')
         + '<div class="campeonatos-cards">' + times.map(function (time) {
           return '<article class="campeonato-card"><div class="campeonato-card-topo">'
             + '<div class="campeonato-card-escudo">'
@@ -5322,11 +5583,14 @@
             + (timesCampeonato.podeEditar ? '<button type="button" class="botao-apoio perigo" data-ep-remover="' + escapar(time.nome) + '">Desvincular</button>' : '')
             + '</div></article>';
         }).join('') + '</div>' + (!times.length ? '<div class="aviso">Nenhuma equipe vinculada neste campeonato.</div>' : '')
+        + ((registro.times || []).length > times.length ? '<div class="aviso">Há vínculos atuais ainda sem resumo nesta cópia. Admin/diretoria devem recalcular para incluir as novas equipes e contagens.</div>' : '')
         + '<div id="timesFormArea"></div>';
       document.getElementById('epCampeonato').addEventListener('change', function () {
         campeonatoParticipantesAtual = this.value; carregarTimesCampeonato();
       });
       document.getElementById('epAtualizar').addEventListener('click', carregarTimesCampeonato);
+      const recalcular = document.getElementById('epRecalcular');
+      if (recalcular) recalcular.onclick = recalcularParticipantesAgora_;
       if (timesCampeonato.podeEditar) document.getElementById('epVincular').addEventListener('click', abrirVinculoEquipeParticipante);
       area.querySelectorAll('[data-elenco]').forEach(function (botao) {
         botao.addEventListener('click', function () { abrirElenco(campeonatoParticipantesAtual, botao.dataset.elenco); });
@@ -5353,7 +5617,7 @@
             botao.disabled = true;
             google.script.run.withSuccessHandler(function () {
               if (moduloAtual !== 'times-campeonato' || elencoAtual) return;
-              carregarTimesCampeonato();
+              carregarTimesCampeonato(true);
             })
               .withFailureHandler(function (erro) {
                 botao.disabled = false;
@@ -5366,7 +5630,19 @@
       });
     }
 
-    function abrirVinculoEquipeParticipante() {
+    function abrirVinculoEquipeParticipante(atualizado) {
+      if (participantesRecalculando_ || confirmacaoElencoAtual) return;
+      if (atualizado !== true) {
+        const requisicao = ++participantesRequisicao, id = campeonatoParticipantesAtual;
+        google.script.run.withSuccessHandler(function (dados) {
+          if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual || id !== campeonatoParticipantesAtual) return;
+          timesCampeonato = dados; montarEquipesParticipantes(); abrirVinculoEquipeParticipante(true);
+        }).withFailureHandler(function (erro) {
+          if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual) return;
+          document.getElementById('timesFormArea').textContent = erro.message || String(erro);
+        }).carregarEquipesParticipantesAtual(id);
+        return;
+      }
       const registro = (timesCampeonato.registros || []).find(function (item) { return item.campeonatoId === campeonatoParticipantesAtual; }) || {};
       const vinculados = (registro.timesDetalhados || []).map(function (item) { return item.id; });
       const disponiveis = (timesCampeonato.equipesGlobais || []).filter(function (item) {
@@ -5430,6 +5706,7 @@
         if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
         document.getElementById('areaTimesCampeonato').innerHTML = '<div class="erro">' + escapar(erro.message || erro) + '</div><button type="button" class="botao-apoio" id="elencoErroVoltar">Voltar às equipes</button>';
         document.getElementById('elencoErroVoltar').addEventListener('click', function () { elencoAtual = null; carregarTimesCampeonato(); });
+        focarAvisoOuFormulario_(document.getElementById('areaTimesCampeonato').querySelector('.erro'));
       }).listarElenco(campeonatoId, equipeId);
     }
 
@@ -5454,7 +5731,7 @@
       const contexto = elencoAtual;
       const area = document.getElementById('areaTimesCampeonato');
       area.innerHTML = '<section class="elenco">'
-        + (recado ? '<div class="sucesso" id="elencoRecado">' + escapar(recado) + '</div>' : '')
+        + (recado ? '<div class="sucesso" id="elencoRecado" role="status" tabindex="-1">' + escapar(recado) + '</div>' : '')
         + '<div class="elenco-contexto apoio">Equipes participantes / ' + escapar(registro.campeonatoNome) + ' / Elenco</div>'
         + '<div class="elenco-cabecalho">'
         + (dados.equipe.escudo ? '<img class="elenco-escudo" src="' + escapar(dados.equipe.escudo) + '" alt="Escudo de ' + escapar(dados.equipe.nome) + '">' : '<span class="elenco-escudo" aria-hidden="true">🛡️</span>')
@@ -5649,6 +5926,7 @@
             .catch(function () { window.prompt('Copie o link de inscrição:', dados.linkInscricao); });
         } else window.prompt('Copie o link de inscrição:', dados.linkInscricao);
       });
+      if (recado) focarAvisoOuFormulario_(document.getElementById('elencoRecado'));
     }
 
     function abrirFormularioTransferenciaAtleta_(atleta) {
@@ -5741,9 +6019,46 @@
     function permitirEdicaoElenco_() {
       if (!elencoAtual) return true;
       if (elencoAtual.salvando) return false;
+      if (elencoAtual.requerReleitura) {
+        mostrarAvisoElenco_(elencoAtual.erroGravacao);
+        return false;
+      }
       if (cadastroPessoasCampeonato.podeEditar === true) return true;
       document.getElementById('elencoBloqueioAviso').textContent = 'Somente leitura — elenco bloqueado. Não é possível alterar ou importar cadastros.';
       return false;
+    }
+
+    function limparAvisosElenco_() {
+      ['elencoAviso', 'elencoRecado', 'avisoRemocaoBloqueada'].forEach(function (id) {
+        const aviso = document.getElementById(id);
+        if (aviso) aviso.remove();
+      });
+    }
+
+    function mostrarAvisoElenco_(mensagem) {
+      limparAvisosElenco_();
+      const area = document.getElementById('areaTimesCampeonato');
+      if (!area || !elencoAtual) return;
+      const contexto = elencoAtual;
+      area.insertAdjacentHTML('afterbegin', '<div class="erro" id="elencoAviso" role="alert">'
+        + escapar(mensagem)
+        + (contexto.requerReleitura ? '<div><button type="button" class="botao-apoio" id="elencoReler">Recarregar elenco</button></div>' : '')
+        + '</div>');
+      const reler = document.getElementById('elencoReler');
+      if (reler) reler.onclick = function () {
+        if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato' || contexto.salvando) return;
+        abrirElenco(contexto.campeonatoId, contexto.equipeId);
+      };
+      focarAvisoOuFormulario_(document.getElementById('elencoAviso'));
+    }
+
+    function exigirReleituraAposFalhaElenco_(erro) {
+      const mensagem = String(erro && erro.message ? erro.message : erro);
+      if (!elencoAtual || !/confirmar a gravação do elenco|elenco foi salvo, mas o histórico|Acesso negado:\s*DriveApp/i.test(mensagem)) return false;
+      elencoAtual.requerReleitura = true;
+      elencoAtual.erroGravacao = mensagem;
+      mostrarAvisoElenco_(mensagem);
+      return true;
     }
 
     function marcarElencoPendente_(pendente) {
@@ -6249,6 +6564,7 @@
 
      function abrirFormularioCadastroPessoa(campeonatoId, tipo, registroId) {
        if (!permitirEdicaoElenco_()) return;
+       if (elencoAtual) limparAvisosElenco_();
        if (elencoAtual && tipo !== 'atletas' && tipo !== 'comissao') return;
        const tipoAtual = tipo === 'comissao' ? 'comissao' : 'atletas';
        const selecionado = campeonatoId || ((cadastroPessoasCampeonato.campeonatos[0] && cadastroPessoasCampeonato.campeonatos[0].id) || '');
@@ -6348,7 +6664,7 @@
        configurarMascaraCpfCadastroPessoa();
        configurarPreviewFotoCadastroPessoa();
        if (elencoAtual) alternarFormularioElenco(true);
-       document.getElementById('elencoFormTitulo').focus();
+       focarAvisoOuFormulario_(document.getElementById('elencoFormTitulo'));
 
        document.getElementById('voltarCadastroPessoa').addEventListener('click', function () {
          if (elencoAtual && elencoAtual.salvando) return;
@@ -6480,6 +6796,7 @@
          : document.getElementById(elencoAtual ? 'elencoLista' : 'areaCadastroPessoasCampeonato');
        if (area) {
          area.insertAdjacentHTML('afterbegin', '<div id="cadastroPessoaLoading" role="status" aria-live="polite">' + blocoCarregando() + '</div>');
+         focarAvisoOuFormulario_(document.getElementById('cadastroPessoaLoading').querySelector('.carregando'));
        }
      }
 
@@ -6490,9 +6807,15 @@
        if (botao) botao.disabled = false;
        const cancelar = document.getElementById('voltarCadastroPessoa');
        if (cancelar && botao === document.getElementById('gravarCadastroPessoa')) cancelar.disabled = false;
+       if (exigirReleituraAposFalhaElenco_(erro)) {
+         if (botao) botao.disabled = true;
+         if (aviso) aviso.textContent = 'Recarregue o elenco pelo aviso acima antes de realizar outra alteração.';
+         return;
+       }
        if (aviso) {
          aviso.innerHTML = '<span class="alerta">'
            + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+         focarAvisoOuFormulario_(aviso);
        }
      }
 
@@ -6615,7 +6938,7 @@
          }).withFailureHandler(function (erro) {
            if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
            montarElenco();
-           document.getElementById('areaTimesCampeonato').insertAdjacentHTML('afterbegin', '<div class="erro">' + escapar(erro.message || erro) + '</div>');
+           if (!exigirReleituraAposFalhaElenco_(erro)) mostrarAvisoElenco_(erro.message || String(erro));
          }).removerCadastroElenco({
            campeonatoId: contexto.campeonatoId, equipeId: contexto.equipeId,
            tipo: tipo, registroId: registroId
@@ -7251,12 +7574,68 @@
     /********* BANCO DE DADOS DE ATLETAS *********/
 
     /**
-     * Le uma vez do servidor (elencos de todos os campeonatos, historico
-     * permanente de inscricoes e fontes legadas) e filtra sobre essa copia.
+     * Le apenas a copia pronta do servidor e filtra/pagina localmente.
      * O detalhe abre na propria tabela, como nas Sumulas Enviadas.
      */
-    let atletasBd = { dados: null, abertos: {} };
+    let atletasBd = { dados: null, abertos: {}, filtrados: [], pagina: 0, porPagina: 25 };
     let atletasBdRequisicao = 0;
+    let atletasBdOcupado_ = false;
+
+    function dataSnapshot_(valor) {
+      return valor ? new Date(valor).toLocaleString('pt-BR') : 'nenhuma cópia gerada';
+    }
+
+    function textoStatusSnapshot_(estado) {
+      estado = estado || {};
+      return 'Última atualização: ' + dataSnapshot_(estado.generatedAt) + '. '
+        + (estado.agendado ? 'Agendamento ativo, responsável: ' + estado.responsavel + '. '
+          + 'Confira o intervalo em Apps Script > Acionadores. '
+          : 'Agendamento desativado. ')
+        + (estado.emRecalculo ? 'Recálculo em andamento; exibindo a última cópia completa. ' : '')
+        + (estado.pendente ? 'Há alterações pendentes de recálculo. ' : '')
+        + (estado.ultimoErro || '');
+    }
+
+    function cabecalhoSnapshotAtletas_(dados) {
+      const estado = dados && dados.snapshotStatus || { generatedAt: dados && dados.generatedAt };
+      return '<section class="formulario"><p class="apoio" id="atletasSnapshotStatus" role="status" aria-live="polite">'
+        + escapar(textoStatusSnapshot_(estado)) + '</p>'
+        + '<p class="apoio">Consulta consolidada possivelmente desatualizada. Não é uma validação para inscrições, '
+        + 'remoções ou transferências: essas operações consultam os dados atuais.</p>'
+        + '<div class="barra-acoes"><button type="button" class="botao-apoio" id="recarregarAtletas">Atualizar</button>'
+        + '<button type="button" class="botao-principal" id="recalcularAtletas">Recalcular agora</button></div>'
+        + '<p id="atletasSnapshotAcao" role="status" aria-live="polite"></p></section>';
+    }
+
+    function conectarAcoesSnapshotAtletas_() {
+      document.getElementById('recarregarAtletas').addEventListener('click', function () {
+        if (!atletasBdOcupado_) abrirModulo('atletas');
+      });
+      document.getElementById('recalcularAtletas').addEventListener('click', recalcularAtletasAgora_);
+    }
+
+    function recalcularAtletasAgora_() {
+      if (moduloAtual !== 'atletas' || atletasBdOcupado_) return;
+      atletasBdOcupado_ = true;
+      const requisicao = ++atletasBdRequisicao;
+      ['recarregarAtletas', 'recalcularAtletas'].forEach(function (id) { document.getElementById(id).disabled = true; });
+      document.getElementById('atletasSnapshotAcao').textContent =
+        'Recalculando todas as fontes e publicando uma cópia completa... Esta operação pode levar vários minutos; aguarde nesta tela.';
+      const concluir = function (erro) {
+        if (requisicao !== atletasBdRequisicao) return;
+        atletasBdOcupado_ = false;
+        if (moduloAtual !== 'atletas') return;
+        if (erro) {
+          ['recarregarAtletas', 'recalcularAtletas'].forEach(function (id) { document.getElementById(id).disabled = false; });
+          document.getElementById('atletasSnapshotAcao').textContent =
+            (erro.message || String(erro)) + ' O sucesso do recálculo não foi confirmado. Use Atualizar para conferir a cópia pronta; uma falha de reconstrução preserva a anterior.';
+          return;
+        }
+        abrirModulo('atletas');
+      };
+      google.script.run.withSuccessHandler(function () { concluir(); })
+        .withFailureHandler(concluir).recalcularBancoAtletas();
+    }
 
     function carregarAtletas() {
       const requisicao = ++atletasBdRequisicao;
@@ -7264,13 +7643,18 @@
       google.script.run
         .withSuccessHandler(function (dados) {
           if (moduloAtual !== 'atletas' || requisicao !== atletasBdRequisicao) return;
-          atletasBd = { dados: dados || { registros: [] }, abertos: {} };
+          atletasBd = { dados: dados || { registros: [] }, abertos: {}, filtrados: [], pagina: 0, porPagina: 25 };
           montarTelaAtletas();
         })
         .withFailureHandler(function (erro) {
           if (moduloAtual !== 'atletas' || requisicao !== atletasBdRequisicao) return;
           const status = document.getElementById('statusAtletas');
-          if (status) status.outerHTML = '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+          if (status) {
+            atletasBd = { dados: null, abertos: {}, filtrados: [], pagina: 0, porPagina: 25 };
+            status.outerHTML = cabecalhoSnapshotAtletas_(null) + '<div class="erro">'
+              + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+            conectarAcoesSnapshotAtletas_();
+          }
         })
         .listarAtletas();
     }
@@ -7306,8 +7690,9 @@
       if (!status) return;
 
       if (!registros.length) {
-        status.outerHTML = '<div class="vazio">Nenhum atleta encontrado nos elencos dos campeonatos, no hist&oacute;rico '
+        status.outerHTML = cabecalhoSnapshotAtletas_(dados) + '<div class="vazio">Nenhum atleta encontrado nos elencos dos campeonatos, no hist&oacute;rico '
           + 'de inscri&ccedil;&otilde;es ou nas solicita&ccedil;&otilde;es, puni&ccedil;&otilde;es e s&uacute;mulas.</div>';
+        conectarAcoesSnapshotAtletas_();
         return;
       }
 
@@ -7328,6 +7713,7 @@
       }
 
       status.outerHTML = ''
+        + cabecalhoSnapshotAtletas_(dados)
         + '<div class="resumo" id="resumoAtletas"></div>'
         + '<div class="filtros">'
         + '<input type="search" id="buscaAtletas" aria-label="Buscar atleta" placeholder="Buscar por nome, apelido ou CPF">'
@@ -7343,7 +7729,6 @@
         + '<div class="barra-acoes">'
         + '<span id="contagemAtletas" aria-live="polite"></span>'
         + '<span class="espaco"></span>'
-        + '<button type="button" class="botao-apoio" id="recarregarAtletas">Atualizar</button>'
         + '</div>'
         + '<p class="apoio">Inclui todos os atletas dos elencos de todos os campeonatos (inscri&ccedil;&otilde;es atuais e '
         + 'anteriores do hist&oacute;rico permanente) e as pessoas citadas em solicita&ccedil;&otilde;es, puni&ccedil;&otilde;es e s&uacute;mulas. '
@@ -7353,16 +7738,34 @@
         + '<div class="tabela-rolagem"><table class="solicitacoes atletas-bd"><thead><tr>'
         + '<th>Atleta</th><th>Situa&ccedil;&atilde;o</th><th>Equipe atual</th><th>Competi&ccedil;&atilde;o atual</th>'
         + '<th>V&iacute;nculos</th><th>Disciplina</th>'
-        + '</tr></thead><tbody id="linhasAtletas"></tbody></table></div>';
+        + '</tr></thead><tbody id="linhasAtletas"></tbody></table></div>'
+        + '<nav class="atletas-bd-paginacao" aria-label="Paginação de atletas">'
+        + '<label for="porPaginaAtletas">Atletas por página</label>'
+        + '<select id="porPaginaAtletas"><option value="25">25</option><option value="50">50</option></select>'
+        + '<button type="button" class="botao-apoio" id="anteriorAtletas" aria-controls="linhasAtletas">Anterior</button>'
+        + '<span id="paginaAtletas" role="status" aria-live="polite" aria-atomic="true"></span>'
+        + '<button type="button" class="botao-apoio" id="proximaAtletas" aria-controls="linhasAtletas">Próxima</button>'
+        + '</nav>';
 
       document.getElementById('buscaAtletas').addEventListener('input', filtrarAtletas);
       ['filtroEquipeAtletas', 'filtroCompeticaoAtletas', 'filtroVinculoAtletas'].forEach(function (id) {
         document.getElementById(id).addEventListener('change', filtrarAtletas);
       });
-      document.getElementById('recarregarAtletas').addEventListener('click', function () {
-        abrirModulo('atletas');
-      });
+      conectarAcoesSnapshotAtletas_();
       document.getElementById('linhasAtletas').addEventListener('click', cliqueLinhasAtletas_);
+      document.getElementById('anteriorAtletas').addEventListener('click', function () {
+        atletasBd.pagina--;
+        desenharPaginaAtletas_();
+      });
+      document.getElementById('proximaAtletas').addEventListener('click', function () {
+        atletasBd.pagina++;
+        desenharPaginaAtletas_();
+      });
+      document.getElementById('porPaginaAtletas').addEventListener('change', function () {
+        atletasBd.porPagina = this.value === '50' ? 50 : 25;
+        atletasBd.pagina = 0;
+        desenharPaginaAtletas_();
+      });
 
       if (termo) {
         document.getElementById('buscaAtletas').value = termo;
@@ -7401,7 +7804,7 @@
         atletasBd.abertos[registro.chave] = true;
       }
 
-      filtrarAtletas();
+      desenharPaginaAtletas_();
 
       const botao = document.getElementById('atletaBdBotao' + indice);
 
@@ -7468,10 +7871,28 @@
         if (atletaBdPassa_(registro, filtros)) filtrados.push({ registro: registro, indice: indice });
       });
 
+      atletasBd.filtrados = filtrados;
+      atletasBd.pagina = 0;
       desenharResumoAtletas(filtrados, registros.length);
-      desenharLinhasAtletas(filtrados);
+      desenharPaginaAtletas_();
 
       return filtrados;
+    }
+
+    function desenharPaginaAtletas_() {
+      const filtrados = atletasBd.filtrados;
+      const paginas = Math.max(1, Math.ceil(filtrados.length / atletasBd.porPagina));
+      atletasBd.pagina = Math.max(0, Math.min(atletasBd.pagina, paginas - 1));
+      const inicio = atletasBd.pagina * atletasBd.porPagina;
+      const fim = Math.min(inicio + atletasBd.porPagina, filtrados.length);
+      desenharLinhasAtletas(filtrados.slice(inicio, fim));
+      const rotulo = document.getElementById('paginaAtletas');
+      const anterior = document.getElementById('anteriorAtletas');
+      const proxima = document.getElementById('proximaAtletas');
+      if (rotulo) rotulo.textContent = 'Página ' + (atletasBd.pagina + 1) + ' de ' + paginas
+        + ' · ' + (filtrados.length ? inicio + 1 : 0) + '–' + fim + ' de ' + filtrados.length + ' atleta(s)';
+      if (anterior) anterior.disabled = atletasBd.pagina === 0;
+      if (proxima) proxima.disabled = atletasBd.pagina === paginas - 1;
     }
 
     function desenharResumoAtletas(filtrados, total) {

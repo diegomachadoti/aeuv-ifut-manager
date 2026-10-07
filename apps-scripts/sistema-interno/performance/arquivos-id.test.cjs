@@ -202,7 +202,10 @@ test('registro de equipes e bloqueios gravam pelo ID memorizado ou criam e memor
   assert.equal(count(h, 'lookup', 'AEUV - Bloqueios de Elenco.json'), 0);
   assert.equal(count(h, 'create'), 0);
   // A gravação pelo ID removeu e2; a regra de semente recriou Equipe B com novo ID.
-  assert.deepEqual([...h.c.lerRegistroEquipes_().map(item => item.id)], ['e1', 'uuid-1']);
+  const idsAtuais = [...h.c.lerRegistroEquipes_().map(item => item.id)];
+  assert.equal(idsAtuais[0], 'e1');
+  assert.match(idsAtuais[1], /^uuid-\d+$/);
+  assert.equal(new Set(idsAtuais).size, 2);
   assert.equal(h.c.lerBloqueiosElenco_()[0].bloqueado, false);
 });
 
@@ -314,6 +317,5 @@ test('remocao de campeonato pelo repositorio invalida IDs das listas; tabelas na
   h.c.lerListaCadastroDrive_(h.c.arquivoTabelaCampeonato_('c1'), 'tabela');
   assert.equal(h.cacheOps.length, ops);
 });
-
 
 

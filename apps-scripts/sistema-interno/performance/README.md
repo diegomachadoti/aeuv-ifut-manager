@@ -3,6 +3,23 @@
 Ferramenta local reutilizável; **não publicar `benchmark.js` no Apps Script**.
 Não muda endpoints, permissões, regras ou dados do sistema.
 
+### Regressao do indice de validacao
+
+`validation-index.test.cjs` usa o VM de `save-fixture.cjs`, fontes Drive com
+versao/MD5 e Script Properties com falhas injetadas. Cobre atualizacao
+incremental sincrona, CPF entre categorias, participacao por IDs/CPFs antigos,
+correcao/exclusao de resultados, fallback vivo, checkpoint concorrente,
+limites UTF-8/quota e agenda Admin independente de cinco minutos.
+Os contadores demonstram leituras de validacao sem blobs de elenco/tabela
+quando o indice e confiavel e ausencia de lock/reescrita na reconciliacao
+ja atual. **Nao** simulam latencia dos servicos Google: nao converter esses
+contadores nem logs misturados em promessa de reducao em segundos.
+
+```powershell
+node --test apps-scripts\sistema-interno\performance\*.test.cjs
+git diff --check
+```
+
 Os cURLs copiados do Network usam callbacks internos e tokens temporários.
 Podem depender da sessão Google e retornar HTTP 401 quando repetidos fora do
 navegador. Tokens, cookies, cURLs, HARs e respostas com CPF/fotos não devem ser
@@ -154,6 +171,39 @@ identificar recargas duplicadas.
 
 ## Testes locais da ferramenta
 
+As consultas de Participantes e Tabela agora medem **leitura da cópia pronta**
+por campeonato, não reconstrução. Antes de medir em uma implantação,
+admin/diretoria devem gerar ambas as cópias e conferir seu timestamp/status.
+Compare payloads do mesmo campeonato e revisão; uma resposta sem cópia é erro,
+não ganho de performance. Abrir edição/resultado/elenco e retornos de gravações
+continuam consultando contexto atual. Não automatize recálculos/mutações reais
+no executor de consultas.
+
+Cobertura persistente das cópias esportivas:
+
+```powershell
+node --test apps-scripts\sistema-interno\performance\esportivos-snapshot.test.cjs
+node --test apps-scripts\sistema-interno\performance\*.test.cjs
+```
+
+`esportivos-snapshot.test.cjs` usa o fixture de cadastros existente e Drive,
+PropertiesService, relógio e gatilhos simulados. Verifica contratos dos builders
+existentes, isolamento por campeonato, autenticação/revogação/identidade de
+associado, bloqueios atuais, retorno vivo/revisão otimista das mutações,
+pendência durante geração, lease/expiração, erros/readback e conservação da
+versão anterior, limpeza targeted, agendas 5/15/15 independentes/idempotentes,
+responsável/UID e orçamento/checkpoint/rodízio. Também verifica sintaxe do
+frontend, separação Atualizar/recálculo e revalidação antes de editar.
+
+Não instala gatilhos nem acessa serviços reais. Latência, quotas, disputa de
+lock e periodicidade efetiva **não foram medidos em produção**. Os acionadores
+compartilham quotas; orçamento de 210 s entre campeonatos não interrompe um
+builder individual. A lease de dez minutos recupera timeout sem publicação
+parcial. Invalidação local é conservadora/compartilhada; alterações externas
+aparecem quando o campeonato é reconstruído no próximo rodízio. Consulte a
+seção **Cópias de Equipes Participantes e Tabela de Classificação** no README
+dos aplicativos para ativação, permissões e recuperação.
+
 Com Node.js, sem instalar dependências:
 
 ```powershell
@@ -176,6 +226,82 @@ time forçado pelo contexto fresco, CPF/participação, resposta autorizada,
 reconciliação histórica global e recuperação de falhas. Também verificam que
 os endpoints legados mantêm seu time solicitado e suas permissões.
 Contagens são chamadas no fixture, não uma garantia de tempo no Drive.
+
+Para o Banco de Dados de Atletas:
+
+```powershell
+node --test apps-scripts\sistema-interno\performance\atletas-banco.test.cjs apps-scripts\sistema-interno\performance\atletas-snapshot.test.cjs
+```
+
+VM do frontend com 141 e 1.001 atletas: páginas de 25/50, filtros sobre toda
+a base, indicadores globais, busca recebida, índices originais nos detalhes,
+zero resultados, limites de página, atualização e callbacks obsoletos.
+Navegação e expansão não repetem RPC, filtragem ou indicadores.
+O fixture de backend compara resposta e histórico com o caminho sem reuso:
+leituras de campeonatos/equipes passam de 2 para 1 por recálculo; as quatro
+listas dos dois campeonatos continuam lidas na reconciliação global.
+Verifica permissões, recuperação, campos de detalhe e ausência de fotos/RG
+na resposta. Não implica redução garantida de segundos ou tamanho do payload.
+
+Também compara **todo o resultado do construtor vivo `construirBancoAtletas_`
+(antigo corpo de `listarAtletas`) e o histórico persistido**
+com a cadeia anterior de fontes completas (fixtures sintéticos, sem rede),
+incluindo homônimos/CPFs, comissão, solicitações de inclusão/remoção/portabilidade,
+documentos malformados, fonte vazia, limites 0/1/3/20, duplicatas legadas entre
+subpastas e exclusão de duplicatas na raiz. Verifica autorização em cada fonte,
+propagação de erros, contratos públicos completos, notas ausentes, silêncio
+fora do banco, IO equivalente com métricas desligadas e releitura em cada recálculo.
+
+`atletas-snapshot.test.cjs` cobre primeira geração explícita, permissão atual
+antes da leitura, contrato/schema/contagens, cópia corrompida ou incompleta,
+isolamento da leitura pronta (sem fontes/reconciliação/cache de negócio),
+falhas de fonte/escrita/validação/publicação preservando a cópia anterior e o
+erro original, metadados sanitizados, lease concorrente/expirada/tomada por
+outra execução, ausência de lock aninhado, retenção atual+anterior e limpeza
+dirigida. Mocka instalação idempotente a cada 15 minutos, propriedade/visibilidade
+dos gatilhos, preservação dos demais gatilhos, desativação exclusiva do dono,
+conta efetiva sem sessão ativa, revogação de admin e erros automáticos.
+Os testes de frontend também cobrem timestamp, primeiro recálculo, ação longa
+única, falha explícita e releitura que reinicia paginação/detalhes.
+Nenhum teste instala gatilhos, grava Drive real ou publica a implantação.
+
+No cenário de três TXT selecionados dentre cinco achados por fonte:
+
+| Operação simulada | Antes | Depois |
+| --- | ---: | ---: |
+| Nomes de arquivos de solicitações (`getName`) | 13 | 7 |
+| Nomes dos arquivos de resultados (`getName`) | 23 | 11 |
+| URLs dos resultados (`getUrl`) | 11 | 7 |
+| Nomes de arquivos de súmulas (`getName`) | 10 | 7 |
+| Leituras do controle de punições (`getBlob`) | 2 | 1 |
+| TXT de solicitações/súmulas abertos | 3 + 3 | 3 + 3 |
+
+São contagens de métodos no fixture, não chamadas HTTP nem segundos economizados.
+O índice de resultados ainda percorre todos os nomes e escolhe o processamento
+mais recente para cada TXT/PDF necessário. Os links usados nos detalhes,
+os totais/limites e URLs das pastas não mudam. `getDateCreated` de todas as
+súmulas candidatas permanece necessário para manter a ordenação/recorte.
+As telas públicas mantêm anexos, resumo, relato, arbitragem, notas/punidos e
+seus filtros; somente a projeção privada dispensa esses campos não utilizados.
+Não há cache de conteúdo que dispense a reconciliação global no **recálculo**.
+A consulta agora autoriza e lê apenas o snapshot persistido pronto; ele é
+intencionalmente defasado e não participa das validações de mutação.
+
+Cadeias verificadas no servidor:
+
+- `construirBancoAtletas_` → `lerSolicitacoes_(true)` → autorização →
+  `pastaSolicitacoes_` → enumeração Entrada/Processados/Falhas/raiz →
+  ordenação/carimbo e limite → `indiceResultados_` → TXT selecionados →
+  `interpretarSolicitacao_` → consolidação. A tela pública usa
+  `listarSolicitacoes` → o mesmo leitor com projeção desligada.
+- `construirBancoAtletas_` → `listarPunicoes` → autorização → `arquivoPunicoes_` →
+  blob/`interpretarPunicoes_`; depois `lerSumulas_(true)` → autorização →
+  `pastaSumulas_` → enumeração/data de criação/ordenação e limite →
+  TXT/`interpretarSumula_` → consolidação. A tela pública usa
+  `listarSumulas` → o mesmo leitor completo → `indiceNotas_` →
+  `arquivoPunicoes_`/blob/`interpretarPunicoes_` → notas/punidos e filtro de equipes.
+  Essa última cadeia de enriquecimento não alimentava nenhum campo do atleta.
+
 `mutations.test.cjs` cobre snapshot original persistido antes de remoção ou
 transferência, reconciliação global sem segunda varredura, inscrições ausentes,
 recuperação de falhas, participante por ID/CPF, permissões revogadas durante a
@@ -193,6 +319,51 @@ o monitor do navegador para estes logs. Consulte a seção **Logs de salvamento,
 em `apps-scripts\sistema-interno\campeonato\README.md` para todos os campos
 e fases. Compare uma criação/edição equivalente por execução, confirmando o
 sucesso na tela, sem repetir gravações reais automaticamente.
+
+Para `listarAtletas`, filtre `"metrica":"atleta_banco"`: apenas a fase
+`snapshot` (leitura e validação da cópia pronta), sem leitura de fontes.
+No recálculo manual/programado, o construtor vivo mantém cinco fases sequenciais
+`elenco`, `solicitacoes`, `punicoes`, `sumulas` e `consolidacao`, sem contagem
+duplicada entre essas fases. `elenco` inclui espera pelo lock, reconciliação
+global e montagem dos vínculos; `consolidacao` mede apenas o merge/ordenação
+em memória depois de ler as quatro fontes. Logs `cadastro_elenco` internos
+de reconciliação são filhos de `elenco`, não valores adicionais para somar.
+As cinco fases principais registram apenas `metrica`, `fase`, `duracaoMs`,
+inclusive em falhas, sem identificadores ou dados pessoais. A mesma flag
+`CADASTRO_METRICAS_ATIVAS` desliga todos os logs/cálculos adicionais.
+Publicar Index.html e WebApp.gs juntos é necessário para atualizar a tela e
+o backend; o teste local não publica nem faz chamadas de rede.
+
+As categorias `solicitacoes` e `sumulas` em `atleta_banco` detalham:
+
+- `autorizacao`: identificação e permissão do módulo, mantidas em cada fonte;
+- `localizar`: abertura da pasta raiz;
+- `enumerar`: subpastas/raiz, nomes, data de criação de súmulas e ordenação;
+- `resultados`: índice dos resultados de solicitações (nomes e URLs necessários);
+- `drive_ler`: abertura/decodificação dos TXT selecionados;
+- `tamanho_utf8`: custo de medir os textos já lidos, sem IO extra;
+- `interpretar`: parser/projeção, incluindo `metadados` (URLs usadas no detalhe);
+- `leitura`: pai inclusivo de toda a fonte, incluindo preparação da resposta.
+
+Há somente uma linha por subfase/categoria na execução, agregando todos os TXT,
+não uma linha por arquivo. Contadores `arquivosLidos`/`bytesLidos` referem-se aos
+TXT decodificados com sucesso daquela fonte, não a resultados, controle de
+punições, tamanho da resposta ou bytes transferidos pela rede.
+`total`/`selecionados` aparecem depois da montagem bem-sucedida dos registros;
+em falhas antecipadas podem estar ausentes. Os números são repetidos nas
+subfases para contexto, **não somá-los**. `metadados` é filho de `interpretar`;
+ambos estão em `leitura`, que por sua vez está na fase principal da fonte.
+Não somar esses pais/filhos. Consultas públicas de solicitações/súmulas
+não emitem essas métricas.
+
+Na amostra informada, solicitações custaram 13,340 s e súmulas 3,807 s de
+31,25 s; as fases antigas não identificam qual suboperação domina. A análise
+do caminho e contagens sintéticas comprovam trabalho descartado (URLs de
+resultados não selecionados, nomes relidos e enriquecimento duplicado com
+punições), não uma redução mensurada de latência. TXT, varreduras e história
+global continuam necessários. **Tempo real depois permanece não medido**:
+nenhuma publicação, consulta à rede ou escrita em dados reais foi executada.
+
 
 Separe `drive_localizar`, `drive_iterar`, `drive_ler`, `drive_setContent` e
 `drive_criar` das etapas `json_*`, `reconciliacao_memoria` e
