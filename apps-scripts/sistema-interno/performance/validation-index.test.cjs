@@ -169,10 +169,11 @@ test('transfer updates normalized team synchronously; existing history snapshots
   h.build();
   h.c.transferirAtletaElenco({ campeonatoId: 'c1', equipeId: 'e1', registroId: 'athlete', equipeDestinoId: 'e2' });
   assert.equal(h.index().cadastros.atletas['52998224725'][0][1], h.c.chaveEquipe_('Equipe B'));
+  assert.equal(h.counts.locks, 2);
+  h.c.processarHistoricoElencoAgora();
   const snapshots = h.history().inscricoes.filter(item => item.registroId === 'athlete');
   assert(snapshots.some(item => item.equipeId === 'e1' && !item.presente));
   assert(snapshots.some(item => item.equipeId === 'e2' && item.presente));
-  assert.equal(h.counts.locks, 2);
   h.state.perfil = 'associado';
   assert.throws(() => h.c.salvarCadastroElenco(h.payload('atletas')), /já está cadastrado na equipe Equipe B/);
 });
@@ -289,23 +290,26 @@ for (const failure of ['chunk', 'publish']) test(`failed ${failure}: committed s
 test('dirty marker failure prevents source write; source/history failures preserve recovery, no stale authorization', () => {
   for (const failure of ['dirty', 'source', 'history']) {
     const h = fixture();
+    let originalHistorico = null;
     h.seed('c1', 'atletas', [person('atletas')]);
     h.build();
     if (failure === 'dirty') h.state.failIndexWrite = 'dirty';
     if (failure === 'source') h.state.failRoster = true;
     if (failure === 'history') {
-      const original = h.c.gravarHistoricoElenco_;
+      originalHistorico = h.c.gravarHistoricoElenco_;
       let writes = 0;
       h.c.gravarHistoricoElenco_ = (...args) => {
         if (++writes === 2) throw Error('history failure');
-        return original(...args);
+        return originalHistorico(...args);
       };
     }
-    assert.throws(() => h.c.removerCadastroElenco(h.payload('atletas', true)));
     if (failure === 'history') {
+      h.c.removerCadastroElenco(h.payload('atletas', true));
+      assert.throws(() => h.c.processarHistoricoElencoAgora(), /pendências foram preservadas/);
       assert.equal(h.roster('c1', 'atletas').length, 0);
       assert.deepEqual(h.index().cadastros.atletas, {});
     } else {
+      assert.throws(() => h.c.removerCadastroElenco(h.payload('atletas', true)));
       assert.equal(h.roster('c1', 'atletas').length, 1);
       assert(!h.writes.includes(rosterFile('c1', 'atletas')));
       if (failure === 'source') assert(h.meta().dirty);
@@ -313,7 +317,8 @@ test('dirty marker failure prevents source write; source/history failures preser
     assert(!h.locked());
     h.state.failIndexWrite = null;
     h.state.failRoster = false;
-    h.withLock(() => h.c.prepararHistoricoElenco_());
+    if (originalHistorico) h.c.gravarHistoricoElenco_ = originalHistorico;
+    h.c.processarHistoricoElencoAgora();
     assert(h.history().inscricoes.some(item => item.registroId === 'athlete'));
   }
 });

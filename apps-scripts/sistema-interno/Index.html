@@ -3424,8 +3424,22 @@
         + '<button type="button" class="botao-apoio" data-indice-validacao="configurarAgendamentoIndicesValidacao">Configurar agendamento</button>'
         + '<button type="button" class="botao-apoio" data-indice-validacao="desativarAgendamentoIndicesValidacao">Desativar meu agendamento</button>'
         + '<button type="button" class="botao-principal" data-indice-validacao="reconciliarIndicesValidacaoAgora">Reconciliar agora</button>'
+        + '</div></section><section class="formulario"><h3>Histórico de inscrições — consolidação em segundo plano</h3>'
+        + '<p class="apoio">As validações e a gravação do elenco continuam síncronas. A consolidação do histórico é enfileirada após a gravação e executada pelo acionador. '
+        + 'O intervalo efetivo é configurado em Apps Script &gt; Acionadores; esta tela não detecta alterações feitas lá. '
+        + 'Consultas de importação continuam reconciliando o histórico atual antes de usá-lo.</p>'
+        + '<p id="statusHistoricoElencoAdmin" class="apoio" role="status" aria-live="polite">Consultando fila...</p>'
+        + '<p class="apoio">Se uma inscrição estiver faltando, reconcilie um campeonato com o elenco atual. Isso não recupera dados de pessoas que já não estejam no elenco nem substitui o histórico anterior.</p>'
+        + '<div class="grupo"><label for="reconciliarHistoricoCampeonato">Reconciliar campeonato pelo elenco atual</label>'
+        + '<select id="reconciliarHistoricoCampeonato"><option value="">Carregando campeonatos...</option></select></div>'
+        + '<div class="barra-acoes">'
+        + '<button type="button" class="botao-apoio" data-fila-historico="configurarAgendamentoHistoricoElenco">Configurar agendamento</button>'
+        + '<button type="button" class="botao-apoio" data-fila-historico="desativarAgendamentoHistoricoElenco">Desativar meu agendamento</button>'
+        + '<button type="button" class="botao-principal" data-fila-historico="processarHistoricoElencoAgora">Processar pendências agora</button>'
+        + '<button type="button" class="botao-apoio" data-fila-historico="reconciliarCampeonatoHistoricoElencoAgora" disabled>Reconciliar campeonato selecionado</button>'
         + '</div></section><div id="adminSnapshotsEsportivos"></div><div id="adminImagens"></div>';
       carregarIndiceValidacaoAdmin_(requisicao);
+      carregarFilaHistoricoElencoAdmin_(requisicao);
       carregarAgendasEsportivasAdmin_(requisicao);
       document.getElementById('configurarSnapshotAdmin').onclick = function () {
         executarAgendaSnapshotAdmin_('configurarAgendamentoBancoAtletas', requisicao);
@@ -3502,6 +3516,77 @@
         + '; adiados por concorrencia: ' + (resultados.concorrente || 0) + '; falhas: ' + (resultados.falhas || 0) + '. '
         + (estado.campeonatos || []).filter(function (item) { return item.pendente; }).length + ' campeonato(s) pendente(s). '
         + (estado.erro || '');
+    }
+
+    function textoStatusFilaHistoricoElenco_(estado) {
+      estado = estado || {};
+      return (estado.agendado ? 'Agendamento ativo, responsável: ' + estado.responsavel + '. '
+        + 'Confira o intervalo em Apps Script > Acionadores. ' : 'Sem agendamento. ')
+        + 'Campeonatos aguardando consolidação: ' + (estado.pendencias || 0) + '. '
+        + (estado.ultimaExecucao ? 'Última execução: ' + dataSnapshot_(estado.ultimaExecucao) + '. ' : '')
+        + (estado.ultimaExecucao && typeof estado.processados === 'number'
+          ? 'Último resultado: ' + estado.processados + ' campeonato(s), '
+            + (estado.registrosConsolidados || 0) + ' inscrição(ões) no histórico. ' : '')
+        + (estado.codigoErro === 'CAMPEONATO_AUSENTE'
+          ? 'Campeonato da pendência não encontrado: ' + (estado.campeonatoErro || '') + '. A pendência foi preservada. ' : '')
+        + (estado.erro || '');
+    }
+
+    function carregarFilaHistoricoElencoAdmin_(requisicao) {
+      const status = document.getElementById('statusHistoricoElencoAdmin');
+      const botoes = document.querySelectorAll('[data-fila-historico]');
+      const seletor = document.getElementById('reconciliarHistoricoCampeonato');
+      const botaoReconciliar = document.querySelector(
+        '[data-fila-historico="reconciliarCampeonatoHistoricoElencoAgora"]');
+      botoes.forEach(function (botao) {
+        botao.onclick = function () {
+          if (administracaoOcupada_ || administracaoSnapshotOcupada_
+              || moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+          const metodo = botao.dataset.filaHistorico;
+          const campeonatoId = metodo === 'reconciliarCampeonatoHistoricoElencoAgora'
+            ? seletor.value : '';
+          if (metodo === 'reconciliarCampeonatoHistoricoElencoAgora' && !campeonatoId) {
+            status.textContent = 'Selecione um campeonato para reconciliar.';
+            return;
+          }
+          administracaoSnapshotOcupada_ = true;
+          const anteriores = Array.from(botoes).map(function (item) { return item.disabled; });
+          botoes.forEach(function (item) { item.disabled = true; });
+          const seletorAnterior = seletor.disabled;
+          seletor.disabled = true;
+          status.textContent = 'Executando...';
+          const concluir = function (estado, erro) {
+            administracaoSnapshotOcupada_ = false;
+            if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+            botoes.forEach(function (item, indice) { item.disabled = anteriores[indice]; });
+            seletor.disabled = seletorAnterior;
+            status.textContent = erro ? (erro.message || String(erro)) : textoStatusFilaHistoricoElenco_(estado);
+          };
+          const chamada = google.script.run.withSuccessHandler(function (estado) { concluir(estado); })
+            .withFailureHandler(function (erro) { concluir(null, erro); });
+          if (metodo === 'reconciliarCampeonatoHistoricoElencoAgora') chamada[metodo](campeonatoId);
+          else chamada[metodo]();
+        };
+      });
+      google.script.run.withSuccessHandler(function (campeonatos) {
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+        seletor.innerHTML = '<option value="">Selecione um campeonato...</option>'
+          + campeonatos.map(function (campeonato) {
+            return '<option value="' + escapar(campeonato.id) + '">' + escapar(campeonato.nome) + '</option>';
+          }).join('');
+        botaoReconciliar.disabled = !campeonatos.length;
+      }).withFailureHandler(function (erro) {
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+        seletor.innerHTML = '<option value="">Não foi possível carregar os campeonatos</option>';
+        status.textContent = erro.message || String(erro);
+      }).listarCampeonatosFilaHistoricoElenco();
+      google.script.run.withSuccessHandler(function (estado) {
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+        status.textContent = textoStatusFilaHistoricoElenco_(estado);
+      }).withFailureHandler(function (erro) {
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+        status.textContent = erro.message || String(erro);
+      }).obterStatusFilaHistoricoElenco();
     }
 
     function carregarIndiceValidacaoAdmin_(requisicao) {

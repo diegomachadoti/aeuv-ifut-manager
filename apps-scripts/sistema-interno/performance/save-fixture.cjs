@@ -18,6 +18,7 @@ const person = (tipo, overrides = {}) => ({
 // opcoes.cache habilita um CacheService.getUserCache realista (por usuário, só strings, TTL máximo).
 function harness(source = backend, opcoes = {}) {
   let locked = false, uuid = 0, nextId = 0, rootId = null;
+  let triggerId = 0;
   const counts = {
     campeonatos: 0, equipes: 0, rosters: 0, history: 0, tables: 0, locks: 0,
     sessoes: 0, bloqueios: 0, times: 0, registro: 0
@@ -37,6 +38,7 @@ function harness(source = backend, opcoes = {}) {
     perfil: 'admin', autorizado: true, equipeUsuario: 'Equipe A', bloqueado: false,
     equipesAtivas: null, times: null, failHistory: false, failRoster: false,
     onLock: null, onRoster: null,
+    effectiveUser: 'admin@example.invalid',
     campeonatos: [{ id: 'c1', nome: 'Atual' }, { id: 'c2', nome: 'Anterior', status: 'encerrado' }],
     equipes: [{ id: 'e1', nome: 'Equipe A' }, { id: 'e2', nome: 'Equipe B' }],
     jogos: [], cacheUser: 'usuario-1'
@@ -70,6 +72,7 @@ function harness(source = backend, opcoes = {}) {
       if (name.startsWith('AEUV - Campeonato -') && state.onRoster) state.onRoster();
     }
   });
+  const triggers = [];
   const c = vm.createContext({
     Date: class extends Date {
       constructor(...args) { super(...(args.length ? args : ['2026-10-05T12:00:00.000Z'])); }
@@ -108,9 +111,35 @@ function harness(source = backend, opcoes = {}) {
         setContent: text => file(atual().name).setContent(text)
       };
     } },
-    ScriptApp: { getService: () => ({ getUrl: () => 'fixture' }) },
+    ScriptApp: {
+      EventType: { CLOCK: 'CLOCK' },
+      getService: () => ({ getUrl: () => 'fixture' }),
+      getProjectTriggers: () => triggers.filter(trigger => !trigger.deleted && trigger.owner === state.effectiveUser),
+      deleteTrigger: trigger => { trigger.deleted = true; },
+      newTrigger: handler => ({
+        timeBased() { return this; },
+        everyMinutes(minutes) {
+          const esperado = handler === 'atualizarTabelaAgendada'
+            || handler === 'reconciliarIndicesValidacaoAgendado' ? 5 : 15;
+          assert.equal(minutes, esperado);
+          this.interval = minutes;
+          return this;
+        },
+        create() {
+          const trigger = { id: 'trigger-' + ++triggerId, owner: state.effectiveUser, handler,
+            interval: this.interval, event: 'CLOCK', deleted: false };
+          trigger.getUniqueId = () => trigger.id;
+          trigger.getHandlerFunction = () => trigger.handler;
+          trigger.getEventType = () => trigger.event;
+          triggers.push(trigger);
+          return trigger;
+        }
+      })
+    },
+    Session: { getEffectiveUser: () => ({ getEmail: () => state.effectiveUser }) },
     PropertiesService: { getScriptProperties: () => ({
       getProperty: key => properties.has(key) ? properties.get(key) : null,
+      getProperties: () => Object.fromEntries(properties),
       setProperty: (key, value) => properties.set(key, value),
       deleteProperty: key => properties.delete(key)
     }) },
@@ -234,7 +263,7 @@ function harness(source = backend, opcoes = {}) {
   };
   return { c, state, counts, writes, logs, reads, io, files, seed, roster, history, payload,
     useRealRegistry, useRealContextFiles, registryFile, properties, ids, meta, caches, cacheOps, drive, idOf,
-    rootId: () => rootId, locked: () => locked };
+    rootId: () => rootId, locked: () => locked, triggers };
 }
 
 function participation(pessoa = person('atletas'), equipeId = 'e1') {

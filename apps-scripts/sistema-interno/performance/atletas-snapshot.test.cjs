@@ -385,7 +385,12 @@ test('Administração isola configuração de imagens, serializa ações e ignor
   const c = vm.createContext({
     CONFIG: { usuario: { perfil: 'admin' } }, moduloAtual: 'administracao', escapar: String,
     otimizarLogoSistema_() {}, otimizarImagensBase_() {}, textoStatusSnapshot_: value => JSON.stringify(value),
-    document: { getElementById: id => elements[id], querySelectorAll: () => [] },
+    document: {
+      getElementById: id => elements[id],
+      querySelector: selector => selector.indexOf('reconciliarCampeonatoHistoricoElencoAgora') >= 0
+        ? element('botaoReconciliarHistorico') : null,
+      querySelectorAll: () => []
+    },
     google: { script: { get run() {
       const req = {};
       const runner = {
@@ -393,7 +398,8 @@ test('Administração isola configuração de imagens, serializa ações e ignor
         withFailureHandler(fn) { req.failure = fn; return this; }
       };
       for (const method of ['obterStatusBancoAtletas', 'listarFontesOtimizacaoImagens',
-        'obterStatusSnapshotsEsportivos', 'obterStatusIndicesValidacao',
+        'obterStatusSnapshotsEsportivos', 'obterStatusIndicesValidacao', 'obterStatusFilaHistoricoElenco',
+        'listarCampeonatosFilaHistoricoElenco',
         'configurarAgendamentoBancoAtletas', 'desativarAgendamentoBancoAtletas']) {
         runner[method] = () => { req.method = method; requests.push(req); };
       }
@@ -404,10 +410,17 @@ test('Administração isola configuração de imagens, serializa ações e ignor
   c.carregarAdministracao_();
   const status = requests.find(req => req.method === 'obterStatusBancoAtletas');
   const images = requests.find(req => req.method === 'listarFontesOtimizacaoImagens');
+  const campeonatosFila = requests.find(req => req.method === 'listarCampeonatosFilaHistoricoElenco');
   assert.match(elements.areaAdministracao.innerHTML, /atualização programada/);
   assert.match(elements.areaAdministracao.innerHTML, /Configurar agendamento/);
   assert.match(elements.areaAdministracao.innerHTML, /Apps Script &gt; Acionadores/);
   assert.doesNotMatch(elements.areaAdministracao.innerHTML, /a cada (?:5|15) minutos/i);
+  assert.match(elements.areaAdministracao.innerHTML, /data-fila-historico="configurarAgendamentoHistoricoElenco"/);
+  assert.match(elements.areaAdministracao.innerHTML, /data-fila-historico="processarHistoricoElencoAgora"/);
+  assert.match(elements.areaAdministracao.innerHTML, /data-fila-historico="reconciliarCampeonatoHistoricoElencoAgora"/);
+  assert.match(elements.areaAdministracao.innerHTML, /reconciliarHistoricoCampeonato/);
+  campeonatosFila.success([{ id: 'c1', nome: 'Atual' }]);
+  assert.match(elements.reconciliarHistoricoCampeonato.innerHTML, /Atual/);
   elements.configurarSnapshotAdmin.onclick();
   const action = requests.at(-1);
   assert.equal(action.method, 'configurarAgendamentoBancoAtletas');

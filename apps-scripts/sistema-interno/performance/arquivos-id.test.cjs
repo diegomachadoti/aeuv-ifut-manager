@@ -30,28 +30,29 @@ test('ID memorizado elimina busca/iteracao por nome entre chamadas com os mesmos
   for (const h of [optimized, baseline]) saveTwice(h);
   assert.equal(count(optimized, 'lookup'), 0);
   assert.equal(count(optimized, 'hasNext'), 0);
-  assert.equal(count(baseline, 'lookup'), 8);
+  assert.equal(count(baseline, 'lookup'), 6);
   assert.deepEqual(optimized.writes, baseline.writes);
   assert.deepEqual([...optimized.files], [...baseline.files]);
   assert.deepEqual(optimized.counts, baseline.counts);
-  // Contagem medida na fixture (por salvamento quente, 8 arquivos): o caminho por nome faz
-  // 8 getFolderById (pastaRaizProjeto_, simulada aqui sem IO) + 8 buscas + 8 hasNext + 8 next = 32;
-  // o caminho por ID faz 8 getFileById + 8 x (getName, isTrashed, getParents, hasNext, getId) = 48.
+  // Contagem medida na fixture (por salvamento quente, 6 arquivos): o caminho por nome faz
+  // 6 getFolderById (pastaRaizProjeto_, simulada aqui sem IO) + 6 buscas + 6 hasNext + 6 next = 24;
+  // o caminho por ID faz 6 getFileById + 6 x (getName, isTrashed, getParents, hasNext, getId) = 36.
   // Leituras de conteúdo e gravações não mudam. Ganho real depende da latência no Apps Script.
-  assert.deepEqual(tally(optimized), { getFileById: 8, getName: 8, isTrashed: 8, getParents: 8,
-    parentHasNext: 8, parentGetId: 8, read: 8, setContent: 2 });
-  assert.deepEqual(tally(baseline), { lookup: 8, hasNext: 8, next: 8, read: 8, setContent: 2 });
+  assert.deepEqual(tally(optimized), { getFileById: 6, getName: 6, isTrashed: 6, getParents: 6,
+    parentHasNext: 6, parentGetId: 6, read: 6, setContent: 2 });
+  assert.deepEqual(tally(baseline), { lookup: 6, hasNext: 6, next: 6, read: 6, setContent: 2 });
   assert.deepEqual(optimized.logs.filter(log => log.fase === 'drive_id').map(log => log.resultado),
-    Array(8).fill('acerto'));
+    Array(6).fill('acerto'));
 });
 
 test('primeira chamada memoriza IDs sem cache negativo e com um getId por arquivo encontrado', () => {
   const h = cached();
   h.c.salvarCadastroElenco(h.payload('atletas'));
-  assert.equal(count(h, 'lookup'), 8);
-  assert.equal(count(h, 'getId'), 8); // 7 encontrados + historico criado.
-  assert.equal(store(h).size, 8);
-  assert.deepEqual([...store(h).values()].sort(), allFiles(h).map(name => h.ids.get(name)).sort());
+  assert.equal(count(h, 'lookup'), 6);
+  assert.equal(count(h, 'getId'), 6); // 5 encontrados + historico criado.
+  assert.equal(store(h).size, 6);
+  assert.deepEqual([...store(h).values()].sort(),
+    allFiles(h).map(name => h.ids.get(name)).filter(Boolean).sort());
 });
 
 test('conteudo e autorizacao sempre atuais: bloqueio externo e lido pelo ID e impede gravacao', () => {
@@ -79,7 +80,7 @@ test('cache por usuario: outro usuario busca pelo nome e nao herda IDs', () => {
   assert.equal(count(h, 'lookup', 'AEUV - Campeonatos.json'), 1);
   assert.equal(count(h, 'getFileById'), 0);
   assert.equal(store(h, 'usuario-2').size, 1);
-  assert.equal(store(h, 'usuario-1').size, 8);
+  assert.equal(store(h, 'usuario-1').size, 6);
   h.io.length = 0;
   h.c.campeonatos_();
   assert.equal(count(h, 'lookup'), 0);
@@ -140,13 +141,13 @@ for (const [caso, preparar] of [
     assert(!h.locked());
     assert(h.logs.some(log => log.fase === 'drive_id' && log.resultado === 'falha'));
     assert(!h.logs.some(log => log.fase === 'resposta'));
-    assert.equal(store(h).size, 7);
+    assert.equal(store(h).size, 5);
     h.state.failGetById = null;
     h.io.length = 0;
     h.c.salvarCadastroElenco(h.payload('comissao'));
     assert.equal(count(h, 'lookup'), 1); // Só a referência descartada volta a ser buscada pelo nome.
     if (caso === 'removido definitivamente') assert.equal(count(h, 'lookup', historyFile), 1);
-    assert.equal(store(h).size, 8);
+    assert.equal(store(h).size, 6);
   });
 }
 
@@ -209,7 +210,7 @@ test('registro de equipes e bloqueios gravam pelo ID memorizado ou criam e memor
   assert.equal(h.c.lerBloqueiosElenco_()[0].bloqueado, false);
 });
 
-test('historico novo criado no salvamento e reutilizado pelo ID na proxima chamada', () => {
+test('historico novo criado no salvamento, reutilizado por ID e consolidado pela fila', () => {
   const h = cached();
   h.c.salvarCadastroElenco(h.payload('atletas'));
   assert.equal(count(h, 'create', historyFile), 1);
@@ -217,6 +218,7 @@ test('historico novo criado no salvamento e reutilizado pelo ID na proxima chama
   h.c.salvarCadastroElenco(h.payload('comissao'));
   assert.equal(count(h, 'lookup', historyFile), 0);
   assert.equal(count(h, 'create', historyFile), 0);
+  h.c.processarHistoricoElencoAgora();
   assert(h.history().inscricoes.some(item => item.tipo === 'comissao' || item.dados.cargo));
 });
 
@@ -247,7 +249,7 @@ test('handles da operacao continuam unicos por arquivo sob lock com cache quente
   saveTwice(h);
   h.io.length = 0;
   h.c.salvarCadastroElenco(h.payload('comissao'));
-  assert.equal(count(h, 'getFileById'), 8);
+  assert.equal(count(h, 'getFileById'), 6);
   assert.equal(count(h, 'lookup'), 0);
   for (const name of [historyFile, rosterFile('c1', 'comissao')]) {
     assert.equal(count(h, 'setContent', name), 1);
@@ -317,5 +319,3 @@ test('remocao de campeonato pelo repositorio invalida IDs das listas; tabelas na
   h.c.lerListaCadastroDrive_(h.c.arquivoTabelaCampeonato_('c1'), 'tabela');
   assert.equal(h.cacheOps.length, ops);
 });
-
-

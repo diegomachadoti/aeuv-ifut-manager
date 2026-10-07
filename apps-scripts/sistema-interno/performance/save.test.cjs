@@ -17,8 +17,9 @@ test('desligar metricas elimina logs e calculo de tamanho sem mudar persistencia
       const result = h.c.salvarCadastroElenco(h.payload(tipo, edit));
       assert.equal(h.logs.length, 0);
       assert.equal(result.registros[0][tipo].length, h.roster('c1', tipo).length);
+      assert.equal(h.counts.rosters, 2);
+      h.c.processarHistoricoElencoAgora();
       assert(h.history().inscricoes.some(item => item.tipo === tipo));
-      assert.equal(h.counts.rosters, 4);
       assert(!h.locked());
     }
   }
@@ -64,20 +65,20 @@ for (const tipo of ['atletas', 'comissao']) {
       if (edit) h.seed('c1', tipo, [person(tipo)]);
       h.seed('c2', 'atletas', [person('atletas', { id: 'legacy', cpf: '123', foto: 'old-photo' })]);
       const result = h.c.salvarCadastroElenco(h.payload(tipo, edit));
-      // HEAD: 8 (create) / 9 (edit); first refinement: 6. Target lists are reused by the history scan.
-      assert.equal(h.counts.rosters, 4);
+      // The target championship's rosters are reused by validation and its history snapshot.
+      assert.equal(h.counts.rosters, 2);
       assert.equal(h.counts.equipes, 1); // Previously 2: pre-lock + under-lock.
       assert.equal(h.counts.campeonatos, 1); // Only the fresh under-lock context.
       assert.equal(h.counts.sessoes, 2); // Authorization: pre-lock + under lock, never reused.
       assert.equal(h.counts.bloqueios, 1); // Previously validation + response.
-      assert.equal(h.counts.times, 2); // Previously 4; no preliminary membership/team lookup.
+      assert.equal(h.counts.times, 1); // Only the current championship membership is needed.
       assert.equal(h.counts.tables, tipo === 'atletas' ? 1 : 0); // Athlete creation previously 2.
       assert.equal(h.counts.locks, 1); // Previously save + response locks.
-      assert.equal(h.counts.history, 0); // First history file created by reconciliation.
+      assert.equal(h.counts.history, 0); // No read when the global history file does not exist yet.
       assert.equal(JSON.stringify(result.registros[0][tipo].map(({ participouCompeticao, podeRemover,
         motivoRemocao, motivoTransferencia, ...item }) => item)),
       JSON.stringify(h.roster('c1', tipo)));
-      assert(h.history().inscricoes.some(item => item.campeonatoId === 'c2' && item.dados.foto === 'old-photo'));
+      assert(!h.history().inscricoes.some(item => item.campeonatoId === 'c2'));
       assert(!h.history().inscricoes.some(item => 'participouCompeticao' in item.dados));
       assert(!h.locked());
       const phases = ['espera_lock', 'validacao_leitura', 'preparacao_historico',
@@ -94,7 +95,7 @@ for (const tipo of ['atletas', 'comissao']) {
       for (const recurso of ['autorizacao', 'equipes', 'ativas', 'campeonatos', 'times', 'bloqueios', 'drive']) {
         assert(h.reads.some(read => read.locked && read.recurso === recurso), recurso);
       }
-      for (const log of h.logs) {
+      for (const log of h.logs.filter(item => item.metrica === 'cadastro_elenco')) {
         const fields = log.fase === 'tamanho_json'
           ? ['metrica', 'fase', 'categoria', 'direcao', 'origem', 'bytesJson',
             ...(log.categoria === 'historico' ? ['participacoes', 'inscricoes'] : ['registros'])]
@@ -305,8 +306,9 @@ test('registro real nao migra equipes antes das guardas; sucesso preserva migrac
     const nova = JSON.parse(h.files.get(h.registryFile)).find(item => item.nome === 'Equipe Nova');
     assert(nova && nova.id);
     assert.equal(h.roster('c1', tipo)[0].timeVinculado, 'Equipe A');
-    assert(h.history().inscricoes.some(item => item.campeonatoId === 'c1' && item.tipo === tipo && item.presente));
     assert.deepEqual(h.reads.filter(read => !read.locked).map(read => read.recurso), ['autorizacao']);
+    h.c.processarHistoricoElencoAgora();
+    assert(h.history().inscricoes.some(item => item.campeonatoId === 'c1' && item.tipo === tipo && item.presente));
     assert(!h.locked());
   }
 });
@@ -469,18 +471,20 @@ test('falhas de escrita propagam erro, liberam lock e recuperacao reconcilia tod
     lock.releaseLock();
     h.state.onRoster = () => { if (fail === 'failHistory') h.state.failHistory = true; };
     if (fail === 'failRoster') h.state.failRoster = true;
-    assert.throws(() => h.c.salvarCadastroElenco(h.payload('atletas')),
-      fail === 'failRoster' ? /confirmar a gravação/ : /elenco foi salvo/);
+    if (fail === 'failRoster') {
+      assert.throws(() => h.c.salvarCadastroElenco(h.payload('atletas')), /confirmar a gravação/);
+    } else {
+      h.c.salvarCadastroElenco(h.payload('atletas'));
+      assert.throws(() => h.c.processarHistoricoElencoAgora(), /pendências foram preservadas/);
+    }
     assert(!h.locked());
     h.state.failRoster = h.state.failHistory = false;
     h.state.onRoster = null;
-    lock.waitLock();
-    h.c.prepararHistoricoElenco_();
-    lock.releaseLock();
+    h.c.processarHistoricoElencoAgora();
     assert(h.history().inscricoes.some(item => item.campeonatoId === 'c2' && item.presente));
     assert.equal(h.history().inscricoes.some(item => item.campeonatoId === 'c1' && item.presente),
       fail === 'failHistory');
-    assert(!h.logs.some(log => log.fase === 'resposta'));
+    assert.equal(h.logs.some(log => log.fase === 'resposta'), fail === 'failHistory');
   }
 });
 
@@ -493,6 +497,12 @@ test('historico invalido impede escrita e migracao global de IDs permanece ativa
   const h = harness();
   h.seed('c2', 'atletas', [person('atletas', { id: '', foto: 'legacy-photo', custom: 'legacy-field' })]);
   h.c.salvarCadastroElenco(h.payload('comissao'));
+  assert.equal(h.roster('c2', 'atletas')[0].id, '',
+    'routine save no longer migrates unrelated championships');
+  const lock = h.c.LockService.getScriptLock();
+  lock.waitLock();
+  h.c.prepararHistoricoElenco_();
+  lock.releaseLock();
   assert(h.roster('c2', 'atletas')[0].id);
   assert.equal(h.roster('c2', 'atletas')[0].custom, 'legacy-field');
   assert(h.history().inscricoes.some(item => item.campeonatoId === 'c2' && item.dados.foto === 'legacy-photo'));
@@ -516,8 +526,15 @@ test('reconciliacao global mantem snapshots ausentes e encerra presenca de campe
   const h = harness();
   h.seed('c2', 'atletas', [person('atletas', { id: 'old-registration', foto: 'historic-photo' })]);
   h.c.salvarCadastroElenco(h.payload('comissao'));
+  const lock = h.c.LockService.getScriptLock();
+  lock.waitLock();
+  h.c.prepararHistoricoElenco_();
+  lock.releaseLock();
   h.state.campeonatos = h.state.campeonatos.filter(item => item.id !== 'c2');
   h.c.salvarCadastroElenco(h.payload('atletas'));
+  lock.waitLock();
+  h.c.prepararHistoricoElenco_();
+  lock.releaseLock();
   const retained = h.history().inscricoes.find(item => item.registroId === 'old-registration');
   assert(retained);
   assert.equal(retained.presente, false);
@@ -538,6 +555,7 @@ test('falha na reconciliacao previa impede gravacao do elenco; falha na resposta
   }]; };
   assert.throws(() => after.c.salvarCadastroElenco(after.payload('comissao')), /inválido/);
   assert.equal(after.roster('c1', 'comissao').length, 1);
+  after.c.processarHistoricoElencoAgora();
   assert(after.history().inscricoes.some(item => item.campeonatoId === 'c1' && item.tipo === 'comissao'
     && item.presente));
   assert(!after.locked());
@@ -628,7 +646,7 @@ test('tamanhos UTF-8 usam JSON bruto lido e JSON persistido, inclusive Unicode',
   const h = harness();
   const pessoa = person('atletas', { nome: 'João 漢 😀', foto: 'data:image/png;base64,cHJpdmF0ZQ==' });
   const raw = ' \n' + JSON.stringify([pessoa]) + '\n ';
-  h.files.set(rosterFile('c2', 'atletas'), raw);
+  h.files.set(rosterFile('c1', 'atletas'), raw);
   const historico = { versao: 1, sequencia: 0, participacoes: [], inscricoes: [] };
   const rawHistory = JSON.stringify(historico, null, 2);
   h.files.set(historyFile, rawHistory);
@@ -652,7 +670,7 @@ test('tamanhos UTF-8 usam JSON bruto lido e JSON persistido, inclusive Unicode',
     assert(h.logs.some(log => log.fase === phase), phase);
   }
   const logs = JSON.stringify(h.logs);
-  for (const secret of [pessoa.nome, pessoa.cpf, pessoa.foto, pessoa.id, historyFile, 'c2', 'Equipe A']) {
+  for (const secret of [pessoa.nome, pessoa.cpf, pessoa.foto, pessoa.id, historyFile, 'c1', 'Equipe A']) {
     assert(!logs.includes(secret), secret);
   }
 });
@@ -670,9 +688,9 @@ test('instrumentacao nao muda IO, migracao global nem snapshots em criacao e edi
     assert.deepEqual(measured.io, unmeasured.io);
     assert.deepEqual(measured.counts, unmeasured.counts);
     assert.deepEqual(measured.writes, unmeasured.writes);
-    assert.equal(measured.counts.rosters, 4);
+    assert.equal(measured.counts.rosters, 2);
     assert.equal(measured.roster('c2', 'atletas')[0].custom, 'preserved');
-    assert(measured.logs.some(log => log.categoria === 'atletas' && log.direcao === 'gravacao'));
+    assert(measured.logs.some(log => log.categoria === tipo && log.direcao === 'gravacao'));
   }
 });
 
@@ -743,9 +761,14 @@ test('leitura legada e criacao de lista sao medidas sem novas leituras e limpeza
   for (const fail of [false, true]) {
     const h = harness(), nome = rosterFile('c1', 'atletas'), raw = '[{"nome":"É"}]';
     h.files.delete(nome);
+    const legacy = 'legacy';
     let reads = 0, deletes = 0;
     h.c.PropertiesService.getScriptProperties = () => ({
-      getProperty: () => { reads++; return raw; }, deleteProperty: () => { deletes++; },
+      getProperty: key => {
+        reads++;
+        return key === legacy ? raw : h.properties.get(key) || null;
+      },
+      deleteProperty: key => { deletes++; h.properties.delete(key); },
       setProperty: (key, value) => h.properties.set(key, value)
     });
     const lista = h.c.lerListaCadastroDrive_(nome, 'legacy', {}, 'atletas');
@@ -757,7 +780,7 @@ test('leitura legada e criacao de lista sao medidas sem novas leituras e limpeza
     lock.waitLock();
     try {
       if (fail) h.state.failCreate = nome;
-      const write = () => h.c.gravarListaCadastroDrive_(nome, 'legacy', lista, {}, 'atletas');
+      const write = () =>       h.c.gravarListaCadastroDrive_(nome, legacy, lista, {}, 'atletas');
       if (fail) assert.throws(write, /create failure/);
       else write();
       assert.equal(deletes, fail ? 0 : 1);
@@ -792,13 +815,13 @@ test('helpers sem recursos continuam silenciosos', () => {
   } finally { lock.releaseLock(); }
 });
 
-test('handles eliminam exatamente as buscas e iteracoes das escritas, sem mudar dados ou regras', () => {
+test('handles limitam reconciliacao e escritas ao campeonato alterado sem mudar dados ou regras', () => {
   for (const tipo of ['atletas', 'comissao']) for (const edit of [false, true]) {
     const optimized = harness(), baseline = harness();
     baseline.c.arquivosDriveOperacao_ = () => null;
     for (const h of [optimized, baseline]) {
       if (edit) h.seed('c1', tipo, [person(tipo)]);
-      // Reconciliation writes history before the target write, and migration writes another roster.
+      // The unrelated legacy roster must remain untouched during this mutation.
       h.seed('c2', 'atletas', [person('atletas', { id: '', cpf: '123', custom: 'preserved' })]);
       h.c.salvarCadastroElenco(h.payload(tipo, edit));
     }
@@ -807,20 +830,26 @@ test('handles eliminam exatamente as buscas e iteracoes das escritas, sem mudar 
     for (const name of names) {
       for (const operacao of ['lookup', 'hasNext']) {
         const count = h => h.io.filter(item => item.name === name && item.operacao === operacao).length;
-        assert.equal(count(optimized), 1, `${tipo}/${edit}/${name}/${operacao}`);
-        assert.equal(count(baseline), 1 + baseline.writes.filter(item => item === name).length);
+        if (name.includes(' - c2 - ')) {
+          assert.equal(count(optimized), 0, `${tipo}/${edit}/${name}/${operacao}`);
+          assert.equal(count(baseline), 0, `${tipo}/${edit}/${name}/${operacao}`);
+        } else {
+          assert.equal(count(optimized), 1, `${tipo}/${edit}/${name}/${operacao}`);
+          assert.equal(count(baseline), 1 + baseline.writes.filter(item => item === name).length);
+        }
       }
     }
-    assert.equal(optimized.io.filter(item => item.operacao === 'lookup').length, 5);
-    assert.equal(baseline.io.filter(item => item.operacao === 'lookup').length, 9); // 2 history + 2 roster writes.
+    assert.equal(optimized.io.filter(item => item.operacao === 'lookup').length, 3);
+    assert.equal(baseline.io.filter(item => item.operacao === 'lookup').length, 5);
     assert.deepEqual(optimized.writes, baseline.writes);
     assert.deepEqual([...optimized.files], [...baseline.files]);
     assert.deepEqual(optimized.counts, baseline.counts);
-    assert.equal(optimized.counts.rosters, 4); // No change in global read coverage.
+    assert.equal(optimized.counts.rosters, 2);
+    assert.equal(optimized.roster('c2', 'atletas')[0].id, '');
   }
 });
 
-test('historico reconciliado elimina duas buscas redundantes no salvamento comum: 7 para 5', () => {
+test('historico reconciliado reaproveita handles no campeonato alterado', () => {
   for (const tipo of ['atletas', 'comissao']) for (const edit of [false, true]) {
     const optimized = harness(), baseline = harness();
     baseline.c.arquivosDriveOperacao_ = () => null;
@@ -833,11 +862,11 @@ test('historico reconciliado elimina duas buscas redundantes no salvamento comum
       h.io.length = h.writes.length = 0;
       h.c.salvarCadastroElenco(h.payload(tipo, edit));
     }
-    assert.equal(optimized.io.filter(item => item.operacao === 'lookup').length, 5);
-    assert.equal(baseline.io.filter(item => item.operacao === 'lookup').length, 7);
-    assert.equal(optimized.io.filter(item => item.operacao === 'hasNext').length, 5);
-    assert.equal(baseline.io.filter(item => item.operacao === 'hasNext').length, 7);
-    assert.deepEqual(optimized.writes, [rosterFile('c1', tipo), historyFile]);
+    assert.equal(optimized.io.filter(item => item.operacao === 'lookup').length, 3);
+    assert.equal(baseline.io.filter(item => item.operacao === 'lookup').length, 4);
+    assert.equal(optimized.io.filter(item => item.operacao === 'hasNext').length, 3);
+    assert.equal(baseline.io.filter(item => item.operacao === 'hasNext').length, 4);
+    assert.deepEqual(optimized.writes, [rosterFile('c1', tipo)]);
     assert.deepEqual(optimized.writes, baseline.writes);
     assert.deepEqual([...optimized.files], [...baseline.files]);
   }

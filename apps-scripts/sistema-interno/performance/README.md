@@ -9,7 +9,7 @@ Não muda endpoints, permissões, regras ou dados do sistema.
 versao/MD5 e Script Properties com falhas injetadas. Cobre atualizacao
 incremental sincrona, CPF entre categorias, participacao por IDs/CPFs antigos,
 correcao/exclusao de resultados, fallback vivo, checkpoint concorrente,
-limites UTF-8/quota e agenda Admin independente de cinco minutos.
+limites UTF-8/quota e agenda Admin independente.
 Os contadores demonstram leituras de validacao sem blobs de elenco/tabela
 quando o indice e confiavel e ausencia de lock/reescrita na reconciliacao
 ja atual. **Nao** simulam latencia dos servicos Google: nao converter esses
@@ -226,6 +226,11 @@ time forçado pelo contexto fresco, CPF/participação, resposta autorizada,
 reconciliação histórica global e recuperação de falhas. Também verificam que
 os endpoints legados mantêm seu time solicitado e suas permissões.
 Contagens são chamadas no fixture, não uma garantia de tempo no Drive.
+Nas mutações de elenco, a preparação e a leitura dos arquivos de elenco são
+limitadas ao campeonato afetado; a reconciliação global permanece nos fluxos de
+importação e manutenção. Isso não segmenta o armazenamento do histórico:
+quando o JSON global já existe, ele ainda precisa ser carregado para preservar
+as inscrições das demais competições.
 
 Para o Banco de Dados de Atletas:
 
@@ -306,9 +311,14 @@ Cadeias verificadas no servidor:
 transferência, reconciliação global sem segunda varredura, inscrições ausentes,
 recuperação de falhas, participante por ID/CPF, permissões revogadas durante a
 espera, bloqueios, destinos/alvos removidos ou movidos, cache de IDs, flag de
-métricas e contratos de resposta/frontend/legados. No fixture, elencos lidos
-caem de 8/8/7 para 4 e buscas por nome de 12/12/11 para 5
-(remover atleta/comissão/transferir). As escritas históricas permanecem.
+métricas, contratos de resposta/frontend/legados e fila do histórico: marcador
+anterior à gravação, retry idempotente, falha sem perda de pendência e acionador
+de consolidação. Também verifica que competição ausente não perde a pendência e
+que a reconciliação manual de uma competição reconstitui inscrições a partir
+dos elencos atuais. A preparação/snapshot anterior continua síncrona; a escrita
+final do histórico passa a ocorrer no processador da fila. No fixture, elencos
+lidos caem de 8/8/7 para 4 e buscas por nome de 12/12/11 para 5
+(remover atleta/comissão/transferir).
 
 ## Logs do servidor: tamanho e memória versus Drive
 

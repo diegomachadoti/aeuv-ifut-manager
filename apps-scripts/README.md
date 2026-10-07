@@ -1417,6 +1417,42 @@ cadastros de terceiros são recusados no servidor, inclusive em edição e
 remoção. As mutações revalidam o contexto e o alvo persistido dentro do lock;
 a resposta nunca inclui o cadastro global.
 
+#### Consolidação assíncrona do histórico
+
+Inclusão, edição, remoção e transferência continuam validando permissão,
+vínculo, CPF, duplicidade e participação, e gravando o elenco atual de forma
+síncrona. Antes da gravação, o histórico atual é reconciliado para preservar o
+snapshot anterior; depois da gravação, uma pendência pequena por campeonato é
+registrada nas Script Properties e o histórico detalhado é consolidado em
+segundo plano. Isso posterga a escrita final do histórico, não altera suas regras
+nem muda ainda os arquivos atuais de elenco.
+
+Nas mutações rotineiras, a preparação lê os elencos apenas do campeonato alterado;
+importações e manutenções globais continuam reconciliando todos. O histórico
+detalhado permanece em um único JSON global: quando já existe, ainda é carregado
+para preservar os demais campeonatos e pode ser regravado se o conteúdo mudar.
+
+Em **Administração > Histórico de inscrições**, o administrador responsável
+deve clicar **Configurar agendamento** uma vez. O handler
+`processarHistoricoElencoAgendado` é criado com intervalo padrão de 15 minutos;
+o intervalo efetivo é configurado em **Apps Script > Acionadores**. A tela mostra
+campeonatos pendentes, última execução e falha. **Processar pendências agora**
+executa a reconciliação manualmente. Falhas preservam as pendências para retry;
+reprocessar é idempotente. O resultado da execução informa quantos campeonatos e
+inscrições foram encontrados, e os logs das Execuções detalham as contagens por
+campeonato. Se uma inscrição estiver faltando, **Reconciliar campeonato
+selecionado** refaz a consolidação daquele campeonato a partir do elenco atual;
+isso não recupera dados de atletas já removidos que ainda não existam no
+histórico. Campeonatos associados a uma pendência que não forem encontrados não
+terão a pendência descartada. Consultas de importação continuam reconciliando o
+histórico antes de confiar nos candidatos, portanto podem fazer trabalho
+síncrono quando forem usadas.
+
+Esta é a primeira etapa da mudança: o armazenamento do elenco continua nos
+JSONs atuais por campeonato. A migração futura para arquivos separados por
+equipe/competição ainda precisa adaptar leituras, gravações, índices, importação
+e recuperação antes que os arquivos atuais possam ser aposentados.
+
 **Bloquear elenco:** somente admin/diretoria pode bloquear/desbloquear no cabeçalho.
 O bloqueio vale para o par de IDs permanentes **campeonato + equipe**, não para a
 equipe global. O padrão é desbloqueado. O arquivo privado do Drive

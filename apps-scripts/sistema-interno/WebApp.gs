@@ -1677,9 +1677,9 @@ function transferirAtletaElencoInterno_(payload) {
     });
 
     const cache = {};
-    // Persistir o snapshot ORIGINAL antes de trocar o vínculo, inclusive no primeiro histórico.
+    // Persist the original snapshot for this championship before changing the team.
     const historico = medirFaseCadastro_('preparacao_historico', function () {
-      return prepararHistoricoElenco_(cache, recursos);
+      return prepararHistoricoElenco_(cache, recursos, origemAtual.campeonato.id);
     });
     const atualizada = lista.map(function (item) {
       if (item.id !== atleta.id) return item;
@@ -1690,7 +1690,8 @@ function transferirAtletaElencoInterno_(payload) {
     const resposta = medirFaseCadastro_('resposta', function () {
       return montarRespostaElenco_(origemAtual, cache[origemAtual.campeonato.id], recursos);
     });
-    resposta.recado = atleta.nome + ' transferido para ' + destino.nome + '.';
+    resposta.recado = atleta.nome + ' transferido para ' + destino.nome
+      + '. O histórico será consolidado em segundo plano.';
     return resposta;
   } finally {
     delete recursos.arquivosDrive;
@@ -1806,9 +1807,9 @@ function removerPessoaCampeonatoInterno_(campeonatoId, registroId, tipo, context
         });
       }
       const cache = {};
-      // A reconciliação global salva o cadastro original antes de qualquer remoção.
+      // Save the current championship snapshot before the destructive roster write.
       const historico = medirFaseCadastro_('preparacao_historico', function () {
-        return prepararHistoricoElenco_(cache, recursos);
+        return prepararHistoricoElenco_(cache, recursos, id);
       });
       const lista = atuais.filter(function (item) { return item.id !== alvoId; });
       if (tipo === 'atletas') gravarAtletasCampeonato_(id, lista, recursos, historico, cache[id]);
@@ -1822,7 +1823,8 @@ function removerPessoaCampeonatoInterno_(campeonatoId, registroId, tipo, context
     }
     // O contrato agregado dos endpoints legados permanece inalterado.
     if (!tela) tela = medirFaseCadastro_('resposta', function () { return respostaCadastro_(contexto); });
-    tela.recado = tipo === 'atletas' ? 'Atleta removido do campeonato.' : 'Membro removido da comissão técnica.';
+    tela.recado = (tipo === 'atletas' ? 'Atleta removido do campeonato.' : 'Membro removido da comissão técnica.')
+      + ' O histórico será consolidado em segundo plano.';
     return tela;
   });
 }
@@ -2053,6 +2055,285 @@ function registrarTamanhoCadastro_(recursos, categoria, direcao, origem, json, d
 
 // Permanent Drive history: enrollment snapshots, never a PropertiesService payload.
 const ELENCO_HISTORICO_ARQUIVO = 'AEUV - Historico de Inscricoes.json';
+const ELENCO_HISTORICO_FILA_PREFIXO = 'ELENCO_HISTORICO_FILA_V1_';
+const ELENCO_HISTORICO_AGENDA = 'ELENCO_HISTORICO_AGENDA_V1';
+const ELENCO_HISTORICO_STATUS = 'ELENCO_HISTORICO_STATUS_V1';
+const ELENCO_HISTORICO_HANDLER = 'processarHistoricoElencoAgendado';
+
+function chaveFilaHistoricoElenco_(campeonatoId) {
+  return ELENCO_HISTORICO_FILA_PREFIXO + digestIndiceValidacao_(String(campeonatoId));
+}
+
+function lerFilaHistoricoElenco_(chave, campeonatoId, recursos) {
+  const bruto = PropertiesService.getScriptProperties().getProperty(chave);
+  if (!bruto) return null;
+  let pendencia;
+  try { pendencia = JSON.parse(bruto); }
+  catch (e) { throw new Error('Fila de histórico inválida; o elenco não será alterado.'); }
+  if (!pendencia || pendencia.versao !== 1 || pendencia.campeonatoId !== campeonatoId
+      || typeof pendencia.token !== 'string' || !pendencia.token) {
+    throw new Error('Fila de histórico inconsistente; o elenco não será alterado.');
+  }
+  return pendencia;
+}
+
+function marcarHistoricoElencoPendente_(campeonatoId) {
+  const id = String(campeonatoId || '').trim();
+  if (!id) throw new Error('Campeonato inválido para atualizar a fila do histórico.');
+  const props = PropertiesService.getScriptProperties(), chave = chaveFilaHistoricoElenco_(id);
+  const anterior = lerFilaHistoricoElenco_(chave, id);
+  props.setProperty(chave, JSON.stringify({
+    versao: 1, campeonatoId: id, token: Utilities.getUuid(),
+    marcadoEm: anterior && anterior.marcadoEm || new Date().toISOString()
+  }));
+  if (CADASTRO_METRICAS_ATIVAS) console.log(JSON.stringify({
+    metrica: 'historico_fila', resultado: 'pendencia_criada',
+    campeonatoRef: digestIndiceValidacao_(id)
+  }));
+}
+
+function statusFilaHistoricoElenco_() {
+  const props = PropertiesService.getScriptProperties();
+  const agenda = JSON.parse(props.getProperty(ELENCO_HISTORICO_AGENDA) || '{}');
+  const estado = JSON.parse(props.getProperty(ELENCO_HISTORICO_STATUS) || '{}');
+  const pendencias = Object.keys(props.getProperties()).filter(function (chave) {
+    return chave.indexOf(ELENCO_HISTORICO_FILA_PREFIXO) === 0;
+  });
+  return {
+    agendado: !!agenda.triggerId,
+    responsavel: agenda.owner || '',
+    pendencias: pendencias.length,
+    ultimaExecucao: estado.ultimaExecucao || '',
+    erro: estado.erro || '',
+    codigoErro: estado.codigoErro || '',
+    campeonatoErro: estado.campeonatoErro || '',
+    processados: Number(estado.processados) || 0,
+    registrosConsolidados: Number(estado.registrosConsolidados) || 0,
+    campeonatosProcessados: Array.isArray(estado.campeonatosProcessados)
+      ? estado.campeonatosProcessados : []
+  };
+}
+
+function obterStatusFilaHistoricoElenco() {
+  exigirAdministracao_();
+  return statusFilaHistoricoElenco_();
+}
+
+function listarCampeonatosFilaHistoricoElenco() {
+  exigirAdministracao_();
+  return campeonatos_().map(function (campeonato) {
+    return { id: campeonato.id, nome: campeonato.nome };
+  });
+}
+
+function reconciliarCampeonatoHistoricoElencoAgora(campeonatoId) {
+  exigirAdministracao_();
+  const id = String(campeonatoId || '').trim();
+  if (!id) throw new Error('Selecione um campeonato para reconciliar o histórico.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const campeonato = campeonatos_().find(function (item) { return item.id === id; });
+    if (!campeonato) throw new Error('Campeonato não encontrado; nenhuma pendência foi criada.');
+    marcarHistoricoElencoPendente_(id);
+  } finally { lock.releaseLock(); }
+  return processarHistoricoElencoAgora();
+}
+
+function configurarAgendamentoHistoricoElenco() {
+  const sessao = exigirAdministracao_();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const agenda = JSON.parse(props.getProperty(ELENCO_HISTORICO_AGENDA) || '{}');
+    const owner = exigirDonoAgendaBancoAtletas_(sessao, agenda);
+    const proprios = ScriptApp.getProjectTriggers().filter(function (trigger) {
+      return trigger.getHandlerFunction() === ELENCO_HISTORICO_HANDLER
+        && trigger.getEventType() === ScriptApp.EventType.CLOCK;
+    });
+    const trigger = proprios.find(function (item) { return String(item.getUniqueId()) === agenda.triggerId; })
+      || proprios[0]
+      || ScriptApp.newTrigger(ELENCO_HISTORICO_HANDLER).timeBased().everyMinutes(15).create();
+    props.setProperty(ELENCO_HISTORICO_AGENDA, JSON.stringify({
+      owner: owner, triggerId: String(trigger.getUniqueId())
+    }));
+    proprios.forEach(function (item) {
+      if (String(item.getUniqueId()) !== String(trigger.getUniqueId())) ScriptApp.deleteTrigger(item);
+    });
+  } finally { lock.releaseLock(); }
+  return statusFilaHistoricoElenco_();
+}
+
+function desativarAgendamentoHistoricoElenco() {
+  const sessao = exigirAdministracao_();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const agenda = JSON.parse(props.getProperty(ELENCO_HISTORICO_AGENDA) || '{}');
+    exigirDonoAgendaBancoAtletas_(sessao, agenda);
+    ScriptApp.getProjectTriggers().filter(function (trigger) {
+      return trigger.getHandlerFunction() === ELENCO_HISTORICO_HANDLER
+        && trigger.getEventType() === ScriptApp.EventType.CLOCK;
+    }).forEach(function (trigger) { ScriptApp.deleteTrigger(trigger); });
+    props.deleteProperty(ELENCO_HISTORICO_AGENDA);
+  } finally { lock.releaseLock(); }
+  return statusFilaHistoricoElenco_();
+}
+
+function processarFilaHistoricoElencoSobLock_() {
+  const props = PropertiesService.getScriptProperties();
+  const todas = props.getProperties();
+  const pendencias = Object.keys(todas).filter(function (chave) {
+    return chave.indexOf(ELENCO_HISTORICO_FILA_PREFIXO) === 0;
+  }).map(function (chave) {
+    let valor;
+    try { valor = JSON.parse(todas[chave]); }
+    catch (e) { throw new Error('Fila de histórico inválida; pendências preservadas.'); }
+    if (!valor || valor.versao !== 1 || typeof valor.campeonatoId !== 'string'
+        || !valor.campeonatoId || !valor.token || chave !== chaveFilaHistoricoElenco_(valor.campeonatoId)) {
+      throw new Error('Fila de histórico inconsistente; pendências preservadas.');
+    }
+    return { chave: chave, bruto: todas[chave], campeonatoId: valor.campeonatoId };
+  });
+  if (!pendencias.length) {
+    const estado = {
+      ultimaExecucao: new Date().toISOString(), erro: '', processados: 0,
+      codigoErro: '', campeonatoErro: '',
+      registrosConsolidados: 0, campeonatosProcessados: []
+    };
+    props.setProperty(ELENCO_HISTORICO_STATUS, JSON.stringify(estado));
+    if (CADASTRO_METRICAS_ATIVAS) {
+      console.log(JSON.stringify({ metrica: 'historico_fila', resultado: 'sem_pendencias' }));
+    }
+    return statusFilaHistoricoElenco_();
+  }
+
+  const campeonatos = campeonatos_();
+  const alvos = pendencias.map(function (pendencia) {
+    const campeonato = campeonatos.find(function (item) { return item.id === pendencia.campeonatoId; });
+    if (!campeonato) {
+      const erro = new Error('Campeonato da fila não encontrado; pendência preservada.');
+      erro.code = 'CAMPEONATO_AUSENTE';
+      erro.campeonatoId = pendencia.campeonatoId;
+      throw erro;
+    }
+    return { pendencia: pendencia, campeonato: campeonato };
+  });
+  const historico = lerHistoricoElenco_();
+  const antes = JSON.stringify(historico);
+  const equipes = equipesRegistro_(true);
+  const resultados = [];
+  alvos.forEach(function (alvo) {
+    const pendencia = alvo.pendencia, campeonato = alvo.campeonato;
+    historico.inscricoes.forEach(function (item) {
+      if (item.campeonatoId === campeonato.id) {
+        item.presenteAntes = item.presente;
+        item.presente = false;
+      }
+    });
+    const listas = {
+      atletas: atletasCampeonato_(campeonato.id, false),
+      comissao: comissaoTecnicaCampeonato_(campeonato.id, false)
+    };
+    reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas);
+    resultados.push({
+      campeonatoId: campeonato.id,
+      atletasLidos: listas.atletas.length,
+      comissaoLida: listas.comissao.length,
+      inscricoesConsolidadas: historico.inscricoes.filter(function (item) {
+        return item.campeonatoId === campeonato.id;
+      }).length
+    });
+    historico.inscricoes.forEach(function (item) {
+      if (item.campeonatoId === campeonato.id) delete item.presenteAntes;
+    });
+  });
+  const alterado = antes !== JSON.stringify(historico);
+  if (alterado) gravarHistoricoElenco_(historico);
+
+  pendencias.forEach(function (pendencia) {
+    if (props.getProperty(pendencia.chave) === pendencia.bruto) props.deleteProperty(pendencia.chave);
+  });
+  const estado = {
+    ultimaExecucao: new Date().toISOString(), erro: '',
+    codigoErro: '', campeonatoErro: '',
+    processados: resultados.length,
+    registrosConsolidados: resultados.reduce(function (total, item) {
+      return total + item.inscricoesConsolidadas;
+    }, 0),
+    campeonatosProcessados: resultados
+  };
+  props.setProperty(ELENCO_HISTORICO_STATUS, JSON.stringify(estado));
+  resultados.forEach(function (item) {
+    if (CADASTRO_METRICAS_ATIVAS) console.log(JSON.stringify({
+      metrica: 'historico_fila', resultado: 'campeonato_processado',
+      campeonatoRef: digestIndiceValidacao_(item.campeonatoId),
+      atletasLidos: item.atletasLidos, comissaoLida: item.comissaoLida,
+      inscricoesConsolidadas: item.inscricoesConsolidadas,
+      historicoGravado: alterado
+    }));
+  });
+  return statusFilaHistoricoElenco_();
+}
+
+function processarHistoricoElencoAgora() {
+  exigirAdministracao_();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    try { return processarFilaHistoricoElencoSobLock_(); }
+    catch (erro) {
+      if (CADASTRO_METRICAS_ATIVAS) console.log(JSON.stringify({
+        metrica: 'historico_fila', resultado: 'erro',
+        codigoErro: erro && erro.code || 'FALHA_RECONCILIACAO',
+        campeonatoRef: erro && erro.campeonatoId
+          ? digestIndiceValidacao_(erro.campeonatoId) : ''
+      }));
+      PropertiesService.getScriptProperties().setProperty(ELENCO_HISTORICO_STATUS, JSON.stringify({
+        ultimaExecucao: new Date().toISOString(),
+        erro: 'Falha ao consolidar o histórico; as pendências foram preservadas. Confira as Execuções.',
+        codigoErro: erro && erro.code || 'FALHA_RECONCILIACAO',
+        campeonatoErro: erro && erro.campeonatoId || '',
+        processados: 0, registrosConsolidados: 0, campeonatosProcessados: []
+      }));
+      throw new Error('Falha ao consolidar o histórico. As pendências foram preservadas; confira as Execuções.');
+    }
+  } finally { lock.releaseLock(); }
+}
+
+function processarHistoricoElencoAgendado(evento) {
+  const sessao = exigirAdministracao_();
+  const props = PropertiesService.getScriptProperties();
+  let agenda = JSON.parse(props.getProperty(ELENCO_HISTORICO_AGENDA) || '{}');
+  validarGatilhoAgendado_(sessao, agenda, ELENCO_HISTORICO_HANDLER, evento,
+    'Gatilho do histórico não configurado para esta conta.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    agenda = JSON.parse(props.getProperty(ELENCO_HISTORICO_AGENDA) || '{}');
+    validarGatilhoAgendado_(sessao, agenda, ELENCO_HISTORICO_HANDLER, evento,
+      'Gatilho do histórico não configurado para esta conta.');
+    try { return processarFilaHistoricoElencoSobLock_(); }
+    catch (erro) {
+      if (CADASTRO_METRICAS_ATIVAS) console.log(JSON.stringify({
+        metrica: 'historico_fila', resultado: 'erro',
+        codigoErro: erro && erro.code || 'FALHA_RECONCILIACAO',
+        campeonatoRef: erro && erro.campeonatoId
+          ? digestIndiceValidacao_(erro.campeonatoId) : ''
+      }));
+      props.setProperty(ELENCO_HISTORICO_STATUS, JSON.stringify({
+        ultimaExecucao: new Date().toISOString(),
+        erro: 'Falha ao consolidar o histórico; as pendências foram preservadas. Confira as Execuções.',
+        codigoErro: erro && erro.code || 'FALHA_RECONCILIACAO',
+        campeonatoErro: erro && erro.campeonatoId || '',
+        processados: 0, registrosConsolidados: 0, campeonatosProcessados: []
+      }));
+      throw new Error('Falha ao consolidar o histórico. As pendências foram preservadas; confira as Execuções.');
+    }
+  } finally { lock.releaseLock(); }
+}
 
 function lerHistoricoElenco_(recursos) {
   const localizado = localizarArquivoCadastro_(ELENCO_HISTORICO_ARQUIVO, recursos, 'historico');
@@ -2163,13 +2444,29 @@ function reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas,
   });
 }
 
-// Called under the script lock, before destructive writes and on import reads.
-// Reconciliation also repairs a failed post-write history update from the saved roster.
-function prepararHistoricoElenco_(cache, recursos) {
+// Called under the script lock before roster mutations and on import reads.
+// Mutation calls scope the snapshot to one championship; imports and global
+// maintenance omit the ID to reconcile every championship.
+function prepararHistoricoElenco_(cache, recursos, campeonatoId) {
   const historico = lerHistoricoElenco_(recursos);
   const antes = medirEtapaCadastro_(recursos, 'historico', 'json_comparacao_antes', function () { return JSON.stringify(historico); });
+  const campeonatosDisponiveis = recursos && recursos.campeonatos
+    ? recursos.campeonatos : campeonatos_();
+  const campeonatos = campeonatoId
+    ? campeonatosDisponiveis.filter(function (item) { return item.id === campeonatoId; })
+    : campeonatosDisponiveis;
+  if (campeonatoId && !campeonatos.length) throw new Error('Campeonato não encontrado.');
+  const idsCampeonatos = Object.create(null);
+  campeonatos.forEach(function (item) { idsCampeonatos[item.id] = true; });
+  if (!campeonatoId) historico.inscricoes.forEach(function (item) {
+    idsCampeonatos[item.campeonatoId] = true;
+  });
   medirEtapaCadastro_(recursos, 'historico', 'historico_marcar_memoria', function () {
-    historico.inscricoes.forEach(function (item) { item.presenteAntes = item.presente; item.presente = false; });
+    historico.inscricoes.forEach(function (item) {
+      if (!idsCampeonatos[item.campeonatoId]) return;
+      item.presenteAntes = item.presente;
+      item.presente = false;
+    });
   });
   let equipes = recursos && recursos.equipes ? recursos.equipes : equipesRegistro_(true);
   // Preserva a migração global, mas só depois das guardas do salvamento sob lock.
@@ -2179,8 +2476,6 @@ function prepararHistoricoElenco_(cache, recursos) {
     equipes = equipesRegistro_(true);
     if (recursos.contexto) recursos.contexto.registroEquipes = equipes;
   }
-  // Todos os campeonatos continuam reconciliados; só leituras desta operação sob lock são reaproveitadas.
-  const campeonatos = recursos && recursos.campeonatos ? recursos.campeonatos : campeonatos_();
   if (recursos) {
     recursos.equipes = equipes;
     recursos.campeonatos = campeonatos;
@@ -2195,7 +2490,9 @@ function prepararHistoricoElenco_(cache, recursos) {
     reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas, recursos);
   });
   medirEtapaCadastro_(recursos, 'historico', 'historico_limpar_memoria', function () {
-    historico.inscricoes.forEach(function (item) { delete item.presenteAntes; });
+    historico.inscricoes.forEach(function (item) {
+      if (idsCampeonatos[item.campeonatoId]) delete item.presenteAntes;
+    });
   });
   if (antes !== medirEtapaCadastro_(recursos, 'historico', 'json_comparacao_depois', function () { return JSON.stringify(historico); })) {
     if (recursos) medirFaseCadastro_('gravacao_historico', function () { gravarHistoricoElenco_(historico, recursos); });
@@ -2206,9 +2503,12 @@ function prepararHistoricoElenco_(cache, recursos) {
 
 function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado, listasPreparadas, recursos) {
   const cache = {};
-  const historico = historicoPreparado || (recursos
-    ? medirFaseCadastro_('preparacao_historico', function () { return prepararHistoricoElenco_(cache, recursos); })
-    : prepararHistoricoElenco_(cache));
+  if (!historicoPreparado) {
+    if (recursos) medirFaseCadastro_('preparacao_historico', function () {
+      return prepararHistoricoElenco_(cache, recursos, campeonatoId);
+    });
+    else prepararHistoricoElenco_(cache, null, campeonatoId);
+  }
   const campeonato = (recursos && recursos.campeonatos ? recursos.campeonatos : campeonatos_())
     .find(function (item) { return item.id === campeonatoId; });
   if (!campeonato) throw new Error('Campeonato não encontrado.');
@@ -2228,28 +2528,8 @@ function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado
       : '';
     throw new Error('Não foi possível confirmar a gravação do elenco. Recarregue antes de repetir a operação; o histórico será reconciliado com os dados persistidos. ' + e.message + orientacao);
   }
-  try {
-    const atualizarHistorico = function () {
-      medirEtapaCadastro_(recursos, 'historico', 'historico_marcar_memoria', function () {
-        historico.inscricoes.forEach(function (item) { item.presenteAntes = item.presente; });
-      });
-      const listas = listasPreparadas || cache[campeonatoId] || {
-        atletas: tipo === 'atletas' ? lista : atletasCampeonato_(campeonatoId),
-        comissao: tipo === 'comissao' ? lista : comissaoTecnicaCampeonato_(campeonatoId)
-      };
-      listas[tipo] = lista;
-      reconciliarHistoricoCampeonato_(historico, campeonato,
-        recursos && recursos.equipes ? recursos.equipes : equipesRegistro_(true), listas, recursos);
-      medirEtapaCadastro_(recursos, 'historico', 'historico_limpar_memoria', function () {
-        historico.inscricoes.forEach(function (item) { delete item.presenteAntes; });
-      });
-      gravarHistoricoElenco_(historico, recursos);
-    };
-    if (recursos) medirFaseCadastro_('gravacao_historico', atualizarHistorico);
-    else atualizarHistorico();
-  } catch (e) {
-    throw new Error('O elenco foi salvo, mas o histórico não foi atualizado. Recarregue antes de repetir: a próxima consulta de importação reconciliará os cadastros persistidos. ' + e.message);
-  }
+  const listasResposta = listasPreparadas || cache[campeonatoId];
+  if (listasResposta) listasResposta[tipo] = lista;
 }
 
 function validarTipoImportacaoElenco_(tipo) {
@@ -2961,6 +3241,12 @@ function gravarListaCadastroDrive_(nomeArquivo, chaveLegada, lista, recursos, ca
   const localizado = localizarArquivoCadastro_(nomeArquivo, recursos, categoria);
   const conteudo = medirEtapaCadastro_(recursos, categoria, 'json_serializar', function () { return JSON.stringify(lista); });
   const indice = iniciarMutacaoIndiceValidacao_(nomeArquivo, recursos);
+  const alvoHistorico = alvoArquivoIndiceValidacao_(nomeArquivo);
+  if (alvoHistorico && alvoHistorico.tipo !== 'tabela') {
+    // Persist the reconciliation marker before changing the roster; retries are safe
+    // because the worker rebuilds this championship's history from its current sources.
+    marcarHistoricoElencoPendente_(alvoHistorico.id);
+  }
 
   // As chamadas de gravação já são protegidas pelo lock de salvar/remover.
   const arquivo = localizado.arquivo;
@@ -5450,7 +5736,7 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
    }
 
     if (!tela) tela = medirFaseCadastro_('resposta', function () { return respostaCadastro_(contexto); });
-   tela.recado = 'Atleta ' + nome + ' adicionado ao campeonato.';
+   tela.recado = 'Atleta ' + nome + ' adicionado ao campeonato. O histórico será consolidado em segundo plano.';
    return tela;
  }
 
@@ -5585,7 +5871,7 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
      }
 
       if (!tela) tela = medirFaseCadastro_('resposta', function () { return respostaCadastro_(contexto); });
-     tela.recado = 'Atleta ' + nome + ' atualizado com sucesso.';
+     tela.recado = 'Atleta ' + nome + ' atualizado com sucesso. O histórico será consolidado em segundo plano.';
      return tela;
    }
 
@@ -10247,7 +10533,7 @@ function abaFinanceiro_() {
     }
 
     if (!tela) tela = medirFaseCadastro_('resposta', function () { return respostaCadastro_(contexto); });
-    tela.recado = 'Membro ' + nome + ' adicionado à comissão técnica.';
+    tela.recado = 'Membro ' + nome + ' adicionado à comissão técnica. O histórico será consolidado em segundo plano.';
     return tela;
   }
 
@@ -10339,7 +10625,7 @@ function abaFinanceiro_() {
     }
 
     if (!tela) tela = medirFaseCadastro_('resposta', function () { return respostaCadastro_(contexto); });
-    tela.recado = 'Membro ' + nome + ' atualizado com sucesso.';
+    tela.recado = 'Membro ' + nome + ' atualizado com sucesso. O histórico será consolidado em segundo plano.';
     return tela;
   }
 
