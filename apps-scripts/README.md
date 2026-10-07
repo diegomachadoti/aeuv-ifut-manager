@@ -156,7 +156,10 @@ com identidade da pasta/manifesto, todas as partições publicadas, tipo,
 estado e nomes canônicos; ausência, corrupção, remoção ou edição externa
 impedem o reaproveitamento do índice anterior. A tabela mantém versão/MD5
 do Drive. A consulta V2 não reutiliza verificações de um índice em memória,
-mesmo sob lock. Após mutação do elenco, o índice fica dirty e as guardas
+mesmo sob lock. Dentro de uma operação sob lock, o fingerprint e as listas
+das duas categorias reutilizam a mesma leitura validada de cada partição;
+antes da publicação, as fontes são relidas para detectar alterações externas.
+Após mutação do elenco, o índice fica dirty e as guardas
 usam a fonte viva até o reconciliador manual/agendado reconstruí-lo.
 Não há promessa de validação V2 sem leituras de blobs.
 

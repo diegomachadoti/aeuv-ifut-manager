@@ -1344,8 +1344,24 @@ function timesCampeonatoOperacao_(campeonatoId, recursos) {
 function lerElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
   const ler = function () {
     if (elencosParticionadosCutoverAtivo_()) {
-      const estado = lerEstadoElencosParticionados_(campeonatoId);
-      const assinatura = assinaturaEstadoElencoParticionado_(estado);
+      const podeReutilizar = recursos && LockService.getScriptLock().hasLock();
+      const snapshots = podeReutilizar
+        ? (recursos.elencosParticionadosSnapshots
+          || (recursos.elencosParticionadosSnapshots = Object.create(null)))
+        : null;
+      let snapshot = snapshots && snapshots[campeonatoId];
+      if (!snapshot) {
+        const estado = lerEstadoElencosParticionados_(campeonatoId);
+        const fontes = fontesEstadoElencoParticionado_(estado);
+        snapshot = {
+          estado: estado,
+          fontes: fontes,
+          assinatura: assinaturaEstadoElencoParticionado_(estado, fontes)
+        };
+        if (snapshots) snapshots[campeonatoId] = snapshot;
+      }
+      const estado = snapshot.estado;
+      const assinatura = snapshot.assinatura;
       if (recursos) {
         const estados = recursos.estadosElencosParticionados
           || (recursos.estadosElencosParticionados = Object.create(null));
@@ -1355,7 +1371,7 @@ function lerElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
         }
         estados[campeonatoId] = { revisao: estado.manifesto.revisao, assinatura: assinatura };
       }
-      return lerElencoParticionadoPorEquipe_(campeonatoId, tipo, estado)
+      return lerElencoParticionadoPorEquipe_(campeonatoId, tipo, estado, snapshot.fontes)
         .reduce(function (lista, equipe) { return lista.concat(equipe.registros); }, []);
     }
     return lerListaCadastroDrive_(
@@ -1373,6 +1389,7 @@ function lerElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
 
 function descartarElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
   if (recursos && recursos.elencosBrutos) delete recursos.elencosBrutos[JSON.stringify([campeonatoId, tipo])];
+  if (recursos && recursos.elencosParticionadosSnapshots) delete recursos.elencosParticionadosSnapshots[campeonatoId];
 }
 
 function jogosParticipacaoOperacao_(campeonatoId, recursos) {
@@ -3531,7 +3548,7 @@ function prepararParticoesElencoPorNome_(registros, equipes) {
 // ID-keyed read adapter for consumers that must not infer storage identity
 // from labels. Resolving the canonical label back to an ID also rejects
 // ambiguous names rather than returning a partial roster.
-function lerElencoParticionadoPorEquipe_(campeonatoId, tipo, estadoPreparado) {
+function lerElencoParticionadoPorEquipe_(campeonatoId, tipo, estadoPreparado, fontesPreparadas) {
   if (tipo !== 'atletas' && tipo !== 'comissao') throw new Error('Categoria de elenco invalida.');
   const estado = estadoPreparado || lerEstadoElencosParticionados_(campeonatoId);
   if (estado.manifesto.campeonatoId !== campeonatoId) throw new Error('Estado de outro campeonato.');
@@ -3539,8 +3556,15 @@ function lerElencoParticionadoPorEquipe_(campeonatoId, tipo, estadoPreparado) {
   return estado.manifesto.particoes.filter(function (item) { return item.tipo === tipo; })
     .map(function (particao) {
       const equipe = equipePermanenteElencoParticionado_(particao.equipeId, equipes);
+      const fontePreparada = fontesPreparadas && fontesPreparadas.find(function (fonte) {
+        return fonte.particao.arquivo === particao.arquivo;
+      });
+      if (fontesPreparadas && !fontePreparada) {
+        throw new Error('Snapshot de elenco incompleto. Recarregue antes de continuar.');
+      }
       const registros = registrosCanonicosElencoParticionado_(
-        lerConteudoParticaoElenco_(estado, particao).registros, particao.equipeId, equipes);
+        fontePreparada ? fontePreparada.registros
+          : lerConteudoParticaoElenco_(estado, particao).registros, particao.equipeId, equipes);
       registros.forEach(function (registro) {
         if (ids.has(registro.id)) throw new Error('Identificador repetido entre particoes de elenco.');
         ids.add(registro.id);

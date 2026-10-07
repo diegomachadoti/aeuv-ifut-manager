@@ -169,6 +169,31 @@ test('active operation cache is resource-local, discarded on commit and rejects 
   assert.equal(h.c.lerElencoBrutoOperacao_('c1', 'atletas', fresh)[0].foto, 'saved');
 });
 
+test('active operation snapshot reads each published partition once and shares both categories under lock', () => {
+  const h = fixture();
+  seed(h, 'atletas', [
+    person('atletas'), person('atletas', { id: 'athlete-b', timeVinculado: 'Equipe B' })
+  ]);
+  seed(h, 'comissao', [
+    person('comissao'), person('comissao', { id: 'staff-b', timeVinculado: 'Equipe B' })
+  ]);
+  h.io.length = 0;
+  const resources = {};
+  lock(h, () => {
+    assert.deepEqual(clone(h.c.lerElencoBrutoOperacao_('c1', 'atletas', resources)
+      .map(item => item.id)), ['athlete', 'athlete-b']);
+    assert.deepEqual(clone(h.c.lerElencoBrutoOperacao_('c1', 'comissao', resources)
+      .map(item => item.id)), ['staff', 'staff-b']);
+  });
+  const published = [...manifest(h).particoes.map(item => folder(h) + '\\' + item.arquivo),
+    manifestPath(h)];
+  for (const name of published) {
+    assert.equal(h.io.filter(item => item.operacao === 'read' && item.name === name).length, 1, name);
+  }
+  assert.equal(h.c.lerElencoBrutoOperacao_('c1', 'atletas', resources)[0].id, 'athlete');
+  assert.equal(h.io.filter(item => item.operacao === 'read' && published.includes(item.name)).length, 5);
+});
+
 for (const phase of ['snapshot', 'partition', 'journal', 'manifest', 'after-commit', 'readback']) {
   test(`active transfer failure ${phase}: no loss/duplication, dirty checkpoint and reload/retry`, () => {
     const h = fixture();

@@ -72,6 +72,9 @@ Os testes também impedem sobrescrita por mudança externa durante a operação.
 rejeição de payload antigo, fingerprints vivos completos, corrupção/remoção/
 edição externa de pasta/manifesto/partições e mudança de nome canônico,
 fallback live enquanto dirty e recálculo manual/agendado, incluindo corridas.
+Dentro da operação sob lock, a primeira leitura valida e reutiliza um snapshot
+local das partições para o fingerprint e ambas as categorias; a publicação
+continua relendo fontes para não aceitar uma alteração externa intermediária.
 `esportivos-snapshot.test.cjs` também executa builders e workers agendados
 com gate ativo, preservando cópias anteriores.
 
