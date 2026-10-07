@@ -207,6 +207,14 @@ function harness(source = backend, opcoes = {}) {
       getName: () => info.name,
       getFoldersByName: name => iterator([...folders].filter(([, item]) =>
         item.parent === id && item.name === name).map(([child]) => folder(child))),
+      getFiles: () => {
+        io.push({ operacao: 'listFiles', folder: info.path });
+        return iterator([...files.keys()].filter(key => {
+          const fileId = ids.get(key);
+          return fileId && meta.get(fileId).parent === id;
+        })
+          .map(key => file(key)));
+      },
       createFolder: name => createFolder(id, name),
       getFilesByName: name => {
         const key = keyOf(name);

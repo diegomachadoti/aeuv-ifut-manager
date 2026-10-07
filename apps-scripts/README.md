@@ -139,6 +139,14 @@ O worker existente lê a mesma fonte escolhida pelo gate e reconcilia o
 estado persistido, tanto após sucesso como após falha. Os journals continuam
 sendo evidência de recuperação, não uma segunda fila.
 
+Na tela **Administração > Histórico de inscrições**, o administrador pode
+selecionar um campeonato e executar **Diagnosticar journals do campeonato**.
+O diagnóstico é somente leitura: confere snapshot, partições preparadas,
+manifesto ativo e presença da fila, classificando cada journal como publicado,
+não publicado, divergente ou inválido. Não publica versões, não reverte dados,
+não limpa filas e não apaga arquivos. Divergências exigem análise manual; a
+rotina não tenta adivinhar se deve confirmar ou descartar uma operação.
+
 O fingerprint `assinaturaFontesElencoParticionado_` lê as fontes novas
 vivas, inclui o formato/manifesto, o digest de cada partição publicada e
 seu nome canônico no registro global. Antes de publicar, o gravador

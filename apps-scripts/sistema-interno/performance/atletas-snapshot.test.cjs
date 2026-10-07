@@ -368,9 +368,15 @@ test('Administração isola configuração de imagens, serializa ações e ignor
   const html = fs.readFileSync(path.join(__dirname, '..', 'Index.html'), 'utf8');
   const admin = html.slice(html.indexOf('    let administracaoOcupada_ ='), html.indexOf('    function selecionarFontesOtimizacao_'));
   const elements = {}, requests = [];
+  const acoesHistorico = {
+    botaoReconciliarHistorico: 'reconciliarCampeonatoHistoricoElencoAgora',
+    botaoDiagnosticoHistorico: 'diagnosticarRecuperacaoElencosParticionados'
+  };
   const element = id => {
+    if (elements[id]) return elements[id];
     const node = {
-      id, textContent: '', disabled: false, isConnected: true, addEventListener() {},
+      id, dataset: { filaHistorico: acoesHistorico[id] || '' },
+      textContent: '', disabled: false, isConnected: true, addEventListener() {},
       querySelectorAll: () => Object.values(elements).filter(e => /Admin$/.test(e.id)),
       set innerHTML(value) {
         this.markup = value;
@@ -388,8 +394,11 @@ test('Administração isola configuração de imagens, serializa ações e ignor
     document: {
       getElementById: id => elements[id],
       querySelector: selector => selector.indexOf('reconciliarCampeonatoHistoricoElencoAgora') >= 0
-        ? element('botaoReconciliarHistorico') : null,
-      querySelectorAll: () => []
+        ? element('botaoReconciliarHistorico')
+        : selector.indexOf('diagnosticarRecuperacaoElencosParticionados') >= 0
+          ? element('botaoDiagnosticoHistorico') : null,
+      querySelectorAll: selector => selector === '[data-fila-historico]'
+        ? Object.keys(acoesHistorico).map(element) : []
     },
     google: { script: { get run() {
       const req = {};
@@ -399,7 +408,7 @@ test('Administração isola configuração de imagens, serializa ações e ignor
       };
       for (const method of ['obterStatusBancoAtletas', 'listarFontesOtimizacaoImagens',
         'obterStatusSnapshotsEsportivos', 'obterStatusIndicesValidacao', 'obterStatusFilaHistoricoElenco',
-        'listarCampeonatosFilaHistoricoElenco',
+        'listarCampeonatosFilaHistoricoElenco', 'diagnosticarRecuperacaoElencosParticionados',
         'configurarAgendamentoBancoAtletas', 'desativarAgendamentoBancoAtletas']) {
         runner[method] = () => { req.method = method; requests.push(req); };
       }
@@ -418,9 +427,16 @@ test('Administração isola configuração de imagens, serializa ações e ignor
   assert.match(elements.areaAdministracao.innerHTML, /data-fila-historico="configurarAgendamentoHistoricoElenco"/);
   assert.match(elements.areaAdministracao.innerHTML, /data-fila-historico="processarHistoricoElencoAgora"/);
   assert.match(elements.areaAdministracao.innerHTML, /data-fila-historico="reconciliarCampeonatoHistoricoElencoAgora"/);
+  assert.match(elements.areaAdministracao.innerHTML, /data-fila-historico="diagnosticarRecuperacaoElencosParticionados"/);
   assert.match(elements.areaAdministracao.innerHTML, /reconciliarHistoricoCampeonato/);
   campeonatosFila.success([{ id: 'c1', nome: 'Atual' }]);
   assert.match(elements.reconciliarHistoricoCampeonato.innerHTML, /Atual/);
+  elements.reconciliarHistoricoCampeonato.value = 'c1';
+  elements.botaoDiagnosticoHistorico.onclick();
+  const diagnostico = requests.at(-1);
+  assert.equal(diagnostico.method, 'diagnosticarRecuperacaoElencosParticionados');
+  diagnostico.success({ total: 1, journals: [{ revisao: 'r1', estado: 'publicado', filaHistorico: 'presente' }] });
+  assert.match(elements.statusRecuperacaoElencosAdmin.textContent, /publicado e íntegro/);
   elements.configurarSnapshotAdmin.onclick();
   const action = requests.at(-1);
   assert.equal(action.method, 'configurarAgendamentoBancoAtletas');

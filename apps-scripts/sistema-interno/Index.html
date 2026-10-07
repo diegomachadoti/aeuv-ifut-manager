@@ -3432,11 +3432,14 @@
         + '<p class="apoio">Se uma inscrição estiver faltando, reconcilie um campeonato com o elenco atual. Isso não recupera dados de pessoas que já não estejam no elenco nem substitui o histórico anterior.</p>'
         + '<div class="grupo"><label for="reconciliarHistoricoCampeonato">Reconciliar campeonato pelo elenco atual</label>'
         + '<select id="reconciliarHistoricoCampeonato"><option value="">Carregando campeonatos...</option></select></div>'
+        + '<p class="apoio">Diagnóstico de journals particionados é somente leitura: identifica se cada publicação ficou ativa, não publicada ou divergente. Não corrige nem apaga arquivos.</p>'
+        + '<p id="statusRecuperacaoElencosAdmin" class="apoio" role="status" aria-live="polite"></p>'
         + '<div class="barra-acoes">'
         + '<button type="button" class="botao-apoio" data-fila-historico="configurarAgendamentoHistoricoElenco">Configurar agendamento</button>'
         + '<button type="button" class="botao-apoio" data-fila-historico="desativarAgendamentoHistoricoElenco">Desativar meu agendamento</button>'
         + '<button type="button" class="botao-principal" data-fila-historico="processarHistoricoElencoAgora">Processar pendências agora</button>'
         + '<button type="button" class="botao-apoio" data-fila-historico="reconciliarCampeonatoHistoricoElencoAgora" disabled>Reconciliar campeonato selecionado</button>'
+        + '<button type="button" class="botao-apoio" data-fila-historico="diagnosticarRecuperacaoElencosParticionados" disabled>Diagnosticar journals do campeonato</button>'
         + '</div></section><div id="adminSnapshotsEsportivos"></div><div id="adminImagens"></div>';
       carregarIndiceValidacaoAdmin_(requisicao);
       carregarFilaHistoricoElencoAdmin_(requisicao);
@@ -3532,20 +3535,43 @@
         + (estado.erro || '');
     }
 
+    function textoDiagnosticoRecuperacaoElencos_(resultado) {
+      const rotulos = {
+        publicado: 'publicado e íntegro',
+        publicado_fila_ausente: 'publicado, mas sem pendência de histórico',
+        publicado_fila_invalida: 'publicado, com pendência de histórico inválida',
+        nao_publicado: 'não publicado; manifesto anterior continua ativo',
+        divergente: 'divergente; requer análise manual',
+        invalido: 'inválido; requer análise manual'
+      };
+      const journals = resultado.journals || [];
+      return 'Journals verificados: ' + journals.length + (resultado.truncado ? ' (lista limitada a 100).' : '. ')
+        + (journals.length ? journals.map(function (item) {
+          return (item.revisao || 'revisão desconhecida') + ': '
+            + (rotulos[item.estado] || item.estado) + '.'
+            + (item.filaHistorico === 'presente' ? ' Fila do histórico presente.' : '')
+            + (item.diagnostico ? ' ' + item.diagnostico : '');
+        }).join(' ') : 'Nenhum journal encontrado.');
+    }
+
     function carregarFilaHistoricoElencoAdmin_(requisicao) {
       const status = document.getElementById('statusHistoricoElencoAdmin');
       const botoes = document.querySelectorAll('[data-fila-historico]');
       const seletor = document.getElementById('reconciliarHistoricoCampeonato');
       const botaoReconciliar = document.querySelector(
         '[data-fila-historico="reconciliarCampeonatoHistoricoElencoAgora"]');
+      const botaoDiagnostico = document.querySelector(
+        '[data-fila-historico="diagnosticarRecuperacaoElencosParticionados"]');
       botoes.forEach(function (botao) {
         botao.onclick = function () {
           if (administracaoOcupada_ || administracaoSnapshotOcupada_
               || moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
           const metodo = botao.dataset.filaHistorico;
-          const campeonatoId = metodo === 'reconciliarCampeonatoHistoricoElencoAgora'
+          const precisaCampeonato = metodo === 'reconciliarCampeonatoHistoricoElencoAgora'
+            || metodo === 'diagnosticarRecuperacaoElencosParticionados';
+          const campeonatoId = precisaCampeonato
             ? seletor.value : '';
-          if (metodo === 'reconciliarCampeonatoHistoricoElencoAgora' && !campeonatoId) {
+          if (precisaCampeonato && !campeonatoId) {
             status.textContent = 'Selecione um campeonato para reconciliar.';
             return;
           }
@@ -3560,11 +3586,16 @@
             if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
             botoes.forEach(function (item, indice) { item.disabled = anteriores[indice]; });
             seletor.disabled = seletorAnterior;
-            status.textContent = erro ? (erro.message || String(erro)) : textoStatusFilaHistoricoElenco_(estado);
+            if (erro) status.textContent = erro.message || String(erro);
+            else if (metodo === 'diagnosticarRecuperacaoElencosParticionados') {
+              document.getElementById('statusRecuperacaoElencosAdmin').textContent =
+                textoDiagnosticoRecuperacaoElencos_(estado);
+              status.textContent = textoStatusFilaHistoricoElenco_(null);
+            } else status.textContent = textoStatusFilaHistoricoElenco_(estado);
           };
           const chamada = google.script.run.withSuccessHandler(function (estado) { concluir(estado); })
             .withFailureHandler(function (erro) { concluir(null, erro); });
-          if (metodo === 'reconciliarCampeonatoHistoricoElencoAgora') chamada[metodo](campeonatoId);
+          if (precisaCampeonato) chamada[metodo](campeonatoId);
           else chamada[metodo]();
         };
       });
@@ -3575,6 +3606,7 @@
             return '<option value="' + escapar(campeonato.id) + '">' + escapar(campeonato.nome) + '</option>';
           }).join('');
         botaoReconciliar.disabled = !campeonatos.length;
+          botaoDiagnostico.disabled = !campeonatos.length;
       }).withFailureHandler(function (erro) {
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
         seletor.innerHTML = '<option value="">Não foi possível carregar os campeonatos</option>';

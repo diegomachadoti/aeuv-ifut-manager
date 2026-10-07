@@ -330,6 +330,47 @@ test('active empty startup keeps old global enrollment snapshots available for d
   assert.deepEqual(h.history().inscricoes.find(item => item.id === old.id).dados, old.dados);
 });
 
+test('admin recovery diagnostics classify committed and staged journals without changing files or properties', () => {
+  const committed = fixture();
+  committed.c.salvarCadastroElenco(committed.payload('atletas'));
+  const committedFiles = [...committed.files], committedProperties = [...committed.properties];
+  const committedReport = committed.c.diagnosticarRecuperacaoElencosParticionados('c1');
+  assert.equal(committedReport.total, 1);
+  assert.equal(committedReport.journals[0].estado, 'publicado');
+  assert.equal(committedReport.journals[0].filaHistorico, 'presente');
+  assert.deepEqual([...committed.files], committedFiles);
+  assert.deepEqual([...committed.properties], committedProperties);
+  assert(!committed.io.some(item => item.operacao === 'trash'));
+
+  const staged = fixture();
+  staged.state.failWrite = manifestPath(staged);
+  assert.throws(() => staged.c.salvarCadastroElenco(staged.payload('atletas')), /Recarregue/);
+  staged.state.failWrite = null;
+  const stagedFiles = [...staged.files], stagedProperties = [...staged.properties];
+  const stagedReport = staged.c.diagnosticarRecuperacaoElencosParticionados('c1');
+  assert.equal(stagedReport.journals.length, 1);
+  assert.equal(stagedReport.journals[0].estado, 'nao_publicado');
+  assert.equal(stagedReport.journals[0].filaHistorico, 'presente');
+  assert.deepEqual([...staged.files], stagedFiles);
+  assert.deepEqual([...staged.properties], stagedProperties);
+  assert(!staged.io.some(item => item.operacao === 'trash'));
+});
+
+test('recovery diagnostics report corrupt journals and enforce admin without exposing roster data', () => {
+  const h = fixture();
+  h.c.salvarCadastroElenco(h.payload('atletas'));
+  const pending = [...h.files.keys()].find(name => name.startsWith(folder(h) + '\\pendencia -'));
+  h.files.set(pending, '{invalid');
+  const report = h.c.diagnosticarRecuperacaoElencosParticionados('c1');
+  assert.equal(report.journals[0].estado, 'invalido');
+  assert.match(report.journals[0].diagnostico, /JSON invalido/);
+  assert(!JSON.stringify(report).includes('Carlos Silva'));
+  h.state.perfil = 'admin';
+  assert.throws(() => h.c.diagnosticarRecuperacaoElencosParticionados(''), /Selecione um campeonato/);
+  h.state.perfil = 'diretoria';
+  assert.throws(() => h.c.diagnosticarRecuperacaoElencosParticionados('c1'), /Somente o administrador/);
+});
+
 test('active staff retains ativo through history, edits, result selection and actual sumula generation', () => {
   const h = fixture();
   seed(h, 'comissao', [person('comissao', { nome: 'Active Staff' }),

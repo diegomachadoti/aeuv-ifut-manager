@@ -77,6 +77,10 @@ local das partições para o fingerprint e ambas as categorias; a publicação
 continua relendo fontes para não aceitar uma alteração externa intermediária.
 `esportivos-snapshot.test.cjs` também executa builders e workers agendados
 com gate ativo, preservando cópias anteriores.
+O diagnóstico administrativo de journals valida snapshot, destino e fontes
+sem escrever/limpar; os testes comparam Drive e Script Properties antes/depois
+para journals publicados, não publicados e corrompidos. Ele não executa
+rollback nem roll-forward.
 
 As regressões existentes de credenciais, índices, participação, snapshots
 esportivos e agendas continuam exercitando o comportamento legado. O VM não simula
