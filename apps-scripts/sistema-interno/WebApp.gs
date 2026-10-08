@@ -11605,6 +11605,31 @@ function normalizarDataFinanceiro_(valor) {
   return str;
 }
 
+function chaveDataOrdenacaoFinanceiro_(valor) {
+  const texto = normalizarDataFinanceiro_(valor);
+  const br = texto.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:$|[ T])/);
+  const iso = texto.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})(?:$|[ T])/);
+  if (!br && !iso) return 0;
+  const ano = Number(br ? br[3] : iso[1]);
+  const mes = Number(br ? br[2] : iso[2]);
+  const dia = Number(br ? br[1] : iso[3]);
+  const data = new Date(0);
+  data.setUTCFullYear(ano, mes - 1, dia);
+  if (ano < 1 || data.getUTCFullYear() !== ano || data.getUTCMonth() !== mes - 1
+      || data.getUTCDate() !== dia) return 0;
+  return ano * 10000 + mes * 100 + dia;
+}
+
+function compararLancamentosFinanceiro_(a, b) {
+  const diferenca = chaveDataOrdenacaoFinanceiro_(b.dataMovimentacao)
+    - chaveDataOrdenacaoFinanceiro_(a.dataMovimentacao);
+  if (diferenca) return diferenca;
+  // Mesmo dia: protocolo mais recente primeiro, independentemente da linha da planilha.
+  const idA = String(a.idLancamento || '');
+  const idB = String(b.idLancamento || '');
+  return idA < idB ? 1 : idA > idB ? -1 : 0;
+}
+
 /**
  * Retorna dados para abrir o modulo financeiro:
  * lista de lancamentos, totais calculados, categorias e lista de competicoes.
@@ -11647,7 +11672,7 @@ function listarFinanceiro() {
       criadoEm: String(linha[12] || ''),
       criadoPor: String(linha[13] || '')
     };
-  }).reverse(); // Mais recentes primeiro
+  }).sort(compararLancamentosFinanceiro_); // Data da movimentação mais recente primeiro.
 
   return {
     lancamentos: lancamentos,

@@ -5638,25 +5638,50 @@
        }
      }
 
+    let campeonatoRemovendo_ = false;
     function removerCampeonatoDoSistema(id) {
-      if (!window.confirm('Remover este campeonato?')) {
-        return;
-      }
-
-      document.getElementById('areaCampeonatos').innerHTML = blocoCarregando('statusCampeonatos');
-
-      google.script.run
-        .withSuccessHandler(function (dados) {
-          campeonatos = dados;
-          montarTelaCampeonatos(dados.recado);
-        })
-        .withFailureHandler(function (erro) {
-          montarTelaCampeonatos();
-
-          document.getElementById('areaCampeonatos').insertAdjacentHTML('afterbegin',
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>');
-        })
-        .removerCampeonato(id);
+      if (campeonatoRemovendo_ || confirmacaoElencoAtual || moduloAtual !== 'campeonatos'
+          || !campeonatos.podeExcluir) return;
+      const area = document.getElementById('areaCampeonatos');
+      const dadosOrigem = campeonatos;
+      const conteudoOrigem = area.innerHTML;
+      const registro = (campeonatos.registros || []).find(function (item) { return item.id === id; });
+      if (!registro) return;
+      return confirmarDescarteElenco_({
+        titulo: 'Remover campeonato?',
+        mensagem: 'Deseja remover o campeonato "' + registro.nome + '" do sistema? '
+          + 'Os cadastros e vínculos associados a ele também serão afetados. Esta ação não pode ser desfeita pela tela.',
+        cancelar: 'Cancelar',
+        confirmar: 'Remover campeonato',
+        perigo: true
+      }).then(function (confirmado) {
+        if (!confirmado || campeonatoRemovendo_ || moduloAtual !== 'campeonatos'
+            || campeonatos !== dadosOrigem || !area.isConnected || area.innerHTML !== conteudoOrigem) return;
+        campeonatoRemovendo_ = true;
+        area.innerHTML = blocoCarregando('statusCampeonatos');
+        const loading = document.getElementById('statusCampeonatos');
+        focarAvisoOuFormulario_(loading);
+        const respostaAtual = function () {
+          return moduloAtual === 'campeonatos' && campeonatos === dadosOrigem
+            && document.getElementById('statusCampeonatos') === loading;
+        };
+        google.script.run
+          .withSuccessHandler(function (dados) {
+            campeonatoRemovendo_ = false;
+            if (!respostaAtual()) return;
+            campeonatos = dados;
+            montarTelaCampeonatos(dados.recado);
+          })
+          .withFailureHandler(function (erro) {
+            campeonatoRemovendo_ = false;
+            if (!respostaAtual()) return;
+            montarTelaCampeonatos();
+            area.insertAdjacentHTML('afterbegin',
+              '<div class="erro" role="alert">' + escapar(erro && erro.message ? erro.message : erro) + '</div>');
+            focarAvisoOuFormulario_(area.querySelector('.erro'));
+          })
+          .removerCampeonato(id);
+      });
     }
 
     let timesCampeonato = { campeonatos: [], equipesGlobais: [], registros: [], podeEditar: false };
@@ -5692,7 +5717,9 @@
       elencoAtual = null;
       const requisicao = ++participantesRequisicao;
       const campeonatoId = campeonatoParticipantesAtual;
-      document.getElementById('areaTimesCampeonato').innerHTML = blocoCarregando('statusTimesCampeonato');
+      const area = document.getElementById('areaTimesCampeonato');
+      area.removeAttribute('aria-busy');
+      area.innerHTML = blocoCarregando('statusTimesCampeonato');
       google.script.run
         .withSuccessHandler(function (dados) {
           if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual) {
@@ -5758,24 +5785,36 @@
     }
 
     let participantesRecalculando_ = false;
+    let participantesVinculoCarregando_ = false;
     function recalcularParticipantesAgora_() {
-      if (participantesRecalculando_ || confirmacaoElencoAtual || elencoAtual || moduloAtual !== 'times-campeonato'
+      if (participantesRecalculando_ || participantesVinculoCarregando_ || confirmacaoElencoAtual || elencoAtual || moduloAtual !== 'times-campeonato'
           || !['admin', 'diretoria'].includes(CONFIG.usuario.perfil)) return;
       participantesRecalculando_ = true;
       const requisicao = ++participantesRequisicao, id = campeonatoParticipantesAtual;
       const area = document.getElementById('areaTimesCampeonato');
       const controles = Array.from(area.querySelectorAll('button,select'));
       const anteriores = controles.map(function (item) { return item.disabled; });
+      const botao = document.getElementById('epRecalcular');
+      const textoBotao = botao ? botao.textContent : '';
       controles.forEach(function (item) { item.disabled = true; });
+      if (botao) botao.textContent = 'Recalculando...';
+      area.setAttribute('aria-busy', 'true');
+      area.insertAdjacentHTML('afterbegin', blocoCarregando('epRecalculoLoading'));
+      const loading = document.getElementById('epRecalculoLoading');
+      focarAvisoOuFormulario_(loading);
       google.script.run.withSuccessHandler(function () {
         participantesRecalculando_ = false;
         if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual || id !== campeonatoParticipantesAtual) return;
+        area.removeAttribute('aria-busy');
         carregarTimesCampeonato();
       }).withFailureHandler(function (erro) {
         participantesRecalculando_ = false;
         if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual || id !== campeonatoParticipantesAtual) return;
+        area.removeAttribute('aria-busy');
+        if (loading && loading.isConnected) loading.remove();
+        if (botao && botao.isConnected) botao.textContent = textoBotao;
         controles.forEach(function (item, indice) { if (item.isConnected) item.disabled = anteriores[indice]; });
-        area.insertAdjacentHTML('afterbegin', '<div class="erro">' + escapar(erro.message || String(erro)) + '</div>');
+        area.insertAdjacentHTML('afterbegin', '<div class="erro" role="alert">' + escapar(erro.message || String(erro)) + '</div>');
       }).recalcularEquipesParticipantes(id);
     }
 
@@ -5870,15 +5909,40 @@
     }
 
     function abrirVinculoEquipeParticipante(atualizado) {
-      if (participantesRecalculando_ || confirmacaoElencoAtual) return;
+      if (participantesRecalculando_ || participantesVinculoCarregando_ || confirmacaoElencoAtual
+          || moduloAtual !== 'times-campeonato' || elencoAtual || !timesCampeonato.podeEditar) return;
       if (atualizado !== true) {
         const requisicao = ++participantesRequisicao, id = campeonatoParticipantesAtual;
+        const area = document.getElementById('areaTimesCampeonato');
+        const formulario = document.getElementById('timesFormArea');
+        if (!formulario) return;
+        participantesVinculoCarregando_ = true;
+        const controles = Array.from(area.querySelectorAll('button,select'));
+        const anteriores = controles.map(function (item) { return item.disabled; });
+        const botao = document.getElementById('epVincular');
+        const textoBotao = botao ? botao.textContent : '';
+        controles.forEach(function (item) { item.disabled = true; });
+        if (botao) botao.textContent = 'Carregando equipes...';
+        formulario.setAttribute('aria-busy', 'true');
+        formulario.innerHTML = '<section class="formulario campeonato-form vinculo-equipe-form">'
+          + '<h3 id="epVinculoTitulo">Vincular equipe existente</h3>'
+          + blocoCarregando('epVinculoLoading') + '</section>';
+        focarAvisoOuFormulario_(document.getElementById('epVinculoTitulo'));
         google.script.run.withSuccessHandler(function (dados) {
-          if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual || id !== campeonatoParticipantesAtual) return;
+          participantesVinculoCarregando_ = false;
+          if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual
+              || id !== campeonatoParticipantesAtual || document.getElementById('timesFormArea') !== formulario) return;
+          formulario.removeAttribute('aria-busy');
           timesCampeonato = dados; montarEquipesParticipantes(); abrirVinculoEquipeParticipante(true);
         }).withFailureHandler(function (erro) {
-          if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual) return;
-          document.getElementById('timesFormArea').textContent = erro.message || String(erro);
+          participantesVinculoCarregando_ = false;
+          if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual
+              || id !== campeonatoParticipantesAtual || document.getElementById('timesFormArea') !== formulario) return;
+          formulario.removeAttribute('aria-busy');
+          controles.forEach(function (item, indice) { if (item.isConnected) item.disabled = anteriores[indice]; });
+          if (botao && botao.isConnected) botao.textContent = textoBotao;
+          formulario.innerHTML = '<div class="erro" role="alert">' + escapar(erro.message || String(erro)) + '</div>';
+          focarAvisoOuFormulario_(formulario);
         }).carregarEquipesParticipantesAtual(id);
         return;
       }
@@ -5887,7 +5951,7 @@
       const disponiveis = (timesCampeonato.equipesGlobais || []).filter(function (item) {
         return !vinculados.includes(item.id) && !(registro.times || []).includes(item.nome);
       });
-      document.getElementById('timesFormArea').innerHTML = '<section class="formulario campeonato-form vinculo-equipe-form"><h3>Vincular equipe existente</h3>'
+      document.getElementById('timesFormArea').innerHTML = '<section class="formulario campeonato-form vinculo-equipe-form"><h3 id="epVinculoTitulo">Vincular equipe existente</h3>'
         + '<div class="grupo"><h4>Equipe participante</h4><div class="campo cheio"><label for="epEquipe">Equipe do Banco de Dados de Equipes</label><select id="epEquipe">'
         + '<option value="">Selecione uma equipe disponível</option>'
         + disponiveis.map(function (item) { return '<option value="' + escapar(item.id) + '">' + escapar(item.nome) + '</option>'; }).join('')
@@ -5898,37 +5962,49 @@
       document.getElementById('epEquipe').addEventListener('change', function () {
         document.getElementById('epSalvar').disabled = !this.value;
       });
-      document.getElementById('epCancelar').addEventListener('click', function () { document.getElementById('timesFormArea').innerHTML = ''; });
+      document.getElementById('epCancelar').addEventListener('click', function () {
+        if (participantesVinculoCarregando_) return;
+        document.getElementById('timesFormArea').innerHTML = '';
+        const origem = document.getElementById('epVincular');
+        if (origem) origem.focus();
+      });
       document.getElementById('epSalvar').addEventListener('click', function () {
-        if (!document.getElementById('epEquipe').value) return;
+        if (this.disabled || participantesVinculoCarregando_ || !document.getElementById('epEquipe').value) return;
+        participantesVinculoCarregando_ = true;
+        const requisicao = ++participantesRequisicao;
         const botao = this;
         const campeonatoId = campeonatoParticipantesAtual;
         const equipe = document.getElementById('epEquipe');
         const equipeId = equipe.value;
-        const cancelar = document.getElementById('epCancelar');
         const aviso = document.getElementById('epAviso');
         const loading = document.getElementById('epLoading');
-        botao.disabled = true;
-        equipe.disabled = true;
-        cancelar.disabled = true;
+        const area = document.getElementById('areaTimesCampeonato');
+        const controles = Array.from(area.querySelectorAll('button,select'));
+        const anteriores = controles.map(function (item) { return item.disabled; });
+        controles.forEach(function (item) { item.disabled = true; });
+        botao.textContent = 'Vinculando...';
         aviso.textContent = 'Vinculando equipe...';
         loading.hidden = false;
         loading.innerHTML = blocoCarregando();
+        focarAvisoOuFormulario_(loading.querySelector('.carregando'));
         google.script.run.withSuccessHandler(function (dados) {
-          if (moduloAtual !== 'times-campeonato' || campeonatoParticipantesAtual !== campeonatoId
+          participantesVinculoCarregando_ = false;
+          if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || campeonatoParticipantesAtual !== campeonatoId
               || document.getElementById('epSalvar') !== botao || elencoAtual) return;
           timesCampeonato = dados;
           montarEquipesParticipantes('Equipe vinculada.');
         }).withFailureHandler(function (erro) {
-          if (document.getElementById('epSalvar') !== botao) return;
+          participantesVinculoCarregando_ = false;
+          if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato'
+              || campeonatoParticipantesAtual !== campeonatoId || elencoAtual || document.getElementById('epSalvar') !== botao) return;
           loading.hidden = true;
           loading.innerHTML = '';
-          botao.disabled = false;
-          equipe.disabled = false;
-          cancelar.disabled = false;
+          controles.forEach(function (item, indice) { if (item.isConnected) item.disabled = anteriores[indice]; });
+          botao.textContent = 'Vincular';
           aviso.textContent = erro.message || erro;
         }).vincularEquipeParticipante({ campeonatoId: campeonatoId, equipeId: equipeId });
       });
+      focarAvisoOuFormulario_(document.getElementById('epVinculoTitulo'));
     }
 
     function abrirElenco(campeonatoId, equipeId) {

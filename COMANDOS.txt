@@ -1,0 +1,184 @@
+COMANDOS DO PROJETO AEUV — GUIA RÁPIDO
+====================================
+Execute na raiz do projeto. Substitua os nomes/caminhos entre aspas pelos seus.
+Windows: use o Python da .venv ativada ou troque python por .\.venv\Scripts\python.exe.
+Linux: troque python por ./.venv/bin/python.
+PDFs são atualizados ao regenerar. Criação de modelos NÃO sobrescreve TXTs existentes.
+
+1. PREPARAÇÃO E AJUDA
+--------------------
+python -m pip install -r requirements.txt
+  Instala as dependências no ambiente Python atual.
+python main.py --help
+  Lista opções do comando principal; -h também funciona.
+python SCRIPT.py --help
+  Mostra a ajuda de cada script com CLI listado na seção 9.
+
+2. INSCRIÇÕES / REMOÇÕES / PORTABILIDADE NO iFut
+----------------------------------------------
+python main.py
+  Fluxo completo: baixa TXT, processa no iFut, move arquivos e publica resultados.
+python main.py --sync-drive-only
+  Somente baixa os TXT de entrada do Drive; não processa no iFut.
+python main.py --process-local-only
+  Processa os TXT já baixados, sem novo download; pode mover/publicar no Drive.
+python main.py --login-only
+  Sincroniza o Drive, faz login no iFut e encerra.
+python main.py --login-only --process-local-only
+  Testa somente o login no iFut, sem sincronizar o Drive.
+python main.py --update-all-team-counts
+  Atualiza a contagem de atletas dos times na planilha; sincroniza entrada antes.
+python main.py --update-all-team-counts --process-local-only
+  Atualiza a mesma contagem sem o download inicial dos TXT.
+
+3. SÚMULAS / NOTAS OFICIAIS / PUNIÇÕES
+------------------------------------
+python main.py --analisar-sumulas
+  Baixa e analisa súmulas por regras; gera notas TXT/PDF e atualiza punições.
+python main.py --analisar-sumulas --process-local-only
+  Analisa súmulas já baixadas; ainda pode mover arquivos/publicar controle no Drive.
+python main.py --analisar-sumulas --ia
+  Analisa com IA; envia regulamento/relato ao provedor configurado.
+python main.py --analisar-sumulas --process-local-only --ia
+  Usa IA nas súmulas locais, sem novo download.
+python main.py --gerar-pdf-nota 5
+  Regera nota pelo número, atualiza punições e publica a nota se finalizada.
+python main.py --gerar-pdf-nota "SUM-PROTOCOLO"
+  Regera a nota correspondente ao protocolo da súmula.
+python main.py --gerar-pdf-nota "caminho/NOTA OFICIAL.txt"
+  Regera pelo TXT editado; notas pendentes permanecem rascunhos sem assinatura.
+python main.py --atualizar-controle-punicoes
+  Reconstrói TXT/PDF de punições pelas notas e publica o controle no Drive.
+
+4. REGULAMENTO / FORMA DE DISPUTA / PUBLICAÇÃO
+--------------------------------------------
+python main.py --gerar-pdf-regulamento "regulamento/regulamento-7-super-liga-união-2026"
+  Gera o PDF assinado do regulamento e publica no Drive.
+python main.py --gerar-pdf-forma-disputa "formadisputa/forma-disputa-7-super-liga-união-2026-5-rodadasV3"
+  Gera o PDF assinado da forma de disputa/tabela e publica no Drive.
+python main.py --publicar-drive
+  Publica regulamentos, formas de disputa e notas finalizadas (não ofícios/filiação).
+
+5. OFÍCIO / REQUERIMENTO À FUTEL
+-------------------------------
+python main.py --criar-modelo-oficio "oficio-requerimento/novo-oficio.txt"
+  Cria uma cópia editável do modelo de ofício, sem sobrescrever.
+python main.py --gerar-pdf-oficio "oficio-requerimento/oficio-futel-001-2026.txt"
+  Gera PDF final assinado e checklist .pendencias.txt; não envia ao Drive.
+--oficio-final
+  Opção antiga com --gerar-pdf-oficio; aceita, mas o PDF já é sempre final.
+
+6. FILIAÇÃO / PLANO DE ASSOCIADO / DOCUMENTOS LIVRES
+---------------------------------------------------
+python main.py --criar-modelos-filiacao
+  Cria os quatro TXTs padrão em filiacao/; recusa se já existirem.
+python main.py --criar-modelos-filiacao "filiacao/equipe-nova"
+  Cria ficha, certificado, recibo e plano editáveis na pasta indicada.
+python main.py --gerar-pdf-filiacao
+  Gera os quatro PDFs padrão; equivale a --gerar-pdf-filiacao todos.
+python main.py --gerar-pdf-filiacao todos
+  Regera ficha, certificado, recibo e Plano de Associado em filiacao/.
+python main.py --gerar-pdf-filiacao ficha
+  Regera ficha + termo, com espaço para assinatura do representante da equipe.
+python main.py --gerar-pdf-filiacao certificado
+  Regera certificado com assinatura do Presidente da AEUV.
+python main.py --gerar-pdf-filiacao recibo
+  Regera recibo com assinatura do Presidente da AEUV.
+python main.py --gerar-pdf-filiacao plano
+  Regera o Plano de Associado público, sem assinatura pessoal.
+python main.py --gerar-pdf-filiacao "filiacao/equipe-nova/recibo-filiacao.txt"
+  Regera um documento de filiação por caminho do TXT.
+python main.py --gerar-pdf-documento "caminho/documento.txt"
+  Gera qualquer documento livre no padrão AEUV; cabeçalho INI + texto após ---.
+python main.py --gerar-pdf-documento "caminho/doc1.txt" "caminho/doc2.txt"
+  Gera vários documentos livres numa execução.
+  Todos os comandos desta seção são locais, sem rascunho ou validação de pagamento.
+
+7. RELATÓRIOS FINANCEIROS
+-------------------------
+python main.py --gerar-pdf-financeiro
+  Gera relatório geral lendo a planilha financeira do Drive.
+python main.py --gerar-pdf-financeiro geral
+  Mesmo relatório geral, com tipo explícito.
+python main.py --gerar-pdf-financeiro competicao --origem "SUPER LIGA UNIÃO"
+  Gera relatório da competição/origem informada.
+python main.py --gerar-pdf-financeiro emenda --emenda "Emenda 042/2026"
+  Gera relatório da emenda/termo informado.
+python main.py --gerar-pdf-financeiro exemplo
+  Gera três relatórios demonstrativos com dados fictícios locais.
+python main.py --gerar-pdf-financeiro "caminho/lancamentos.json"
+  Gera relatório com os dados do JSON, sem ler a planilha.
+--periodo 3m
+  Filtro opcional de período: hoje, mes, 3m, 6m ou anual.
+  Aliases: today; mes_atual/mes-atual; 3meses/trimestre; 6meses/semestre; ano/12m/1ano.
+--data-inicio 01/01/2026 --data-fim 31/12/2026
+  Filtros opcionais por datas, em DD/MM/AAAA ou AAAA-MM-DD; evite misturar com --periodo.
+--origem "NOME" / --emenda "NUMERO"
+  Selecionam competição ou emenda; também definem o tipo se omitido/geral.
+
+8. CONFIGURAÇÃO OPCIONAL
+------------------------
+--config "config.ini"
+  Seleciona configuração; disponível em todas as CLIs Python deste guia.
+--selectors "selectors.ini"
+  Seleciona os seletores Selenium; somente main.py.
+  Adicione essas opções ao final do comando escolhido; não existe flag --dry-run.
+
+9. ALTERNATIVAS DIRETAS DOS SCRIPTS PYTHON
+-----------------------------------------
+python regulamento_pdf.py "ARQUIVO" --titulo "SUBTÍTULO"
+  Gera apenas o PDF local do regulamento; NÃO publica no Drive como main.py.
+python forma_disputa_pdf.py "ARQUIVO" --titulo "SUBTÍTULO"
+  Gera apenas o PDF local da forma de disputa; --titulo é opcional nos dois scripts.
+python nota_pdf.py "ALVO"
+  Regera a nota por número, protocolo ou TXT; atualiza punições/publica a final.
+python resultado_pdf.py
+  Regera o PDF local do resultado de inscrição mais recente.
+python resultado_pdf.py "ALVO"
+  Regera resultado por caminho, nome/trecho ou protocolo do arquivo.
+python resultado_pdf.py --todos
+  Regera PDFs de todos os resultados locais existentes.
+python sumula_disciplinar.py
+  Executa a mesma análise disciplinar de --analisar-sumulas.
+python sumula_disciplinar.py --process-local-only --ia
+  Analisa súmulas locais com IA; ambas as opções podem ser usadas separadamente.
+python oficio_pdf.py --criar-modelo "oficio-requerimento/novo-oficio.txt"
+  Cria o TXT de ofício local.
+python oficio_pdf.py --gerar-pdf "oficio-requerimento/oficio-futel-001-2026.txt"
+  Gera ofício assinado e checklist local; --final é apenas compatibilidade antiga.
+python documento_pdf.py --criar-modelos-filiacao "filiacao/equipe-nova"
+  Cria os quatro modelos; a pasta é opcional, padrão filiacao/.
+python documento_pdf.py --gerar-pdf-filiacao plano
+  Gera por tipo ou TXT; sem tipo, gera todos; aceita ficha/certificado/recibo/plano/todos.
+python documento_pdf.py --gerar-pdf-documento "doc1.txt" "doc2.txt"
+  Gera um ou mais documentos livres locais.
+
+10. TESTES E DIAGNÓSTICOS
+-------------------------
+python -m unittest discover -s tests -p "test_*.py" -v
+  Executa os testes Python locais.
+python -m unittest discover -s tests -p "test_documento_pdf.py" -v
+  Testa documentos livres, filiação e Plano de Associado.
+python -m unittest discover -s tests -p "test_oficio_pdf.py" -v
+  Testa ofício Futel, anexos, assinatura e edição.
+node --test "apps-scripts/sistema-interno/performance/*.test.cjs"
+  Executa os testes locais do sistema interno; requer Node.js.
+node --test "apps-scripts/sistema-interno/performance/atas-pdf.test.cjs"
+  Testa o layout e os marcadores do PDF das atas.
+node apps-scripts/sistema-interno/performance/analisar-har.cjs "captura.har" "ETIQUETA" > metricas.json
+  Analisa localmente uma captura HAR; não faz chamadas ao Google.
+node apps-scripts/sistema-interno/performance/executar-consultas.cjs "apps-scripts/sistema-interno/performance/config.local.json" > metricas.json
+  Mede consultas REAIS ao Apps Script; requer configuração privada, Node.js e curl.
+  Mais detalhes: apps-scripts/sistema-interno/performance/README.md.
+
+ATENÇÃO
+-------
+- --process-local-only evita download inicial, mas NÃO garante ausência de escrita remota.
+- dry_run é configurado no INI; não impede remoções, publicação/movimentação no Drive ou planilha.
+- --ia envia dados ao provedor configurado e pode gerar cobrança conforme o serviço.
+- Certificados/recibos livres não comprovam aprovação/pagamento automaticamente; conferir antes de emitir.
+- Não compartilhar credenciais, tokens, config.local.ini/json, HAR ou documentos pessoais.
+- Atas e outros aplicativos web são usados pela interface; não há CLI Python para exportar suas atas.
+- benchmark.js é usado no console do navegador, conforme seu README; não é um comando Node de terminal.
+- Módulos auxiliares sem CLI: financeiro_pdf.py, financeiro_planilha.py, controle_punicoes.py,
+  publicacao_drive.py, drive_auth.py e sumula_ia.py. Use os comandos de main.py acima.

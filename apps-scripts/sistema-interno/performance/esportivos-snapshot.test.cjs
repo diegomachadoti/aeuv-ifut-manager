@@ -505,12 +505,21 @@ test('frontend executado: recálculo tabela único, callback obsoleto não naveg
 test('frontend executado: participantes recálculo exclusivo, permissões/UI restauradas e resposta tardia ignorada', () => {
   let loads = 0, errors = 0;
   const controls = [{ disabled: false, isConnected: true }, { disabled: true, isConnected: true }];
-  const area = { querySelectorAll: () => controls, insertAdjacentHTML: () => { errors++; } };
+  const loading = { isConnected: true, remove() { this.isConnected = false; } };
+  const area = {
+    querySelectorAll: () => controls, setAttribute: () => {}, removeAttribute: () => {},
+    insertAdjacentHTML: (position, html) => {
+      if (html.includes('class="erro"')) errors++;
+      else loading.isConnected = true;
+    }
+  };
   const script = html.slice(html.indexOf('    let participantesRecalculando_ ='), html.indexOf('    function montarTelaTimesCampeonato('));
   const { c, requests } = frontendFixture(script, {
     moduloAtual: 'times-campeonato', elencoAtual: null, participantesRequisicao: 0,
     campeonatoParticipantesAtual: 'c1', escapar: String,
-    document: { getElementById: () => area },
+    document: { getElementById: id => id === 'areaTimesCampeonato' ? area
+      : id === 'epRecalculoLoading' ? loading : controls[0] },
+    blocoCarregando: () => '<div class="carregando"></div>', focarAvisoOuFormulario_: () => {},
     carregarTimesCampeonato: () => { loads++; }
   });
   c.CONFIG.usuario.perfil = 'associado';

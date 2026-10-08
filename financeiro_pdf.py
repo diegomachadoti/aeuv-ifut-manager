@@ -79,6 +79,15 @@ class LancamentoFinanceiro:
         return f"{sinal} R$ {abs(self.valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def ordenar_lancamentos_financeiros(lancamentos: list[LancamentoFinanceiro]) -> list[LancamentoFinanceiro]:
+    """PDFs: data de movimentação crescente; empate por protocolo, datas inválidas ao final."""
+    def chave(item: LancamentoFinanceiro) -> tuple[bool, date, str]:
+        data_movimentacao = parse_data_flexivel(item.data_movimentacao)
+        return (data_movimentacao is None, data_movimentacao or date.max, str(item.id_lancamento or ""))
+
+    return sorted(lancamentos, key=chave)
+
+
 @dataclass
 class FiltroRelatorio:
     tipo_relatorio: str  # "geral", "emenda", "competicao"
@@ -239,6 +248,9 @@ def gerar_pdf_financeiro(
             return True
 
         itens = [i for i in itens if data_no_intervalo(i)]
+
+    # Independe da posição na planilha/JSON e considera alterações ou lançamentos retroativos.
+    itens = ordenar_lancamentos_financeiros(itens)
 
     # Calculos totais
     total_entradas = sum(i.valor for i in itens if i.eh_entrada)
