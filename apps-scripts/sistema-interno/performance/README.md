@@ -29,11 +29,15 @@ não estejam associadas ao campeonato ou à lista ativa, sem descartar dados.
 Cada alteração efetiva confirma um `snapshot - <revisaoDestino>.json`
 do estado anterior antes de preparar as partições, e um
 `pendencia - <revisaoDestino>.json` antes de publicar o manifesto.
-São documentos privados de recuperação, retidos e ignorados nas leituras.
-**Não são o histórico de inscrições nem a fila existente.** A integração RPC
-mantém o snapshot síncrono global e persiste separadamente fila, índice dirty
-e pendência esportiva antes do manifesto. Os workers existentes respeitam
-o gate; não há worker novo para consumir os journals de recuperação.
+Com gate ativo, são documentos V2 de referências imutáveis + digests, sem
+cópias dos registros. A integração RPC não lê/grava o histórico global:
+persiste fila, índice dirty e pendência esportiva antes do manifesto.
+O worker de histórico existente consome somente a linhagem publicada, em ordem,
+e grava `historico - <equipeId>.json` na pasta da competição. Checkpoint por
+campeonato e último commit por equipe permitem retry idempotente após falha
+parcial. Journals não publicados continuam ignorados. Imports projetam os
+commits pendentes em memória, filtrados pela equipe autorizada; Banco de Atletas
+usa a projeção global. O histórico global V1 é ignorado sob gate ativo.
 Não execute as funções privadas manualmente para substituir RPCs.
 
 A fixture mantém o fake plano anterior e acrescenta pastas aninhadas,
@@ -60,21 +64,37 @@ registros são agrupados por ID permanente, nomes não resolvidos/ambíguos
 falham e a leitura por equipe mantém os dados e nomes canônicos sem escrita.
 `elencos-cutover.test.cjs` exerce adição/edição/remoção/transferência via RPC,
 listagens/agregadores, cache local de operação, guardas originais,
-importação de candidaturas novas e snapshots globais antigos, imagens por
+importação de candidaturas novas e rejeição de fontes globais antigas, imagens por
 equipe e agregadas com assinatura/backup, comissão ativa/inativa em resultados
 e geração real da súmula no VM, histórico pré/pós-publicação e exclusão lógica
-com tombstone. Falhas de histórico, fila, índice dirty, snapshot, segunda
+com tombstone. Falhas de histórico no worker, fila, índice dirty, snapshot, segunda
 partição, journal, manifesto e resposta/readback após commit preservam estado,
-causa, pendências e necessidade de recarregar, sem perda/duplicação.
+causa, pendências e necessidade de recarregar, sem perda/duplicação. A cobertura
+de journals inclui inclusão/edição/troca de CPF/remoção acumuladas antes do worker,
+transferência seguida de edição/remoção, retry após segunda equipe, resposta
+perdida de histórico e checkpoint, branches não publicados e corrupção de
+versões antigas. Também compara projeção sem escrita com histórico consolidado.
+Commits sem alterações de elenco preservam participações de equipes vazias
+após desvinculação; histórico consolidado ausente gera erro, nunca fallback vazio.
 Os testes também impedem sobrescrita por mudança externa durante a operação.
 
 `validation-index.test.cjs` mantém as regressões V1 e acrescenta V2 sob gate:
 rejeição de payload antigo, fingerprints vivos completos, corrupção/remoção/
 edição externa de pasta/manifesto/partições e mudança de nome canônico,
 fallback live enquanto dirty e recálculo manual/agendado, incluindo corridas.
-Dentro da operação sob lock, a primeira leitura valida e reutiliza um snapshot
-local das partições para o fingerprint e ambas as categorias; a publicação
-continua relendo fontes para não aceitar uma alteração externa intermediária.
+Com índice V2 limpo, CRUD lê blobs apenas das categorias/equipes afetadas;
+transferência lê e publica origem/destino juntas. O índice compacto conserva
+CPF, nomes normalizados, IDs e participação para guardas entre equipes.
+Após o manifesto ser publicado, deltas das listas anterior/nova atualizam o
+índice sem reler os elencos. A validação das fontes continua consultando
+metadados Drive v3 (ID, pasta, nome, versão e MD5) de todas as referências,
+além do manifesto; isso evita baixar todos os blobs, mas ainda tem custo
+proporcional ao número de partições.
+Sem base limpa/confiável, as guardas voltam a ler as partições ao vivo e o
+índice permanece dirty. Falhas de metadados impedem autorizar a mutação.
+Checks antes/depois do manifesto rejeitam alterações externas observadas,
+inclusive em partições não afetadas; edições manuais ainda não participam do
+ScriptLock e permanece a janela inerente entre chamadas Drive.
 `esportivos-snapshot.test.cjs` também executa builders e workers agendados
 com gate ativo, preservando cópias anteriores.
 O diagnóstico administrativo de journals valida snapshot, destino e fontes
@@ -90,21 +110,25 @@ esportivos e agendas continuam exercitando o comportamento legado. O VM não sim
 latência, quotas reais nem atomicidade entre serviços Google distintos.
 O manifesto depende da substituição integral do conteúdo de um único
 arquivo pelo Drive e do `ScriptLock` dos escritores da aplicação; edições
-manuais concorrentes no Drive não participam desse lock. A revalidação de
-manifesto, blobs e nomes canônicos antes de publicar rejeita divergências,
-mas não elimina a janela entre a última leitura e a publicação no Drive.
+manuais concorrentes no Drive não participam desse lock. Metadados Drive v3
+validam nome, pasta, versão e MD5 sem baixar os registros, mas fazem uma
+consulta por referência e não removem a janela entre checagem e publicação.
+Snapshots de histórico guardam referências imutáveis e digests: versões
+anteriores e novas partições afetadas usam SHA-256 para replay; referências
+inalteradas usam MD5 do Drive, sem baixar seus blobs. Snapshots legados continuam
+aceitando o SHA-256 já persistido.
 
-O fingerprint V2 lê manifesto e blobs publicados; **não há promessa de
-validação sem leituras**. O namespace de propriedades do índice é preservado,
-mas metadados/payloads V1 não autorizam consultas V2. Em mutações de elenco V2,
-o índice fica dirty durante a preparação e a publicação única do manifesto.
-Somente com um índice V2 limpo e validado como base, a aplicação relê o estado
-publicado, atualiza a categoria afetada e confirma novamente fingerprints e
-checkpoint antes de publicar metadados limpos. Falta de base, divergência,
-concorrência, falha ou limite de propriedades preserva o estado dirty e o
-fallback live até reconciliação. Assim, a publicação do índice limpo nunca
-precede o commit do manifesto. Não há limpeza física nem consumo automático de
-journals; remoção com gate ativo é somente lógica e preserva os arquivos.
+O namespace de propriedades do índice é preservado, mas payloads V1 não
+autorizam consultas V2. Em mutações V2, o índice fica dirty durante preparação
+e publicação. Somente uma base limpa com fingerprints atuais permite aplicar
+deltas; fontes são revalidadas antes da publicação limpa. Falta de base,
+divergência, concorrência, falha ou limite de propriedades mantém o índice
+dirty e força guardas live até reconciliação. O fallback pode ler todas as
+partições do campeonato; agregações e reconstruções completas também continuam
+proporcionais aos dados. A transferência publica as duas partições num único
+manifesto, sem janela de perda/duplicação para leitores do manifesto. Não há
+limpeza física; journals publicados são consumidos pelo worker de
+histórico, sem apagá-los. Remoção com gate ativo é somente lógica e preserva os arquivos.
 Ativação remota e validação nos serviços Google reais continuam fora desta
 entrega.
 
@@ -113,8 +137,17 @@ A leitura nova ignora os JSONs e propriedades antigos: não os copia,
 migra ou mescla. Eles permanecem preservados, sem nenhum apagar automático.
 Com o gate de produção desabilitado, os
 consumidores legados ainda dependem deles; mantenha-os. Equipes e IDs
-globais, jogos/tabela e histórico de inscrições permanecem preservados.
+globais e jogos/tabela não são migrados. O histórico global antigo permanece
+fisicamente preservado, mas não participa do modelo ativo.
 Os testes são exclusivamente locais e não executam ações no Drive remoto.
+
+**Limites ainda pendentes:** fingerprints e confirmações percorrem metadados de
+todas as referências (sem baixar os blobs); fallback dirty e rebuild do índice
+leem as fontes completas. Listagens agregadas, histórico assíncrono e
+reconciliação mantêm seus próprios custos por dados/equipes. O VM não mede
+latência real nem quotas Drive v3/Apps Script, e esta entrega não afirma
+complexidade constante nem melhoria específica em segundos. Catálogo,
+referências, versões e checkpoints não têm compactação automática.
 
 ### Regressao do indice de validacao
 

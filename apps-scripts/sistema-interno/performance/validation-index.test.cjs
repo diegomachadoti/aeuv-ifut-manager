@@ -35,9 +35,10 @@ function fixture(active = false) {
     if (h.state.failMetadata) throw Error('sensitive metadata error 52998224725');
     const meta = h.meta.get(id);
     if (h.state.onMetadata) h.state.onMetadata(meta.name);
+    const key = meta.key || meta.name;
     return { id, name: meta.name, trashed: meta.trashed,
       parents: [meta.parent === 'root' ? h.rootId() : meta.parent],
-      version: String(versions.get(meta.name) || 1), md5Checksum: md5(h.files.get(meta.name)) };
+      version: String(versions.get(key) || 1), md5Checksum: md5(h.files.get(key)) };
   } } };
   const props = h.c.PropertiesService.getScriptProperties();
   h.c.PropertiesService.getScriptProperties = () => ({
@@ -119,10 +120,11 @@ function fixture(active = false) {
 
 const activeSeed = (h, tipo, registros, id = 'c1') => h.withLock(() => h.c.gravarParticoesElenco_(id,
   h.c.prepararParticoesElencoPorNome_(registros).map(group => ({ ...group, tipo }))));
-const activePath = (h, tipo = 'comissao') => {
+const activePath = (h, tipo = 'comissao', equipeId) => {
   const folder = h.c.nomePastaElencosParticionados_('c1');
   const manifest = JSON.parse(h.files.get(folder + '\\manifesto.json'));
-  return folder + '\\' + manifest.particoes.find(item => item.tipo === tipo).arquivo;
+  return folder + '\\' + manifest.particoes.find(item => item.tipo === tipo
+    && (!equipeId || item.equipeId === equipeId)).arquivo;
 };
 
 test('active V2 index reconciles both partition categories and retains Drive version checks for games', () => {
@@ -180,6 +182,185 @@ test('active RPC mutations publish V2 only after the manifest and update CPF/tea
   });
   assert.equal(h.meta().dirty, false);
   assert.equal(h.index().cadastros.atletas[athlete.cpf][0][1], h.c.chaveEquipe_('Equipe B'));
+});
+
+test('warm active CRUD reads only the selected team and uses compact cross-team CPF/name indexes', () => {
+  const h = fixture(true);
+  h.state.equipes.push({ id: 'e3', nome: 'Equipe C' });
+  activeSeed(h, 'atletas', [
+    person('atletas'),
+    person('atletas', { id: 'athlete-b', nome: 'Bruno Lima', cpf: '12345678909', timeVinculado: 'Equipe B' }),
+    person('atletas', { id: 'athlete-c', nome: 'Carla Lima', cpf: '98765432290', timeVinculado: 'Equipe C' })
+  ]);
+  activeSeed(h, 'comissao', [
+    person('comissao'),
+    person('comissao', { id: 'staff-b', nome: 'Equipe B staff', cpf: '11111111111', timeVinculado: 'Equipe B' }),
+    person('comissao', { id: 'staff-c', nome: 'Equipe C staff', cpf: '22222222222', timeVinculado: 'Equipe C' })
+  ]);
+  assert.equal(h.build(), 'reconciliado');
+  const refs = JSON.parse(h.files.get(h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json')).particoes;
+  const unrelated = refs.filter(item => item.equipeId !== 'e1')
+    .map(item => h.c.nomePastaElencosParticionados_('c1') + '\\' + item.arquivo);
+  h.io.length = 0;
+  const response = h.c.listarElenco('c1', 'e1');
+  assert.equal(response.registros[0].atletas.length, 1);
+  const listingReads = h.io.filter(item => item.operacao === 'read').map(item => item.name);
+  assert(unrelated.every(name => !listingReads.includes(name)),
+    'team RPC listing reads only the selected team roster blobs');
+  const metadataBefore = h.counts.metadata;
+  h.io.length = 0;
+  h.c.salvarCadastroElenco({ ...h.payload('comissao'), cpf: '24681357928' });
+  const reads = h.io.filter(item => item.operacao === 'read').map(item => item.name);
+  assert(reads.some(name => name === activePath(h, 'comissao', 'e1')));
+  assert(unrelated.every(name => !reads.includes(name)), 'untouched team partition blobs are not downloaded');
+  assert(h.counts.metadata > metadataBefore, 'live source metadata is still checked');
+
+  const before = h.c.lerElencoParticionado_('c1', 'atletas');
+  h.io.length = 0;
+  assert.throws(() => h.c.salvarCadastroElenco({
+    ...h.payload('atletas'), cpf: '12345678909', nome: 'Novo Jogador'
+  }), /CPF j[aá] cadastrado/);
+  const readsDuplicate = h.io.filter(item => item.operacao === 'read').map(item => item.name);
+  assert(unrelated.some(name => readsDuplicate.includes(name)) === false,
+    'a valid index rejects cross-team CPF duplicates without roster downloads');
+  assert.deepEqual(h.c.lerElencoParticionado_('c1', 'atletas'), before);
+  h.io.length = 0;
+  assert.throws(() => h.c.salvarCadastroElenco({
+    ...h.payload('atletas'), cpf: '31415926590', nome: 'Bruno'
+  }), /Nome similar j[aá] cadastrado/);
+  assert(!h.io.some(item => item.operacao === 'read' && unrelated.includes(item.name)),
+    'the normalized-name index enforces cross-team similar-name rules');
+});
+
+test('warm active transfer reads only origin and destination team data and updates their index delta', () => {
+  const h = fixture(true);
+  h.state.equipes.push({ id: 'e3', nome: 'Equipe C' });
+  activeSeed(h, 'atletas', [
+    person('atletas'),
+    person('atletas', { id: 'athlete-b', nome: 'Bruno Lima', cpf: '12345678909', timeVinculado: 'Equipe B' }),
+    person('atletas', { id: 'athlete-c', nome: 'Carla Lima', cpf: '98765432290', timeVinculado: 'Equipe C' })
+  ]);
+  activeSeed(h, 'comissao', [
+    person('comissao'),
+    person('comissao', { id: 'staff-b', timeVinculado: 'Equipe B' }),
+    person('comissao', { id: 'staff-c', timeVinculado: 'Equipe C' })
+  ]);
+  h.build();
+  const refs = JSON.parse(h.files.get(h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json')).particoes;
+  const thirdTeam = refs.filter(item => item.equipeId === 'e3')
+    .map(item => h.c.nomePastaElencosParticionados_('c1') + '\\' + item.arquivo);
+  h.io.length = 0;
+  h.c.transferirAtletaElenco({
+    campeonatoId: 'c1', equipeId: 'e1', registroId: 'athlete', equipeDestinoId: 'e2'
+  });
+  const reads = h.io.filter(item => item.operacao === 'read').map(item => item.name);
+  assert(thirdTeam.every(name => !reads.includes(name)));
+  assert.equal(h.c.lerElencoParticionado_('c1', 'atletas').find(item => item.id === 'athlete').timeVinculado, 'Equipe B');
+  assert.equal(h.index().cadastros.atletas['52998224725'][0][1], h.c.chaveEquipe_('Equipe B'));
+});
+
+test('missing compact base scans live sources and rejects duplicate writes while leaving the index dirty', () => {
+  const h = fixture(true);
+  h.state.equipes.push({ id: 'e3', nome: 'Equipe C' });
+  activeSeed(h, 'comissao', [
+    person('comissao'),
+    person('comissao', { id: 'staff-b', nome: 'Outro membro', timeVinculado: 'Equipe B' })
+  ]);
+  h.build();
+  h.withLock(() => h.c.invalidarIndiceValidacao_('c1'));
+  const revision = JSON.parse(h.files.get(h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json')).revisao;
+  h.io.length = 0;
+  assert.throws(() => h.c.salvarCadastroElenco({
+    ...h.payload('comissao'), cpf: '11144477735', nome: 'Outra pessoa'
+  }), /CPF j[aá] cadastrado/);
+  assert(h.meta().dirty);
+  assert.equal(h.c.consultarIndiceValidacao_('c1'), null, 'dirty base cannot authorize use');
+  assert.equal(JSON.parse(h.files.get(h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json')).revisao, revision);
+  const rosterReads = h.io.filter(item => item.operacao === 'read' && item.name.includes('\\Comissao Tecnica -'))
+    .map(item => item.name);
+  assert(rosterReads.length > 0, 'fallback reads current roster partitions instead of trusting dirty properties');
+});
+
+for (const tipo of ['atletas', 'comissao']) {
+  test(`dirty active index rejects ${tipo} CPF from another category on another team`, () => {
+    const h = fixture(true);
+    const outroTipo = tipo === 'atletas' ? 'comissao' : 'atletas';
+    activeSeed(h, outroTipo, [person(outroTipo, { timeVinculado: 'Equipe B' })]);
+    h.build();
+    h.withLock(() => h.c.invalidarIndiceValidacao_('c1'));
+    const path = h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json';
+    const before = h.files.get(path);
+    assert.throws(() => h.c.salvarCadastroElenco({
+      ...h.payload(tipo), cpf: person(outroTipo).cpf
+    }), /Este CPF já está cadastrado/);
+    assert.equal(h.files.get(path), before);
+    assert.equal(h.c.lerElencoParticionado_('c1', tipo).length, 0);
+  });
+
+  for (const trusted of [true, false]) {
+    test(`active ${tipo} import rejects similar names within batch with ${trusted ? 'trusted' : 'dirty'} index`, () => {
+      const h = fixture(true);
+      activeSeed(h, tipo, [
+        person(tipo, { id: 'previous-1', nome: 'Ana Souza', cpf: '52998224725' }),
+        person(tipo, { id: 'previous-2', nome: 'Ana Souza Silva', cpf: '11144477735' })
+      ], 'c2');
+      h.build();
+      if (!trusted) h.withLock(() => h.c.invalidarIndiceValidacao_('c1'));
+      const listed = h.c.listarImportacaoElenco({
+        campeonatoId: 'c1', equipeId: 'e1', tipo, origemId: 'c2'
+      });
+      assert.equal(listed.candidatos.length, 2);
+      assert(listed.candidatos.every(item => !item.motivo));
+      const before = [...h.files];
+      assert.throws(() => h.c.importarCadastrosElenco({
+        campeonatoId: 'c1', equipeId: 'e1', tipo, origemId: 'c2',
+        inscricaoIds: listed.candidatos.map(item => item.id)
+      }), /Nome similar já cadastrado/);
+      assert.deepEqual([...h.files], before, 'entire batch fails before any persistent write');
+      assert.equal(h.c.lerElencoParticionado_('c1', tipo).length, 0);
+    });
+  }
+}
+
+test('external edit to an unrelated partition during staging blocks the manifest commit', () => {
+  const h = fixture(true);
+  activeSeed(h, 'comissao', [
+    person('comissao'),
+    person('comissao', { id: 'staff-b', nome: 'Equipe B staff', cpf: '12345678909', timeVinculado: 'Equipe B' })
+  ]);
+  h.build();
+  const manifestName = h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json';
+  const previousManifest = h.files.get(manifestName);
+  const unrelated = activePath(h, 'comissao', 'e2');
+  const original = h.files.get(unrelated);
+  let tampered = false;
+  h.state.onWrite = name => {
+    if (!tampered && name.includes('\\Comissao Tecnica - e1 -')) {
+      tampered = true;
+      h.files.set(unrelated, JSON.stringify([person('comissao', {
+        id: 'staff-b', nome: 'External edit', cpf: '12345678909', timeVinculado: 'Equipe B'
+      })]));
+    }
+  };
+  assert.throws(() => h.c.salvarCadastroElenco({ ...h.payload('comissao'), cpf: '24681357928' }));
+  h.state.onWrite = null;
+  assert(tampered);
+  assert.equal(h.files.get(manifestName), previousManifest);
+  assert(h.meta().dirty);
+  assert.equal(JSON.parse(h.files.get(unrelated))[0].nome, 'External edit');
+  h.files.set(unrelated, original);
+});
+
+test('unavailable Drive metadata prevents an active scoped mutation rather than authorizing stale sources', () => {
+  const h = fixture(true);
+  activeSeed(h, 'comissao', [person('comissao')]);
+  h.build();
+  const manifestName = h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json';
+  const previousManifest = h.files.get(manifestName);
+  h.state.failMetadata = true;
+  assert.throws(() => h.c.salvarCadastroElenco({ ...h.payload('comissao'), cpf: '24681357928' }));
+  assert.equal(h.files.get(manifestName), previousManifest);
+  assert.equal(h.c.lerElencoParticionado_('c1', 'comissao').length, 1);
 });
 
 for (const failure of ['chunk', 'publish']) test(`active V2 incremental ${failure} failure stays dirty and falls back live`, () => {

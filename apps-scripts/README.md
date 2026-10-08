@@ -86,6 +86,7 @@ AEUV - Elencos - <encodeURIComponent(campeonatoId)>
   Comissao Tecnica - <encodeURIComponent(equipeId)> - <revisao>.json
   snapshot - <revisaoDestino>.json
   pendencia - <revisaoDestino>.json
+  historico - <encodeURIComponent(equipeId)>.json
 ```
 
 Os nomes físicos usam somente identidades permanentes, nunca nomes visíveis.
@@ -130,14 +131,35 @@ arquivos preparados mas não publicados ficam
 retidos e ignorados nas leituras. **Não existe remoção automática**, nem
 dos arquivos antigos nem dessas versões.
 
-**O snapshot de recuperação não substitui o histórico global de inscrições.
-O journal pendente não é a fila existente de reconciliação.** O adaptador
-RPC prepara o snapshot síncrono no histórico global, no formato existente,
-antes da mutação. Antes de publicar o manifesto, deixa o índice dirty,
-persiste `marcarHistoricoElencoPendente_` e marca as cópias esportivas pendentes.
-O worker existente lê a mesma fonte escolhida pelo gate e reconcilia o
-estado persistido, tanto após sucesso como após falha. Os journals continuam
-sendo evidência de recuperação, não uma segunda fila.
+**Com gate ativo, não há leitura nem gravação síncrona do histórico global
+nas mutações.** Snapshots e journals V2 guardam referências imutáveis e digests,
+sem copiar os registros de todas as equipes. O snapshot aponta o manifesto
+anterior; o journal registra manifesto destino, referências alteradas, nomes e
+timestamp da publicação. São confirmados antes do único commit do manifesto,
+com fila durável por campeonato, índice dirty e cópias esportivas pendentes.
+
+O worker existente percorre exclusivamente a linhagem do manifesto publicado,
+em ordem de `sequenciaPublicacao`, e grava `historico - <equipeId>.json` na pasta
+do campeonato. Journals preparados sem publicação nunca viram histórico.
+Cada equipe guarda o último commit aplicado; o checkpoint do campeonato avança
+somente depois de confirmar todas as equipes afetadas. Retry após escrita
+parcial não duplica inscrições nem incrementa sequências novamente. Referências
+ausentes, digests divergentes ou cadeia inválida preservam a pendência e geram
+erro. Inclusão, edição, troca de CPF, transferência e remoção antes do worker
+mantêm os snapshots históricos finais por inscrição, inclusive da origem.
+Vínculos de equipes sem elenco também entram como commits de participação:
+alterar/desvincular equipes preserva o par histórico, sem precisar inventar
+registros de pessoas. Manutenções registram os metadados atuais pelo journal,
+não pela regravação de um histórico global.
+
+Importações projetam em memória os commits ainda pendentes da equipe autorizada,
+sem gravar histórico e sem confiar em journals não publicados. O Banco de Atletas
+usa a mesma projeção, abrangendo todas as equipes. A exclusão lógica fecha a
+presença somente quando o campeonato realmente saiu do registro e possui
+tombstone válido; um tombstone preparado antes de uma exclusão falha não fecha
+inscrições de um campeonato ainda existente. O modelo ativo não lê, migra ou
+mescla o antigo histórico global. Com gate desligado, o comportamento V1
+permanece inalterado.
 
 Na tela **Administração > Histórico de inscrições**, o administrador pode
 selecionar um campeonato e executar **Diagnosticar journals do campeonato**.
@@ -165,13 +187,15 @@ Se a listagem indicar limite de 100 journals, os resultados que dependem da
 cadeia de revisões podem não estar completos. Não use um relatório truncado
 para autorizar o cutover.
 
-O fingerprint `assinaturaFontesElencoParticionado_` lê as fontes novas
-vivas, inclui o formato/manifesto, o digest de cada partição publicada e
-seu nome canônico no registro global. Antes de publicar, o gravador
+O fingerprint `assinaturaFontesElencoParticionado_`, sob o gate ativo,
+consulta metadados Drive v3 vivos (ID, nome, pasta, versão e MD5) do manifesto
+e de cada partição publicada, além do nome canônico no registro global.
+Não baixa todos os blobs para verificar as fontes. Antes de publicar, o gravador
 revalida todas essas fontes, inclusive partições não alteradas. A
 transferência também compara o fingerprint entre sua leitura e o início
-da gravação, não só a revisão do manifesto. Fontes ausentes ou corrompidas
-impedem a publicação, mesmo quando não são o alvo da alteração. Isso
+da gravação, não só a revisão do manifesto. Fontes ausentes ou divergentes
+impedem o uso do índice anterior; metadados inválidos impedem a publicação,
+mesmo quando não são o alvo da alteração. Isso
 detecta edições externas sem depender de metadados legados. Não é um CAS
 fornecido pelo Drive: existe uma janela entre a última leitura e a chamada
 de publicação para escritores externos que não usam o `ScriptLock`.
@@ -182,40 +206,48 @@ com identidade da pasta/manifesto, todas as partições publicadas, tipo,
 estado e nomes canônicos; ausência, corrupção, remoção ou edição externa
 impedem o reaproveitamento do índice anterior. A tabela mantém versão/MD5
 do Drive. A consulta V2 não reutiliza verificações de um índice em memória,
-mesmo sob lock. Dentro de uma operação sob lock, o fingerprint e as listas
-das duas categorias reutilizam a mesma leitura validada de cada partição;
-antes da publicação, as fontes são relidas para detectar alterações externas.
-Após mutação do elenco, o índice fica dirty e as guardas
-usam a fonte viva até o reconciliador manual/agendado reconstruí-lo.
-Não há promessa de validação V2 sem leituras de blobs.
+mesmo sob lock. CRUD lê os registros apenas da equipe selecionada; a
+transferência lê origem e destino. Antes da publicação, os metadados de todas
+as referências são revalidados para detectar alterações externas.
+O índice fica dirty durante a mutação; após o manifesto, uma base V2 limpa
+permite atualizar CPF, nomes e IDs por deltas das listas anterior/nova,
+sem reler os elencos completos. Sem base confiável ou após falha, as guardas
+usam fontes completas ao vivo até o reconciliador manual/agendado reconstruí-lo.
 
 Superfícies integradas, **somente sob o gate ativo**:
 
 | Superfície | Implementação desabilitada em produção |
 | --- | --- |
-| Cadastros e transferências RPC | Adição/edição/remoção e transferência por lista completa, resolução por ID permanente e publicação única. Registros particionados exigem IDs válidos; não há migração automática dos antigos. |
-| Histórico global e fila | Snapshot síncrono anterior, fila persistida antes do commit e reconciliação pós-publicação pela mesma fonte. Inscrições/snapshots antigos mantêm seus IDs e dados, inclusive para importação deliberada. |
+| Cadastros e transferências RPC | Adição/edição/remoção por equipe; transferência lê e publica origem/destino juntas. Guardas compactas entre equipes com fallback vivo, resolução por ID permanente e publicação única. Registros particionados exigem IDs válidos; não há migração automática dos antigos. |
+| Histórico particionado e fila | Journals V2 duráveis antes do manifesto, replay ordenado/idempotente pelo worker, histórico por competição + equipe. Histórico global antigo ignorado, sem migração. |
 | Índice CPF/participação | V2 usa fingerprint vivo para elencos e Drive version/MD5 para tabela. Com uma base V2 íntegra, inclusão/edição/remoção/transferência atualizam incrementalmente a categoria após o manifesto; o índice fica dirty até confirmar os novos chunks e fontes. Sem base V2 confiável ou após falha, as consultas usam fallback vivo até o recálculo manual/agendado. |
-| Importação e respostas | Listagens/agregadores e candidatos usam listas novas/histórico global; importação explícita passa pelas mesmas guardas e publica partições, sem copiar arquivos legados. |
+| Importação e respostas | Listagens usam listas novas; candidatos usam histórico particionado com projeção dos commits pendentes da mesma equipe. Importação explícita passa pelas mesmas guardas e publica partições, sem copiar arquivos legados. |
 | Resultados e súmulas | Leituras diretas de comissão passam pelo adaptador. `ativo` é preservado também pelos normalizadores/edições V2; inativos não entram como participantes disponíveis nem na súmula atual. Resultados históricos salvos não são regravados. |
 | Imagens | Lotes mantêm assinatura e backup anterior; aceitam filtro opcional `fonte.equipeId`. Sem filtro, mantêm o contrato agregado atual. Apenas equipes alteradas recebem versões, com uma publicação por lote e histórico pela fila. Falha do backup impede a gravação. |
 | Cópias esportivas | Mutações marcam pendência; os builders/workers de tabela e participantes recompõem usando a fonte do gate. Cópias anteriores permanecem imutáveis e a releitura continua exibindo a cópia pronta, conforme o contrato existente. |
 | Remoção do campeonato | Exclusão lógica do registro listado, tombstone durável e fila antes da alteração. O worker fecha a presença das inscrições quando o campeonato removido tem tombstone válido. Pasta nova, versões/journals, propriedades antigas, arquivos legados e jogos/tabela são preservados; apenas o namespace do índice removido é limpo. |
 
-Limites ainda não suportados: limpeza física das pastas/versões e consumo
-automático dos journals.
-Não são necessários para as leituras/gravações com gate, nem estão sendo
-executados. A validação local não substitui autorização, quotas e comportamento
+**Limite desta etapa:** fingerprints e confirmações ainda consultam metadados
+de todas as partições; o custo permanece proporcional ao número de referências,
+embora não baixe os registros das equipes não afetadas com índice confiável.
+Fallback dirty e reconstrução do índice leem as fontes completas. Não há
+promessa de custo constante nem de latência específica nos serviços Google.
+Snapshots V2 eliminam as cópias integrais de dados, mas ainda contêm metadados
+de todas as referências. O catálogo de campeonatos e os checkpoints usam
+Script Properties e continuam sujeitos às quotas. Não há limpeza/compactação
+automática de versões ou journals. A validação local não substitui autorização, quotas e comportamento
 real dos serviços Google; ativação/publicação de produção permanece fora
 desta entrega. Não há CAS contra escritores externos que ignorem o lock.
 
 **Cutover futuro da base de testes:** a decisão é iniciar elencos atuais
 vazios, sem migrar/copiar/mesclar JSONs ou Script Properties antigos.
-Preservar `equipes.json`/registro global de equipes e seus IDs, jogos
-existentes e histórico global de inscrições; o arquivo de tabela continua
+Preservar `equipes.json`/registro global de equipes e seus IDs; o arquivo de tabela continua
 no local atual. Com gate ativo nas fixtures, as leituras atuais usam exclusivamente a
 estrutura nova; JSONs/propriedades antigos ficam ignorados, não migrados,
-e permanecem preservados. **Em produção o gate continua `false` e os
+e permanecem preservados. O histórico global antigo também é ignorado pelo
+modelo ativo: os dados de teste são descartáveis e não há compatibilidade
+ou migração exigida. Qualquer reset será uma ação separada do responsável,
+nunca executada por esta entrega. **Em produção o gate continua `false` e os
 consumidores ainda dependem deles: não os apague.** Nenhuma ação no Drive
 remoto ou remoção local/remota foi executada para implementar esta etapa.
 
@@ -1571,6 +1603,11 @@ remoção. As mutações revalidam o contexto e o alvo persistido dentro do lock
 a resposta nunca inclui o cadastro global.
 
 #### Consolidação assíncrona do histórico
+
+Os parágrafos abaixo descrevem o caminho **V1 em produção (gate desligado)**.
+No caminho ativo local, journals de referências substituem a preparação global
+síncrona, o worker consolida por competição/equipe e importações projetam
+pendências sem escrita; veja [o modelo V2](#elencos-particionados-etapa-inativa).
 
 Inclusão, edição, remoção e transferência continuam validando permissão,
 vínculo, CPF, duplicidade e participação, e gravando o elenco atual de forma

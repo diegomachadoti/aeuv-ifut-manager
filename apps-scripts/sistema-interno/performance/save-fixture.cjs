@@ -93,8 +93,9 @@ function harness(source = backend, opcoes = {}) {
     console: { log: value => logs.push(JSON.parse(value)) },
     Utilities: {
       getUuid: () => `uuid-${++uuid}`, newBlob: (text, mime, name) => ({ text, name }),
-      DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' },
-      computeDigest: (_algo, text) => [...crypto.createHash('sha256').update(text, 'utf8').digest()],
+      DigestAlgorithm: { SHA_256: 'SHA_256', MD5: 'MD5' }, Charset: { UTF_8: 'UTF_8' },
+      computeDigest: (algo, text) => [...crypto.createHash(algo === 'MD5' ? 'md5' : 'sha256')
+        .update(text, 'utf8').digest()],
       base64EncodeWebSafe: bytes => Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_')
     },
     DriveApp: { getFileById: id => {
@@ -124,6 +125,23 @@ function harness(source = backend, opcoes = {}) {
         setContent: text => file(atual().key || atual().name).setContent(text)
       };
     } },
+    Drive: { Files: { get(id, options) {
+      io.push({ operacao: 'metadata', id });
+      if (options.fields !== 'id,name,trashed,parents,version,md5Checksum') {
+        throw new Error('unexpected metadata fields');
+      }
+      if (state.failMetadata) throw new Error(state.failMetadata);
+      const atual = meta.get(id);
+      if (!atual) throw new Error('metadata missing');
+      const key = atual.key || atual.name;
+      const contents = files.get(key);
+      return {
+        id: id, name: atual.name, trashed: atual.trashed,
+        parents: [atual.parent === 'root' ? rootId : atual.parent],
+        version: '1',
+        md5Checksum: contents === undefined ? '' : crypto.createHash('md5').update(contents, 'utf8').digest('hex')
+      };
+    } } },
     ScriptApp: {
       EventType: { CLOCK: 'CLOCK' },
       getService: () => ({ getUrl: () => 'fixture' }),
@@ -314,7 +332,9 @@ function harness(source = backend, opcoes = {}) {
   c.lerTabelaCampeonato_ = () => { read('jogos'); counts.tables++; return { jogos: clone(state.jogos) }; };
   const seed = (id, tipo, records) => files.set(rosterFile(id, tipo), JSON.stringify(records));
   const roster = (id, tipo) => JSON.parse(files.get(rosterFile(id, tipo)));
-  const history = () => files.has(historyFile) ? JSON.parse(files.get(historyFile)) : null;
+  const history = () => c.elencosParticionadosCutoverAtivo_()
+    ? clone(c.lerHistoricoElenco_())
+    : files.has(historyFile) ? JSON.parse(files.get(historyFile)) : null;
   const payload = (tipo, edit = false) => ({
     ...person(tipo), campeonatoId: 'c1', equipeId: 'e1', tipo,
     registroId: edit ? person(tipo).id : '', nome: edit ? person(tipo).nome : 'Nova Pessoa'

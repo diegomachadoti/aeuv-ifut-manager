@@ -474,3 +474,47 @@ test('Administração isola configuração de imagens, serializa ações e ignor
   assert.equal(requests.length, count);
   assert.match(elements.areaAdministracao.textContent, /exclusivo/);
 });
+
+test('abrir cadastro de campeonato move o foco para o formulário abaixo da lista', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'Index.html'), 'utf8');
+  const inicio = html.indexOf('    function abrirFormularioCampeonato(id) {');
+  const fim = html.indexOf('     function gravarCampeonato(idOriginal) {', inicio);
+  assert(inicio >= 0 && fim > inicio);
+  const elements = {};
+  let foco = '';
+  const element = id => {
+    if (!elements[id]) elements[id] = {
+      id, value: id === 'cFormato' ? 'Pontos corridos' : '', hidden: false,
+      addEventListener() {},
+      focus() { foco = id; }
+    };
+    return elements[id];
+  };
+  Object.defineProperty(element('campeonatoFormArea'), 'innerHTML', {
+    set(markup) {
+      this.markup = markup;
+      for (const match of markup.matchAll(/\bid="([^"]+)"/g)) element(match[1]);
+    },
+    get() { return this.markup || ''; }
+  });
+  const c = vm.createContext({
+    campeonatos: {
+      registros: [], status: [], modalidades: [{ id: 'Futsal', nome: 'Futsal' }],
+      visibilidades: [{ id: 'Interno', nome: 'Interno' }],
+      formatos: [{ id: 'Pontos corridos', nome: 'Pontos corridos' }]
+    },
+    document: {
+      getElementById: element,
+      querySelectorAll: () => []
+    },
+    escapar: String,
+    campoTexto: (id, label, value) => '<input id="' + id + '" value="' + value + '">',
+    opcoesSelect: () => '',
+    imagemUpload: id => '<input id="' + id + '">',
+    inicializarImagemUpload() {}
+  });
+  vm.runInContext(html.slice(inicio, fim), c);
+  c.abrirFormularioCampeonato('');
+  assert.match(elements.campeonatoFormArea.innerHTML, /Criar campeonato/);
+  assert.equal(foco, 'cNome');
+});

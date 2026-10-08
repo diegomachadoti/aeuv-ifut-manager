@@ -1344,6 +1344,9 @@ function timesCampeonatoOperacao_(campeonatoId, recursos) {
 function lerElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
   const ler = function () {
     if (elencosParticionadosCutoverAtivo_()) {
+      if (recursos && recursos.elencoEquipeId) {
+        return lerParticaoElencoOperacao_(campeonatoId, tipo, recursos.elencoEquipeId, recursos);
+      }
       const podeReutilizar = recursos && LockService.getScriptLock().hasLock();
       const snapshots = podeReutilizar
         ? (recursos.elencosParticionadosSnapshots
@@ -1356,7 +1359,7 @@ function lerElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
         snapshot = {
           estado: estado,
           fontes: fontes,
-          assinatura: assinaturaEstadoElencoParticionado_(estado, fontes)
+          assinatura: assinaturaEstadoElencoParticionado_(estado, fontes, recursos && recursos.equipes)
         };
         if (snapshots) snapshots[campeonatoId] = snapshot;
       }
@@ -1387,9 +1390,29 @@ function lerElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
   return brutos[chave];
 }
 
+function lerParticaoElencoOperacao_(campeonatoId, tipo, equipeId, recursos) {
+  const estado = lerEstadoElencosParticionados_(campeonatoId);
+  const assinatura = assinaturaEstadoElencoParticionado_(estado, null, recursos.equipes);
+  const estados = recursos.estadosElencosParticionados
+    || (recursos.estadosElencosParticionados = Object.create(null));
+  const anterior = estados[campeonatoId];
+  if (anterior && anterior.assinatura !== assinatura) {
+    throw new Error('Uma fonte do elenco mudou durante a operacao. Recarregue antes de repetir.');
+  }
+  estados[campeonatoId] = { revisao: estado.manifesto.revisao, assinatura: assinatura };
+  const chave = JSON.stringify([tipo, equipeId]);
+  const registros = lerParticaoElenco_(campeonatoId, equipeId, tipo, estado);
+  const particoes = recursos.particoesElencos || (recursos.particoesElencos = Object.create(null));
+  particoes[chave] = registros;
+  return registros;
+}
+
 function descartarElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
   if (recursos && recursos.elencosBrutos) delete recursos.elencosBrutos[JSON.stringify([campeonatoId, tipo])];
   if (recursos && recursos.elencosParticionadosSnapshots) delete recursos.elencosParticionadosSnapshots[campeonatoId];
+  if (recursos && recursos.particoesElencos && recursos.elencoEquipeId) {
+    delete recursos.particoesElencos[JSON.stringify([tipo, recursos.elencoEquipeId])];
+  }
 }
 
 function jogosParticipacaoOperacao_(campeonatoId, recursos) {
@@ -1499,6 +1522,7 @@ function validarAlvoElenco_(contexto, tipo, id, recursos, solicitacaoElenco) {
   const atual = solicitacaoElenco
     ? exigirEdicaoElencoPorIds_(solicitacaoElenco.campeonatoId, solicitacaoElenco.equipeId, recursos)
     : exigirEdicaoElenco_(contexto, recursos);
+  if (recursos) recursos.elencoEquipeId = atual.equipe.id;
   if (!id) return atual;
   const lista = medirRecursoCadastro_(recursos, 'lock_elenco_leitura', function () {
     return tipo === 'comissao' ? comissaoTecnicaCampeonato_(atual.campeonato.id, false, recursos)
@@ -1620,8 +1644,19 @@ function listarElencoInterno_(campeonatoId, equipeId, lockJaAdquirido) {
   if (lock) medirFaseCadastro_('listar_elenco_espera_lock', function () { lock.waitLock(30000); });
   try {
     const contexto = sessaoElenco_(campeonatoId, equipeId, true);
+    let recursos, listas;
+    if (elencosParticionadosCutoverAtivo_()) {
+      recursos = {
+        contexto: contexto, elencoEquipeId: contexto.equipe.id,
+        equipes: contexto.registroEquipes, campeonatos: [contexto.campeonato]
+      };
+      listas = {
+        atletas: atletasCampeonato_(contexto.campeonato.id, false, recursos),
+        comissao: comissaoTecnicaCampeonato_(contexto.campeonato.id, false, recursos)
+      };
+    }
     return medirFaseCadastro_('listar_elenco_montar_resposta', function () {
-      return montarRespostaElenco_(contexto);
+      return montarRespostaElenco_(contexto, listas, recursos);
     });
   } finally {
     if (lock) lock.releaseLock();
@@ -1718,6 +1753,50 @@ function transferirAtletaElencoInterno_(payload) {
         throw new Error(mensagemVinculoCompeticao_(atleta, origemAtual.campeonato, 'não pode ser transferido'));
       }
     });
+
+    if (elencosParticionadosCutoverAtivo_()) {
+      const origemId = origemAtual.equipe.id;
+      const origemAntes = lista.slice();
+      const destinoAntes = lerParticaoElencoOperacao_(
+        origemAtual.campeonato.id, 'atletas', solicitacao.equipeDestinoId, recursos);
+      if (destinoAntes.some(function (item) { return item.id === atleta.id; })) {
+        throw new Error('Registro de transferencia ausente ou duplicado. Recarregue antes de continuar.');
+      }
+      const cache = {};
+      medirFaseCadastro_('preparacao_historico', function () {
+        return prepararHistoricoElenco_(cache, recursos, origemAtual.campeonato.id);
+      });
+      const origemDepois = origemAntes.filter(function (item) { return item.id !== atleta.id; });
+      const destinoDepois = destinoAntes.concat([
+        Object.assign({}, atleta, { timeVinculado: destino.nome })
+      ]);
+      const mutacaoIndice = iniciarMutacaoIndiceParticionado_(origemAtual.campeonato.id, recursos);
+      delete recursos.indicesValidacao;
+      marcarHistoricoElencoPendente_(origemAtual.campeonato.id);
+      marcarSnapshotsEsportivosPendentes_();
+      try {
+        gravarParticoesElenco_(origemAtual.campeonato.id, [
+          { tipo: 'atletas', equipeId: origemId, registros: origemDepois },
+          { tipo: 'atletas', equipeId: destino.id, registros: destinoDepois }
+        ], recursos.estadosElencosParticionados[origemAtual.campeonato.id].revisao,
+        recursos.estadosElencosParticionados[origemAtual.campeonato.id].assinatura, false, recursos);
+      } catch (causa) {
+        const erro = new Error('Nao foi possivel confirmar a transferencia do elenco. Recarregue antes de repetir a operacao.');
+        erro.cause = causa;
+        throw erro;
+      }
+      concluirMutacaoIndiceParticionado_(mutacaoIndice, origemAtual.campeonato.id, [
+        { tipo: 'atletas', equipeId: origemId, antes: origemAntes, depois: origemDepois },
+        { tipo: 'atletas', equipeId: destino.id, antes: destinoAntes, depois: destinoDepois }
+      ], recursos);
+      cache[origemAtual.campeonato.id].atletas = origemDepois;
+      const resposta = medirFaseCadastro_('resposta', function () {
+        return montarRespostaElenco_(origemAtual, cache[origemAtual.campeonato.id], recursos);
+      });
+      resposta.recado = atleta.nome + ' transferido para ' + destino.nome
+        + '. O histórico será consolidado em segundo plano.';
+      return resposta;
+    }
 
     const cache = {};
     // Persist the original snapshot for this championship before changing the team.
@@ -2102,6 +2181,310 @@ const ELENCO_HISTORICO_FILA_PREFIXO = 'ELENCO_HISTORICO_FILA_V1_';
 const ELENCO_HISTORICO_AGENDA = 'ELENCO_HISTORICO_AGENDA_V1';
 const ELENCO_HISTORICO_STATUS = 'ELENCO_HISTORICO_STATUS_V1';
 const ELENCO_HISTORICO_HANDLER = 'processarHistoricoElencoAgendado';
+const ELENCO_HISTORICO_PARTICOES_CATALOGO = 'ELENCO_HISTORICO_PARTICOES_CATALOGO_V2';
+
+function catalogoHistoricoParticionado_() {
+  const bruto = PropertiesService.getScriptProperties().getProperty(ELENCO_HISTORICO_PARTICOES_CATALOGO);
+  const ids = bruto ? interpretarJsonElencoParticionado_(bruto) : [];
+  if (!Array.isArray(ids) || ids.some(function (id) { return typeof id !== 'string' || !id.trim(); })
+      || new Set(ids).size !== ids.length) throw new Error('Catalogo do historico particionado invalido.');
+  return ids;
+}
+
+function registrarCampeonatoHistoricoParticionado_(id) {
+  const ids = catalogoHistoricoParticionado_();
+  if (ids.indexOf(id) === -1) {
+    ids.push(id);
+    PropertiesService.getScriptProperties().setProperty(ELENCO_HISTORICO_PARTICOES_CATALOGO, JSON.stringify(ids));
+  }
+}
+
+function chaveCheckpointHistoricoParticionado_(id) {
+  return 'ELENCO_HISTORICO_CHECKPOINT_V2_' + digestIndiceValidacao_(id);
+}
+
+function nomeHistoricoEquipeParticionado_(equipeId) {
+  return 'historico - ' + identidadeElencoParticionado_(equipeId) + '.json';
+}
+
+function lerHistoricoEquipeParticionado_(estado, equipeId) {
+  const arquivo = estado.pasta && itemUnicoElencoParticionado_(
+    estado.pasta.getFilesByName(nomeHistoricoEquipeParticionado_(equipeId)));
+  if (!arquivo) {
+    const checkpoint = PropertiesService.getScriptProperties().getProperty(
+      chaveCheckpointHistoricoParticionado_(estado.manifesto.campeonatoId));
+    if (checkpoint) {
+      const commit = lerDocumentoRecuperacaoElenco_(estado.pasta,
+        'pendencia - ' + identidadeElencoParticionado_(checkpoint) + '.json');
+      const manifesto = validarManifestoRecuperacaoElenco_(
+        commit.manifestoDestino, estado.manifesto.campeonatoId, checkpoint);
+      if (manifesto.particoes.concat(manifesto.participacoes || []).some(function (item) {
+        return item.equipeId === equipeId;
+      })) throw new Error('Historico consolidado da equipe ausente; restaure os dados antes de continuar.');
+    }
+  }
+  const dados = arquivo ? interpretarJsonElencoParticionado_(arquivo.getBlob().getDataAsString('UTF-8'))
+    : { schema: 'aeuv.elencos.historico', versao: 2, campeonatoId: estado.manifesto.campeonatoId,
+      equipeId: equipeId, ultimoCommit: 0, sequencia: 0, participacoes: [], inscricoes: [] };
+  if (!dados || dados.schema !== 'aeuv.elencos.historico' || dados.versao !== 2
+      || dados.campeonatoId !== estado.manifesto.campeonatoId || dados.equipeId !== equipeId
+      || !Number.isSafeInteger(dados.ultimoCommit) || dados.ultimoCommit < 0
+      || dados.ultimoCommit > (estado.manifesto.sequenciaPublicacao || 0)
+      || !Number.isSafeInteger(dados.sequencia) || dados.sequencia < 0
+      || !Array.isArray(dados.participacoes) || !Array.isArray(dados.inscricoes)) {
+    throw new Error('Historico da equipe invalido; pendencias preservadas.');
+  }
+  const ids = new Set();
+  if (dados.participacoes.length > 1 || dados.participacoes.some(function (item) {
+    return !item || item.campeonatoId !== dados.campeonatoId || item.equipeId !== equipeId
+      || typeof item.id !== 'string' || !item.id || typeof item.equipeNome !== 'string'
+      || typeof item.campeonatoNome !== 'string';
+  }) || dados.inscricoes.some(function (item) {
+    if (!item || item.campeonatoId !== dados.campeonatoId || item.equipeId !== equipeId
+        || ['atletas', 'comissao'].indexOf(item.tipo) === -1 || typeof item.registroId !== 'string'
+        || !item.registroId || typeof item.cpf !== 'string' || typeof item.presente !== 'boolean'
+        || !Number.isSafeInteger(item.sequencia) || item.sequencia < 1 || item.sequencia > dados.sequencia
+        || !item.dados || typeof item.dados !== 'object' || Array.isArray(item.dados)
+        || typeof item.id !== 'string' || !item.id || ids.has(item.id)) return true;
+    ids.add(item.id);
+    return false;
+  })) throw new Error('Inscricoes do historico da equipe invalidas; pendencias preservadas.');
+  return dados;
+}
+
+function gravarHistoricoEquipeParticionado_(estado, dados) {
+  exigirLockElencoParticionado_();
+  const nome = nomeHistoricoEquipeParticionado_(dados.equipeId);
+  const arquivo = itemUnicoElencoParticionado_(estado.pasta.getFilesByName(nome));
+  const texto = JSON.stringify(dados);
+  if (arquivo) arquivo.setContent(texto);
+  else estado.pasta.createFile(Utilities.newBlob(texto, 'application/json', nome));
+  if (JSON.stringify(lerDocumentoRecuperacaoElenco_(estado.pasta, nome)) !== texto) {
+    throw new Error('Nao foi possivel confirmar o historico da equipe; pendencias preservadas.');
+  }
+}
+
+// Only the manifest lineage is authoritative. Staged journals are never replayed.
+function commitsHistoricoParticionado_(estado) {
+  const checkpoint = PropertiesService.getScriptProperties().getProperty(
+    chaveCheckpointHistoricoParticionado_(estado.manifesto.campeonatoId)) || '';
+  let manifesto = estado.manifesto;
+  const commits = [], vistos = new Set();
+  while (manifesto.revisao !== checkpoint) {
+    if (!manifesto.revisao || vistos.has(manifesto.revisao)) {
+      throw new Error('Cadeia do historico incompleta ou ciclica; pendencias preservadas.');
+    }
+    vistos.add(manifesto.revisao);
+    const journal = lerDocumentoRecuperacaoElenco_(estado.pasta,
+      'pendencia - ' + identidadeElencoParticionado_(manifesto.revisao) + '.json');
+    if (!journal || journal.schema !== 'aeuv.elencos.publicacao' || journal.versao !== 2
+        || journal.campeonatoId !== manifesto.campeonatoId || journal.revisaoDestino !== manifesto.revisao
+        || JSON.stringify(journal.manifestoDestino) !== JSON.stringify(manifesto)
+        || journal.snapshotAnterior !== 'snapshot - ' + identidadeElencoParticionado_(manifesto.revisao) + '.json'
+        || typeof journal.registradoEm !== 'string' || !journal.registradoEm
+        || typeof journal.campeonatoNome !== 'string' || !Array.isArray(journal.alteracoes)) {
+      throw new Error('Journal do historico invalido; pendencias preservadas.');
+    }
+    const snapshot = lerDocumentoRecuperacaoElenco_(estado.pasta, journal.snapshotAnterior);
+    if (!snapshot || snapshot.schema !== 'aeuv.elencos.snapshot' || snapshot.versao !== 2
+        || snapshot.campeonatoId !== manifesto.campeonatoId || snapshot.revisaoDestino !== manifesto.revisao
+        || snapshot.assinaturaAnterior !== journal.assinaturaAnterior || !Array.isArray(snapshot.particoes)) {
+      throw new Error('Snapshot do historico invalido; pendencias preservadas.');
+    }
+    const anterior = validarManifestoRecuperacaoElenco_(snapshot.manifestoAnterior, manifesto.campeonatoId, '');
+    validarManifestoRecuperacaoElenco_(manifesto, manifesto.campeonatoId, manifesto.revisao);
+    if (!Number.isSafeInteger(manifesto.sequenciaPublicacao)
+        || manifesto.sequenciaPublicacao !== (anterior.sequenciaPublicacao || 0) + 1
+        || snapshot.particoes.length !== anterior.particoes.length
+        || snapshot.particoes.some(function (item) {
+          return !item || typeof item.digest !== 'string'
+            || (item.algoritmo !== undefined && ['md5', 'sha256'].indexOf(item.algoritmo) === -1);
+        })
+        || anterior.particoes.some(function (ref, i) {
+          return JSON.stringify(snapshot.particoes[i].referencia) !== JSON.stringify(ref);
+        })) throw new Error('Sequencia ou referencias do historico invalidas.');
+    const mudaram = manifesto.particoes.filter(function (ref) {
+      return !anterior.particoes.some(function (item) { return item.arquivo === ref.arquivo; });
+    });
+    if (anterior.particoes.some(function (ref) {
+      return !manifesto.particoes.some(function (item) { return item.tipo === ref.tipo && item.equipeId === ref.equipeId; });
+    }) || mudaram.length !== journal.alteracoes.length || mudaram.some(function (ref, i) {
+      return JSON.stringify(journal.alteracoes[i].referencia) !== JSON.stringify(ref)
+        || typeof journal.alteracoes[i].equipeNome !== 'string' || !journal.alteracoes[i].equipeNome
+        || typeof journal.alteracoes[i].digest !== 'string'
+        || (journal.alteracoes[i].algoritmo !== undefined
+          && ['md5', 'sha256'].indexOf(journal.alteracoes[i].algoritmo) === -1);
+    })) throw new Error('Alteracoes do journal inconsistentes.');
+    const participacoes = (manifesto.participacoes || []).filter(function (item) {
+      return !(anterior.participacoes || []).some(function (antes) {
+        return JSON.stringify(antes) === JSON.stringify(item);
+      });
+    });
+    if (!Array.isArray(journal.participacoes)
+        || JSON.stringify(journal.participacoes) !== JSON.stringify(participacoes)
+        || (anterior.participacoes || []).some(function (item) {
+          return !(manifesto.participacoes || []).some(function (depois) { return depois.equipeId === item.equipeId; });
+        })) throw new Error('Participacoes do journal inconsistentes.');
+    commits.push({ journal: journal, snapshot: snapshot });
+    manifesto = anterior;
+  }
+  return commits.reverse();
+}
+
+function registrosReferenciaHistorico_(estado, item) {
+  const conteudo = lerConteudoParticaoElenco_(estado, item.referencia);
+  const digest = item.algoritmo === 'md5'
+    ? md5IndiceValidacao_(conteudo.texto) : digestIndiceValidacao_(conteudo.texto);
+  if (digest !== item.digest) {
+    throw new Error('Particao imutavel do historico alterada; pendencias preservadas.');
+  }
+  return conteudo.registros;
+}
+
+function aplicarRegistrosHistoricoEquipe_(historico, tipo, registros, journal, equipeNome) {
+  const id = historico.campeonatoId, equipeId = historico.equipeId;
+  atualizarParticipacaoHistoricoEquipe_(historico, journal, equipeNome);
+  const presentes = new Set();
+  registros.forEach(function (pessoa) {
+    const cpf = somenteDigitos_(pessoa.cpf || '');
+    const chave = digestIndiceValidacao_(JSON.stringify(['inscricao', id, equipeId, tipo, pessoa.id, cpf]));
+    presentes.add(chave);
+    let inscricao = historico.inscricoes.find(function (item) { return item.id === chave; });
+    if (!inscricao) {
+      inscricao = { id: chave, campeonatoId: id, equipeId: equipeId, tipo: tipo,
+        registroId: pessoa.id, cpf: cpf, inscritoEm: journal.registradoEm };
+      historico.inscricoes.push(inscricao);
+    }
+    if (!inscricao.presente || JSON.stringify(inscricao.dados) !== JSON.stringify(pessoa)) {
+      inscricao.dados = Object.assign({}, pessoa);
+      inscricao.atualizadoEm = journal.registradoEm;
+      inscricao.sequencia = ++historico.sequencia;
+    }
+    inscricao.presente = true;
+  });
+  historico.inscricoes.forEach(function (item) {
+    if (item.tipo === tipo && !presentes.has(item.id)) item.presente = false;
+  });
+}
+
+function atualizarParticipacaoHistoricoEquipe_(historico, journal, equipeNome) {
+  const id = historico.campeonatoId, equipeId = historico.equipeId;
+  if (!historico.participacoes.length) historico.participacoes.push({
+    id: digestIndiceValidacao_(JSON.stringify(['participacao', id, equipeId])),
+    campeonatoId: id, equipeId: equipeId, campeonatoNomeOriginal: journal.campeonatoNome,
+    equipeNomeOriginal: equipeNome, inscritoEm: journal.registradoEm
+  });
+  historico.participacoes[0].campeonatoNome = journal.campeonatoNome;
+  historico.participacoes[0].equipeNome = equipeNome;
+}
+
+function consolidarHistoricoParticionado_(estado, persistir, equipeFiltro) {
+  const porEquipe = new Map();
+  function obter(id) {
+    if (!porEquipe.has(id)) porEquipe.set(id, lerHistoricoEquipeParticionado_(estado, id));
+    return porEquipe.get(id);
+  }
+  commitsHistoricoParticionado_(estado).forEach(function (commit) {
+    const journal = commit.journal, sequencia = journal.manifestoDestino.sequenciaPublicacao;
+    const afetadas = new Set();
+    (journal.participacoes || []).forEach(function (item) {
+      if (equipeFiltro && item.equipeId !== equipeFiltro) return;
+      const historico = obter(item.equipeId);
+      if (historico.ultimoCommit >= sequencia) return;
+      atualizarParticipacaoHistoricoEquipe_(historico, journal, item.equipeNome);
+      afetadas.add(item.equipeId);
+    });
+    journal.alteracoes.forEach(function (item) {
+      const ref = item.referencia;
+      if (equipeFiltro && ref.equipeId !== equipeFiltro) return;
+      const historico = obter(ref.equipeId);
+      if (historico.ultimoCommit >= sequencia) return;
+      const antes = commit.snapshot.particoes.find(function (fonte) {
+        return fonte.referencia.equipeId === ref.equipeId && fonte.referencia.tipo === ref.tipo;
+      });
+      if (antes) aplicarRegistrosHistoricoEquipe_(historico, ref.tipo,
+        registrosReferenciaHistorico_(estado, antes), journal, item.equipeNome);
+      aplicarRegistrosHistoricoEquipe_(historico, ref.tipo,
+        registrosReferenciaHistorico_(estado, item), journal, item.equipeNome);
+      afetadas.add(ref.equipeId);
+    });
+    afetadas.forEach(function (id) {
+      const historico = obter(id);
+      historico.ultimoCommit = sequencia;
+      if (persistir) gravarHistoricoEquipeParticionado_(estado, historico);
+    });
+    // A partial team write can be retried; the championship cursor advances last.
+    if (persistir) PropertiesService.getScriptProperties().setProperty(
+      chaveCheckpointHistoricoParticionado_(estado.manifesto.campeonatoId), journal.revisaoDestino);
+  });
+  estado.manifesto.particoes.forEach(function (ref) {
+    if (!equipeFiltro || equipeFiltro === ref.equipeId) obter(ref.equipeId);
+  });
+  (estado.manifesto.participacoes || []).forEach(function (item) {
+    if (!equipeFiltro || equipeFiltro === item.equipeId) obter(item.equipeId);
+  });
+  const tombstone = PropertiesService.getScriptProperties().getProperty(
+    chaveRemocaoElencosParticionados_(estado.manifesto.campeonatoId));
+  if (tombstone && !campeonatos_().some(function (item) { return item.id === estado.manifesto.campeonatoId; })) {
+    const removido = interpretarJsonElencoParticionado_(tombstone);
+    if (!removido || removido.versao !== 1 || removido.campeonatoId !== estado.manifesto.campeonatoId) {
+      throw new Error('Remocao do campeonato invalida; pendencias preservadas.');
+    }
+    porEquipe.forEach(function (historico) {
+      const presentes = historico.inscricoes.some(function (item) { return item.presente; });
+      historico.inscricoes.forEach(function (item) { item.presente = false; });
+      if (persistir && presentes) gravarHistoricoEquipeParticionado_(estado, historico);
+    });
+  }
+  return Array.from(porEquipe.values());
+}
+
+function lerHistoricoParticionado_(incluirPendentes, equipeId) {
+  const resultado = { versao: 2, sequencia: 0, participacoes: [], inscricoes: [] };
+  catalogoHistoricoParticionado_().forEach(function (id) {
+    const estado = lerEstadoElencosParticionados_(id);
+    const equipes = incluirPendentes ? consolidarHistoricoParticionado_(estado, false, equipeId)
+      : Array.from(new Set(estado.manifesto.particoes.concat(estado.manifesto.participacoes || [])
+        .map(function (ref) { return ref.equipeId; })))
+        .filter(function (equipe) { return !equipeId || equipe === equipeId; })
+        .map(function (equipe) { return lerHistoricoEquipeParticionado_(estado, equipe); });
+    equipes.forEach(function (historico) {
+      resultado.participacoes = resultado.participacoes.concat(historico.participacoes);
+      resultado.inscricoes = resultado.inscricoes.concat(historico.inscricoes);
+      resultado.sequencia += historico.sequencia;
+    });
+  });
+  return resultado;
+}
+
+function processarHistoricoParticionadoSobLock_() {
+  exigirLockElencoParticionado_();
+  const props = PropertiesService.getScriptProperties(), todas = props.getProperties(), resultados = [];
+  Object.keys(todas).filter(function (chave) {
+    return chave.indexOf(ELENCO_HISTORICO_FILA_PREFIXO) === 0;
+  }).forEach(function (chave) {
+    const pendencia = interpretarJsonElencoParticionado_(todas[chave]);
+    if (!pendencia || chave !== chaveFilaHistoricoElenco_(pendencia.campeonatoId)) {
+      throw new Error('Fila do historico invalida; pendencias preservadas.');
+    }
+    lerFilaHistoricoElenco_(chave, pendencia.campeonatoId);
+    const estado = lerEstadoElencosParticionados_(pendencia.campeonatoId);
+    const campeonato = campeonatos_().some(function (item) { return item.id === pendencia.campeonatoId; });
+    if (!campeonato && !props.getProperty(chaveRemocaoElencosParticionados_(pendencia.campeonatoId))) {
+      throw new Error('Campeonato da fila nao encontrado; pendencia preservada.');
+    }
+    const historicos = consolidarHistoricoParticionado_(estado, true);
+    resultados.push({ campeonatoId: pendencia.campeonatoId,
+      inscricoesConsolidadas: historicos.reduce(function (total, item) { return total + item.inscricoes.length; }, 0) });
+    if (props.getProperty(chave) === todas[chave]) props.deleteProperty(chave);
+  });
+  props.setProperty(ELENCO_HISTORICO_STATUS, JSON.stringify({
+    ultimaExecucao: new Date().toISOString(), erro: '', codigoErro: '', campeonatoErro: '',
+    processados: resultados.length, campeonatosProcessados: resultados,
+    registrosConsolidados: resultados.reduce(function (total, item) { return total + item.inscricoesConsolidadas; }, 0)
+  }));
+  return statusFilaHistoricoElenco_();
+}
 
 function chaveFilaHistoricoElenco_(campeonatoId) {
   return ELENCO_HISTORICO_FILA_PREFIXO + digestIndiceValidacao_(String(campeonatoId));
@@ -2226,6 +2609,7 @@ function desativarAgendamentoHistoricoElenco() {
 }
 
 function processarFilaHistoricoElencoSobLock_() {
+  if (elencosParticionadosCutoverAtivo_()) return processarHistoricoParticionadoSobLock_();
   const props = PropertiesService.getScriptProperties();
   const todas = props.getProperties();
   const pendencias = Object.keys(todas).filter(function (chave) {
@@ -2388,6 +2772,7 @@ function processarHistoricoElencoAgendado(evento) {
 }
 
 function lerHistoricoElenco_(recursos) {
+  if (elencosParticionadosCutoverAtivo_()) return lerHistoricoParticionado_(false);
   const localizado = localizarArquivoCadastro_(ELENCO_HISTORICO_ARQUIVO, recursos, 'historico');
   if (!localizado.arquivo) return { versao: 1, sequencia: 0, participacoes: [], inscricoes: [] };
   let dados;
@@ -2500,10 +2885,46 @@ function reconciliarHistoricoCampeonato_(historico, campeonato, equipes, listas,
   });
 }
 
-// Called under the script lock before roster mutations and on import reads.
-// Mutation calls scope the snapshot to one championship; imports and global
-// maintenance omit the ID to reconcile every championship.
-function prepararHistoricoElenco_(cache, recursos, campeonatoId) {
+// Under the script lock. Legacy calls reconcile synchronously; active mutations
+// only prepare roster response lists, while imports project pending commits.
+function prepararHistoricoElenco_(cache, recursos, campeonatoId, equipeId) {
+  if (elencosParticionadosCutoverAtivo_()) {
+    const campeonatos = recursos && recursos.campeonatos || campeonatos_();
+    const equipes = recursos && recursos.equipes || lerRegistroEquipes_();
+    if (campeonatoId && !campeonatos.some(function (item) { return item.id === campeonatoId; })) {
+      throw new Error('Campeonato não encontrado.');
+    }
+    if (recursos) {
+      recursos.campeonatos = campeonatos;
+      recursos.equipes = equipes;
+      recursos.listas = cache;
+    }
+    // Maintenance preserves team enrollments (including empty rosters) through
+    // the same publication chain, never by scanning/writing global history.
+    if (!cache) {
+      campeonatos.filter(function (item) { return !campeonatoId || item.id === campeonatoId; })
+        .forEach(function (item) { gravarParticoesElenco_(item.id, [], undefined, undefined, true); });
+      return { participacoes: [], inscricoes: [] };
+    }
+    if (cache) campeonatos.filter(function (item) {
+      return !campeonatoId || item.id === campeonatoId;
+    }).forEach(function (item) {
+      if (recursos && recursos.elencoEquipeId) {
+        cache[item.id] = {
+          atletas: lerParticaoElencoOperacao_(item.id, 'atletas', recursos.elencoEquipeId, recursos),
+          comissao: lerParticaoElencoOperacao_(item.id, 'comissao', recursos.elencoEquipeId, recursos)
+        };
+      } else {
+        cache[item.id] = {
+          atletas: atletasCampeonato_(item.id, false, recursos),
+          comissao: comissaoTecnicaCampeonato_(item.id, false, recursos)
+        };
+      }
+    });
+    // Mutations preserve history through the publication journal, not a history scan.
+    return campeonatoId ? { participacoes: [], inscricoes: [] }
+      : lerHistoricoParticionado_(true, equipeId);
+  }
   const historico = lerHistoricoElenco_(recursos);
   const antes = medirEtapaCadastro_(recursos, 'historico', 'json_comparacao_antes', function () { return JSON.stringify(historico); });
   const campeonatosDisponiveis = recursos && recursos.campeonatos
@@ -2568,34 +2989,47 @@ function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado
   const campeonato = (recursos && recursos.campeonatos ? recursos.campeonatos : campeonatos_())
     .find(function (item) { return item.id === campeonatoId; });
   if (!campeonato) throw new Error('Campeonato não encontrado.');
+  const equipeIdAlvo = recursos && recursos.elencoEquipeId;
+  const chaveListaAnterior = equipeIdAlvo && JSON.stringify([tipo, equipeIdAlvo]);
+  const listaAnterior = chaveListaAnterior && recursos.particoesElencos
+    ? (recursos.particoesElencos[chaveListaAnterior] || []).slice() : null;
   try {
     const gravar = function () {
       if (elencosParticionadosCutoverAtivo_()) {
         const estado = lerEstadoElencosParticionados_(campeonatoId);
-        const assinatura = assinaturaEstadoElencoParticionado_(estado);
+        const assinatura = assinaturaEstadoElencoParticionado_(estado, null, recursos && recursos.equipes);
         const anterior = recursos && recursos.estadosElencosParticionados
           && recursos.estadosElencosParticionados[campeonatoId];
         if (anterior && anterior.assinatura !== assinatura) {
           throw new Error('Uma fonte do elenco mudou durante a operacao. Recarregue antes de repetir.');
         }
         const grupos = prepararParticoesElencoPorNome_(lista, recursos && recursos.equipes);
-        const alteracoes = grupos.map(function (grupo) {
-          return { tipo: tipo, equipeId: grupo.equipeId, registros: grupo.registros };
-        });
-        estado.manifesto.particoes.forEach(function (particao) {
-          if (particao.tipo === tipo && !grupos.some(function (grupo) {
-            return grupo.equipeId === particao.equipeId;
-          })) alteracoes.push({ tipo: tipo, equipeId: particao.equipeId, registros: [] });
-        });
-        // Keep the index dirty through the sole manifest commit; only a validated
-        // baseline can be republished against the newly committed source identity.
+        let alteracoes;
+        if (equipeIdAlvo) {
+          if (grupos.some(function (grupo) { return grupo.equipeId !== equipeIdAlvo; })) {
+            throw new Error('A alteracao tentou gravar fora da equipe validada.');
+          }
+          alteracoes = [{ tipo: tipo, equipeId: equipeIdAlvo,
+            registros: grupos.length ? grupos[0].registros : [] }];
+        } else {
+          alteracoes = grupos.map(function (grupo) {
+            return { tipo: tipo, equipeId: grupo.equipeId, registros: grupo.registros };
+          });
+          estado.manifesto.particoes.forEach(function (particao) {
+            if (particao.tipo === tipo && !grupos.some(function (grupo) {
+              return grupo.equipeId === particao.equipeId;
+            })) alteracoes.push({ tipo: tipo, equipeId: particao.equipeId, registros: [] });
+          });
+        }
         const mutacaoIndice = iniciarMutacaoIndiceParticionado_(campeonatoId, recursos);
         if (recursos) delete recursos.indicesValidacao;
         marcarHistoricoElencoPendente_(campeonatoId);
         marcarSnapshotsEsportivosPendentes_();
         if (alteracoes.length) gravarParticoesElenco_(
-          campeonatoId, alteracoes, estado.manifesto.revisao, assinatura);
-        concluirMutacaoIndiceParticionado_(mutacaoIndice, tipo, campeonatoId, recursos);
+          campeonatoId, alteracoes, estado.manifesto.revisao, assinatura, false, recursos);
+        concluirMutacaoIndiceParticionado_(mutacaoIndice, campeonatoId, [{
+          tipo: tipo, equipeId: equipeIdAlvo || null, antes: listaAnterior, depois: lista
+        }], recursos);
         if (recursos && recursos.estadosElencosParticionados) {
           delete recursos.estadosElencosParticionados[campeonatoId];
         }
@@ -2646,7 +3080,7 @@ function candidatosImportacaoElenco_(historico, contexto, tipo, origemId) {
   return Object.keys(porPessoa).map(function (chave) { return porPessoa[chave]; });
 }
 
-function validarPessoaImportacaoElenco_(inscricao, contexto, tipo, listas, jogos) {
+function validarPessoaImportacaoElenco_(inscricao, contexto, tipo, listas, jogos, recursos) {
   const pessoa = Object.assign({}, inscricao.dados);
   pessoa.nome = limparCampo_(pessoa.nome || '', 100);
   if (!pessoa.nome) throw new Error('Informe o nome do cadastro.');
@@ -2664,15 +3098,20 @@ function validarPessoaImportacaoElenco_(inscricao, contexto, tipo, listas, jogos
     if (pessoa.numero !== '' && (!Number.isFinite(Number(pessoa.numero)) || Number(pessoa.numero) < 0 || Number(pessoa.numero) > 99)) {
       throw new Error('O número da camisa deve ficar entre 0 e 99.');
     }
-    bloquearCpfAtletaEmOutraEquipe_(contexto, pessoa.cpf, listas.atletas, '');
+    bloquearCpfAtletaEmOutraEquipe_(contexto, pessoa.cpf, listas.atletas, '', recursos);
     bloquearVinculoAtletaParticipante_(contexto.campeonato, jogos, pessoa.cpf, contexto.equipe.nome, contexto);
   }
-  const duplicata = tipo === 'atletas'
-    ? validarDuplicataAtleta_(pessoa.nome, pessoa.cpf, listas.atletas)
-    : validarDuplicataComissao_(pessoa.nome, pessoa.cpf, listas.comissao);
+  const duplicata = validarDuplicataCadastroOperacao_(
+    contexto.campeonato.id, tipo, pessoa.nome, pessoa.cpf, listas[tipo], '', recursos);
   if (!duplicata.ok) throw new Error(duplicata.motivo + ' A verificação abrange todas as equipes do campeonato de destino.');
   const outroTipo = tipo === 'atletas' ? 'comissao' : 'atletas';
-  if (existeCpfNoCadastro_(listas[outroTipo], pessoa.cpf)) {
+  const indice = elencosParticionadosCutoverAtivo_()
+    ? consultarIndiceValidacao_(contexto.campeonato.id, recursos, outroTipo) : null;
+  const existeEmOutroTipo = indice
+    ? (indice.cadastros[outroTipo][somenteDigitos_(pessoa.cpf)] || []).length > 0
+    : existeCpfNoCadastro_(elencosParticionadosCutoverAtivo_()
+      ? lerElencoParticionado_(contexto.campeonato.id, outroTipo) : listas[outroTipo], pessoa.cpf);
+  if (existeEmOutroTipo) {
     throw new Error('CPF já cadastrado em ' + (outroTipo === 'atletas' ? 'atletas' : 'comissão técnica') + ' neste campeonato (inclusive outras equipes).');
   }
   return pessoa;
@@ -2685,28 +3124,36 @@ function listarImportacaoElenco(payload) {
   lock.waitLock(30000);
   try {
     const contexto = sessaoElenco_(dados.campeonatoId, dados.equipeId, true);
-    exigirEdicaoElenco_(contexto);
+    const recursos = elencosParticionadosCutoverAtivo_()
+      ? { elencoEquipeId: contexto.equipe.id } : null;
+    exigirEdicaoElenco_(contexto, recursos);
     const cache = {};
-    const historico = prepararHistoricoElenco_(cache);
+    const historico = prepararHistoricoElenco_(cache, recursos, null, contexto.equipe.id);
     const fontes = fontesImportacaoElenco_(historico, contexto);
     const origens = fontes.map(function (item) {
       return { campeonatoId: item.campeonatoId, nome: item.campeonatoNome, equipeNome: item.equipeNome };
     });
     const candidatos = dados.origemId ? candidatosImportacaoElenco_(historico, contexto, dados.tipo, dados.origemId) : [];
-    const jogos = candidatos.length && dados.tipo === 'atletas' ? jogosParticipacaoOperacao_(contexto.campeonato.id) : [];
+    const jogos = candidatos.length && dados.tipo === 'atletas'
+      ? jogosParticipacaoOperacao_(contexto.campeonato.id, recursos) : [];
     return {
       origens: origens,
       candidatos: candidatos.map(function (item) {
         let motivo = '';
         const listas = cache[contexto.campeonato.id];
         const cpf = somenteDigitos_(item.cpf || item.dados.cpf);
+        const indice = cpf && elencosParticionadosCutoverAtivo_()
+          ? consultarIndiceValidacao_(contexto.campeonato.id, recursos) : null;
         const jaCadastrado = Boolean(cpf && ['atletas', 'comissao'].some(function (tipo) {
-          return existeCpfNoCadastro_(listas[tipo], cpf);
+          return indice
+            ? (indice.cadastros[tipo][cpf] || []).length > 0
+            : existeCpfNoCadastro_(elencosParticionadosCutoverAtivo_()
+              ? lerElencoParticionado_(contexto.campeonato.id, tipo) : listas[tipo], cpf);
         }));
         if (jaCadastrado) {
           motivo = 'Já cadastrado no campeonato de destino.';
         } else {
-          try { validarPessoaImportacaoElenco_(item, contexto, dados.tipo, listas, jogos); }
+          try { validarPessoaImportacaoElenco_(item, contexto, dados.tipo, listas, jogos, recursos); }
           catch (e) { motivo = e.message; }
         }
         return {
@@ -2732,22 +3179,28 @@ function importarCadastrosElenco(payload) {
   lock.waitLock(30000);
   try {
     const contexto = sessaoElenco_(dados.campeonatoId, dados.equipeId, true);
-    exigirEdicaoElenco_(contexto);
+    const recursos = elencosParticionadosCutoverAtivo_()
+      ? { elencoEquipeId: contexto.equipe.id } : null;
+    exigirEdicaoElenco_(contexto, recursos);
     const cache = {};
-    const historico = prepararHistoricoElenco_(cache);
+    const historico = prepararHistoricoElenco_(cache, recursos, null, contexto.equipe.id);
     const candidatos = candidatosImportacaoElenco_(historico, contexto, dados.tipo, dados.origemId);
     const listas = cache[contexto.campeonato.id];
-    const jogos = dados.tipo === 'atletas' ? jogosParticipacaoOperacao_(contexto.campeonato.id) : [];
+    const chaveParticao = JSON.stringify([dados.tipo, contexto.equipe.id]);
+    if (recursos) recursos.particoesElencos[chaveParticao] = listas[dados.tipo].slice();
+    const jogos = dados.tipo === 'atletas'
+      ? jogosParticipacaoOperacao_(contexto.campeonato.id, recursos) : [];
     const novos = dados.inscricaoIds.map(function (id) {
       const inscricao = candidatos.find(function (item) { return item.id === id; });
       if (!inscricao) throw new Error('Inscrição inválida para a origem, equipe e tipo selecionados.');
-      const pessoa = validarPessoaImportacaoElenco_(inscricao, contexto, dados.tipo, listas, jogos);
+      const pessoa = validarPessoaImportacaoElenco_(inscricao, contexto, dados.tipo, listas, jogos, recursos);
       pessoa.id = gerarIdUnico_();
       listas[dados.tipo].push(pessoa);
       return pessoa;
     });
     // No roster write occurs until every selection has passed preflight.
-    gravarElencoComHistorico_(contexto.campeonato.id, dados.tipo, listas[dados.tipo], historico, listas);
+    gravarElencoComHistorico_(contexto.campeonato.id, dados.tipo,
+      listas[dados.tipo], historico, listas, recursos);
     return { quantidade: novos.length, recado: novos.length + ' cadastro(s) importado(s). Recarregue o elenco para consultar.' };
   } finally { lock.releaseLock(); }
 }
@@ -3420,6 +3873,21 @@ function interpretarJsonElencoParticionado_(texto) {
   catch (e) { throw new Error('Fonte de elenco particionado contem JSON invalido. Restaure os dados antes de continuar.'); }
 }
 
+function validarParticipacoesManifestoElenco_(manifesto) {
+  if (manifesto.participacoes === undefined) return;
+  const ids = new Set();
+  if (!Array.isArray(manifesto.participacoes)) throw new Error('Participacoes do manifesto invalidas.');
+  manifesto.participacoes.forEach(function (item) {
+    if (!item || typeof item.equipeId !== 'string' || !item.equipeId.trim()
+        || typeof item.equipeNome !== 'string' || !item.equipeNome.trim()
+        || typeof item.campeonatoNome !== 'string' || ids.has(item.equipeId)) {
+      throw new Error('Participacao do manifesto invalida.');
+    }
+    identidadeElencoParticionado_(item.equipeId);
+    ids.add(item.equipeId);
+  });
+}
+
 function lerEstadoElencosParticionados_(campeonatoId) {
   const pasta = pastaElencosParticionados_(campeonatoId, false);
   const arquivo = pasta && itemUnicoElencoParticionado_(pasta.getFilesByName(ELENCOS_PARTICOES_MANIFESTO));
@@ -3433,6 +3901,7 @@ function lerEstadoElencosParticionados_(campeonatoId) {
     throw new Error('Manifesto de elenco particionado invalido.');
   }
   const chaves = new Set();
+  validarParticipacoesManifestoElenco_(manifesto);
   manifesto.particoes.forEach(function (particao) {
     if (!particao || particao.arquivo !== nomeArquivoParticaoElenco_(
       particao.equipeId, particao.tipo, particao.revisao)) {
@@ -3593,7 +4062,45 @@ function fontesEstadoElencoParticionado_(estado) {
   });
 }
 
-function assinaturaEstadoElencoParticionado_(estado, conteudos) {
+function metadadosFonteElencoParticionado_(estado, arquivo, nome, pastaEsperada) {
+  if (typeof Drive === 'undefined' || !Drive.Files || typeof Drive.Files.get !== 'function') {
+    throw new Error('Ative o servico avancado Drive v3 para validar as fontes particionadas.');
+  }
+  const id = arquivo.getId();
+  const meta = Drive.Files.get(id, {
+    fields: 'id,name,trashed,parents,version,md5Checksum', supportsAllDrives: true
+  });
+  if (!meta || String(meta.id) !== String(id) || meta.name !== nome || meta.trashed
+      || !Array.isArray(meta.parents) || meta.parents.indexOf(pastaEsperada) === -1
+      || !meta.version || !/^[a-f0-9]{32}$/i.test(meta.md5Checksum || '')) {
+    throw new Error('Fonte particionada ausente, movida ou sem versao verificavel. Restaure os dados antes de continuar.');
+  }
+  return [String(meta.id), String(meta.version), String(meta.md5Checksum).toLowerCase()];
+}
+
+function fontesMetadadosElencoParticionado_(estado, equipes) {
+  if (!estado.pasta) {
+    if (estado.manifesto.particoes.length) throw new Error('Pasta de particoes ausente.');
+    return [];
+  }
+  const registroEquipes = equipes || lerRegistroEquipes_();
+  return estado.manifesto.particoes.map(function (particao) {
+    const arquivo = itemUnicoElencoParticionado_(estado.pasta.getFilesByName(particao.arquivo));
+    if (!arquivo) throw new Error('Particao publicada de elenco nao encontrada. Restaure os dados antes de continuar.');
+    const equipe = equipePermanenteElencoParticionado_(particao.equipeId, registroEquipes);
+    return [particao.tipo, particao.equipeId, particao.arquivo, equipe.nome,
+      metadadosFonteElencoParticionado_(estado, arquivo, particao.arquivo, estado.pasta.getId())];
+  });
+}
+
+function assinaturaEstadoElencoParticionado_(estado, conteudos, equipes) {
+  if (elencosParticionadosCutoverAtivo_()) {
+    const manifesto = estado.arquivo
+      ? metadadosFonteElencoParticionado_(estado, estado.arquivo, ELENCOS_PARTICOES_MANIFESTO, estado.pasta.getId())
+      : null;
+    return digestIndiceValidacao_(JSON.stringify(['aeuv.elencos.particoes.v2', manifesto,
+      fontesMetadadosElencoParticionado_(estado, equipes)]));
+  }
   const fontes = (conteudos || fontesEstadoElencoParticionado_(estado)).map(function (conteudo) {
     const particao = conteudo.particao;
     return [particao.tipo, particao.equipeId, particao.arquivo, conteudo.equipeNome,
@@ -3618,8 +4125,19 @@ function criarDocumentoPreparacaoElenco_(pasta, nome, dados) {
   return nome;
 }
 
-// Recovery evidence only; the RPC adapter separately persists the enrollment queue.
+// Active snapshots retain immutable references instead of copying roster data.
 function prepararSnapshotPublicacaoElenco_(pasta, estado, conteudos, revisao, assinatura) {
+  if (elencosParticionadosCutoverAtivo_()) {
+    return criarDocumentoPreparacaoElenco_(pasta, 'snapshot - ' + identidadeElencoParticionado_(revisao) + '.json', {
+      schema: 'aeuv.elencos.snapshot', versao: 2, campeonatoId: estado.manifesto.campeonatoId,
+      revisaoDestino: revisao, assinaturaAnterior: assinatura, manifestoAnterior: estado.manifesto,
+      particoes: conteudos.map(function (conteudo) {
+        return { referencia: conteudo.particao,
+          digest: conteudo.digest || digestIndiceValidacao_(conteudo.texto),
+          algoritmo: conteudo.algoritmo || 'sha256' };
+      })
+    });
+  }
   return criarDocumentoPreparacaoElenco_(pasta, 'snapshot - ' + identidadeElencoParticionado_(revisao) + '.json', {
     schema: 'aeuv.elencos.snapshot', versao: 1, campeonatoId: estado.manifesto.campeonatoId,
     revisaoDestino: revisao, assinaturaAnterior: assinatura, manifestoAnterior: estado.manifesto,
@@ -3629,7 +4147,43 @@ function prepararSnapshotPublicacaoElenco_(pasta, estado, conteudos, revisao, as
   });
 }
 
-function prepararPendenciaPublicacaoElenco_(pasta, manifesto, snapshot, assinatura) {
+function prepararPendenciaPublicacaoElenco_(pasta, manifesto, snapshot, assinatura, recursos, preparadas) {
+  if (elencosParticionadosCutoverAtivo_()) {
+    const anterior = lerDocumentoRecuperacaoElenco_(pasta, snapshot).manifestoAnterior;
+    const equipes = recursos && recursos.equipes || lerRegistroEquipes_();
+    const campeonatos = recursos && recursos.campeonatos || campeonatos_();
+    const campeonato = campeonatos.find(function (item) { return item.id === manifesto.campeonatoId; });
+    if (!campeonato) throw new Error('Campeonato não encontrado para o journal.');
+    const alteracoes = manifesto.particoes.filter(function (particao) {
+      return !anterior.particoes.some(function (item) { return item.arquivo === particao.arquivo; });
+    }).map(function (particao) {
+      const arquivo = itemUnicoElencoParticionado_(pasta.getFilesByName(particao.arquivo));
+      if (!arquivo) throw new Error('Particao do journal ausente.');
+      const metadados = metadadosFonteElencoParticionado_(
+        { pasta: pasta }, arquivo, particao.arquivo, pasta.getId());
+      const preparada = (preparadas || []).find(function (item) {
+        return item.item.tipo === particao.tipo && item.item.equipeId === particao.equipeId;
+      });
+      if (!preparada || metadados[2] !== md5IndiceValidacao_(preparada.texto)) {
+        throw new Error('Particao do journal divergiu dos dados preparados.');
+      }
+      return { referencia: particao, digest: digestIndiceValidacao_(preparada.texto), algoritmo: 'sha256',
+        equipeNome: equipePermanenteElencoParticionado_(particao.equipeId, equipes).nome };
+    });
+    return criarDocumentoPreparacaoElenco_(pasta,
+      'pendencia - ' + identidadeElencoParticionado_(manifesto.revisao) + '.json', {
+        schema: 'aeuv.elencos.publicacao', versao: 2, campeonatoId: manifesto.campeonatoId,
+        revisaoDestino: manifesto.revisao, snapshotAnterior: snapshot,
+        assinaturaAnterior: assinatura, manifestoDestino: manifesto,
+        registradoEm: new Date().toISOString(), campeonatoNome: campeonato.nome,
+        alteracoes: alteracoes,
+        participacoes: (manifesto.participacoes || []).filter(function (item) {
+          return !(anterior.participacoes || []).some(function (antes) {
+            return JSON.stringify(antes) === JSON.stringify(item);
+          });
+        })
+      });
+  }
   return criarDocumentoPreparacaoElenco_(pasta,
     'pendencia - ' + identidadeElencoParticionado_(manifesto.revisao) + '.json', {
       schema: 'aeuv.elencos.publicacao', versao: 1, campeonatoId: manifesto.campeonatoId,
@@ -3645,6 +4199,7 @@ function validarManifestoRecuperacaoElenco_(manifesto, campeonatoId, revisao) {
       throw new Error('Manifesto de recuperacao de elenco invalido.');
     }
     const chaves = new Set();
+    validarParticipacoesManifestoElenco_(manifesto);
     manifesto.particoes.forEach(function (particao) {
       if (!particao || particao.arquivo !== nomeArquivoParticaoElenco_(
         particao.equipeId, particao.tipo, particao.revisao)) {
@@ -3693,7 +4248,7 @@ function diagnosticarRecuperacaoElencosParticionados(campeonatoId) {
           const correspondencia = entrada.nome.match(/^pendencia - (.+)\.json$/);
           const dados = interpretarJsonElencoParticionado_(entrada.texto);
           if (!correspondencia || !dados || dados.schema !== 'aeuv.elencos.publicacao'
-              || dados.versao !== 1 || dados.campeonatoId !== id
+              || dados.versao !== (elencosParticionadosCutoverAtivo_() ? 2 : 1) || dados.campeonatoId !== id
               || typeof dados.revisaoDestino !== 'string'
               || decodeURIComponent(correspondencia[1]) !== dados.revisaoDestino
               || dados.snapshotAnterior !== 'snapshot - ' + identidadeElencoParticionado_(dados.revisaoDestino) + '.json'
@@ -3702,7 +4257,7 @@ function diagnosticarRecuperacaoElencosParticionados(campeonatoId) {
           }
           resultado.revisao = dados.revisaoDestino;
           const snapshot = lerDocumentoRecuperacaoElenco_(pasta, dados.snapshotAnterior);
-          if (!snapshot || snapshot.schema !== 'aeuv.elencos.snapshot' || snapshot.versao !== 1
+          if (!snapshot || snapshot.schema !== 'aeuv.elencos.snapshot' || snapshot.versao !== dados.versao
               || snapshot.campeonatoId !== id || snapshot.revisaoDestino !== dados.revisaoDestino
               || snapshot.assinaturaAnterior !== dados.assinaturaAnterior
               || !Array.isArray(snapshot.particoes)) {
@@ -3712,6 +4267,15 @@ function diagnosticarRecuperacaoElencosParticionados(campeonatoId) {
           const destino = validarManifestoRecuperacaoElenco_(dados.manifestoDestino, id, dados.revisaoDestino);
           const referenciasSnapshot = Object.create(null), idsSnapshot = Object.create(null);
           snapshot.particoes.forEach(function (item) {
+            if (snapshot.versao === 2) {
+              const conteudo = lerConteudoParticaoElenco_({ pasta: pasta }, item.referencia);
+                const digest = item.algoritmo === 'md5'
+                  ? md5IndiceValidacao_(conteudo.texto) : digestIndiceValidacao_(conteudo.texto);
+                if (digest !== item.digest) {
+                  throw new Error('Versao imutavel do snapshot alterada.');
+                }
+              item = { referencia: item.referencia, registros: conteudo.registros };
+            }
             if (!item || !Array.isArray(item.registros) || !item.referencia
                 || item.referencia.arquivo !== nomeArquivoParticaoElenco_(
                   item.referencia.equipeId, item.referencia.tipo, item.referencia.revisao)) {
@@ -3737,6 +4301,21 @@ function diagnosticarRecuperacaoElencosParticionados(campeonatoId) {
             texto: JSON.stringify(destino), manifesto: destino
           };
           fontesEstadoElencoParticionado_(estadoDestino);
+          if (dados.versao === 2) {
+            const alteradas = destino.particoes.filter(function (ref) {
+              return !anterior.particoes.some(function (item) { return item.arquivo === ref.arquivo; });
+            });
+            if (!Array.isArray(dados.alteracoes) || dados.alteracoes.length !== alteradas.length
+                || destino.sequenciaPublicacao !== (anterior.sequenciaPublicacao || 0) + 1) {
+              throw new Error('Journal de historico inconsistente.');
+            }
+            dados.alteracoes.forEach(function (item, i) {
+              if (!item || JSON.stringify(item.referencia) !== JSON.stringify(alteradas[i])) {
+                throw new Error('Referencia de historico inconsistente.');
+              }
+              registrosReferenciaHistorico_(estadoDestino, item);
+            });
+          }
           const filaBruta = propriedades.getProperty(chaveFilaHistoricoElenco_(id));
           if (filaBruta === null) resultado.filaHistorico = 'ausente';
           else {
@@ -3787,30 +4366,105 @@ function diagnosticarRecuperacaoElencosParticionados(campeonatoId) {
     } finally { lock.releaseLock(); }
 }
 
-function validarIdsPublicacaoElenco_(manifesto, conteudos, preparadas) {
-  const ids = new Set();
-  manifesto.particoes.forEach(function (particao) {
-    const nova = preparadas.find(function (preparada) {
-      return preparada.item.tipo === particao.tipo && preparada.item.equipeId === particao.equipeId;
-    });
-    const anterior = conteudos.find(function (conteudo) {
-      return conteudo.particao.tipo === particao.tipo && conteudo.particao.equipeId === particao.equipeId;
-    });
-    const registros = nova ? nova.item.registros : anterior.registros;
-    validarRegistrosParticaoElenco_(registros);
-    registros.forEach(function (registro) {
-      const chave = JSON.stringify([particao.tipo, registro.id]);
-      if (ids.has(chave)) throw new Error('Identificador repetido entre particoes de elenco.');
-      ids.add(chave);
+function validarIdsPublicacaoElenco_(manifesto, conteudos, preparadas, indiceBase, equipes) {
+  const alteradas = Object.create(null), ids = Object.create(null);
+  preparadas.forEach(function (preparada) {
+    const tipo = preparada.item.tipo, equipeId = preparada.item.equipeId;
+    (alteradas[tipo] || (alteradas[tipo] = Object.create(null)))[equipeId] = true;
+  });
+  ['atletas', 'comissao'].forEach(function (tipo) {
+    ids[tipo] = Object.create(null);
+    if (indiceBase && indiceBase.ids && indiceBase.ids[tipo]) {
+      const equipesAlteradas = Object.create(null);
+      Object.keys(alteradas[tipo] || {}).forEach(function (equipeId) {
+        const equipe = equipePermanenteElencoParticionado_(equipeId, equipes);
+        equipesAlteradas[chaveEquipe_(equipe.nome)] = true;
+      });
+      Object.keys(indiceBase.ids[tipo]).forEach(function (registroId) {
+        const equipe = indiceBase.ids[tipo][registroId];
+        if (!equipesAlteradas[equipe]) ids[tipo][registroId] = true;
+      });
+    } else {
+      conteudos.filter(function (conteudo) { return conteudo.particao.tipo === tipo; })
+        .forEach(function (conteudo) {
+          if (alteradas[tipo] && alteradas[tipo][conteudo.particao.equipeId]) return;
+          conteudo.registros.forEach(function (registro) {
+            if (ids[tipo][registro.id]) {
+              throw new Error('Identificador repetido entre particoes de elenco.');
+            }
+            ids[tipo][registro.id] = true;
+          });
+        });
+    }
+  });
+  preparadas.forEach(function (preparada) {
+    validarRegistrosParticaoElenco_(preparada.item.registros);
+    preparada.item.registros.forEach(function (registro) {
+      if (ids[preparada.item.tipo][registro.id]) {
+        throw new Error('Identificador repetido entre particoes de elenco.');
+      }
+      ids[preparada.item.tipo][registro.id] = true;
     });
   });
 }
 
-function confirmarFontesPublicacaoElenco_(campeonatoId, assinatura) {
+function validarAssociacoesPublicacaoElenco_(campeonatoId, estado, equipesAlteradas, recursos) {
+  const equipes = lerRegistroEquipes_();
+  const campeonatos = campeonatos_();
+  const campeonato = campeonatos.find(function (item) { return item.id === campeonatoId; });
+  if (!campeonato) throw new Error('Campeonato removido durante a gravacao.');
+  const campeonatoAnterior = recursos && recursos.campeonatos
+    && recursos.campeonatos.find(function (item) { return item.id === campeonatoId; });
+  if (campeonatoAnterior && campeonatoAnterior.nome !== campeonato.nome) {
+    throw new Error('O campeonato mudou durante a gravacao.');
+  }
+  const equipesAnteriores = recursos && recursos.equipes;
+  const idsRelevantes = new Set(equipesAlteradas || []);
+  estado.manifesto.particoes.forEach(function (item) { idsRelevantes.add(item.equipeId); });
+  (estado.manifesto.participacoes || []).forEach(function (item) { idsRelevantes.add(item.equipeId); });
+  idsRelevantes.forEach(function (equipeId) {
+    const atual = equipePermanenteElencoParticionado_(equipeId, equipes);
+    const anteriores = equipesAnteriores && equipesAnteriores.filter(function (item) {
+      return item.id === equipeId;
+    });
+    if (anteriores && (anteriores.length !== 1 || anteriores[0].nome !== atual.nome)) {
+      throw new Error('O registro de uma equipe mudou durante a gravacao.');
+    }
+  });
+  const timesAtuais = timesCampeonato_(campeonatoId);
+  const timesAnteriores = recursos && recursos.times && recursos.times[campeonatoId];
+  if (timesAnteriores && JSON.stringify(timesAnteriores.map(function (nome) {
+    return chaveEquipe_(nome);
+  }).sort()) !== JSON.stringify(timesAtuais.map(function (nome) {
+    return chaveEquipe_(nome);
+  }).sort())) {
+    throw new Error('Os vinculos de equipes do campeonato mudaram durante a gravacao.');
+  }
+  const ativas = obterEquipes_().map(chaveEquipe_);
+  (equipesAlteradas || []).forEach(function (equipeId) {
+    const equipe = equipePermanenteElencoParticionado_(equipeId, equipes);
+    if (ativas.indexOf(chaveEquipe_(equipe.nome)) === -1
+        || !timesAtuais.some(function (nome) { return chaveEquipe_(nome) === chaveEquipe_(equipe.nome); })) {
+      throw new Error('A equipe alterada deixou de estar ativa e vinculada ao campeonato.');
+    }
+  });
+  return { equipes: equipes, campeonato: campeonato };
+}
+
+function confirmarFontesPublicacaoElenco_(campeonatoId, assinatura, recursos, equipesAlteradas) {
   const atual = lerEstadoElencosParticionados_(campeonatoId);
-  if (assinaturaEstadoElencoParticionado_(atual) !== assinatura) {
+  if (!elencosParticionadosCutoverAtivo_()) {
+    if (assinaturaEstadoElencoParticionado_(atual) !== assinatura) {
+      throw new Error('O manifesto ou uma particao mudou durante a gravacao. Recarregue antes de repetir a operacao.');
+    }
+    return [];
+  }
+  const contexto = validarAssociacoesPublicacaoElenco_(
+    campeonatoId, atual, equipesAlteradas, recursos);
+  if (assinaturaEstadoElencoParticionado_(atual, null, contexto.equipes) !== assinatura) {
     throw new Error('O manifesto ou uma particao mudou durante a gravacao. Recarregue antes de repetir a operacao.');
   }
+  return contexto.equipes;
 }
 
 function publicarManifestoElenco_(pasta, estado, texto) {
@@ -3830,9 +4484,13 @@ function publicarManifestoElenco_(pasta, estado, texto) {
   }
 }
 
-function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assinaturaEsperada) {
+function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assinaturaEsperada,
+    somenteParticipacoes, recursosOperacao) {
   exigirLockElencoParticionado_();
-  if (!Array.isArray(alteracoes) || !alteracoes.length) throw new Error('Informe as particoes alteradas.');
+  if (!Array.isArray(alteracoes) || (!alteracoes.length
+      && !(somenteParticipacoes && elencosParticionadosCutoverAtivo_()))) {
+    throw new Error('Informe as particoes alteradas.');
+  }
   const chaves = new Set();
   alteracoes.forEach(function (item) {
     if (!item || !Array.isArray(item.registros)) throw new Error('A particao de elenco deve conter uma lista.');
@@ -3845,37 +4503,92 @@ function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assin
   if (revisaoEsperada !== undefined && revisaoEsperada !== estado.manifesto.revisao) {
     throw new Error('O elenco mudou. Recarregue antes de repetir a operacao.');
   }
-  // No manifest means an empty roster. Old JSONs and unpublished versions are
-  // never scanned, copied, merged, removed or used as a fallback.
-  const conteudos = fontesEstadoElencoParticionado_(estado);
-  const assinatura = assinaturaEstadoElencoParticionado_(estado, conteudos);
+  // The active path fingerprints every source with Drive metadata. Roster blobs
+  // are read only for changed partitions unless no valid compact index exists.
+  let conteudos = [];
+  let indiceBase = null;
+  if (elencosParticionadosCutoverAtivo_()) {
+    indiceBase = recursosOperacao && recursosOperacao.indiceBaseMutacao
+      || consultarIndiceValidacao_(campeonatoId, null);
+    if (!indiceBase) conteudos = fontesEstadoElencoParticionado_(estado);
+  } else {
+    conteudos = fontesEstadoElencoParticionado_(estado);
+  }
+  const fontesAntes = elencosParticionadosCutoverAtivo_()
+    ? fontesMetadadosElencoParticionado_(estado, recursosOperacao && recursosOperacao.equipes) : null;
+  const equipes = recursosOperacao && recursosOperacao.equipes || lerRegistroEquipes_();
+  const assinatura = assinaturaEstadoElencoParticionado_(estado, conteudos, equipes);
   if (assinaturaEsperada !== undefined && assinaturaEsperada !== assinatura) {
     throw new Error('Uma fonte do elenco mudou. Recarregue antes de repetir a operacao.');
   }
-  const equipes = lerRegistroEquipes_();
+  let participacoes = estado.manifesto.participacoes || [];
+  let mudouParticipacao = false;
+  if (elencosParticionadosCutoverAtivo_()) {
+    participacoes = participacoes.slice();
+    const campeonatos = recursosOperacao && recursosOperacao.campeonatos || campeonatos_();
+    const campeonato = campeonatos.find(function (item) { return item.id === campeonatoId; });
+    if (!campeonato) throw new Error('Campeonato não encontrado.');
+    timesCampeonatoOperacao_(campeonatoId, recursosOperacao).forEach(function (nome) {
+      const equipe = equipePorNomeElencoParticionado_(nome, equipes);
+      const item = { equipeId: equipe.id, equipeNome: equipe.nome, campeonatoNome: campeonato.nome };
+      const indice = participacoes.findIndex(function (anterior) { return anterior.equipeId === equipe.id; });
+      if (indice === -1) {
+        participacoes.push(item);
+        mudouParticipacao = true;
+      } else if (JSON.stringify(participacoes[indice]) !== JSON.stringify(item)) {
+        participacoes[indice] = item;
+        mudouParticipacao = true;
+      }
+    });
+  }
   const preparadas = alteracoes.map(function (item) {
     const registros = registrosCanonicosElencoParticionado_(item.registros, item.equipeId, equipes);
-    const anterior = conteudos.find(function (conteudo) {
-      return conteudo.particao.tipo === item.tipo && conteudo.particao.equipeId === item.equipeId;
+    const referencia = estado.manifesto.particoes.find(function (particao) {
+      return particao.tipo === item.tipo && particao.equipeId === item.equipeId;
     });
+    const anterior = referencia ? (conteudos.find(function (conteudo) {
+      return conteudo.particao.arquivo === referencia.arquivo;
+    }) || lerConteudoParticaoElenco_(estado, referencia)) : null;
     const texto = JSON.stringify(registros);
     const antes = anterior ? JSON.stringify(registrosCanonicosElencoParticionado_(
       anterior.registros, item.equipeId, equipes)) : '[]';
     return { item: { equipeId: item.equipeId, tipo: item.tipo, registros: registros },
-      texto: texto, mudou: texto !== antes };
+      texto: texto, mudou: texto !== antes, anteriorTexto: anterior && anterior.texto };
   }).filter(function (item) { return item.mudou; });
-  if (!preparadas.length) return estado.manifesto.revisao;
+  if (!preparadas.length && !mudouParticipacao) return estado.manifesto.revisao;
+  if (elencosParticionadosCutoverAtivo_() && !recursosOperacao) {
+    invalidarIndiceValidacao_(campeonatoId);
+  }
   const manifesto = Object.assign({}, estado.manifesto, {
     revisao: Utilities.getUuid(), particoes: estado.manifesto.particoes.slice()
   });
+  if (elencosParticionadosCutoverAtivo_()) {
+    manifesto.sequenciaPublicacao = (estado.manifesto.sequenciaPublicacao || 0) + 1;
+    manifesto.participacoes = participacoes;
+  }
   preparadas.forEach(function (preparada) {
     if (!manifesto.particoes.some(function (particao) {
       return particao.tipo === preparada.item.tipo && particao.equipeId === preparada.item.equipeId;
     })) manifesto.particoes.push({ tipo: preparada.item.tipo, equipeId: preparada.item.equipeId });
   });
-  validarIdsPublicacaoElenco_(manifesto, conteudos, preparadas);
+  validarIdsPublicacaoElenco_(manifesto, conteudos, preparadas, indiceBase, equipes);
   const pasta = estado.pasta || pastaElencosParticionados_(campeonatoId, true);
-  const snapshot = prepararSnapshotPublicacaoElenco_(pasta, estado, conteudos, manifesto.revisao, assinatura);
+  let conteudosSnapshot = conteudos;
+  if (elencosParticionadosCutoverAtivo_()) {
+    conteudosSnapshot = fontesAntes.map(function (fonte) {
+      const referencia = estado.manifesto.particoes.find(function (item) {
+        return item.tipo === fonte[0] && item.equipeId === fonte[1];
+      });
+      const preparada = preparadas.find(function (item) {
+        return item.item.tipo === fonte[0] && item.item.equipeId === fonte[1];
+      });
+      return { particao: referencia,
+        digest: preparada && preparada.anteriorTexto !== undefined
+          ? digestIndiceValidacao_(preparada.anteriorTexto) : fonte[4][2],
+        algoritmo: preparada && preparada.anteriorTexto !== undefined ? 'sha256' : 'md5' };
+    });
+  }
+  const snapshot = prepararSnapshotPublicacaoElenco_(pasta, estado, conteudosSnapshot, manifesto.revisao, assinatura);
   preparadas.forEach(function (preparada) {
     const item = preparada.item, revisao = Utilities.getUuid();
     const nome = nomeArquivoParticaoElenco_(item.equipeId, item.tipo, revisao);
@@ -3893,13 +4606,65 @@ function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assin
     if (posicao === -1) manifesto.particoes.push(referencia);
     else manifesto.particoes[posicao] = referencia;
   });
-  prepararPendenciaPublicacaoElenco_(pasta, manifesto, snapshot, assinatura);
-  confirmarFontesPublicacaoElenco_(campeonatoId, assinatura);
+  prepararPendenciaPublicacaoElenco_(pasta, manifesto, snapshot, assinatura, recursosOperacao, preparadas);
+  if (elencosParticionadosCutoverAtivo_()) {
+    registrarCampeonatoHistoricoParticionado_(campeonatoId);
+    marcarHistoricoElencoPendente_(campeonatoId);
+  }
+  confirmarFontesPublicacaoElenco_(
+    campeonatoId, assinatura, recursosOperacao, alteracoes.map(function (item) { return item.equipeId; }));
   const texto = JSON.stringify(manifesto);
   // Copy-on-write: one publication point for every affected team/category.
   // A failure before this point leaves all old references intact. A failure
   // after it leaves the complete new state; never roll back one partition.
   publicarManifestoElenco_(pasta, estado, texto);
+  if (elencosParticionadosCutoverAtivo_()) {
+    const equipesDepois = validarAssociacoesPublicacaoElenco_(
+      campeonatoId, lerEstadoElencosParticionados_(campeonatoId),
+      alteracoes.map(function (item) { return item.equipeId; }), recursosOperacao).equipes;
+    const fontesDepois = fontesMetadadosElencoParticionado_(
+      lerEstadoElencosParticionados_(campeonatoId), equipesDepois);
+    const chavesAlteradas = Object.create(null);
+    preparadas.forEach(function (preparada) {
+      chavesAlteradas[JSON.stringify([preparada.item.tipo, preparada.item.equipeId])] = preparada;
+    });
+    const fontesAntesPorChave = Object.create(null);
+    fontesAntes.forEach(function (fonte) {
+      fontesAntesPorChave[JSON.stringify([fonte[0], fonte[1]])] = fonte;
+    });
+    const novas = preparadas.filter(function (preparada) {
+      return !fontesAntesPorChave[JSON.stringify([preparada.item.tipo, preparada.item.equipeId])];
+    }).length;
+    if (fontesDepois.length !== fontesAntes.length + novas) {
+      throw new Error('Fontes de elenco divergiram apos a publicacao.');
+    }
+    fontesDepois.forEach(function (fonte) {
+      const chave = JSON.stringify([fonte[0], fonte[1]]);
+      const preparada = chavesAlteradas[chave];
+      if (preparada) {
+        const ref = manifesto.particoes.find(function (item) {
+          return item.tipo === preparada.item.tipo && item.equipeId === preparada.item.equipeId;
+        });
+        if (!ref || ref.arquivo !== fonte[2]
+            || fonte[4][2] !== md5IndiceValidacao_(preparada.texto)) {
+          throw new Error('Particao publicada divergiu dos dados preparados.');
+        }
+      } else if (JSON.stringify(fonte) !== JSON.stringify(fontesAntesPorChave[chave])) {
+        throw new Error('Uma particao nao alterada mudou durante a publicacao.');
+      }
+    });
+    const manifestoPublicado = itemUnicoElencoParticionado_(
+      pasta.getFilesByName(ELENCOS_PARTICOES_MANIFESTO));
+    const metaManifesto = metadadosFonteElencoParticionado_(
+      { pasta: pasta }, manifestoPublicado, ELENCOS_PARTICOES_MANIFESTO, pasta.getId());
+    if (metaManifesto[2] !== md5IndiceValidacao_(texto)) {
+      throw new Error('Manifesto publicado divergiu dos dados preparados.');
+    }
+    if (recursosOperacao) {
+      recursosOperacao.elencoAssinaturaPosCommit = assinaturaEstadoElencoParticionado_(
+        lerEstadoElencosParticionados_(campeonatoId), null, equipesDepois);
+    }
+  }
   return manifesto.revisao;
 }
 
@@ -4158,7 +4923,7 @@ function removerCampeonato(id) {
       throw new Error('Campeonato não encontrado.');
     }
 
-      prepararHistoricoElenco_();
+      prepararHistoricoElenco_(null, null, elencosParticionadosCutoverAtivo_() ? idAlvo : null);
       if (elencosParticionadosCutoverAtivo_()) {
         const props = PropertiesService.getScriptProperties();
         props.setProperty(chaveRemocaoElencosParticionados_(idAlvo), JSON.stringify({
@@ -5846,10 +6611,10 @@ function gerarSumulaJogoCampeonato(payload) {
    marcarSnapshotsEsportivosPendentes_();
    const validos = lista.length ? higienizarEquipes_(lista) : [];
 
-   prepararHistoricoElenco_();
+   prepararHistoricoElenco_(null, null, elencosParticionadosCutoverAtivo_() ? campeonatoId : null);
    PropertiesService.getScriptProperties()
      .setProperty(chaveTimesCampeonato_(campeonatoId), JSON.stringify(validos));
-   prepararHistoricoElenco_();
+   prepararHistoricoElenco_(null, null, elencosParticionadosCutoverAtivo_() ? campeonatoId : null);
  }
 
   function detalharTimesCampeonato_(campeonatoId, times, registroEquipes, somenteResumo) {
@@ -6262,6 +7027,9 @@ function validarCpfUnicoEntreCadastros_(campeonatoId, cpf, origem, idIgnorado, r
     return;
   }
   const outraLista = medirRecursoCadastro_(recursos, 'lock_cpf_categorias', function () {
+    if (elencosParticionadosCutoverAtivo_()) {
+      return lerElencoParticionado_(campeonatoId, origem === 'atleta' ? 'comissao' : 'atletas');
+    }
     return origem === 'atleta'
       ? comissaoTecnicaCampeonato_(campeonatoId, false, recursos)
       : atletasCampeonato_(campeonatoId, false, recursos);
@@ -6270,6 +7038,43 @@ function validarCpfUnicoEntreCadastros_(campeonatoId, cpf, origem, idIgnorado, r
   if (existeCpfNoCadastro_(outraLista, cpf, idIgnorado)) {
     throw new Error('Este CPF já está cadastrado na ' + (origem === 'atleta' ? 'comissão técnica' : 'lista de atletas') + ' deste campeonato.');
   }
+}
+
+function validarDuplicataCadastroOperacao_(campeonatoId, tipo, nome, cpf, lista, idIgnorado, recursos) {
+  const duplicataLocal = tipo === 'atletas'
+    ? validarDuplicataAtleta_(nome, cpf, lista, idIgnorado)
+    : validarDuplicataComissao_(nome, cpf, lista, idIgnorado);
+  if (!duplicataLocal.ok) return duplicataLocal;
+  if (!elencosParticionadosCutoverAtivo_()) {
+    return duplicataLocal;
+  }
+  const indice = consultarIndiceValidacao_(campeonatoId, recursos, tipo);
+  if (!indice) {
+    const completa = lerElencoParticionado_(campeonatoId, tipo);
+    return tipo === 'atletas'
+      ? validarDuplicataAtleta_(nome, cpf, completa, idIgnorado)
+      : validarDuplicataComissao_(nome, cpf, completa, idIgnorado);
+  }
+  const cpfLimpo = somenteDigitos_(cpf || '');
+  const duplicadoCpf = (indice.cadastros[tipo][cpfLimpo] || []).some(function (item) {
+    return !idIgnorado || item[0] !== idIgnorado;
+  });
+  if (duplicadoCpf) {
+    return { ok: false, motivo: tipo === 'atletas'
+      ? 'CPF já cadastrado: este CPF já pertence a outro atleta neste campeonato.'
+      : 'CPF já cadastrado: este CPF já pertence a outro comissionado neste campeonato.' };
+  }
+  const nomeSimilar = Object.keys(indice.nomes[tipo]).some(function (nomeIndice) {
+    return nomeSimilar_(nome, nomeIndice) && indice.nomes[tipo][nomeIndice].some(function (item) {
+      return !idIgnorado || item[0] !== idIgnorado;
+    });
+  });
+  if (nomeSimilar) {
+    return { ok: false, motivo: tipo === 'atletas'
+      ? 'Nome similar já cadastrado: existe um atleta com nome muito parecido. Verifique se não é duplicata.'
+      : 'Nome similar já cadastrado: existe um comissionado com nome muito parecido. Verifique se não é duplicata.' };
+  }
+  return { ok: true, motivo: '' };
 }
 
 function contatoResponsavelEquipeConflito_(equipe) {
@@ -6289,14 +7094,27 @@ function contatoResponsavelEquipeConflito_(equipe) {
   };
 }
 
-function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado) {
+function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado, recursos) {
   if (!contexto || contexto.sessao.usuario.perfil !== 'associado') return;
-  const atual = lista.find(function (item) {
-    return (!atletaIdIgnorado || item.id !== atletaIdIgnorado)
-      && somenteDigitos_(item.cpf || '') === somenteDigitos_(cpf)
-      && String(item.timeVinculado || '').trim()
-      && chaveEquipe_(item.timeVinculado) !== chaveEquipe_(contexto.equipe.nome);
-  });
+  let atual;
+  const indice = elencosParticionadosCutoverAtivo_()
+    ? consultarIndiceValidacao_(contexto.campeonato.id, recursos, 'atletas') : null;
+  if (indice) {
+    const conflito = (indice.cadastros.atletas[somenteDigitos_(cpf)] || []).find(function (item) {
+      return (!atletaIdIgnorado || item[0] !== atletaIdIgnorado)
+        && item[1] !== chaveEquipe_(contexto.equipe.nome) && item[2];
+    });
+    if (conflito) atual = { timeVinculado: conflito[2] };
+  } else {
+    const candidatos = elencosParticionadosCutoverAtivo_()
+      ? lerElencoParticionado_(contexto.campeonato.id, 'atletas') : lista;
+    atual = candidatos.find(function (item) {
+      return (!atletaIdIgnorado || item.id !== atletaIdIgnorado)
+        && somenteDigitos_(item.cpf || '') === somenteDigitos_(cpf)
+        && String(item.timeVinculado || '').trim()
+        && chaveEquipe_(item.timeVinculado) !== chaveEquipe_(contexto.equipe.nome);
+    });
+  }
   if (!atual) return;
   const contato = contatoResponsavelEquipeConflito_(atual.timeVinculado);
   throw new Error('Este atleta já está cadastrado na equipe ' + atual.timeVinculado
@@ -6366,8 +7184,9 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
      const lista = medirRecursoCadastro_(recursos, 'lock_elenco_leitura', function () {
        return atletasCampeonato_(campeonatoId, false, recursos).slice();
      });
-      bloquearCpfAtletaEmOutraEquipe_(contextoAtual, cpf, lista, '');
-      const validacaoDuplicata = validarDuplicataAtleta_(nome, cpf, lista);
+      bloquearCpfAtletaEmOutraEquipe_(contextoAtual, cpf, lista, '', recursos);
+      const validacaoDuplicata = validarDuplicataCadastroOperacao_(
+        campeonatoId, 'atletas', nome, cpf, lista, '', recursos);
 
       if (!validacaoDuplicata.ok) {
         throw new Error(validacaoDuplicata.motivo);
@@ -6483,8 +7302,9 @@ function bloquearCpfAtletaEmOutraEquipe_(contexto, cpf, lista, atletaIdIgnorado)
           throw new Error('Envie a foto do atleta.');
        }
 
-        bloquearCpfAtletaEmOutraEquipe_(contextoAtual, cpf, lista, atletaId);
-        const validacaoDuplicata = validarDuplicataAtleta_(nome, cpf, lista, atletaId);
+        bloquearCpfAtletaEmOutraEquipe_(contextoAtual, cpf, lista, atletaId, recursos);
+        const validacaoDuplicata = validarDuplicataCadastroOperacao_(
+          campeonatoId, 'atletas', nome, cpf, lista, atletaId, recursos);
         if (!validacaoDuplicata.ok) {
           throw new Error(validacaoDuplicata.motivo);
         }
@@ -7558,10 +8378,70 @@ function compactarCadastroIndiceValidacao_(lista) {
   lista.forEach(function (pessoa) {
     if (!pessoa || typeof pessoa !== 'object' || !String(pessoa.nome || '').trim()) return;
     const cpf = somenteDigitos_(pessoa.cpf || '');
-    const entrada = [String(pessoa.id || '').trim(), chaveEquipe_(pessoa.timeVinculado || '')];
+    const entrada = [String(pessoa.id || '').trim(), chaveEquipe_(pessoa.timeVinculado || ''),
+      String(pessoa.timeVinculado || '').trim()];
     (mapa[cpf] || (mapa[cpf] = [])).push(entrada);
   });
   return mapa;
+}
+
+function chaveNomeIndiceValidacao_(nome) {
+  return String(nome || '').trim().toLowerCase();
+}
+
+function compactarNomesCadastroIndiceValidacao_(lista) {
+  const mapa = Object.create(null);
+  lista.forEach(function (pessoa) {
+    if (!pessoa || typeof pessoa !== 'object' || !String(pessoa.nome || '').trim()) return;
+    const nome = chaveNomeIndiceValidacao_(pessoa.nome);
+    (mapa[nome] || (mapa[nome] = [])).push([
+      String(pessoa.id || '').trim(), chaveEquipe_(pessoa.timeVinculado || ''),
+      String(pessoa.timeVinculado || '').trim()
+    ]);
+  });
+  return mapa;
+}
+
+function compactarIdsCadastroIndiceValidacao_(lista) {
+  const mapa = Object.create(null);
+  lista.forEach(function (pessoa) {
+    if (!pessoa || typeof pessoa !== 'object' || !String(pessoa.nome || '').trim()) return;
+    const id = String(pessoa.id || '').trim();
+    if (id) mapa[id] = chaveEquipe_(pessoa.timeVinculado || '');
+  });
+  return mapa;
+}
+
+function removerEntradaMapaIndiceValidacao_(mapa, chave, id, equipe) {
+  const entradas = mapa[chave];
+  if (!entradas) return;
+  mapa[chave] = entradas.filter(function (entrada) {
+    return entrada[0] !== id || entrada[1] !== equipe;
+  });
+  if (!mapa[chave].length) delete mapa[chave];
+}
+
+function aplicarDeltaCadastroIndiceValidacao_(indice, tipo, antes, depois) {
+  [antes || [], depois || []].forEach(function (lista, posicao) {
+    const adicionar = posicao === 1;
+    lista.forEach(function (pessoa) {
+      if (!pessoa || !String(pessoa.nome || '').trim()) return;
+      const id = String(pessoa.id || '').trim();
+      const equipe = chaveEquipe_(pessoa.timeVinculado || '');
+      const equipeNome = String(pessoa.timeVinculado || '').trim();
+      const cpf = somenteDigitos_(pessoa.cpf || '');
+      const nome = chaveNomeIndiceValidacao_(pessoa.nome);
+      if (adicionar) {
+        (indice.cadastros[tipo][cpf] || (indice.cadastros[tipo][cpf] = [])).push([id, equipe, equipeNome]);
+        (indice.nomes[tipo][nome] || (indice.nomes[tipo][nome] = [])).push([id, equipe, equipeNome]);
+        indice.ids[tipo][id] = equipe;
+      } else {
+        removerEntradaMapaIndiceValidacao_(indice.cadastros[tipo], cpf, id, equipe);
+        removerEntradaMapaIndiceValidacao_(indice.nomes[tipo], nome, id, equipe);
+        if (indice.ids[tipo][id] === equipe) delete indice.ids[tipo][id];
+      }
+    });
+  });
 }
 
 function compactarParticipacaoIndiceValidacao_(jogos) {
@@ -7606,6 +8486,18 @@ function lerPayloadIndiceValidacao_(id, meta) {
   }
   if (indice.versao !== versao || indice.campeonatoId !== id || indice.token !== meta.token
       || !indice.cadastros || !indice.cadastros.atletas || !indice.cadastros.comissao || !indice.participacao) return null;
+  if (versao === 2 && (!indice.nomes || !indice.nomes.atletas || !indice.nomes.comissao
+      || !indice.ids || !indice.ids.atletas || !indice.ids.comissao)) return null;
+  if (versao === 2 && ['atletas', 'comissao'].some(function (tipo) {
+    return Object.keys(indice.ids[tipo]).some(function (registroId) {
+      return !registroId || typeof indice.ids[tipo][registroId] !== 'string';
+    }) || Object.keys(indice.nomes[tipo]).some(function (nome) {
+      return !Array.isArray(indice.nomes[tipo][nome]) || indice.nomes[tipo][nome].some(function (item) {
+        return !Array.isArray(item) || item.length < 2 || typeof item[0] !== 'string'
+          || typeof item[1] !== 'string';
+      });
+    });
+  })) return null;
   return indice;
 }
 
@@ -7761,37 +8653,44 @@ function iniciarMutacaoIndiceParticionado_(id, recursos) {
     indice = null;
     meta = null;
   }
-  return { indice: indice, meta: meta, checkpoint: invalidarIndiceValidacao_(id) };
+  const mutacao = { indice: indice, meta: meta, checkpoint: invalidarIndiceValidacao_(id) };
+  if (recursos) recursos.indiceBaseMutacao = indice;
+  return mutacao;
 }
 
-function concluirMutacaoIndiceParticionado_(mutacao, tipo, id, recursos) {
+function concluirMutacaoIndiceParticionado_(mutacao, id, deltas, recursos) {
   if (!mutacao || !mutacao.indice || !mutacao.meta) {
     registrarFalhaIndiceValidacao_('incremental_sem_base_v2');
     return;
   }
   let fase = 'leitura_estado';
   try {
-    const posicao = ['atletas', 'comissao'].indexOf(tipo);
-    if (posicao === -1) throw new Error('Categoria de elenco invalida.');
     const indice = mutacao.indice;
     fase = 'fingerprint_inicial';
+    const estadoAtual = lerEstadoElencosParticionados_(id);
+    const equipesAlteradas = deltas.map(function (delta) { return delta.equipeId; })
+      .filter(function (equipeId) { return !!equipeId; });
+    const contextoAtual = validarAssociacoesPublicacaoElenco_(
+      id, estadoAtual, equipesAlteradas, recursos);
+    recursos.equipes = contextoAtual.equipes;
     const fontesAntes = versoesFontesIndiceValidacao_(id, recursos);
-    const publicados = lerElencoParticionado_(id, tipo);
-    const outroTipo = tipo === 'atletas' ? 'comissao' : 'atletas';
-    const outroPublicado = compactarCadastroIndiceValidacao_(lerElencoParticionado_(id, outroTipo));
-    function assinaturaCadastro_(cadastros) {
-      return JSON.stringify(Object.keys(cadastros).sort().map(function (cpf) {
-        return [cpf, cadastros[cpf].map(function (entrada) { return JSON.stringify(entrada); }).sort()];
-      }));
+    if (!recursos || !recursos.elencoAssinaturaPosCommit
+        || assinaturaEstadoElencoParticionado_(estadoAtual)
+          !== recursos.elencoAssinaturaPosCommit) {
+      throw new Error('Fontes divergiram apos a publicacao.');
     }
-    if (assinaturaCadastro_(outroPublicado) !== assinaturaCadastro_(indice.cadastros[outroTipo])) {
-      throw new Error('A outra categoria mudou durante a gravacao.');
-    }
-    indice.cadastros[tipo] = compactarCadastroIndiceValidacao_(publicados);
+    deltas.forEach(function (delta) {
+      if (delta.antes === null || delta.antes === undefined) {
+        throw new Error('Delta de elenco incompleto.');
+      }
+      aplicarDeltaCadastroIndiceValidacao_(indice, delta.tipo, delta.antes, delta.depois);
+    });
     fase = 'fingerprint';
     const fontes = versoesFontesIndiceValidacao_(id, recursos);
     if (JSON.stringify(fontesAntes) !== JSON.stringify(fontes)
-        || JSON.stringify(fontes[2]) !== JSON.stringify(mutacao.meta.fontes[2])) {
+        || JSON.stringify(fontes[2]) !== JSON.stringify(mutacao.meta.fontes[2])
+        || assinaturaEstadoElencoParticionado_(lerEstadoElencosParticionados_(id), null, recursos.equipes)
+          !== recursos.elencoAssinaturaPosCommit) {
       throw new Error('Uma fonte mudou durante a gravacao.');
     }
     fase = 'publicacao';
@@ -7848,10 +8747,22 @@ function reconciliarIndiceValidacao_(id) {
         && JSON.stringify(fontes) === JSON.stringify(antes.fontes)) return 'atual';
   } catch (e) { registrarFalhaIndiceValidacao_('payload_reconciliacao'); }
   // Never hold ScriptLock while reading/parsing large roster/table files.
+  const atletas = lerElencoBrutoOperacao_(id, 'atletas');
+  const comissao = lerElencoBrutoOperacao_(id, 'comissao');
   const indice = { versao: elencosParticionadosCutoverAtivo_() ? 2 : 1, campeonatoId: id, cadastros: {
-    atletas: compactarCadastroIndiceValidacao_(lerElencoBrutoOperacao_(id, 'atletas')),
-    comissao: compactarCadastroIndiceValidacao_(lerElencoBrutoOperacao_(id, 'comissao'))
+    atletas: compactarCadastroIndiceValidacao_(atletas),
+    comissao: compactarCadastroIndiceValidacao_(comissao)
   }, participacao: compactarParticipacaoIndiceValidacao_(jogosParticipacaoCampeonato_(id)) };
+  if (indice.versao === 2) {
+    indice.nomes = {
+      atletas: compactarNomesCadastroIndiceValidacao_(atletas),
+      comissao: compactarNomesCadastroIndiceValidacao_(comissao)
+    };
+    indice.ids = {
+      atletas: compactarIdsCadastroIndiceValidacao_(atletas),
+      comissao: compactarIdsCadastroIndiceValidacao_(comissao)
+    };
+  }
   if (JSON.stringify(versoesFontesIndiceValidacao_(id)) !== JSON.stringify(fontes)) return 'concorrente';
   if (!campeonatos_().some(function (item) { return item.id === id; })) return 'concorrente';
   let publicado = false;
@@ -11248,7 +12159,8 @@ function abaFinanceiro_() {
       const lista = medirRecursoCadastro_(recursos, 'lock_elenco_leitura', function () {
         return comissaoTecnicaCampeonato_(campeonatoId, false, recursos);
       });
-      const validacaoDuplicata = validarDuplicataComissao_(nome, cpf, lista);
+      const validacaoDuplicata = validarDuplicataCadastroOperacao_(
+        campeonatoId, 'comissao', nome, cpf, lista, '', recursos);
 
       if (!validacaoDuplicata.ok) {
         throw new Error(validacaoDuplicata.motivo);
@@ -11338,7 +12250,8 @@ function abaFinanceiro_() {
       if (!foto && !membroExistente.foto) {
         throw new Error('Envie a foto do membro da comissão técnica.');
       }
-      const duplicata = validarDuplicataComissao_(nome, cpf, existentes, membroId);
+      const duplicata = validarDuplicataCadastroOperacao_(
+        campeonatoId, 'comissao', nome, cpf, existentes, membroId, recursos);
       if (!duplicata.ok) throw new Error(duplicata.motivo);
       validarCpfUnicoEntreCadastros_(campeonatoId, cpf, 'comissao', '', recursos);
 

@@ -4066,6 +4066,48 @@
       }
     }
 
+    function carregarTabelaSemCopia_(campeonatoId, erro, requisicao, modulo) {
+      const renderizar = function (campeonatos) {
+        if (requisicao !== tabelaEstado.requisicao || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
+        const lista = campeonatos || [];
+        tabelaEstado.campeonatoId = campeonatoId;
+        tabelaEstado.dados = {
+          campeonatos: lista,
+          campeonatoId: campeonatoId,
+          campeonato: null,
+          jogos: [],
+          grupos: [],
+          fases: [],
+          campos: [],
+          criterioOpcoes: [],
+          avisos: [],
+          snapshotStatus: { pendente: true },
+          snapshotIndisponivel: true
+        };
+        tabelaEstado.sujo = false;
+        tabelaEstado.formulario = '';
+        tabelaEstado.resultado = null;
+        tabelaVoltarLista_();
+        const mensagem = document.getElementById('tabelaMensagem');
+        if (mensagem) mensagem.innerHTML = '<div class="aviso" role="status">'
+          + escapar(erro && erro.message ? erro.message : String(erro))
+          + ' Selecione a competição desejada e use Recalcular agora para gerar a cópia.</div>';
+      };
+      const disponiveis = tabelaEstado.dados && tabelaEstado.dados.campeonatos;
+      if (disponiveis && disponiveis.length) {
+        renderizar(disponiveis);
+        return;
+      }
+      google.script.run.withSuccessHandler(function (dados) {
+        renderizar((dados.registros || []).map(function (item) {
+          return { id: item.id, nome: item.nome, temporada: item.temporada, status: item.status };
+        }));
+      }).withFailureHandler(function (erroLista) {
+        if (requisicao !== tabelaEstado.requisicao || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
+        tabelaErro_(erroLista);
+      }).listarCampeonatos();
+    }
+
     function tabelaOcupada_(ativo) {
       tabelaEstado.ocupado = ativo;
       const area = document.getElementById('areaTabelaCampeonato');
@@ -4107,6 +4149,11 @@
       }).withFailureHandler(function (erro) {
         if (requisicao !== tabelaEstado.requisicao || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
         tabelaOcupada_(false);
+        if (modulo === 'jogos-campeonato' && !tabelaEstado.sujo
+            && /ainda não possui cópia para este campeonato|cópia de tabela.*inválida/i.test(erro && erro.message || '')) {
+          carregarTabelaSemCopia_(id, erro, requisicao, modulo);
+          return;
+        }
         if (modulo === 'sumula-campeonato' && sumulasEstado.dados) montarSumulasCampeonato_();
         else if (tabelaEstado.dados) montarTabelaCampeonato_();
         else area.innerHTML = '<div id="tabelaLoading"></div><div id="tabelaMensagem"></div><button type="button" class="botao-apoio" id="tabelaTentar">Tentar novamente</button>'
@@ -4245,7 +4292,9 @@
         + (dados.campeonato ? '<div class="tabela-abas" aria-label="Seções da tabela">' + abas.map(function (aba) {
           return '<button type="button" class="botao-apoio" data-tabela-aba="' + aba[0] + '" aria-pressed="' + (tabelaEstado.aba === aba[0] ? 'true' : 'false') + '">' + aba[1] + '</button>';
         }).join('') + '</div><div id="tabelaPainel"></div><div id="tabelaFormArea" class="tabela-form"></div>'
-          : '<div class="vazio">Nenhum campeonato cadastrado. Cadastre um campeonato e vincule os times para começar.</div>'
+          : (dados.snapshotIndisponivel
+            ? '<div class="aviso">A cópia desta competição ainda não foi gerada. Use Recalcular agora para inicializá-la.</div>'
+            : '<div class="vazio">Nenhum campeonato cadastrado. Cadastre um campeonato e vincule os times para começar.</div>')
             + (moduloDisponivel('campeonatos') ? tabelaBotao_('Cadastrar campeonato', 'campeonatos') : ''));
       area.querySelector('#tabelaCampeonato').onchange = function (evento) {
         const id = evento.target.value;
@@ -5496,6 +5545,7 @@
        }
        document.getElementById('cFormato').addEventListener('change', atualizarFasesEliminatorias);
        atualizarFasesEliminatorias();
+       document.getElementById('cNome').focus();
     }
 
      function gravarCampeonato(idOriginal) {
@@ -5628,6 +5678,12 @@
             return;
           }
 
+          if (['admin', 'diretoria'].includes(CONFIG.usuario.perfil)
+              && /ainda não possui cópia para este campeonato|cópia de equipes participantes.*inválida/i.test(
+            erro && erro.message || '')) {
+            carregarParticipantesSemCopia_(campeonatoId, erro, requisicao);
+            return;
+          }
           document.getElementById('areaTimesCampeonato').innerHTML =
             '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>'
             + '<button type="button" class="botao-apoio" id="epAtualizar">Atualizar</button>'
@@ -5638,6 +5694,37 @@
           if (recalcular) recalcular.onclick = recalcularParticipantesAgora_;
         })
         [atual === true ? 'carregarEquipesParticipantesAtual' : 'listarEquipesParticipantes'](campeonatoId);
+    }
+
+    function carregarParticipantesSemCopia_(campeonatoId, erro, requisicao) {
+      const renderizar = function (campeonatos) {
+        if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual) return;
+        timesCampeonato = {
+          campeonatos: campeonatos || [],
+          equipesGlobais: [],
+          registros: [],
+          podeEditar: ['admin', 'diretoria'].includes(CONFIG.usuario.perfil),
+          snapshotStatus: { pendente: true },
+          snapshotIndisponivel: erro && erro.message ? erro.message : String(erro)
+        };
+        campeonatoParticipantesAtual = campeonatoId;
+        montarEquipesParticipantes();
+      };
+      if (timesCampeonato.campeonatos && timesCampeonato.campeonatos.length) {
+        renderizar(timesCampeonato.campeonatos);
+        return;
+      }
+      google.script.run.withSuccessHandler(function (dados) {
+        renderizar((dados.registros || []).map(function (item) {
+          return { id: item.id, nome: item.nome, temporada: item.temporada, status: item.status };
+        }));
+      }).withFailureHandler(function (erroLista) {
+        if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual) return;
+        document.getElementById('areaTimesCampeonato').innerHTML =
+          '<div class="erro" role="alert">' + escapar(erroLista && erroLista.message ? erroLista.message : erroLista) + '</div>'
+          + '<button type="button" class="botao-apoio" id="epAtualizar">Tentar novamente</button>';
+        document.getElementById('epAtualizar').onclick = carregarTimesCampeonato;
+      }).listarCampeonatos();
     }
 
     let participantesRecalculando_ = false;
@@ -5685,7 +5772,10 @@
         + '<p class="apoio" role="status">' + escapar(timesCampeonato.snapshotStatus
           ? textoStatusSnapshot_(timesCampeonato.snapshotStatus) : 'Dados atuais consultados em ' + dataSnapshot_(timesCampeonato.consultadoEm)
             + '. A cópia pode estar pendente; Atualizar relê a cópia pronta, possivelmente anterior às alterações salvas.')
-        + '</p>' + (timesCampeonato.podeEditar
+        + '</p>' + (timesCampeonato.snapshotIndisponivel
+          ? '<div class="aviso" role="status">' + escapar(timesCampeonato.snapshotIndisponivel)
+            + ' Selecione a competição e use Recalcular agora para gerar a cópia.</div>' : '')
+        + (timesCampeonato.podeEditar
           ? '<button type="button" class="botao-apoio" id="epRecalcular">Recalcular agora</button>' : '')
         + '<div class="campeonatos-cards">' + times.map(function (time) {
           return '<article class="campeonato-card"><div class="campeonato-card-topo">'
@@ -5700,7 +5790,8 @@
             + '<div class="barra-acoes participante-card-acoes"><button type="button" class="botao-principal" data-elenco="' + escapar(time.id) + '">Gerenciar elenco</button>'
             + (timesCampeonato.podeEditar ? '<button type="button" class="botao-apoio perigo" data-ep-remover="' + escapar(time.nome) + '">Desvincular</button>' : '')
             + '</div></article>';
-        }).join('') + '</div>' + (!times.length ? '<div class="aviso">Nenhuma equipe vinculada neste campeonato.</div>' : '')
+        }).join('') + '</div>' + (!times.length && !timesCampeonato.snapshotIndisponivel
+          ? '<div class="aviso">Nenhuma equipe vinculada neste campeonato.</div>' : '')
         + ((registro.times || []).length > times.length ? '<div class="aviso">Há vínculos atuais ainda sem resumo nesta cópia. Admin/diretoria devem recalcular para incluir as novas equipes e contagens.</div>' : '')
         + '<div id="timesFormArea"></div>';
       document.getElementById('epCampeonato').addEventListener('change', function () {

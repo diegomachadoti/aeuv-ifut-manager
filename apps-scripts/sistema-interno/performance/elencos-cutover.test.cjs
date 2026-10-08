@@ -33,6 +33,181 @@ const assertNoLegacyWrites = (h, before) => {
   assert(!h.io.some(entry => entry.operacao === 'trash'));
 };
 
+test('active journals retain reference-only snapshots and replay add/edit/CPF change/remove before any worker', () => {
+  const h = fixture();
+  const legacy = new Map(h.files);
+  const added = h.c.salvarCadastroElenco(h.payload('atletas'));
+  const id = added.registros[0].atletas[0].id;
+  h.c.salvarCadastroElenco({ ...h.payload('atletas'), registroId: id, foto: 'last-original-cpf-photo' });
+  h.c.salvarCadastroElenco({ ...h.payload('atletas'), registroId: id,
+    cpf: '12345678909', foto: 'last-new-cpf-photo' });
+  h.c.removerCadastroElenco({ campeonatoId: 'c1', equipeId: 'e1', registroId: id, tipo: 'atletas' });
+  assert(!h.io.some(entry => entry.name === historyFile));
+  assert(!h.writes.some(name => name.includes('\\historico - ')));
+  const journals = [...h.files].filter(([name]) => name.includes('\\pendencia - '));
+  assert.equal(journals.length, 4);
+  for (const [, text] of journals) {
+    const journal = JSON.parse(text);
+    assert.equal(journal.versao, 2);
+    assert.equal(journal.alteracoes.length, 1);
+    assert(!text.includes('"dados"') && !text.includes('"cpf"'));
+    const snapshot = JSON.parse(h.files.get(folder(h) + '\\' + journal.snapshotAnterior));
+    assert.equal(snapshot.versao, 2);
+    assert(snapshot.particoes.every(item => item.referencia && item.digest && !item.registros));
+  }
+  const beforeProjection = new Map(h.files), properties = [...h.properties];
+  const projection = clone(h.c.lerHistoricoParticionado_(true));
+  assert.deepEqual([...h.files], [...beforeProjection]);
+  assert.deepEqual([...h.properties], properties);
+  assert.equal(projection.inscricoes.length, 2);
+  h.c.processarHistoricoElencoAgora();
+  const entries = historyEntries(h, 'atletas', id);
+  assert.equal(entries.length, 2);
+  assert(entries.every(entry => !entry.presente));
+  assert.equal(entries.find(entry => entry.cpf === '52998224725').dados.foto, 'last-original-cpf-photo');
+  assert.equal(entries.find(entry => entry.cpf === '12345678909').dados.foto, 'last-new-cpf-photo');
+  assert.deepEqual(h.history(), projection);
+  const after = new Map(h.files);
+  h.c.processarHistoricoElencoAgora();
+  assert.deepEqual([...h.files], [...after], 'no repeated history write without pending commits');
+  assertNoLegacyWrites(h, legacy);
+});
+
+test('active unprocessed transfer followed by removal preserves both teams with last snapshots', () => {
+  const h = fixture();
+  seed(h, 'atletas', [person('atletas')]);
+  h.c.transferirAtletaElenco({
+    campeonatoId: 'c1', equipeId: 'e1', registroId: 'athlete', equipeDestinoId: 'e2'
+  });
+  h.c.salvarCadastroElenco({ ...h.payload('atletas'), equipeId: 'e2',
+    registroId: 'athlete', foto: 'destination-photo' });
+  h.c.removerCadastroElenco({
+    campeonatoId: 'c1', equipeId: 'e2', registroId: 'athlete', tipo: 'atletas'
+  });
+  h.c.processarHistoricoElencoAgora();
+  const entries = historyEntries(h, 'atletas', 'athlete');
+  assert.equal(entries.length, 2);
+  assert(entries.every(entry => !entry.presente));
+  assert.equal(entries.find(entry => entry.equipeId === 'e1').dados.foto, 'photo');
+  assert.equal(entries.find(entry => entry.equipeId === 'e2').dados.foto, 'destination-photo');
+});
+
+for (const failure of ['second-team', 'history-response', 'checkpoint']) {
+  test(`active worker retry after ${failure} failure is idempotent across the manifest lineage`, () => {
+    const h = fixture();
+    seed(h, 'atletas', [person('atletas')]);
+    h.c.processarHistoricoElencoAgora();
+    const cursor = h.c.chaveCheckpointHistoricoParticionado_('c1');
+    const previous = h.properties.get(cursor);
+    h.c.transferirAtletaElenco({
+      campeonatoId: 'c1', equipeId: 'e1', registroId: 'athlete', equipeDestinoId: 'e2'
+    });
+    const expected = clone(h.c.lerHistoricoParticionado_(true));
+    const target = folder(h) + '\\historico - e2.json';
+    if (failure === 'second-team') h.state.failWrite = target;
+    if (failure === 'history-response') h.state.onWrite = name => {
+      if (name === target) throw Error('history response lost after write');
+    };
+    const props = h.c.PropertiesService.getScriptProperties();
+    if (failure === 'checkpoint') h.c.PropertiesService.getScriptProperties = () => ({
+      ...props, setProperty(key, value) {
+        if (key === cursor) throw Error('checkpoint failure');
+        return props.setProperty(key, value);
+      }
+    });
+    assert.throws(() => h.c.processarHistoricoElencoAgora(), /pendências foram preservadas/);
+    assert.equal(h.properties.get(cursor), previous);
+    assert.equal(h.c.obterStatusFilaHistoricoElenco().pendencias, 1);
+    h.state.failCreate = null;
+    h.state.failWrite = null;
+    h.state.onWrite = null;
+    h.c.PropertiesService.getScriptProperties = () => props;
+    h.c.processarHistoricoElencoAgora();
+    assert.deepEqual(h.history(), expected, 'no duplicated enrollment IDs or sequence increments');
+    assert.equal(h.properties.get(cursor), manifest(h).revisao);
+    assert.equal(h.c.obterStatusFilaHistoricoElenco().pendencias, 0);
+  });
+}
+
+test('active worker ignores unpublished branches even after a later successful commit', () => {
+  const h = fixture();
+  seed(h, 'atletas', [person('atletas')]);
+  h.state.failWrite = manifestPath(h);
+  assert.throws(() => h.c.salvarCadastroElenco({ ...h.payload('atletas', true), foto: 'never-published' }));
+  h.state.failWrite = null;
+  h.c.salvarCadastroElenco({ ...h.payload('atletas', true), foto: 'published' });
+  h.c.processarHistoricoElencoAgora();
+  assert.equal(historyEntries(h, 'atletas', 'athlete')[0].dados.foto, 'published');
+  assert.equal(historyEntries(h, 'atletas', 'athlete')[0].sequencia, 2);
+  assert.equal([...h.files.keys()].filter(name => name.includes('\\pendencia - ')).length, 3);
+});
+
+test('active immutable history references reject corruption and preserve the pending cursor', () => {
+  const h = fixture();
+  seed(h, 'atletas', [person('atletas')]);
+  const previousPath = currentPath(h);
+  h.c.salvarCadastroElenco({ ...h.payload('atletas', true), foto: 'new-photo' });
+  const text = h.files.get(previousPath);
+  h.files.set(previousPath, JSON.stringify([person('atletas', { foto: 'tampered' })]));
+  assert.throws(() => h.c.processarHistoricoElencoAgora(), /pendências foram preservadas/);
+  assert.equal(h.c.obterStatusFilaHistoricoElenco().pendencias, 1);
+  assert(!h.properties.has(h.c.chaveCheckpointHistoricoParticionado_('c1')));
+  h.files.set(previousPath, text);
+  h.c.processarHistoricoElencoAgora();
+  assert.equal(historyEntries(h, 'atletas', 'athlete')[0].dados.foto, 'new-photo');
+});
+
+test('active participation-only journals retain empty team enrollments after unlinking without global history', () => {
+  const h = fixture();
+  h.state.times = { c1: ['Equipe A'], c2: [] };
+  lock(h, () => h.c.prepararHistoricoElenco_(null, null, 'c1'));
+  h.state.times.c1 = ['Equipe B'];
+  lock(h, () => h.c.prepararHistoricoElenco_(null, null, 'c1'));
+  h.state.times.c1 = [];
+  lock(h, () => h.c.prepararHistoricoElenco_(null, null, 'c1'));
+  assert.equal(manifest(h).particoes.length, 0);
+  assert.equal(manifest(h).sequenciaPublicacao, 2);
+  assert.equal(h.history().participacoes.length, 0, 'no synchronous history write');
+  assert(!h.io.some(entry => entry.name === historyFile));
+  h.c.processarHistoricoElencoAgora();
+  const history = h.history();
+  assert.deepEqual(history.participacoes.map(item => item.equipeId), ['e1', 'e2']);
+  assert.equal(history.inscricoes.length, 0);
+  assert.equal(h.c.fontesImportacaoElenco_(history, {
+    equipe: { id: 'e1' }, campeonato: { id: 'c2' }
+  }).length, 1);
+  assert(h.files.has(folder(h) + '\\historico - e1.json'));
+  assert(h.files.has(folder(h) + '\\historico - e2.json'));
+});
+
+test('active missing consolidated history is an error, never an empty-history fallback', () => {
+  const h = fixture();
+  seed(h, 'atletas', [person('atletas')]);
+  h.c.processarHistoricoElencoAgora();
+  const target = folder(h) + '\\historico - e1.json', text = h.files.get(target);
+  h.files.delete(target);
+  assert.throws(() => h.c.lerHistoricoParticionado_(true, 'e1'), /Historico consolidado da equipe ausente/);
+  h.files.set(target, text);
+  assert.equal(h.c.lerHistoricoParticionado_(true, 'e1').inscricoes.length, 1);
+});
+
+test('active athlete-bank history consumer projects pending current and removed links without history writes', () => {
+  const h = fixture();
+  seed(h, 'atletas', [person('atletas')]);
+  h.c.transferirAtletaElenco({
+    campeonatoId: 'c1', equipeId: 'e1', registroId: 'athlete', equipeDestinoId: 'e2'
+  });
+  const before = new Map(h.files), properties = [...h.properties];
+  const bank = h.c.vinculosAtletasElenco_();
+  assert.equal(bank.atuais, 1);
+  assert.equal(bank.anteriores, 1);
+  assert.equal(bank.grupos.length, 1);
+  assert.equal(bank.grupos[0].vinculos.length, 2);
+  assert.deepEqual([...h.files], [...before]);
+  assert.deepEqual([...h.properties], properties);
+  assert(!h.io.some(entry => entry.name === historyFile));
+});
+
 test('active startup is empty through RPCs and aggregates, ignoring legacy JSON and properties', () => {
   const h = fixture();
   h.seed('c1', 'atletas', [person('atletas')]);
@@ -61,7 +236,8 @@ for (const tipo of ['atletas', 'comissao']) test(`active ${tipo}: add/edit/remov
       assert(h.locked());
       assert(h.properties.has(h.c.chaveFilaHistoricoElenco_('c1')));
       assert.equal(h.c.lerMetaIndiceValidacao_('c1').dirty, true);
-      assert(h.files.has(historyFile));
+      assert(!h.io.some(entry => entry.name === historyFile));
+      assert([...h.files.keys()].some(key => key.startsWith(folder(h) + '\\pendencia - ')));
       commits.push(name);
     }
   };
@@ -76,7 +252,7 @@ for (const tipo of ['atletas', 'comissao']) test(`active ${tipo}: add/edit/remov
   h.c.salvarCadastroElenco({ ...h.payload(tipo), registroId: record.id, foto: 'edited-photo' });
   assert.equal(read(h, tipo)[0].id, record.id);
   assert.equal(read(h, tipo)[0].foto, 'edited-photo');
-  assert.equal(historyEntries(h, tipo, record.id)[0].dados.foto, 'photo', 'synchronous old snapshot');
+  assert.equal(historyEntries(h, tipo, record.id)[0].dados.foto, 'photo', 'history stays unchanged until worker');
   h.c.processarHistoricoElencoAgora();
   assert.equal(historyEntries(h, tipo, record.id)[0].dados.foto, 'edited-photo');
   const listed = h.c.listarElenco('c1', 'e1').registros[0][tipo];
@@ -224,7 +400,7 @@ for (const phase of ['snapshot', 'partition', 'journal', 'manifest', 'after-comm
     assert.equal(manifest(h).revisao === before.revisao, !committed);
     assert.equal(h.c.lerMetaIndiceValidacao_('c1').dirty, true);
     assert.equal(h.c.obterStatusFilaHistoricoElenco().pendencias, 1);
-    assert.equal(historyEntries(h, 'atletas', 'athlete')[0].dados.timeVinculado, 'Equipe A');
+    assert.equal(historyEntries(h, 'atletas', 'athlete').length, 0, 'no synchronous history write');
     h.c.processarHistoricoElencoAgora();
     assert.equal(historyEntries(h, 'atletas', 'athlete').length, committed ? 2 : 1);
     h.state.failWrite = null;
@@ -237,12 +413,11 @@ for (const phase of ['snapshot', 'partition', 'journal', 'manifest', 'after-comm
   });
 }
 
-for (const failure of ['history', 'queue', 'dirty']) test(`active ${failure} persistence failure prevents publication`, () => {
+for (const failure of ['queue', 'dirty']) test(`active ${failure} persistence failure prevents publication`, () => {
   const h = fixture();
   seed(h, 'atletas', [person('atletas')]);
   const before = manifest(h);
-  if (failure === 'history') h.state.failHistory = true;
-  else {
+  {
     const props = h.c.PropertiesService.getScriptProperties();
     h.c.PropertiesService.getScriptProperties = () => ({
       ...props, setProperty(key, value) {
@@ -288,7 +463,7 @@ for (const operation of ['add', 'edit', 'remove']) for (const committed of [fals
   });
 }
 
-test('active import candidates and import use new live rosters plus preserved global history', () => {
+test('active import candidates project journaled history without a synchronous history write', () => {
   const h = fixture();
   seed(h, 'atletas', [person('atletas', { id: 'previous', foto: 'previous-photo' })], 'c2');
   h.seed('c2', 'atletas', [person('atletas', { id: 'legacy-ignored' })]);
@@ -297,8 +472,10 @@ test('active import candidates and import use new live rosters plus preserved gl
   });
   assert.equal(listed.candidatos.length, 1);
   const candidate = listed.candidatos[0];
-  assert.equal(h.history().inscricoes.find(item => item.id === candidate.id).registroId, 'previous');
-  const original = clone(h.history().inscricoes[0]);
+  assert.equal(h.history().inscricoes.length, 0);
+  const projected = clone(h.c.lerHistoricoParticionado_(true, 'e1'));
+  assert.equal(projected.inscricoes.find(item => item.id === candidate.id).registroId, 'previous');
+  const original = projected.inscricoes[0];
   const imported = h.c.importarCadastrosElenco({
     campeonatoId: 'c1', equipeId: 'e1', tipo: 'atletas', origemId: 'c2', inscricaoIds: [candidate.id]
   });
@@ -310,24 +487,23 @@ test('active import candidates and import use new live rosters plus preserved gl
   assert(!h.history().inscricoes.some(item => item.registroId === 'legacy-ignored'));
 });
 
-test('active empty startup keeps old global enrollment snapshots available for deliberate import, without migration', () => {
+test('active empty startup ignores old global history without migration or writes', () => {
   const legacy = harness();
   legacy.seed('c2', 'comissao', [person('comissao', { id: 'historical-staff' })]);
   lock(legacy, () => legacy.c.prepararHistoricoElenco_());
   const h = fixture(), old = legacy.history().inscricoes[0];
   h.files.set(historyFile, legacy.files.get(historyFile));
-  const candidates = h.c.listarImportacaoElenco({
+  const before = new Map(h.files);
+  assert.deepEqual(clone(h.c.listarImportacaoElenco({
+    campeonatoId: 'c1', equipeId: 'e1', tipo: 'comissao'
+  }).origens), []);
+  assert.throws(() => h.c.listarImportacaoElenco({
     campeonatoId: 'c1', equipeId: 'e1', tipo: 'comissao', origemId: 'c2'
-  }).candidatos;
-  assert.equal(candidates.length, 1);
-  assert.equal(candidates[0].id, old.id);
+  }), /origem não pertence/);
   assert.deepEqual(read(h, 'comissao', 'c2'), []);
-  assert.deepEqual(h.history().inscricoes.find(item => item.id === old.id).dados, old.dados);
-  h.c.importarCadastrosElenco({
-    campeonatoId: 'c1', equipeId: 'e1', tipo: 'comissao', origemId: 'c2', inscricaoIds: [old.id]
-  });
-  assert.equal(read(h, 'comissao')[0].cpf, old.cpf);
-  assert.deepEqual(h.history().inscricoes.find(item => item.id === old.id).dados, old.dados);
+  assert.equal(h.history().inscricoes.length, 0);
+  assert.deepEqual([...h.files], [...before]);
+  assert(!h.io.some(entry => entry.name === historyFile));
 });
 
 test('admin recovery diagnostics classify committed and staged journals without changing files or properties', () => {
@@ -453,7 +629,7 @@ for (const tipo of ['atletas', 'comissao']) test(`active ${tipo} image batches r
   for (const [name, text] of original) if (name !== manifestPath(h) && name !== historyFile) {
     assert.equal(h.files.get(name), text);
   }
-  assert.equal(historyEntries(h, tipo, person(tipo).id)[0].dados.foto, image);
+  assert.equal(historyEntries(h, tipo, person(tipo).id).length, 0);
   h.c.processarHistoricoElencoAgora();
   assert.equal(historyEntries(h, tipo, person(tipo).id)[0].dados.foto, optimized);
 });

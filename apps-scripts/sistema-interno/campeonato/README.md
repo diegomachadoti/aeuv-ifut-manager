@@ -620,6 +620,27 @@ Cadastro dos atletas vinculados aos times:
 
 #### Histórico permanente e importação
 
+**Escopo:** a descrição do arquivo global abaixo vale para o gate de produção
+desligado (`ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = false`). No modelo ativo,
+exercitado somente no VM local, o histórico fica em
+`AEUV - Elencos - <campeonatoId>/historico - <equipeId>.json`. Mutações não
+leem nem regravam o arquivo global: confirmam journals V2 com referências
+imutáveis pré/pós e digests antes de publicar o manifesto. O worker segue a
+linhagem publicada em ordem e confirma todas as equipes antes do checkpoint
+do campeonato. Retry parcial é idempotente e documentos não publicados não
+viram inscrições. Importação e Banco de Atletas projetam pendências em memória,
+sem escrita síncrona; remoções e trocas de CPF/equipe antes do worker preservam
+os últimos dados de cada inscrição. A exclusão lógica fecha a presença somente
+após a competição sair do registro, com tombstone válido.
+
+Não há migração/compatibilidade do histórico global ou dos JSONs de elenco
+antigos no caminho ativo. Dados de teste podem ser reiniciados pelo responsável;
+esta entrega não apaga dados, não publica nem acessa Drive remoto. As regras
+de acesso, CPF, duplicidade e participação continuam iguais. Leituras das
+guardas e fingerprints do índice ainda agregam o campeonato por segurança;
+o escopo completo por equipe permanece pendente. Veja
+[o formato e os limites do modelo V2](../../README.md#elencos-particionados-etapa-inativa).
+
 `AEUV - Historico de Inscricoes.json`, na pasta raiz do projeto no Drive,
 guarda participações de equipes mesmo sem elenco ou jogos e inscrições de atletas
 e comissão. Não usa Script Properties para o conteúdo histórico. Equipe e competição
