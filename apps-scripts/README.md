@@ -739,8 +739,8 @@ Perfis disponíveis:
 | --- | --- |
 | `admin` | Tudo, inclusive conceder e revogar acesso. |
 | `diretoria` | Tudo, menos a tela de acessos. |
-| `arbitragem` | Início, súmula digital e regulamentos. |
-| `associado` | Início, inscrição e portabilidade, regulamentos e associados. |
+| `arbitragem` | Início, súmula digital e Central de Documentos. |
+| `associado` | Início, inscrição e portabilidade, Central de Documentos e associados. |
 
 A única diferença entre `admin` e `diretoria` é a tela de acessos: quem dirige a
 associação precisa operar o sistema inteiro, mas distribuir permissão é ato de
@@ -791,7 +791,7 @@ pode declarar `grupo` para entrar num submenu.
 | `solicitacoes` | Solicitações de Inscrições; busca os dados com `listarSolicitacoes()`. |
 | `sumulas` | Súmulas Enviadas; busca os dados com `listarSumulas()`. |
 | `notas` | Notas oficiais; busca os dados com `listarNotas()`. |
-| `regulamentos` | Regulamentos; busca os dados com `listarRegulamentos()`. |
+| `regulamentos` | Central de Documentos; busca os dados com `listarRegulamentos()` (identificadores mantidos por compatibilidade). |
 | `financeiro` | Financeiro e Prestação de Contas; controle de entradas/saídas, anexos e relatórios oficiais em PDF com `listarFinanceiro()` e `salvarLancamentoFinanceiro()`. |
 | `atas` | Atas de reuniões da associação ou campeonato; usa `listarAtas()`, `salvarAta()`, `exportarAtaPdf()` e `excluirAta()`. |
 | `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
@@ -801,7 +801,7 @@ pode declarar `grupo` para entrar num submenu.
 
 Módulos publicados hoje: Início, Formulários (Súmula digital e Inscrição e
 portabilidade), Solicitações de Inscrições, Súmulas Enviadas, Notas oficiais,
-Regulamentos, Controle de punições, Financeiro e Prestação de Contas, Atas de reuniões, Associados,
+Central de Documentos, Controle de punições, Financeiro e Prestação de Contas, Atas de reuniões, Associados,
 Banco de Dados de Atletas e Usuários do sistema.
 
 #### Banco de Dados de Atletas
@@ -1549,12 +1549,19 @@ acesso de leitura à pasta das súmulas no Drive. Quando a tela acusar erro, a
 própria mensagem já distingue os dois casos: a pasta `Notas Oficiais` ainda não
 existe (nenhuma nota foi publicada) ou o usuário não tem acesso a ela.
 
-### Regulamentos
+### Central de Documentos
 
-Lista os regulamentos e as formas de disputa oficiais publicados na mesma
-subpasta `Regulamentos` do Drive. É a tela mais simples do sistema e a
-**única consulta aberta a todos os perfis**: são documentos que toda equipe e
-a arbitragem precisam ter à mão, sem depender de quem está olhando.
+**Consulte os documentos oficiais da AEUV e das competições.** Reúne
+regulamentos, formas de disputa, tabelas de jogos, estatuto da associação e
+outros documentos públicos de interesse dos associados. A consulta continua
+liberada para todos os perfis autorizados: admin, diretoria, arbitragem e associado.
+
+Os PDFs continuam na mesma subpasta `Regulamentos` do Drive. O nome dessa pasta,
+seu ID, as permissões de leitura e os identificadores internos `regulamentos`
+e `listarRegulamentos()` foram preservados: não é necessário migrar arquivos
+ou alterar os links existentes. Adicione tabelas, estatuto e outros documentos
+oficiais em PDF nessa pasta para que apareçam na Central. Não coloque ali
+cadastros, documentos pessoais ou outros anexos restritos.
 
 Por isso não há tabela nem filtro. São poucos arquivos e o uso é sempre o
 mesmo — abrir o PDF —, então cada documento é um cartão com o título, a data

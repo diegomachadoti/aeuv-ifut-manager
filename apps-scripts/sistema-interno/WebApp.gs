@@ -262,10 +262,10 @@ const MODULOS = [
   },
   {
     id: 'regulamentos',
-    nome: 'Regulamentos',
-    icone: '📕',
+    nome: 'Central de Documentos',
+    icone: '📚',
     tipo: 'regulamentos',
-    descricao: 'Regulamentos oficiais publicados das competições da associação.',
+    descricao: 'Consulte os documentos oficiais da AEUV e das competições.',
     perfis: ['admin', 'diretoria', 'arbitragem', 'associado']
   },
   {
@@ -10903,7 +10903,7 @@ function listarRegulamentos() {
   const sessao = identificarUsuario_();
 
   if (!sessao.autorizado || !moduloLiberado_('regulamentos', sessao.usuario.perfil)) {
-    throw new Error('Você não tem permissão para consultar os regulamentos.');
+    throw new Error('Você não tem permissão para consultar a Central de Documentos.');
   }
 
   const pasta = pastaRegulamentos_();
@@ -10986,16 +10986,16 @@ function pastaRegulamentos_() {
     throw new Error(guardado
       ? 'Não foi possível abrir a pasta "' + CONFIG.regulamentos.subpasta + '" no Drive. '
         + 'Peça à administração para compartilhá-la com o seu e-mail (Leitor).'
-      : 'A pasta de regulamentos ainda não foi registrada. Um administrador ou a '
-        + 'diretoria precisa abrir a tela de Regulamentos uma vez.');
+      : 'A pasta da Central de Documentos ainda não foi registrada. Um administrador ou a '
+        + 'diretoria precisa abrir a Central de Documentos uma vez.');
   }
 
   const pastas = raiz.getFoldersByName(CONFIG.regulamentos.subpasta);
 
   if (!pastas.hasNext()) {
     throw new Error('A pasta "' + CONFIG.regulamentos.subpasta + '" ainda não existe dentro de "'
-      + raiz.getName() + '". Crie-a no Drive e publique o regulamento com '
-      + 'main.py --publicar-drive.');
+      + raiz.getName() + '". Crie-a no Drive e adicione os documentos oficiais em PDF. '
+      + 'Regulamentos e formas de disputa também podem ser publicados com main.py --publicar-drive.');
   }
 
   const pasta = pastas.next();

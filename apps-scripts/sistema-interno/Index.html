@@ -9197,7 +9197,7 @@
     }
 
     /**
-     * Estado da tela de regulamentos.
+     * Estado da Central de Documentos (identificadores legados preservados).
      */
     let regulamentos = { registros: [], total: 0, limite: 0, pastaUrl: '' };
 
@@ -9209,7 +9209,7 @@
         return '';
       }
 
-      if (modulo === 'Regulamentos') {
+      if (modulo === 'regulamentos') {
         return CONFIG.regulamentosPastaUrl
           ? '<div class="barra-acoes"><a class="botao-apoio destaque" href="'
             + escapar(CONFIG.regulamentosPastaUrl)
@@ -9232,7 +9232,7 @@
     }
 
     /**
-     * Busca no servidor os regulamentos publicados.
+     * Busca no servidor os documentos oficiais publicados.
      */
     function carregarRegulamentos() {
       google.script.run
@@ -9253,30 +9253,33 @@
           document.getElementById('statusRegulamentos').outerHTML =
             '<div class="erro">' + escapar(mensagem) + '</div>'
             + (/Não foi possível abrir a pasta "Regulamentos"/.test(mensagem)
-              ? botaoSolicitarAcessoAssociado('Regulamentos') : '');
+              ? botaoSolicitarAcessoAssociado('regulamentos') : '');
         })
         .listarRegulamentos();
     }
 
     /**
-     * Lista os regulamentos em cartoes.
+     * Lista os documentos oficiais em cartoes.
      *
      * Sao poucos arquivos e o uso e sempre o mesmo - abrir o PDF -, entao
-     * aqui nao ha tabela nem filtro: cada regulamento e um cartao com os
+     * aqui nao ha tabela nem filtro: cada documento e um cartao com os
      * dois botoes de acesso.
      */
     function montarTelaRegulamentos() {
       const registros = regulamentos.registros || [];
+      const descricao = '<p>Consulte os documentos oficiais da AEUV e das competições.</p>'
+        + '<p class="equipe-dado">Regulamentos, formas de disputa, tabelas de jogos, estatuto da associação '
+        + 'e outros documentos públicos de interesse dos associados.</p>';
 
       if (!registros.length) {
         document.getElementById('statusRegulamentos').outerHTML =
-          '<div class="vazio">Nenhum regulamento publicado at&eacute; o momento.</div>';
+          descricao + '<div class="vazio">Nenhum documento publicado at&eacute; o momento.</div>';
         return;
       }
 
       const cartoes = registros.map(function (r) {
         return '<div class="regulamento">'
-          + '<div class="regulamento-titulo"><span class="icone">📕</span>'
+          + '<div class="regulamento-titulo"><span class="icone">📄</span>'
           + '<h3>' + escapar(r.titulo) + '</h3></div>'
           + '<p class="equipe-dado">Atualizado em ' + escapar(r.atualizadoEm) + ' · ' + escapar(r.tamanho) + '</p>'
           + '<div class="barra-acoes">'
@@ -9285,9 +9288,9 @@
           + '</div></div>';
       }).join('');
 
-      document.getElementById('statusRegulamentos').outerHTML = ''
+      document.getElementById('statusRegulamentos').outerHTML = descricao
         + '<div class="barra-acoes">'
-        + '<span>' + registros.length + ' regulamento(s)</span>'
+        + '<span>' + registros.length + (registros.length === 1 ? ' documento' : ' documentos') + '</span>'
         + '<span class="espaco"></span>'
         + '<button type="button" class="botao-apoio" id="recarregarRegulamentos">Atualizar</button>'
         + (regulamentos.pastaUrl
