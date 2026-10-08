@@ -1,0 +1,52 @@
+# RECIBO DE PAGAMENTO — MODELO EDITÁVEL AEUV
+# Preencha somente pagamentos efetivamente recebidos.
+# Inicial: valor = 150,00; valor_extenso = cento e cinquenta reais.
+# Renovação: valor = 100,00; valor_extenso = cem reais; tipo_filiacao = Renovação anual.
+# O gerador não consulta banco, financeiro ou comprovantes e não valida o pagamento.
+[documento]
+titulo = RECIBO DE PAGAMENTO
+subtitulo = Taxa anual de filiação de equipe à AEUV
+cabecalho = Filiação de Equipes · AEUV
+rodape = Recibo de filiação
+assunto = Recebimento de taxa anual de filiação de equipe
+
+[assinatura]
+tipo = presidente
+data = {{cidade}}, {{data_documento}}.
+
+[dados]
+numero = __________/__________
+equipe = ________________________________________
+pagador = ________________________________________
+cpf_cnpj_pagador = ____________________
+representante = ________________________________________
+exercicio = __________
+tipo_filiacao = Filiação inicial
+valor = 150,00
+valor_extenso = cento e cinquenta reais
+data_pagamento = ____/____/________
+forma_pagamento = ________________________________________
+identificador_pagamento = ________________________________________
+data_documento = ____ de ____________________ de ________
+cidade = Uberlândia/MG
+
+---
+**Recibo nº:** {{numero}}
+
+* IDENTIFICAÇÃO DO RECEBIMENTO
+**Recebedora:** AEUV (Associação Esportiva Uberlandense Varzeana)
+**CNPJ da AEUV:** 67.645.389/0001-01
+**Equipe:** {{equipe}}
+**Pagador:** {{pagador}}
+**CPF / CNPJ do pagador:** {{cpf_cnpj_pagador}}
+**Presidente / representante legal da equipe:** {{representante}}
+
+> VALOR RECEBIDO: R$ {{valor}}
+Recebemos do pagador acima identificado a importância de **R$ {{valor}} ({{valor_extenso}})**, referente à taxa anual de **{{tipo_filiacao}}** da equipe **{{equipe}}** à AEUV, correspondente ao exercício **{{exercicio}}**.
+
+* DADOS DO PAGAMENTO
+**Data do pagamento:** {{data_pagamento}}
+**Forma de pagamento:** {{forma_pagamento}}
+**Identificador / referência do comprovante:** {{identificador_pagamento}}
+
+Damos quitação exclusivamente ao valor e à obrigação descritos neste recibo.

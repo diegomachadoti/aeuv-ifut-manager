@@ -1,0 +1,84 @@
+# FICHA DE FILIAÇÃO — MODELO EDITÁVEL AEUV
+# Altere os campos de [dados]. O texto após --- também pode ser alterado livremente.
+# {{campo}} reutiliza o valor de [dados] no texto. Não altere os nomes sem atualizar as referências.
+# Esta ficha é assinada pelo representante da EQUIPE, não pelo Presidente da AEUV.
+[documento]
+titulo = FICHA DE FILIAÇÃO
+subtitulo = Cadastro da equipe e termo de responsabilidade
+cabecalho = Filiação de Equipes · AEUV
+rodape = Ficha de filiação
+assunto = Requerimento de filiação de equipe à AEUV
+
+[assinatura]
+tipo = manual
+nome = {{representante}}
+cargo = Presidente / representante legal da equipe {{equipe}}
+data = {{cidade}}, {{data_documento}}.
+
+[dados]
+equipe = ________________________________________
+razao_social = ________________________________________
+cnpj_equipe = ________________________________________
+cores = ________________________________________
+sede_campo = ________________________________________
+endereco_equipe = ________________________________________
+representante = ________________________________________
+cpf_representante = ____________________
+rg_representante = ____________________
+telefone = ____________________
+email = ________________________________________
+tipo_filiacao = [ ] Filiação inicial   [ ] Renovação anual
+exercicio = __________
+data_documento = ____ de ____________________ de ________
+cidade = Uberlândia/MG
+
+---
+* 1 — DADOS DA EQUIPE E DO REPRESENTANTE
+**Nome fantasia da equipe:** {{equipe}}
+**Razão social, se houver:** {{razao_social}}
+**CNPJ, se houver:** {{cnpj_equipe}}
+**Cores oficiais:** {{cores}}
+**Campo / sede utilizada:** {{sede_campo}}
+**Endereço da equipe:** {{endereco_equipe}}
+**Presidente / representante legal:** {{representante}}
+**CPF:** {{cpf_representante}}     **RG:** {{rg_representante}}
+**Telefone:** {{telefone}}     **E-mail:** {{email}}
+**Tipo de filiação:** {{tipo_filiacao}}     **Exercício anual:** {{exercicio}}
+
+* 2 — DIRETORIA E COMISSÃO TÉCNICA
+Relacionar todos os dirigentes e membros da comissão técnica. Acrescente linhas se necessário.
+| Nome completo | Cargo / função | CPF | RG |
+| --- | --- | --- | --- |
+| __________________ | __________________ | ______________ | ______________ |
+| __________________ | __________________ | ______________ | ______________ |
+| __________________ | __________________ | ______________ | ______________ |
+| __________________ | __________________ | ______________ | ______________ |
+
+* 3 — DOCUMENTAÇÃO PARA ANÁLISE
+- Ficha de cadastro preenchida e relação completa da diretoria e comissão técnica.
+- Termo de responsabilidade assinado pelo presidente ou representante legal da equipe.
+- Cópia do documento pessoal e comprovante de endereço do presidente da equipe.
+- **Somente se houver vínculo anterior com outra associação varzeana:** documento comprovando o desligamento total, autenticado em cartório ou emitido/assinado digitalmente, conforme análise da AEUV.
+- Comprovante da taxa anual de filiação, após aprovação e emissão da cobrança.
+
+=== PAGINA ===
+* 4 — TERMO DE RESPONSABILIDADE E DECLARAÇÕES
+Eu, **{{representante}}**, na condição de presidente / representante legal da equipe **{{equipe}}**, solicito sua filiação à Associação Esportiva Uberlandense Varzeana — AEUV e assumo o compromisso de cumprir o Estatuto, o Regimento Interno e o Regulamento Geral da entidade.
+
+Declaro, para análise da Diretoria da AEUV, que:
+- A equipe não mantém filiação simultânea a outra associação varzeana e, enquanto filiada à AEUV, não se filiará a outra associação varzeana.
+- Não serão admitidos na equipe, como atletas ou membros da comissão, dirigentes ou representantes legais de outra associação varzeana, conforme as regras aprovadas pela AEUV.
+- Caso a equipe tenha mantido vínculo com outra associação varzeana, apresentará a comprovação de desligamento total exigida. Essa documentação não é exigida de equipe sem vínculo anterior.
+- As informações da equipe, da diretoria e da comissão técnica serão apresentadas de forma verdadeira e atualizadas quando houver alterações.
+
+> TAXA ANUAL POR EQUIPE
+**Primeiro ano de filiação: R$ 150,00 (cento e cinquenta reais).**
+**Renovações anuais seguintes: R$ 100,00 (cem reais).**
+
+* 5 — FLUXO DE FILIAÇÃO
+- Envio da ficha e documentação da equipe; comprovação de desligamento somente quando aplicável.
+- Análise jurídica/administrativa pela Diretoria da AEUV, incluindo conferência de vínculos e conflitos de interesses.
+- Aprovação da solicitação e emissão da cobrança da taxa anual pela secretaria da AEUV.
+- Após confirmação do pagamento: emissão do certificado de filiação e do recibo de pagamento.
+
+O preenchimento e a assinatura desta ficha constituem um pedido de filiação, não a comprovação de sua aprovação. A equipe receberá o certificado após a análise e a confirmação do pagamento, conforme o fluxo definido pela AEUV.

@@ -6,10 +6,8 @@ PENDÊNCIAS DE PREENCHIMENTO / ANEXOS PARA O REQUERIMENTO E O TERMO
 - Anexo 2.2.4 — Comprovante de endereço do Presidente: substituir o link provisório por acesso HTTPS ao documento
 - Anexo 2.2.5 — Certidão federal, Dívida Ativa da União e Previdência Social: substituir o link provisório por acesso HTTPS ao documento
 - Anexo 2.2.6 — Certidão negativa da Fazenda Estadual: substituir o link provisório por acesso HTTPS ao documento
-- Anexo 2.2.7 — Certidão negativa municipal da associação: substituir o link provisório por acesso HTTPS ao documento
 - Anexo 2.2.7 — Certidão negativa municipal do Presidente: substituir o link provisório por acesso HTTPS ao documento
 - Anexo 2.2.8 — Certificado de regularidade do FGTS (CRF): substituir o link provisório por acesso HTTPS ao documento
-- Anexo 2.2.9 — Certidão negativa de débitos trabalhistas: substituir o link provisório por acesso HTTPS ao documento
 
 ANTECEDÊNCIA / ALINHAMENTO
 - Emissão até primeiro uso: 23 dias. O documento da Futel exige antecedência mínima de 40 dias.

@@ -1566,6 +1566,36 @@
       background: #fff; color: var(--texto); }
     .ata-editor .campo textarea:focus { outline: 2px solid var(--dourado); }
     .ata-editor .campo input { width: 100%; box-sizing: border-box; }
+    .ata-formatacao {
+      margin-top: 10px;
+      padding: 14px 16px;
+      border: 1px solid var(--borda);
+      border-left: 4px solid #1F3A68;
+      border-radius: 8px;
+      background: var(--superficie, #fff);
+      color: var(--texto);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .ata-formatacao ul {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+      gap: 12px 20px;
+      margin: 12px 0;
+      padding: 0;
+      list-style: none;
+    }
+    .ata-formatacao li { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .ata-formatacao code {
+      align-self: flex-start;
+      padding: 3px 7px;
+      border-radius: 4px;
+      background: #E9EEF8;
+      color: #1F3A68;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .ata-formatacao p { margin: 0; }
 
     /* ---------- Gestão do campeonato ---------- */
     .campeonatos-cards {
@@ -9907,9 +9937,14 @@
         + escapar(ata ? ata.participantes : '') + '</textarea></div>'
         + '<div class="campo cheio"><label for="ataTexto">Texto da ata *</label><textarea id="ataTexto" maxlength="40000" required aria-describedby="ataFormatacao">'
         + escapar(ata ? ata.texto : '') + '</textarea>'
-        + '<div class="apoio" id="ataFormatacao">Formatação no PDF: comece a linha com <code>* Título</code> para uma faixa azul-escura, '
-        + '<code>&gt; Subtítulo</code> para uma faixa azul-clara ou <code>- Item</code> para um tópico. '
-        + 'Use <code>**palavras**</code> para negrito azul (branco nas faixas escuras).</div></div>'
+        + '<aside class="ata-formatacao" id="ataFormatacao" aria-labelledby="ataFormatacaoTitulo">'
+        + '<strong id="ataFormatacaoTitulo">Legenda de formatação do PDF</strong>'
+        + '<ul><li><code>* PREMIAÇÃO</code><span>Comece a linha com <strong>*</strong> para criar uma faixa azul-escura com texto branco.</span></li>'
+        + '<li><code>&gt; ART 1: Disposições</code><span>Comece a linha com <strong>&gt;</strong> para criar uma faixa azul-clara com texto azul em negrito.</span></li>'
+        + '<li><code>- Primeiro item</code><span>Comece a linha com <strong>-</strong> para criar um tópico com marcador. Use uma linha para cada item.</span></li>'
+        + '<li><code>Prazo até **20 de outubro**.</code><span>Coloque o trecho entre <strong>**</strong> e <strong>**</strong> para aplicar negrito azul; nas faixas escuras, o texto permanece branco.</span></li></ul>'
+        + '<p>Os marcadores não aparecem no PDF. Linhas sem marcadores são texto normal. Salve a ata e clique em <strong>Exportar PDF</strong> para aplicar a formatação.</p>'
+        + '</aside></div>'
         + '</div><div class="acoes-formulario">'
         + (somenteLeitura ? '' : '<button type="submit" class="botao-principal" id="salvarAta">Salvar ata</button>')
         + (ata ? '<button type="button" class="botao-apoio" id="exportarAtaEditor">Exportar PDF</button>' : '')

@@ -1,0 +1,76 @@
+# PLANO DE ASSOCIADO — DOCUMENTO DE DIVULGAÇÃO AEUV
+# Base: plano aprovado na reunião de 07/10/2026.
+# Edite valores e contatos em [dados] ou altere livremente o texto após ---.
+# As variáveis {{campo}} recebem os valores da seção [dados].
+# O documento não identifica equipes ou dirigentes, nem comprova filiação.
+[documento]
+titulo = PLANO DE ASSOCIADO
+subtitulo = Sua equipe faz parte do fortalecimento do futebol varzeano
+cabecalho = Plano de Associado · AEUV
+rodape = Plano de Associado
+assunto = Apresentação pública das condições de filiação de equipes à AEUV
+
+[assinatura]
+tipo = nenhuma
+
+[dados]
+taxa_inicial = R$ 150,00
+taxa_renovacao = R$ 100,00
+email = associacaoaeuv@gmail.com
+site = https://www.aeuv.org/
+instagram = https://www.instagram.com/aeuv.varzea/
+
+---
+> MAIS ORGANIZAÇÃO, VISIBILIDADE E UNIÃO PARA SUA EQUIPE
+A **AEUV (Associação Esportiva Uberlandense Varzeana)** convida as equipes a integrarem uma associação comprometida com o fortalecimento do esporte varzeano, a organização das atividades esportivas e a transparência.
+Conheça as condições para solicitar sua filiação e construir esse trabalho junto com a entidade.
+
+* 1 — POR QUE FAZER PARTE DA AEUV?
+- **Participação esportiva:** a filiação aprovada confere à equipe o direito de disputar os campeonatos oficiais da AEUV, observados os critérios de inscrição e os regulamentos de cada competição.
+- **Visibilidade e imagem:** valorização da equipe e fortalecimento de sua presença na comunidade esportiva.
+- **Organização e transparência:** uma atuação associativa voltada à organização e à transparência das atividades.
+- **Perspectivas de apoio:** busca de recursos e emendas parlamentares futuras para custeio de campos, arbitragem, bolas, material esportivo e premiações, como troféus e medalhas.
+Eventuais apoios e repasses dependem da captação de recursos, dos projetos e das condições aplicáveis. **Não há garantia de repasse financeiro ou de fornecimento de materiais.**
+
+* 2 — INVESTIMENTO ANUAL POR EQUIPE
+| Tipo de filiação | Taxa anual |
+| --- | --- |
+| Primeiro ano de filiação | **{{taxa_inicial}}** |
+| Renovações anuais seguintes | **{{taxa_renovacao}}** |
+A taxa é **anual, por equipe**, e contribui para a manutenção das atividades da associação. A cobrança será emitida após a aprovação da solicitação; ao final, a AEUV emitirá o recibo do pagamento recebido.
+
+* 3 — PRÉ-REQUISITOS E COMPROMISSOS
+- **Vínculo exclusivo:** equipes filiadas a outra associação varzeana não podem manter filiação simultânea à AEUV. Enquanto associada à AEUV, a equipe não poderá se associar a outra associação varzeana.
+- **Elegibilidade dos participantes:** membros da diretoria ou representantes legais de outra associação varzeana não poderão se associar à AEUV nem participar como atletas ou comissão técnica nas equipes associadas.
+- **Desligamento anterior, quando aplicável:** a equipe que tenha vínculo com outra associação deverá se desvincular totalmente e apresentar a comprovação do desligamento para análise da AEUV.
+- **Compromisso institucional:** o presidente ou representante legal da equipe deverá assumir o cumprimento do Estatuto, do Regimento Interno e do Regulamento Geral da AEUV.
+
+=== PAGINA ===
+* 4 — O QUE SUA EQUIPE PRECISA APRESENTAR?
+- **Ficha de cadastro preenchida:** nome fantasia, razão social se houver, cores oficiais e campo ou sede utilizada pela equipe.
+- **Relação da diretoria e comissão técnica:** nome completo, cargo, CPF e RG de todos os dirigentes e membros da comissão, para conferência dos dados e de eventuais conflitos de interesses.
+- **Termo de responsabilidade:** assinado pelo presidente ou representante legal da equipe, com o compromisso de cumprir as normas da AEUV.
+- **Documentos do presidente da equipe:** cópia do documento pessoal e do comprovante de endereço.
+- **Comprovação de desligamento, somente quando necessária:** declaração oficial ou termo que comprove a desvinculação total da outra associação, autenticado em cartório ou emitido/assinado digitalmente, conforme análise da AEUV.
+- **Comprovante da taxa anual:** referente ao primeiro ano ou à renovação, após a aprovação e a emissão da cobrança.
+
+> A COMPROVAÇÃO DE DESLIGAMENTO NÃO É EXIGIDA DE TODAS AS EQUIPES
+Esse documento é necessário apenas se a equipe tiver vínculo anterior com outra associação varzeana. Equipes sem esse vínculo apresentam os demais documentos do cadastro.
+
+* 5 — COMO FUNCIONA A FILIAÇÃO?
+**1. Envio da documentação:** a equipe solicita a ficha à AEUV e encaminha o cadastro, a relação da diretoria/comissão e os documentos exigidos. O comprovante de desligamento é enviado somente quando aplicável.
+**2. Análise jurídica/administrativa:** a Diretoria da AEUV verifica a documentação, possíveis conflitos de interesses e, quando necessário, a autenticidade do desligamento da outra associação.
+**3. Aprovação e cobrança:** estando a documentação regular, a solicitação é aprovada e a secretaria da AEUV emite a cobrança da taxa anual.
+**4. Pagamento:** a equipe efetua o pagamento e apresenta o respectivo comprovante para confirmação do recebimento.
+**5. Certificado e recibo:** após a confirmação do pagamento, a AEUV emite o Certificado de Filiação e o recibo de pagamento da taxa anual.
+
+* 6 — QUER ASSOCIAR SUA EQUIPE?
+Entre em contato com a AEUV para solicitar a ficha de filiação e as orientações de entrega da documentação.
+**E-mail:** {{email}}
+**Site:** {{site}}
+**Instagram:** {{instagram}}
+Documentos pessoais devem ser encaminhados apenas pelo canal indicado pela AEUV, sem divulgação pública de CPF, RG ou comprovantes de endereço.
+
+Este material apresenta o Plano de Associado. A divulgação ou o envio do cadastro não comprova a aprovação de uma filiação, que depende da análise documental e da confirmação do pagamento.
+
+

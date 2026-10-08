@@ -47,6 +47,7 @@ Formato e pendências estão no
 - `regulamento_pdf.py`: PDF do regulamento no mesmo layout, assinado pelo Presidente (`--gerar-pdf-regulamento`)
 - `forma_disputa_pdf.py`: PDF da Forma de Disputa com tabelas de fases, rodadas e auditoria (`--gerar-pdf-forma-disputa`)
 - `oficio_pdf.py`: modelo TXT editável, PDF de requerimento à Futel e checklist de pendências (`--criar-modelo-oficio`, `--gerar-pdf-oficio`)
+- `documento_pdf.py`: PDFs livres e modelos editáveis da ficha, certificado, recibo e Plano de Associado (`--gerar-pdf-documento`, `--gerar-pdf-filiacao`)
 - `financeiro_pdf.py`: PDF oficial de Prestação de Contas e Relatório Financeiro nos padrões AEUV e emendas impositivas (`--gerar-pdf-financeiro`)
 - `financeiro_planilha.py`: lê os lançamentos da planilha `AEUV - Financeiro` (aba `Movimentacoes`) no Drive, alimentada pelo módulo Financeiro do sistema interno. Exemplos: `python main.py --gerar-pdf-financeiro geral`, `... competicao --origem "SUPER LIGA UNIÃO"`, `... emenda --emenda "Emenda 042/2026"`, com `--periodo 3m|6m|anual` ou `--data-inicio/--data-fim` opcionais
 - `controle_punicoes.py`: TXT e PDF de controle com todos os punidos pelas notas oficiais (`--atualizar-controle-punicoes`)
@@ -1205,3 +1206,48 @@ A opção `--oficio-final` é desnecessária e continua aceita por compatibilida
 [guia do ofício Futel](oficio-requerimento/README.md) para o formato do TXT,
 exigências por fase e informações ainda necessárias. Os links do Drive não são
 validados remotamente nem substituem automaticamente a entrega de cópias.
+
+## Documentos livres e plano de filiação de equipes
+
+Modelos baseados na ata de 07/10/2026: **ficha de filiação com termo de
+responsabilidade**, **certificado de filiação**, **recibo da taxa anual** e
+**Plano de Associado para divulgação**.
+Os TXTs editáveis e PDFs ficam em `filiacao/`; os modelos originais ficam em
+`filiacao/modelos/`. Após alterar os dados ou o texto, regenere os quatro:
+
+```powershell
+python main.py --gerar-pdf-filiacao todos
+```
+
+Ou apenas um:
+
+```powershell
+python main.py --gerar-pdf-filiacao ficha
+python main.py --gerar-pdf-filiacao certificado
+python main.py --gerar-pdf-filiacao recibo
+python main.py --gerar-pdf-filiacao plano
+```
+
+O plano público reúne benefícios, requisitos, documentos, valores anuais e
+etapas da filiação. Edite valores/contatos em `[dados]` e o texto livre de
+`filiacao/plano-associado.txt`; o comando `plano` atualiza
+`filiacao/plano-associado.pdf`. O material não expõe dados pessoais ou assinatura
+do Presidente, não comprova filiação e não promete repasses financeiros.
+
+Para outra equipe, crie cópias sem sobrescrever as atuais e gere pelos caminhos:
+
+```powershell
+python main.py --criar-modelos-filiacao "filiacao/equipe-nova"
+python main.py --gerar-pdf-documento "filiacao/equipe-nova/ficha-filiacao.txt" "filiacao/equipe-nova/certificado-filiacao.txt" "filiacao/equipe-nova/recibo-filiacao.txt"
+```
+
+Taxa anual: **R$ 150,00 no primeiro ano**, **R$ 100,00 nas renovações**. A carta
+de desligamento é exigida somente quando houver vínculo anterior com outra
+associação varzeana. A ficha tem assinatura manual da equipe; certificado e
+recibo usam a assinatura do Presidente da AEUV.
+
+Não há regras de rascunho, bloqueios de aprovação/pagamento ou publicação no
+Drive: o conteúdo é livre e a conferência cabe ao emissor. O mesmo comando
+`--gerar-pdf-documento` pode gerar outros documentos no padrão AEUV.
+Veja o [guia de documentos de filiação](filiacao/README.md) para editar campos,
+texto e taxas e para os cuidados de emissão de certificados e recibos.

@@ -1,0 +1,50 @@
+# CERTIFICADO DE FILIAÇÃO — MODELO EDITÁVEL AEUV
+# Preencha os dados e ajuste o período conforme a filiação aprovada.
+# Emitir para a equipe somente após análise aprovada e pagamento confirmado.
+# O gerador é livre: não consulta nem confirma aprovação ou pagamento.
+[documento]
+titulo = CERTIFICADO DE FILIAÇÃO
+subtitulo = Equipe associada à AEUV — Exercício {{exercicio}}
+cabecalho = Filiação de Equipes · AEUV
+rodape = Certificado de filiação
+assunto = Certificação de filiação anual de equipe à AEUV
+
+[assinatura]
+tipo = presidente
+data = {{cidade}}, {{data_documento}}.
+
+[dados]
+numero = __________/__________
+equipe = ________________________________________
+razao_social = ________________________________________
+representante = ________________________________________
+exercicio = __________
+tipo_filiacao = Filiação inicial / Renovação anual
+inicio_validade = ____/____/________
+fim_validade = ____/____/________
+data_documento = ____ de ____________________ de ________
+cidade = Uberlândia/MG
+
+---
+**Certificado nº:** {{numero}}
+
+* EQUIPE FILIADA
+**Nome fantasia:** {{equipe}}
+**Razão social, se houver:** {{razao_social}}
+**Presidente / representante legal da equipe:** {{representante}}
+
+A **AEUV (Associação Esportiva Uberlandense Varzeana)** certifica que a equipe acima identificada encontra-se filiada à entidade no exercício **{{exercicio}}**, após aprovação administrativa da documentação e confirmação do pagamento da taxa anual correspondente.
+
+> VIGÊNCIA DA FILIAÇÃO
+**Modalidade:** {{tipo_filiacao}}
+**Período:** {{inicio_validade}} a {{fim_validade}}
+
+A filiação confere à equipe o direito de disputar os campeonatos oficiais da AEUV, observados os critérios de inscrição e os regulamentos de cada competição, além do Estatuto e do Regimento Interno da associação.
+
+* COMPROMISSOS DA EQUIPE ASSOCIADA
+- Manter vínculo exclusivo com a AEUV, sem filiação simultânea a outra associação varzeana.
+- Observar as regras de elegibilidade de dirigentes, representantes legais, atletas e comissão técnica aprovadas pela associação.
+- Manter os dados cadastrais atualizados e cumprir as obrigações da filiação anual.
+
+* ATUAÇÃO E BENEFÍCIOS INSTITUCIONAIS
+Visibilidade e valorização da equipe, organização e transparência. A AEUV buscará recursos e emendas futuras para apoiar campos, arbitragem, materiais e premiações, conforme projetos e recursos obtidos, sem garantia de repasse financeiro.

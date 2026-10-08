@@ -1610,6 +1610,19 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--oficio-final", action="store_true",
         help="Compatibilidade com comandos antigos: o PDF de ofício já é sempre final e assinado",
     )
+    documentos = parser.add_mutually_exclusive_group()
+    documentos.add_argument(
+        "--criar-modelos-filiacao", nargs="?", const="filiacao", metavar="PASTA",
+        help="Cria os TXTs editáveis da ficha, certificado, recibo e Plano de Associado, sem sobrescrever arquivos",
+    )
+    documentos.add_argument(
+        "--gerar-pdf-filiacao", nargs="?", const="todos", metavar="TIPO_OU_TXT",
+        help="Gera PDFs de filiação: todos (padrão), ficha, certificado, recibo, plano ou caminho do TXT",
+    )
+    documentos.add_argument(
+        "--gerar-pdf-documento", nargs="+", metavar="TXT",
+        help="Gera um ou mais documentos livres editáveis no padrão AEUV, sem regras de rascunho",
+    )
     parser.add_argument(
         "--gerar-pdf-financeiro",
         metavar="TIPO_OU_JSON",
@@ -1664,6 +1677,26 @@ def main() -> int:
     args = parser.parse_args()
     if args.oficio_final and not args.gerar_pdf_oficio:
         parser.error("--oficio-final exige --gerar-pdf-oficio")
+    if args.criar_modelos_filiacao or args.gerar_pdf_filiacao or args.gerar_pdf_documento:
+        from documento_pdf import criar_modelos_filiacao, gerar_pdf_documento, gerar_pdfs_filiacao
+        from nota_pdf import ConfigPdf
+
+        logger = configure_logging(DEFAULT_LOG_PATH)
+        try:
+            if args.criar_modelos_filiacao:
+                for modelo in criar_modelos_filiacao(args.criar_modelos_filiacao):
+                    logger.info("[DOCUMENTO] TXT editável criado em %s", modelo)
+            else:
+                config_pdf = ConfigPdf.carregar(Path(args.config))
+                if args.gerar_pdf_filiacao:
+                    gerar_pdfs_filiacao(args.gerar_pdf_filiacao, config_pdf, logger)
+                else:
+                    for alvo in args.gerar_pdf_documento:
+                        gerar_pdf_documento(alvo, config_pdf, logger)
+        except (ValueError, OSError) as exc:
+            logger.error("[DOCUMENTO] %s", exc)
+            return 1
+        return 0
     if args.criar_modelo_oficio or args.gerar_pdf_oficio:
         from nota_pdf import ConfigPdf
         from oficio_pdf import criar_modelo_oficio, gerar_pdf_oficio
