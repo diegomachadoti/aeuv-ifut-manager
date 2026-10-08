@@ -28,10 +28,20 @@ function setup(profile = 'admin', team = '') {
     getProperties: () => ({ ...values })
   };
   let uuid = 0;
-  const state = { rows: [], uploads: [], released: 0, sheetReads: 0, deletedRows: [], locks: 0 };
+  const state = { rows: [], uploads: [], released: 0, sheetReads: 0, deletedRows: [], locks: 0,
+    maxRows: 100, cellFormats: {} };
   const sheet = {
     getDataRange() { state.sheetReads++; return { getValues: () => [['headers'], ...state.rows] }; },
+    getMaxRows: () => state.maxRows,
+    insertRowsAfter(after, count) { assert.equal(after, state.maxRows); state.maxRows += count; },
     getRange(row, column, height, width) {
+      if (height === undefined) return {
+        setNumberFormat(format) {
+          assert.ok(row >= 2 && row <= state.maxRows);
+          assert.ok(column === 4 || column === 15, 'only birth and CPF cells');
+          state.cellFormats[row + ':' + column] = format;
+        }
+      };
       assert.equal(column, 1);
       assert.equal(height, 1);
       return { setValues: lines => { assert.equal(lines[0].length, width); state.rows[row - 2] = lines[0]; } };
@@ -47,7 +57,19 @@ function setup(profile = 'admin', team = '') {
   const context = vm.createContext({
     CONFIG: { associados: { prefixoConsulta: 'associado:', aba: 'Associados', maxArquivoBytes: 5 * 1024 * 1024 } },
     PropertiesService: { getScriptProperties: () => properties },
-    Utilities: { getUuid: () => 'version-' + (++uuid) },
+    Session: { getScriptTimeZone: () => 'America/Sao_Paulo' },
+    Utilities: {
+      getUuid: () => 'version-' + (++uuid),
+      formatDate(date, zone, format) {
+        assert.equal(zone, 'America/Sao_Paulo');
+        assert.equal(format, 'dd/MM/yyyy');
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone: zone, day: '2-digit', month: '2-digit', year: 'numeric'
+        }).formatToParts(date);
+        const part = type => parts.find(item => item.type === type).value;
+        return `${part('day')}/${part('month')}/${part('year')}`;
+      }
+    },
     LockService: { getScriptLock: () => ({ waitLock(ms) { assert.equal(ms, 30000); state.locks++; }, releaseLock() { state.released++; } }) },
     identificarUsuario_: () => ({ autorizado: true, usuario: { perfil: profile, equipe: team }, email: 'admin@example.test' }),
     moduloLiberado_: () => true,
@@ -123,6 +145,64 @@ test('new optional fields validate CNPJ, exercise, choices and people', () => {
     { diretoriaComissao: [{ nome: 'Pessoa Exemplo', cargo: 'Presidente', cpf: '11111111111', rg: '1' }] }
   ]) assert.throws(() => context.validarCamposFiliacao_(invalid));
   assert.throws(() => context.validarVinculoAssociado_({ vinculoAnterior: 'sim', associacaoAnterior: '' }));
+});
+
+test('legacy sheet dates and numeric CPFs reopen with birth date and leading zero intact', () => {
+  const { context, row } = setup();
+  const client = vm.createContext({});
+  for (const name of ['paraDataInput', 'formatarCpf']) {
+    vm.runInContext(functionSource(html, name, '    '), client);
+  }
+  for (const cpf of ['02036861520', '01234567890', '00123456789']) {
+    const loaded = context.linhaParaAssociado_(row({
+      ...representative, nascimento: new Date('1990-10-08T01:00:00Z'), cpf: Number(cpf)
+    }));
+    assert.equal(loaded.nascimento, '07/10/1990', 'use script timezone, not UTC');
+    assert.equal(loaded.cpf, cpf);
+    assert.equal(client.paraDataInput(loaded.nascimento), '1990-10-07');
+    assert.equal(client.formatarCpf(loaded.cpf).replace(/\D/g, ''), cpf);
+  }
+  const empty = context.linhaParaAssociado_(row({ nascimento: '', cpf: '' }));
+  assert.equal(empty.nascimento, '');
+  assert.equal(empty.cpf, '');
+});
+
+test('inclusion and editing retain representative birth and CPF after sheet coercion', () => {
+  const { context, state, columns } = setup();
+  state.maxRows = 1; // A sheet containing only the header needs a new row.
+  const payload = { ...representative, cpf: '020.368.615-20' };
+  context.salvarAssociado(payload);
+  assert.equal(state.maxRows, 2);
+  assert.deepEqual(state.cellFormats, { '2:4': '@', '2:15': '@' });
+  assert.equal(state.rows[0][columns.indexOf('nascimento')], '08/10/1990');
+  assert.equal(state.rows[0][columns.indexOf('cpf')], '02036861520');
+  state.rows[0][columns.indexOf('nascimento')] = new Date('1990-10-08T03:00:00Z');
+  state.rows[0][columns.indexOf('cpf')] = 2036861520;
+  let loaded = context.listarAssociados().registros[0];
+  assert.equal(loaded.nascimento, '08/10/1990');
+  assert.equal(loaded.cpf, '02036861520');
+  assert.throws(() => context.salvarAssociado({ ...payload, equipe: 'Equipe B' }), /já está cadastrado/);
+  context.salvarAssociado({ ...payload, equipeOriginal: 'Equipe A', nascimento: '1991-11-09' });
+  loaded = context.listarAssociados().registros[0];
+  assert.equal(state.rows.length, 1);
+  assert.equal(loaded.nascimento, '09/11/1991');
+  assert.equal(loaded.cpf, '02036861520');
+  const published = context.lerConsultaAssociado_('Equipe A');
+  assert.equal(published.nascimento, loaded.nascimento);
+  assert.equal(published.cpf, loaded.cpf);
+});
+
+test('saving one associate does not reformat or rewrite other legacy rows', () => {
+  const { context, state, row } = setup();
+  const legacy = row({ ...representative, equipe: 'Equipe B',
+    nascimento: new Date('1990-10-08T03:00:00Z'), cpf: 2036861520 });
+  state.rows.push(legacy);
+  context.salvarAssociado(representative);
+  assert.equal(state.rows[0], legacy);
+  assert.deepEqual(state.cellFormats, { '3:4': '@', '3:15': '@' });
+  const loaded = context.listarAssociados().registros.find(record => record.equipe === 'Equipe B');
+  assert.equal(loaded.nascimento, '08/10/1990');
+  assert.equal(loaded.cpf, '02036861520');
 });
 
 test('all documents optional regardless of status and prior affiliation', () => {

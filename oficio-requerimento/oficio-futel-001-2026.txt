@@ -18,7 +18,7 @@ alinhamento_previo = Conforme alinhamento em reunião prévia com a Futel sobre 
 [requerente]
 razao_social = AEUV (Associação Esportiva Uberlandense Varzeana)
 cnpj = 67.645.389/0001-01
-endereco = Av. Belo Horizonte, 68 - Martins, Uberlândia - MG, 38400-454, Uberlândia/MG.
+endereco = Rua Jorge Martins Pinto, 1233 - Sta Mônica, Uberlândia - MG, 38408-230, Uberlândia/MG.
 # Telefone e e-mail obtidos no site público https://www.aeuv.org/.
 telefone = (34) 99640-6025
 email = associacaoaeuv@gmail.com
@@ -53,7 +53,7 @@ ingressos = Não haverá cobrança de ingresso. Acesso gratuito ao público, sem
 29/11/2026 = Oitavas de final | 15:00 | 5 | Poliesportivos definidos semanalmente pela Futel
 06/12/2026 = Quartas de final | 15:00 | 4 | Poliesportivos definidos semanalmente pela Futel
 13/12/2026 = Semifinais | 15:00 | 2 | Poliesportivos definidos semanalmente pela Futel
-20/12/2026 = 3º lugar e final | 08:00 / 10:00 | 2 | Locais a confirmar com a Futel, conforme tabela V3
+20/12/2026 = 3º lugar e final | 08:00 / 10:00 | 2 | Locais a confirmar com a Futel Disponibilidade, conforme tabela V3
 
 # Condições usadas apenas para selecionar os anexos aplicáveis.
 # Não haverá texto sobre música ou alimentos no PDF quando a resposta for nao.
@@ -72,13 +72,13 @@ procuracao = nao
 cnpj = https://drive.google.com/file/d/18m1fkGZkMA2161OWvBzEkevDTcboBzoJ/view?usp=sharing
 estatuto = https://drive.google.com/file/d/1Hj0PRzRyXedn2uUFBf-eWQ3DMUkQa8BG/view?usp=sharing
 ata_eleicao = https://drive.google.com/file/d/1tQilVc3cnVYKHlZ-Ju0_WEurMrYDWwhs/view?usp=sharing
-documento_foto = PENDENTE
-cpf_dirigente = PENDENTE
-endereco_dirigente = PENDENTE
+documento_foto = https://drive.google.com/file/d/1FLuSGs_STswTwyINOXhfHBKbcQdEAYqp/view?usp=sharing
+cpf_dirigente = https://drive.google.com/file/d/1FLuSGs_STswTwyINOXhfHBKbcQdEAYqp/view?usp=sharing
+endereco_dirigente = https://drive.google.com/file/d/164j1TNVIzxPicpFE2UQ2WCRhWm8uus_-/view?usp=sharing
 cnd_federal = PENDENTE
 cnd_estadual = PENDENTE
 cnd_municipal_entidade = https://drive.google.com/file/d/1hA_2y-6oIED-qbTGjsDfqCzQxpWoy6G7/view?usp=sharing
-cnd_municipal_dirigente = PENDENTE
+cnd_municipal_dirigente = https://drive.google.com/file/d/12xcH_hkVTb-MsQ3mmLGlCGbI4mtyQk5V/view?usp=sharing
 fgts = N/A
 cndt = https://drive.google.com/file/d/1QLQfwhZ7i8hLizEZ1RFFMEnjdA76GSfF/view?usp=sharing
 regulamento = https://drive.google.com/file/d/1Ky4OAvGJd9sJAudWPthKXnBUGLapU8Kk/view?usp=sharing

@@ -12165,11 +12165,16 @@ function salvarAssociado(payload) {
       return registro[coluna.id] || '';
     });
 
-    if (linhaExistente) {
-      aba.getRange(linhaExistente, 1, 1, linha.length).setValues([linha]);
-    } else {
-      aba.appendRow(linha);
+    const linhaDestino = linhaExistente || valores.length + 1;
+    if (linhaDestino > aba.getMaxRows()) {
+      aba.insertRowsAfter(aba.getMaxRows(), linhaDestino - aba.getMaxRows());
     }
+    // Não formata a coluna inteira: datas antigas virariam números seriais.
+    ['nascimento', 'cpf'].forEach(function (id) {
+      const coluna = ASSOCIADOS_COLUNAS.findIndex(function (item) { return item.id === id; }) + 1;
+      aba.getRange(linhaDestino, coluna).setNumberFormat('@');
+    });
+    aba.getRange(linhaDestino, 1, 1, linha.length).setValues([linha]);
 
     publicarConsultaAssociado_(linhaParaAssociado_(linha));
     if (anterior && chaveOriginal !== chave) {
@@ -12265,7 +12270,15 @@ function linhaParaAssociado_(linha) {
   const registro = {};
 
   ASSOCIADOS_COLUNAS.forEach(function (coluna, i) {
-    registro[coluna.id] = linha[i] === null || linha[i] === undefined ? '' : String(linha[i]).trim();
+    const valor = linha[i];
+    if (coluna.id === 'nascimento' && Object.prototype.toString.call(valor) === '[object Date]') {
+      registro[coluna.id] = Utilities.formatDate(valor, Session.getScriptTimeZone(), 'dd/MM/yyyy');
+    } else if (coluna.id === 'cpf' && typeof valor === 'number' && /^\d{1,11}$/.test(String(valor))) {
+      // Recupera os zeros iniciais removidos em cadastros antigos.
+      registro[coluna.id] = String(valor).padStart(11, '0');
+    } else {
+      registro[coluna.id] = valor === null || valor === undefined ? '' : String(valor).trim();
+    }
   });
 
   return completarAssociado_(registro);
