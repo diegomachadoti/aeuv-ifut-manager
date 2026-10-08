@@ -89,12 +89,104 @@ Após o manifesto ser publicado, deltas das listas anterior/nova atualizam o
 índice sem reler os elencos. A validação das fontes continua consultando
 metadados Drive v3 (ID, pasta, nome, versão e MD5) de todas as referências,
 além do manifesto; isso evita baixar todos os blobs, mas ainda tem custo
-proporcional ao número de partições.
+de bytes/processamento proporcional ao número de partições atuais.
+Cada checkpoint consulta esses metadados em lotes via `Drive.Files.list` v3:
+pai exato, `trashed = false` e disjunção dos nomes exatos atuais, com escape
+de barras invertidas/apóstrofos. Limites de 100 nomes e 7.000 caracteres por
+consulta mantêm o filtro limitado, sem enumerar milhares de versões antigas,
+snapshots ou journals. Cada lote percorre todas as páginas (até 1.000 itens
+por página); duplicidades inclusive entre páginas e `incompleteSearch = true`
+são rejeitadas. O campo falso/default pode estar ausente na resposta Drive;
+valores malformados também são rejeitados. O manifesto listado deve manter
+o ID do handle lido e o MD5 dos bytes interpretados. Ausência/falha de
+`Files.list` não provoca fallback silencioso para buscas individuais.
 Sem base limpa/confiável, as guardas voltam a ler as partições ao vivo e o
 índice permanece dirty. Falhas de metadados impedem autorizar a mutação.
 Checks antes/depois do manifesto rejeitam alterações externas observadas,
 inclusive em partições não afetadas; edições manuais ainda não participam do
 ScriptLock e permanece a janela inerente entre chamadas Drive.
+
+Os checkpoints agora recebem bundles explícitos de estado, assinatura e
+metadados: atletas/comissão compartilham a mesma varredura apenas naquele
+checkpoint. A fase inicial de validação sem escrita também compartilha esse
+bundle entre guardas e leituras de categorias; a preparação da resposta
+reutiliza o baseline da equipe já lido, sem outra leitura do alvo.
+Não há cache persistente de fingerprints/permissões nem reutilização de um
+bundle anterior à escrita para validar o estado publicado. Preparação, precommit, poscommit e
+publicação final do índice continuam verificando fontes vivas; nome/pasta,
+versão e MD5 permanecem obrigatórios. O cache de índice verificado pertence ao
+bundle, não à duração inteira do pedido ativo. O gravador entrega o checkpoint
+poscommit completo e já verificado ao índice incremental (consumido uma vez),
+sem repetir a varredura inicial nem fazer uma varredura intermediária antes
+dos chunks. Após os chunks, a confirmação final resolve novamente todas as
+fontes e associações/nomes vivos. A tabela inalterada é comparada à base antiga,
+nunca incorporada sem recomputar participação. Qualquer falha deixa o índice
+dirty e conserva o elenco, snapshots e journals já confirmados.
+
+Fixture local de edição de atleta, índice V2 limpo e duas partições publicadas:
+**63 → 31 → 16 → 6 consultas de metadados Drive v3;
+75 → 41 → 26 → 16 buscas por nome** (reuso de fases seguido de lotes).
+São contagens de chamadas fake, não segundos medidos no Google. A regressão
+limita a edição a cinco listas independentes + um get da nova partição
+e 16 buscas por nome (fixtures com duas/quatro partições: antes 16/26 e
+26/36; agora 6/16 em ambas), com até 13 leituras de blobs;
+um teste repete consultas de categorias doze vezes no mesmo checkpoint sem
+repetir a lista única das três fontes (duas partições + manifesto).
+`metadata-batch.test.cjs` verifica paginação, chunking, fontes duplicadas,
+escapes, respostas incompletas/malformadas, mudanças de versão/MD5 e corrida
+entre bytes do manifesto e metadados novos. Inclui 3.000 arquivos históricos
+que não entram na resposta filtrada. Contagens desta correção, mesma fixture
+quente com duas partições; antes eram somente `Files.get`, depois:
+
+| Operação | Gets antes → depois | Lists antes → depois | Buscas por nome antes → depois | Blobs antes → depois |
+| --- | --- | --- | --- | --- |
+| Inclusão | 16 → 1 | 0 → 5 | 26 → 16 | 13 → 13 |
+| Edição | 16 → 1 | 0 → 5 | 26 → 16 | 13 → 13 |
+| Remoção | 16 → 1 | 0 → 5 | 26 → 16 | 13 → 13 |
+| Transferência para equipe sem partição prévia | 19 → 2 | 0 → 5 | 30 → 18 | 14 → 14 |
+| Listagem selecionada | 6 → 0 | 0 → 2 | 9 → 5 | 4 → 4 |
+| Vínculo de equipe selecionado | 9 → 0 | 0 → 3 | 14 → 8 | 7 → 7 |
+
+Os limites de CRUD, transferência, listagem e vínculo são regressões locais.
+As corridas novas alteram fontes entre poscommit e publicação limpa e durante
+escrita de chunks: edição/exclusão/renomeação de partição não afetada, manifesto,
+registro global/nome canônico, campeonato, vínculos, equipes ativas e
+edição/criação da tabela. Todas mantêm o índice dirty, sem rollback do elenco.
+Chamadas são **O(lotes + páginas)** por fronteira fresca; bytes/processamento
+continuam **O(partições atuais)**, e o fallback dirty
+continua podendo baixar todos os elencos.
+Snapshots e journals continuam separados, sem migração de IDs/schema ou
+cache persistente de fingerprints. Gets individuais da nova partição/journal
+e da tabela, quando presente, continuam necessários fora dos lotes.
+A medição Google anterior à mudança registrou 32,916 s no backend ativo
+(validação 7,263 s, snapshot 2,557 s, partições 2,595 s, journal 3,267 s,
+precommit 3,508 s, commit 2,332 s, poscommit 3,545 s e índice 4,174 s,
+incluindo confirmação fresca 3,813 s). Esses números não são uma previsão
+do resultado dos lotes. Menos de 12 s é uma meta aspiracional, não garantia;
+somente medição real autorizada poderá confirmar. Nenhuma publicação nem
+ação remota faz parte desta etapa; o literal local permanece `false`.
+
+`gravacao_elenco` mantém sua métrica agregada. As fases internas
+`elenco_metadados_preparacao`, `elenco_indice_base`,
+`elenco_preparacao_particoes`, `elenco_ids_publicacao`, `elenco_snapshot`,
+`elenco_particoes`, `elenco_journal`, `elenco_precommit`, `elenco_commit`,
+`elenco_poscommit` e `elenco_indice_incremental` medem blocos sequenciais,
+incluindo falhas; não somar esses filhos novamente à métrica agregada.
+Dentro de `elenco_indice_incremental`, `elenco_indice_baseline` mede a projeção
+do bundle já confirmado, `elenco_indice_delta` a atualização compacta e
+`elenco_indice_publicacao` chunks/readback/publicação. A métrica filha
+`elenco_indice_confirmacao_fontes` mede a checagem fresca final, incluída
+em `elenco_indice_publicacao`; não somar pai e filho.
+Não cobrem todo o overhead entre blocos e outras métricas preexistentes
+podem estar aninhadas.
+
+Vincular equipe não constrói mais uma listagem agregada descartada antes
+da resposta selecionada. Na adição, um único journal pós-vínculo captura
+participações existentes/novas; desvinculações mantêm a captura anterior para
+preservar equipes vazias removidas. `salvarTimeCampeonato`/remoção mantêm
+`campeonatos`, `equipesGlobais`, `registros` (array) e `podeEditar`, mas detalham
+apenas o campeonato alterado. A listagem sem filtro permanece agregada.
+
 `esportivos-snapshot.test.cjs` também executa builders e workers agendados
 com gate ativo, preservando cópias anteriores.
 O diagnóstico administrativo de journals valida snapshot, destino e fontes
@@ -111,8 +203,8 @@ latência, quotas reais nem atomicidade entre serviços Google distintos.
 O manifesto depende da substituição integral do conteúdo de um único
 arquivo pelo Drive e do `ScriptLock` dos escritores da aplicação; edições
 manuais concorrentes no Drive não participam desse lock. Metadados Drive v3
-validam nome, pasta, versão e MD5 sem baixar os registros, mas fazem uma
-consulta por referência e não removem a janela entre checagem e publicação.
+validam nome, pasta, versão e MD5 sem baixar os registros, em consultas
+filtradas por lotes, e não removem a janela entre checagem e publicação.
 Snapshots de histórico guardam referências imutáveis e digests: versões
 anteriores e novas partições afetadas usam SHA-256 para replay; referências
 inalteradas usam MD5 do Drive, sem baixar seus blobs. Snapshots legados continuam

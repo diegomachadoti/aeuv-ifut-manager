@@ -66,6 +66,39 @@ autorizacao, limites, fallback e controles Admin, consulte
 As agendas de tabela, participantes e Banco de Atletas permanecem independentes
 e nao sao desativadas por essa manutencao.
 
+### Limpeza unica do historico de elencos de teste
+
+Depois de excluir todos os campeonatos de teste, um administrador pode executar
+no editor do Apps Script, sem parametros:
+
+1. `simularLimpezaHistoricoElencosTeste`: apenas consulta e registra nas Execucoes
+   as quantidades de inscricoes/participacoes consolidadas e pendencias a descartar.
+2. `executarLimpezaHistoricoElencosTeste`: cria e confere um arquivo
+   `AEUV - Backup limpeza historico - <ID>.json` na pasta raiz antes de alterar
+   qualquer historico. O ID do backup aparece nas Execucoes.
+3. No Banco de Dados de Atletas, usar **Recalcular agora** e depois **Atualizar**.
+
+A rotina funciona com a flag ligada ou desligada e bloqueia a execucao se houver
+qualquer campeonato ou um recalculo do Banco em andamento. Esvazia o historico
+global e os historicos por campeonato/equipe conhecidos pelo catalogo/fila,
+inclusive vinculos de CPFs que tambem constam em solicitacoes reais. Remove
+pendencias antigas e estabelece checkpoints na revisao atual para que os
+journals de testes nao recriem os registros. Pendencias ainda nao consolidadas
+nao entram na contagem de inscricoes, mas tambem sao descartadas.
+
+**Preserva integralmente** solicitacoes de inscricao/remocao/portabilidade,
+punicoes, sumulas, equipes/IDs, jogos, arquivos de elenco e journals/snapshots
+de recuperacao. Nao filtra CPFs nem altera as regras futuras do Banco: ele
+continua consolidando todas as fontes, mas sem os vinculos de elenco apagados.
+Pessoas presentes apenas em punicoes ou sumulas ainda podem aparecer.
+Os registros antigos continuam disponiveis no backup e nos documentos imutaveis
+de recuperacao; nao se trata de apagamento fisico definitivo desses arquivos.
+
+A copia pronta do Banco e invalidada, nao reutilizada apos a limpeza. Se ocorrer
+falha parcial, preserve o backup e examine a Execucao; a rotina pode ser repetida.
+Nao restaure checkpoints isoladamente: isso pode reativar journals antigos.
+Nenhuma rotina de limpeza e executada automaticamente ou na publicacao.
+
 ### Elencos particionados: etapa inativa
 
 **A integração funcional está implementada atrás de um gate, mas o cutover
@@ -190,6 +223,15 @@ para autorizar o cutover.
 O fingerprint `assinaturaFontesElencoParticionado_`, sob o gate ativo,
 consulta metadados Drive v3 vivos (ID, nome, pasta, versão e MD5) do manifesto
 e de cada partição publicada, além do nome canônico no registro global.
+Cada checkpoint usa `Drive.Files.list` filtrado pela pasta exata,
+`trashed = false` e somente pelos nomes exatos do manifesto/referências atuais.
+Consultas são divididas em lotes de até 100 nomes/7.000 caracteres e consomem
+todas as páginas; não enumeram snapshots, journals nem versões históricas.
+Nomes duplicados, busca incompleta e fontes ausentes/divergentes são rejeitados.
+O ID do manifesto listado deve corresponder ao arquivo lido, e seu MD5 aos
+bytes interpretados, evitando associar um manifesto antigo a metadados novos.
+Sem `Files.list` disponível, a validação falha explicitamente, sem fallback
+silencioso. Os documentos, schemas e fingerprints permanecem inalterados.
 Não baixa todos os blobs para verificar as fontes. Antes de publicar, o gravador
 revalida todas essas fontes, inclusive partições não alteradas. A
 transferência também compara o fingerprint entre sua leitura e o início
@@ -205,14 +247,27 @@ V1 são automaticamente recusados. Atletas/comissão usam fingerprints vivos
 com identidade da pasta/manifesto, todas as partições publicadas, tipo,
 estado e nomes canônicos; ausência, corrupção, remoção ou edição externa
 impedem o reaproveitamento do índice anterior. A tabela mantém versão/MD5
-do Drive. A consulta V2 não reutiliza verificações de um índice em memória,
-mesmo sob lock. CRUD lê os registros apenas da equipe selecionada; a
+do Drive. A validação inicial compartilha um checkpoint explícito somente
+na fase sem escrita da operação sob lock: guardas de categorias usam a mesma
+varredura e a preparação da resposta reutiliza o baseline da equipe já lido.
+Não há fingerprint/permissão persistente nem cache válido por todo o pedido.
+O início da gravação estabelece outra fronteira fresca. CRUD lê os registros apenas da equipe selecionada; a
 transferência lê origem e destino. Antes da publicação, os metadados de todas
 as referências são revalidados para detectar alterações externas.
 O índice fica dirty durante a mutação; após o manifesto, uma base V2 limpa
 permite atualizar CPF, nomes e IDs por deltas das listas anterior/nova,
 sem reler os elencos completos. Sem base confiável ou após falha, as guardas
 usam fontes completas ao vivo até o reconciliador manual/agendado reconstruí-lo.
+O gravador entrega seu bundle poscommit verificado diretamente à aplicação
+dos deltas, sem repetir essa varredura. Após confirmar os chunks e imediatamente
+antes de publicar o índice limpo, uma nova validação resolve todas as fontes,
+nomes canônicos e associações vivas (registro, campeonato, equipes ativas e
+vínculos). A tabela deve continuar igual à base antiga do índice; qualquer
+divergência deixa o índice dirty, sem desfazer o elenco já confirmado.
+As métricas `elenco_indice_baseline`, `elenco_indice_delta`,
+`elenco_indice_publicacao` e `elenco_indice_confirmacao_fontes` detalham esse
+trabalho, sem dados pessoais. Contagens locais e limites estão no
+[guia de performance](sistema-interno/performance/README.md); não são tempos Google.
 
 Superfícies integradas, **somente sob o gate ativo**:
 
@@ -228,10 +283,13 @@ Superfícies integradas, **somente sob o gate ativo**:
 | Remoção do campeonato | Exclusão lógica do registro listado, tombstone durável e fila antes da alteração. O worker fecha a presença das inscrições quando o campeonato removido tem tombstone válido. Pasta nova, versões/journals, propriedades antigas, arquivos legados e jogos/tabela são preservados; apenas o namespace do índice removido é limpo. |
 
 **Limite desta etapa:** fingerprints e confirmações ainda consultam metadados
-de todas as partições; o custo permanece proporcional ao número de referências,
+de todas as partições; chamadas remotas por checkpoint são proporcionais aos
+lotes/páginas, e os bytes/processamento ao número de referências atuais,
 embora não baixe os registros das equipes não afetadas com índice confiável.
 Fallback dirty e reconstrução do índice leem as fontes completas. Não há
 promessa de custo constante nem de latência específica nos serviços Google.
+A meta de menos de 12 segundos é uma aspiração a medir após eventual
+publicação autorizada; os testes locais não simulam latência real.
 Snapshots V2 eliminam as cópias integrais de dados, mas ainda contêm metadados
 de todas as referências. O catálogo de campeonatos e os checkpoints usam
 Script Properties e continuam sujeitos às quotas. Não há limpeza/compactação

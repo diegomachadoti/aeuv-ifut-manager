@@ -9905,8 +9905,11 @@
         + escapar(ata ? ata.local : '') + '"></div>'
         + '<div class="campo cheio"><label for="ataParticipantes">Participantes</label><textarea id="ataParticipantes" maxlength="5000" style="min-height:70px;">'
         + escapar(ata ? ata.participantes : '') + '</textarea></div>'
-        + '<div class="campo cheio"><label for="ataTexto">Texto da ata *</label><textarea id="ataTexto" maxlength="40000" required>'
-        + escapar(ata ? ata.texto : '') + '</textarea></div>'
+        + '<div class="campo cheio"><label for="ataTexto">Texto da ata *</label><textarea id="ataTexto" maxlength="40000" required aria-describedby="ataFormatacao">'
+        + escapar(ata ? ata.texto : '') + '</textarea>'
+        + '<div class="apoio" id="ataFormatacao">Formatação no PDF: comece a linha com <code>* Título</code> para uma faixa azul-escura, '
+        + '<code>&gt; Subtítulo</code> para uma faixa azul-clara ou <code>- Item</code> para um tópico. '
+        + 'Use <code>**palavras**</code> para negrito azul (branco nas faixas escuras).</div></div>'
         + '</div><div class="acoes-formulario">'
         + (somenteLeitura ? '' : '<button type="submit" class="botao-principal" id="salvarAta">Salvar ata</button>')
         + (ata ? '<button type="button" class="botao-apoio" id="exportarAtaEditor">Exportar PDF</button>' : '')

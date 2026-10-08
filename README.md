@@ -46,6 +46,7 @@ Formato e pendências estão no
 - `nota_pdf.py`: PDF da nota oficial com a identidade da AEUV (`--gerar-pdf-nota`)
 - `regulamento_pdf.py`: PDF do regulamento no mesmo layout, assinado pelo Presidente (`--gerar-pdf-regulamento`)
 - `forma_disputa_pdf.py`: PDF da Forma de Disputa com tabelas de fases, rodadas e auditoria (`--gerar-pdf-forma-disputa`)
+- `oficio_pdf.py`: modelo TXT editável, PDF de requerimento à Futel e checklist de pendências (`--criar-modelo-oficio`, `--gerar-pdf-oficio`)
 - `financeiro_pdf.py`: PDF oficial de Prestação de Contas e Relatório Financeiro nos padrões AEUV e emendas impositivas (`--gerar-pdf-financeiro`)
 - `financeiro_planilha.py`: lê os lançamentos da planilha `AEUV - Financeiro` (aba `Movimentacoes`) no Drive, alimentada pelo módulo Financeiro do sistema interno. Exemplos: `python main.py --gerar-pdf-financeiro geral`, `... competicao --origem "SUPER LIGA UNIÃO"`, `... emenda --emenda "Emenda 042/2026"`, com `--periodo 3m|6m|anual` ou `--data-inicio/--data-fim` opcionais
 - `controle_punicoes.py`: TXT e PDF de controle com todos os punidos pelas notas oficiais (`--atualizar-controle-punicoes`)
@@ -1174,3 +1175,33 @@ você precisa copiar à mão.
 
 > **Não renomeie as pastas do Drive**: tanto o Python quanto o Apps Script as
 > localizam pelo nome exato.
+
+## Ofício / requerimento de autorização à Futel
+
+Modelo baseado nas exigências de `oficio-requerimento/Futel.EspaçoPublico.doc`,
+com a identidade AEUV e os dados iniciais da 7ª Super Liga União 2026.
+O fluxo é local: não publica documentos pessoais nem protocola o pedido.
+
+Na raiz do projeto, em PowerShell:
+
+```powershell
+python main.py --criar-modelo-oficio "oficio-requerimento/oficio-futel-001-2026.txt"
+python main.py --gerar-pdf-oficio "oficio-requerimento/oficio-futel-001-2026.txt"
+```
+
+O TXT pode ser editado e o segundo comando executado novamente para atualizar
+o PDF. Um arquivo `.pendencias.txt` informa dados faltantes, links provisórios,
+documentação posterior e cuidados com o prazo e o protocolo. O PDF sai sempre
+como **versão final, sem marca de rascunho e com a assinatura do Presidente**,
+mesmo com pendências de preenchimento. Revise o checklist antes de protocolar.
+Logo e imagem da assinatura devem estar disponíveis; datas e formato inválidos
+continuam sendo recusados.
+
+Os anexos usam tabelas alinhadas à esquerda, com links curtos clicáveis
+“Abrir documento” / “Abrir pasta”, sem exibir URLs longas. Os links provisórios
+ficam como “A disponibilizar”, mantendo o endereço editável no TXT.
+
+A opção `--oficio-final` é desnecessária e continua aceita por compatibilidade. Veja o
+[guia do ofício Futel](oficio-requerimento/README.md) para o formato do TXT,
+exigências por fase e informações ainda necessárias. Os links do Drive não são
+validados remotamente nem substituem automaticamente a entrega de cópias.

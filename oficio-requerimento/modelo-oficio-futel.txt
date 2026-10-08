@@ -1,0 +1,113 @@
+# MODELO EDITÁVEL — OFÍCIO/REQUERIMENTO À FUTEL — AEUV
+# Formato: [seção] e campo = valor. Não altere os nomes dos campos.
+# Para continuar um parágrafo em outra linha, coloque espaços no início dela.
+# Edite uma CÓPIA deste arquivo para cada novo ofício.
+# Datas DD/MM/AAAA. Dados não confirmados ficam como [PENDENTE: descrição].
+# Substitua SUBSTITUIR_ID_* pelo ID real dos arquivos/pastas no Google Drive.
+# Acesso aos documentos pessoais: restrito aos destinatários autorizados.
+# O gerador não envia documentos, não muda permissões e não protocola o pedido.
+
+[oficio]
+numero = 001/2026
+data = 09/10/2026
+destinatario = FUTEL — Fundação Uberlandense do Turismo, Esporte e Lazer — Uberlândia/MG
+assunto = Autorização de uso dos campos de futebol dos poliesportivos municipais para a 7ª Super Liga União 2026
+pedido = A associação acima identificada, por seu Presidente, requer a autorização de uso dos campos de futebol dos poliesportivos municipais para a realização de partidas da competição descrita neste expediente, no período de uso solicitado e conforme o cronograma abaixo, com definição semanal dos locais pela Futel.
+alinhamento_previo = Conforme alinhamento em reunião prévia com a Futel sobre a disponibilidade e liberação dos espaços, apresentamos este requerimento para protocolo e formalização da autorização, observadas a análise documental e as condições estabelecidas pelo órgão.
+
+[requerente]
+razao_social = AEUV (Associação Esportiva Uberlandense Varzeana)
+cnpj = 67.645.389/0001-01
+endereco = [PENDENTE: endereço completo da associação, bairro, CEP, cidade e UF]
+# Telefone e e-mail obtidos no site público https://www.aeuv.org/.
+telefone = (34) 99670-5509
+email = associacaoaeuv@gmail.com
+contato = [PENDENTE: nome do responsável pelo protocolo e contato com a Futel]
+representante = Iure Costtiti
+cargo = Presidente
+cidade = Uberlândia/MG
+
+[evento]
+denominacao = 7ª Super Liga União 2026
+finalidade = Incentivar a prática esportiva como instrumento de qualidade de vida, bem-estar e desenvolvimento pessoal; fortalecer o futebol varzeano de Uberlândia; apoiar atletas e equipes; e promover a integração comunitária e a inclusão social por meio de uma competição organizada e acessível ao público, em consonância com os objetivos institucionais da AEUV.
+modalidade = Futebol de campo
+caracteristicas = Campeonato de futebol varzeano organizado pela AEUV, com 20 equipes distribuídas em quatro grupos de cinco. A primeira fase compreende cinco rodadas de confrontos cruzados entre os grupos A e C e entre os grupos B e D, totalizando 50 partidas. As 16 equipes mais bem classificadas seguem para oitavas de final, quartas de final, semifinais, disputa de terceiro lugar e final, em partidas únicas, conforme regulamento e forma de disputa V3. Os jogos são distribuídos entre os campos previstos na tabela; os poliesportivos municipais serão utilizados a partir de 01/11/2026, com indicação semanal dos locais pela Futel.
+publico = Até 1.000 pessoas, distribuídas entre os jogos, sem concentração prevista de todo esse público em um único campo.
+inicio_competicao = 25/10/2026
+inicio_uso = 01/11/2026
+fim_uso = 20/12/2026
+locais = Campos de futebol dos poliesportivos municipais de Uberlândia, a serem definidos semanalmente pela própria Futel, conforme disponibilidade. Não se solicita uso dos poliesportivos em 25/10/2026.
+montagem = Não haverá montagem de equipamentos, estruturas ou acessórios extras em cada evento. Será utilizada a estrutura existente nos campos disponibilizados pela Futel, nos horários programados para as partidas.
+desmontagem = Não haverá desmontagem de estruturas ou equipamentos extras. A utilização dos espaços se restringirá às partidas programadas e às condições de liberação estabelecidas pela Futel.
+ingressos = Não haverá cobrança de ingresso. Acesso gratuito ao público, sem setores pagos, áreas VIP ou camarotes comercializados.
+
+# Cronograma de uso dos poliesportivos, extraído da forma de disputa V3.
+# Formato: data = fase | horário de início | quantidade de jogos | local.
+# 25/10 não entra: nessa data ainda não haverá uso dos poliesportivos.
+# Em 20/12 a V3 prevê os jogos com campo A Definir; não representa reserva.
+[cronograma]
+01/11/2026 = 2ª rodada — fase de grupos | 15:00 | 5 | Poliesportivos definidos semanalmente pela Futel
+08/11/2026 = 3ª rodada — fase de grupos | 15:00 | 5 | Poliesportivos definidos semanalmente pela Futel
+15/11/2026 = 4ª rodada — fase de grupos | 15:00 | 5 | Poliesportivos definidos semanalmente pela Futel
+22/11/2026 = 5ª rodada — fase de grupos | 15:00 | 5 | Poliesportivos definidos semanalmente pela Futel
+29/11/2026 = Oitavas de final | 15:00 | 5 | Poliesportivos definidos semanalmente pela Futel
+06/12/2026 = Quartas de final | 15:00 | 4 | Poliesportivos definidos semanalmente pela Futel
+13/12/2026 = Semifinais | 15:00 | 2 | Poliesportivos definidos semanalmente pela Futel
+20/12/2026 = 3º lugar e final | 08:00 / 10:00 | 2 | Locais a confirmar com a Futel, conforme tabela V3
+
+# Condições usadas apenas para selecionar os anexos aplicáveis.
+# Não haverá texto sobre música ou alimentos no PDF quando a resposta for nao.
+# O Presidente assina diretamente: não há representação por procuração neste modelo.
+[condicoes]
+musica = nao
+venda_alimentos = nao
+criancas_adolescentes = [PENDENTE: haverá entrada de crianças e adolescentes? responder sim ou nao]
+procuracao = nao
+
+# Anexos para o requerimento e elaboração do termo (itens 1.7, 1.9 e 2.2).
+# Estatuto e ata de eleição substituem a referência a contrato social para associação.
+# Reportagens/folders: o Instagram é divulgação complementar, não substitui cópias.
+# Se um documento não existir, confirmar com a Futel o tratamento antes de finalizar.
+[anexos]
+cnpj = https://drive.google.com/file/d/SUBSTITUIR_ID_CNPJ/view
+estatuto = https://drive.google.com/file/d/SUBSTITUIR_ID_ESTATUTO/view
+ata_eleicao = https://drive.google.com/file/d/SUBSTITUIR_ID_ATA_ELEICAO/view
+documento_foto = https://drive.google.com/file/d/SUBSTITUIR_ID_RG_PRESIDENTE/view
+cpf_dirigente = https://drive.google.com/file/d/SUBSTITUIR_ID_CPF_PRESIDENTE/view
+endereco_dirigente = https://drive.google.com/file/d/SUBSTITUIR_ID_ENDERECO_PRESIDENTE/view
+cnd_federal = https://drive.google.com/file/d/SUBSTITUIR_ID_CND_FEDERAL/view
+cnd_estadual = https://drive.google.com/file/d/SUBSTITUIR_ID_CND_ESTADUAL/view
+cnd_municipal_entidade = https://drive.google.com/file/d/SUBSTITUIR_ID_CND_MUNICIPAL_AEUV/view
+cnd_municipal_dirigente = https://drive.google.com/file/d/SUBSTITUIR_ID_CND_MUNICIPAL_PRESIDENTE/view
+fgts = https://drive.google.com/file/d/SUBSTITUIR_ID_CRF_FGTS/view
+cndt = https://drive.google.com/file/d/SUBSTITUIR_ID_CNDT/view
+regulamento = https://drive.google.com/file/d/SUBSTITUIR_ID_REGULAMENTO/view
+folders = https://drive.google.com/drive/folders/SUBSTITUIR_ID_DIVULGACAO
+reportagens = https://drive.google.com/drive/folders/SUBSTITUIR_ID_REPORTAGENS
+procuracao = https://drive.google.com/file/d/SUBSTITUIR_ID_PROCURACAO/view
+
+# Os itens 2.3.1 e 2.3.2 podem ser apresentados após o evento (2.3.3.1).
+# Os links provisórios nesta seção não impedem a geração final do requerimento.
+[posteriores]
+inscricoes = https://drive.google.com/drive/folders/SUBSTITUIR_ID_INSCRICOES
+tabela_jogos = https://drive.google.com/file/d/SUBSTITUIR_ID_FORMA_DISPUTA_V3/view
+sumulas = https://drive.google.com/drive/folders/SUBSTITUIR_ID_SUMULAS
+pontuacao = https://drive.google.com/file/d/SUBSTITUIR_ID_CLASSIFICACAO/view
+resultados = https://drive.google.com/file/d/SUBSTITUIR_ID_RESULTADOS_FINAIS/view
+reportagens_finais = https://drive.google.com/drive/folders/SUBSTITUIR_ID_REPORTAGENS_FINAIS
+
+# Licenças após assinatura do termo (item 3): não são declaradas emitidas.
+# ECAD e alvará sanitário são omitidos do PDF pelas condições acima.
+[licencas]
+alvara_evento = [PENDENTE APÓS TERMO: providenciar alvará de licença para realização de eventos — Secretaria Municipal de Finanças]
+ecad = [NÃO APLICÁVEL: sem execução musical]
+alvara_infancia = [PENDENTE APÓS TERMO: confirmar entrada de menores e exigência do alvará com a Futel/TJMG]
+alvara_sanitario = [NÃO APLICÁVEL: sem venda de alimentos]
+
+# Referências locais e públicas para revisão. Não são anexos automaticamente enviados.
+[fontes]
+exigencias = oficio-requerimento/Futel.EspaçoPublico.doc
+regulamento = regulamento/regulamento-7-super-liga-união-2026
+forma_disputa = formadisputa/forma-disputa-7-super-liga-união-2026-5-rodadasV3
+site = https://www.aeuv.org/
+instagram = https://www.instagram.com/aeuv.varzea/

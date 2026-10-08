@@ -1597,6 +1597,19 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Gera o PDF da Forma de Disputa (layout AEUV com tabelas formatadas e assinatura) a partir do arquivo "
              "texto/markdown na pasta formadisputa (ex.: forma-disputa-7-super-liga-união-2026-3-rodadas)",
     )
+    oficio = parser.add_mutually_exclusive_group()
+    oficio.add_argument(
+        "--criar-modelo-oficio", metavar="TXT",
+        help="Cria uma cópia editável do modelo de requerimento à Futel, sem sobrescrever um TXT existente",
+    )
+    oficio.add_argument(
+        "--gerar-pdf-oficio", metavar="TXT",
+        help="Gera o PDF AEUV do requerimento à Futel e relatório de pendências a partir do TXT editável",
+    )
+    parser.add_argument(
+        "--oficio-final", action="store_true",
+        help="Compatibilidade com comandos antigos: o PDF de ofício já é sempre final e assinado",
+    )
     parser.add_argument(
         "--gerar-pdf-financeiro",
         metavar="TIPO_OU_JSON",
@@ -1647,7 +1660,26 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     write_default_config()
-    args = build_argument_parser().parse_args()
+    parser = build_argument_parser()
+    args = parser.parse_args()
+    if args.oficio_final and not args.gerar_pdf_oficio:
+        parser.error("--oficio-final exige --gerar-pdf-oficio")
+    if args.criar_modelo_oficio or args.gerar_pdf_oficio:
+        from nota_pdf import ConfigPdf
+        from oficio_pdf import criar_modelo_oficio, gerar_pdf_oficio
+
+        logger = configure_logging(DEFAULT_LOG_PATH)
+        try:
+            if args.criar_modelo_oficio:
+                modelo = criar_modelo_oficio(args.criar_modelo_oficio)
+                logger.info("[OFICIO] Modelo editável criado em %s", modelo)
+            else:
+                gerar_pdf_oficio(args.gerar_pdf_oficio, ConfigPdf.carregar(Path(args.config)),
+                                 logger=logger, exigir_final=args.oficio_final)
+        except (ValueError, OSError) as exc:
+            logger.error("[OFICIO] %s", exc)
+            return 1
+        return 0
     if args.publicar_drive:
         import publicacao_drive
 

@@ -29,8 +29,14 @@ function fixture(active = false) {
     .update(text, 'utf8').digest()];
   h.counts.metadata = 0;
   h.counts.indexChunkWrites = 0;
-  h.c.Drive = { Files: { get(id, options) {
+  h.state.metadataVersion = key => versions.get(key) || 1;
+  const list = h.c.Drive.Files.list;
+  h.c.Drive = { Files: { list(options) {
     h.counts.metadata++;
+    return list(options);
+  }, get(id, options) {
+    h.counts.metadata++;
+    h.counts.metadataGet++;
     assert.equal(options.fields, 'id,name,trashed,parents,version,md5Checksum');
     if (h.state.failMetadata) throw Error('sensitive metadata error 52998224725');
     const meta = h.meta.get(id);
@@ -120,12 +126,346 @@ function fixture(active = false) {
 
 const activeSeed = (h, tipo, registros, id = 'c1') => h.withLock(() => h.c.gravarParticoesElenco_(id,
   h.c.prepararParticoesElencoPorNome_(registros).map(group => ({ ...group, tipo }))));
+
+test('active checkpoint resolves each published source once regardless of category repeats', () => {
+  const h = fixture(true);
+  activeSeed(h, 'atletas', [person('atletas')]);
+  activeSeed(h, 'comissao', [person('comissao')]);
+  h.build();
+  h.withLock(() => {
+    h.io.length = 0;
+    const before = h.counts.metadata;
+    const checkpoint = h.c.checkpointElencoParticionado_('c1');
+    const initial = h.c.versoesFontesIndiceValidacao_('c1', null, [0, 1], checkpoint);
+    for (let i = 0; i < 12; i++) {
+      assert.deepEqual(clone(h.c.versoesFontesIndiceValidacao_('c1', null, [0, 1], checkpoint)), clone(initial));
+      assert(h.c.consultarIndiceValidacao_('c1', null, 'atletas', checkpoint));
+      assert(h.c.consultarIndiceValidacao_('c1', null, 'comissao', checkpoint));
+    }
+    assert.equal(h.counts.metadata - before, 1, 'one list for both partitions + manifest, not per category/call');
+    assert.equal(h.io.filter(item => item.operacao === 'lookup').length, 1);
+    h.c.iniciarMutacaoIndiceParticionado_('c1', null, checkpoint);
+    assert.equal(h.c.consultarIndiceValidacao_('c1', null, 'atletas', checkpoint), null,
+      'marking the index dirty discards verified checkpoint state');
+  });
+  h.build();
+  const target = activePath(h, 'atletas');
+  h.files.set(target, JSON.stringify([person('atletas', { cpf: '12345678909' })]));
+  assert.equal(h.index(), null, 'the next boundary never trusts a previous verified bundle');
+});
+
+for (const partitions of [2, 4]) test(`active warm edit bounds Drive calls with ${partitions} published partitions`, () => {
+  const h = fixture(true);
+  for (const tipo of ['atletas', 'comissao']) {
+    const records = [person(tipo)];
+    if (partitions === 4) records.push(person(tipo, {
+      id: tipo + '-other', nome: 'Other ' + tipo, timeVinculado: 'Equipe B', cpf: '24681357928'
+    }));
+    activeSeed(h, tipo, records);
+  }
+  h.build();
+  h.io.length = 0;
+  const before = h.counts.metadata;
+  const beforeGet = h.counts.metadataGet, beforeList = h.counts.metadataList;
+  h.c.salvarCadastroElenco({ ...h.payload('atletas', true), foto: 'updated' });
+  assert.equal(h.meta().dirty, false);
+  // Before batching: 5 * partitions + 6 gets, 5 * partitions + 16 name lookups.
+  // Five independent source boundaries, not fixture wall-clock estimates.
+  assert(h.counts.metadata - before <= 6, 'metadata calls: ' + (h.counts.metadata - before));
+  assert.equal(h.counts.metadataList - beforeList, 5, 'five fresh checkpoint lists');
+  assert.equal(h.counts.metadataGet - beforeGet, 1, 'one-off new partition metadata for the journal');
+  const lookups = h.io.filter(item => item.operacao === 'lookup').length;
+  assert.equal(lookups, 16);
+  assert.equal(h.io.filter(item => item.operacao === 'read').length, 13);
+  const phases = new Set(h.logs.filter(item => item.metrica === 'cadastro_elenco').map(item => item.fase));
+  for (const phase of ['elenco_metadados_preparacao', 'elenco_indice_base', 'elenco_preparacao_particoes',
+    'elenco_ids_publicacao', 'elenco_snapshot', 'elenco_particoes', 'elenco_journal',
+    'elenco_precommit', 'elenco_commit', 'elenco_poscommit', 'elenco_indice_incremental',
+    'elenco_indice_baseline', 'elenco_indice_delta', 'elenco_indice_publicacao',
+    'elenco_indice_confirmacao_fontes']) {
+    assert(phases.has(phase), phase);
+  }
+});
+
+test('active selected team link never builds the discarded aggregate response or scans another championship', () => {
+  const h = fixture(true);
+  h.state.times = { c1: ['Equipe A'], c2: ['Equipe A'] };
+  const times = h.c.timesCampeonato_;
+  h.c.timesCampeonato_ = id => {
+    const persisted = h.properties.get(h.c.chaveTimesCampeonato_(id));
+    return persisted ? JSON.parse(persisted) : times(id);
+  };
+  const aggregate = h.c.listarTimesCampeonato;
+  h.c.listarTimesCampeonato = () => { throw Error('discarded aggregate response'); };
+  const response = h.c.vincularEquipeParticipante({ campeonatoId: 'c1', equipeId: 'e2' });
+  h.c.listarTimesCampeonato = aggregate;
+  assert.equal(response.registros.length, 1);
+  assert.equal(response.registros[0].campeonatoId, 'c1');
+  assert.equal(response.registros[0].times.length, 2);
+  assert(!h.io.some(item => String(item.name || '').includes(h.c.nomePastaElencosParticionados_('c2'))));
+  assert(!h.io.some(item => item.name === historyFile));
+  assert.equal([...h.files.keys()].filter(name => name.includes('\\pendencia - ')).length, 1);
+});
+
+test('active warm transfer bounds metadata/name calls while publishing both teams atomically', () => {
+  const h = fixture(true);
+  activeSeed(h, 'atletas', [person('atletas')]);
+  activeSeed(h, 'comissao', [person('comissao')]);
+  h.build();
+  h.io.length = 0;
+  const before = h.counts.metadata;
+  const beforeGet = h.counts.metadataGet, beforeList = h.counts.metadataList;
+  h.c.transferirAtletaElenco({
+    campeonatoId: 'c1', equipeId: 'e1', registroId: 'athlete', equipeDestinoId: 'e2'
+  });
+  assert(h.counts.metadata - before <= 7);
+  assert.equal(h.counts.metadataList - beforeList, 5);
+  assert.equal(h.counts.metadataGet - beforeGet, 2, 'both newly published partitions');
+  assert.equal(h.io.filter(item => item.operacao === 'lookup').length, 18);
+  assert.equal(h.io.filter(item => item.operacao === 'read').length, 14);
+  const published = clone(h.c.lerElencoParticionado_('c1', 'atletas'));
+  assert.equal(published.length, 1);
+  assert.equal(published[0].timeVinculado, 'Equipe B');
+  assert.equal(h.meta().dirty, false);
+});
+
 const activePath = (h, tipo = 'comissao', equipeId) => {
   const folder = h.c.nomePastaElencosParticionados_('c1');
   const manifest = JSON.parse(h.files.get(folder + '\\manifesto.json'));
   return folder + '\\' + manifest.particoes.find(item => item.tipo === tipo
     && (!equipeId || item.equipeId === equipeId)).arquivo;
 };
+
+for (const race of ['partition', 'manifest']) {
+  test(`active final index validation rejects ${race} changes during the metadata list itself`, () => {
+    const h = fixture(true);
+    activeSeed(h, 'atletas', [person('atletas')]);
+    activeSeed(h, 'comissao', [person('comissao')]);
+    h.build();
+    const target = activePath(h), manifest = h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json';
+    let raced = false;
+    h.state.onIndexChunkWrite = () => {
+      h.state.onMetadata = name => {
+        if (name !== (race === 'manifest' ? 'manifesto.json' : target.split('\\').pop())) return;
+        h.state.onMetadata = null;
+        raced = true;
+        if (race === 'partition') h.files.set(target, JSON.stringify([person('comissao', { foto: 'external' })]));
+        else {
+          const doc = JSON.parse(h.files.get(manifest));
+          doc.revisao = 'external-during-list';
+          h.files.set(manifest, JSON.stringify(doc));
+        }
+      };
+    };
+    h.c.salvarCadastroElenco({ ...h.payload('atletas', true), cpf: '12345678909', foto: 'committed' });
+    assert(raced, 'onMetadata must run inside listing, not only get mocks');
+    assert.equal(h.meta().dirty, true);
+    assert.equal(JSON.parse(h.files.get(activePath(h, 'atletas')))[0].foto, 'committed',
+      'index failure does not roll back the committed roster');
+  });
+}
+
+for (const operation of ['add', 'remove', 'listing', 'link']) {
+  test(`active ${operation} keeps measured remote-call bounds with a warm two-partition base`, () => {
+    const h = fixture(true);
+    activeSeed(h, 'atletas', [person('atletas')]);
+    activeSeed(h, 'comissao', [person('comissao')]);
+    h.build();
+    h.io.length = 0;
+    const before = h.counts.metadata;
+    const beforeGet = h.counts.metadataGet, beforeList = h.counts.metadataList;
+    if (operation === 'add') h.c.salvarCadastroElenco({
+      ...h.payload('atletas'), nome: 'Outra Pessoa', cpf: '12345678909'
+    });
+    if (operation === 'remove') h.c.removerCadastroElenco(h.payload('atletas', true));
+    if (operation === 'listing') h.c.listarElenco('c1', 'e1');
+    if (operation === 'link') {
+      h.state.times = { c1: ['Equipe A'], c2: ['Equipe A'] };
+      h.c.vincularEquipeParticipante({ campeonatoId: 'c1', equipeId: 'e2' });
+    }
+    const bounds = { add: [6, 16, 13], remove: [6, 16, 13],
+      listing: [2, 5, 4], link: [3, 8, 7] }[operation];
+    assert(h.counts.metadata - before <= bounds[0], 'metadata calls');
+    assert.equal(h.counts.metadataList - beforeList, { add: 5, remove: 5, listing: 2, link: 3 }[operation]);
+    assert.equal(h.counts.metadataGet - beforeGet, ['add', 'remove'].includes(operation) ? 1 : 0);
+    assert.equal(h.io.filter(item => item.operacao === 'lookup').length, bounds[1], 'name lookups');
+    assert.equal(h.io.filter(item => item.operacao === 'read').length, bounds[2], 'blob reads');
+  });
+}
+
+test('active commission add/edit/remove use the same five fresh batch checkpoints as athletes', () => {
+  for (const operation of ['add', 'edit', 'remove']) {
+    const h = fixture(true);
+    activeSeed(h, 'atletas', [person('atletas')]);
+    activeSeed(h, 'comissao', [person('comissao')]);
+    h.build();
+    h.io.length = 0;
+    const beforeGet = h.counts.metadataGet, beforeList = h.counts.metadataList;
+    if (operation === 'add') h.c.salvarCadastroElenco({
+      ...h.payload('comissao'), nome: 'Outra Pessoa', cpf: '12345678909'
+    });
+    if (operation === 'edit') h.c.salvarCadastroElenco({ ...h.payload('comissao', true), foto: 'updated' });
+    if (operation === 'remove') h.c.removerCadastroElenco(h.payload('comissao', true));
+    assert.equal(h.counts.metadataList - beforeList, 5);
+    assert.equal(h.counts.metadataGet - beforeGet, 1);
+    assert.equal(h.io.filter(item => item.operacao === 'lookup').length, 16);
+    assert.equal(h.meta().dirty, false);
+  }
+});
+
+test('history response preparation reuses the validated target baseline but the writer rechecks it', () => {
+  const h = fixture(true);
+  activeSeed(h, 'atletas', [person('atletas')]);
+  activeSeed(h, 'comissao', [person('comissao')]);
+  h.build();
+  const prepare = h.c.prepararHistoricoElenco_;
+  const manifestPath = h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json';
+  const manifestBefore = h.files.get(manifestPath), target = activePath(h, 'atletas');
+  h.c.prepararHistoricoElenco_ = (cache, resources, ...args) => {
+    const baseline = resources.particoesElencos[JSON.stringify(['atletas', 'e1'])];
+    const reads = h.io.filter(item => item.operacao === 'read' && item.name === target).length;
+    const result = prepare(cache, resources, ...args);
+    assert.equal(cache.c1.atletas, baseline, 'stored baseline is reused, not reread');
+    assert.equal(h.io.filter(item => item.operacao === 'read' && item.name === target).length, reads);
+    h.files.set(target, JSON.stringify([person('atletas', { foto: 'external-validation-edit' })]));
+    return result;
+  };
+  assert.throws(() => h.c.salvarCadastroElenco({
+    ...h.payload('atletas', true), foto: 'requested-photo'
+  }), /fonte.*mudou/i);
+  assert.equal(h.files.get(manifestPath), manifestBefore);
+  assert.equal(JSON.parse(h.files.get(target))[0].foto, 'external-validation-edit');
+});
+
+for (const boundary of ['postcommit', 'chunks']) {
+  for (const change of ['partition-edit', 'partition-delete', 'partition-rename', 'manifest-edit',
+    'registry-name', 'championship-name', 'links', 'active-team', 'table-edit', 'table-create']) {
+    test(`active clean index rejects ${change} after ${boundary}, retaining the committed roster`, () => {
+      const h = fixture(true);
+      h.useRealContextFiles();
+      activeSeed(h, 'atletas', [person('atletas'), person('atletas', {
+        id: 'other', nome: 'Pessoa da Equipe B', timeVinculado: 'Equipe B', cpf: '12345678909'
+      })]);
+      activeSeed(h, 'comissao', [person('comissao')]);
+      if (change !== 'table-create') h.games([]);
+      h.build();
+      const unrelated = activePath(h, 'atletas', 'e2');
+      const manifestPath = h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json';
+      let changed = false, committedTarget;
+      const tamper = () => {
+        if (changed) return;
+        changed = true;
+        committedTarget = activePath(h, 'atletas', 'e1');
+        if (change === 'partition-edit') h.files.set(unrelated, JSON.stringify([person('atletas', {
+          id: 'other', nome: 'Externo', timeVinculado: 'Equipe B', cpf: '24681357928'
+        })]));
+        if (change === 'partition-delete') h.drive.trash(unrelated);
+        if (change === 'partition-rename') h.drive.rename(unrelated, unrelated + '.renamed');
+        if (change === 'manifest-edit') {
+          const doc = JSON.parse(h.files.get(manifestPath)); doc.revisao = 'external';
+          h.files.set(manifestPath, JSON.stringify(doc));
+        }
+        if (change === 'registry-name') {
+          const teams = JSON.parse(h.files.get(h.registryFile)); teams[1].nome = 'Equipe Renomeada';
+          h.files.set(h.registryFile, JSON.stringify(teams));
+        }
+        if (change === 'championship-name') {
+          const championships = JSON.parse(h.files.get('AEUV - Campeonatos.json'));
+          championships[0].nome = 'Campeonato Renomeado';
+          h.files.set('AEUV - Campeonatos.json', JSON.stringify(championships));
+        }
+        if (change === 'links') h.state.times = { ...h.state.times, c1: ['Equipe A'] };
+        if (change === 'active-team') h.state.equipesAtivas = ['Equipe B'];
+        if (change === 'table-edit' || change === 'table-create') h.games([h.game()]);
+      };
+      if (boundary === 'chunks') h.state.onIndexChunkWrite = tamper;
+      else {
+        const conclude = h.c.concluirMutacaoIndiceParticionado_;
+        h.c.concluirMutacaoIndiceParticionado_ = (...args) => { tamper(); return conclude(...args); };
+      }
+      h.c.salvarCadastroElenco({ ...h.payload('atletas', true), foto: 'committed-photo' });
+      assert(changed, 'race injection executed');
+      assert.equal(JSON.parse(h.files.get(committedTarget))[0].foto, 'committed-photo');
+      assert(h.meta().dirty, 'no clean publication of an untrusted delta');
+      assert.equal(h.index(), null);
+      assert([...h.files.keys()].some(name => name.includes('\\snapshot - ')));
+      assert([...h.files.keys()].some(name => name.includes('\\pendencia - ')));
+    });
+  }
+}
+
+test('active no-op edit retains a clean index without publishing a new roster revision', () => {
+  const h = fixture(true);
+  activeSeed(h, 'atletas', [person('atletas')]);
+  activeSeed(h, 'comissao', [person('comissao')]);
+  h.build();
+  h.c.salvarCadastroElenco(h.payload('atletas', true));
+  const path = h.c.nomePastaElencosParticionados_('c1') + '\\manifesto.json';
+  const before = h.files.get(path), chunks = h.counts.indexChunkWrites;
+  h.c.salvarCadastroElenco(h.payload('atletas', true));
+  assert.equal(h.files.get(path), before);
+  assert.equal(h.counts.indexChunkWrites, chunks);
+  assert.equal(h.meta().dirty, false);
+  assert(h.index());
+});
+
+test('active no-op edit rejects external source changes before clean index publication', () => {
+  const h = fixture(true);
+  activeSeed(h, 'atletas', [person('atletas')]);
+  activeSeed(h, 'comissao', [person('comissao')]);
+  h.build();
+  h.c.salvarCadastroElenco(h.payload('atletas', true));
+  const publish = h.c.publicarIndiceValidacao_;
+  let changed = false;
+  h.c.publicarIndiceValidacao_ = (...args) => {
+    changed = true;
+    h.files.set(activePath(h, 'comissao'), JSON.stringify([
+      person('comissao', { cpf: '12345678909' })
+    ]));
+    return publish(...args);
+  };
+  h.c.salvarCadastroElenco(h.payload('atletas', true));
+  assert(changed);
+  assert(h.meta().dirty);
+  assert.equal(h.index(), null);
+});
+
+test('active unchanged compact generation still freshly validates sources before reusing its chunks', () => {
+  const h = fixture(true);
+  activeSeed(h, 'atletas', [person('atletas')]);
+  activeSeed(h, 'comissao', [person('comissao')]);
+  h.build();
+  const chunks = h.counts.indexChunkWrites, publish = h.c.publicarIndiceValidacao_;
+  let changed = false;
+  h.c.publicarIndiceValidacao_ = (...args) => {
+    changed = true;
+    h.files.set(activePath(h, 'comissao'), JSON.stringify([
+      person('comissao', { cpf: '12345678909' })
+    ]));
+    return publish(...args);
+  };
+  h.c.salvarCadastroElenco({ ...h.payload('atletas', true), foto: 'committed-photo' });
+  assert(changed);
+  assert.equal(h.counts.indexChunkWrites, chunks, 'unchanged compact payload takes the reuse branch');
+  assert(h.meta().dirty);
+  assert.equal(h.index(), null);
+  assert.throws(() => h.c.validarCpfUnicoEntreCadastros_('c1', '12345678909', 'atleta', ''), /comissão técnica/);
+});
+
+test('active transfer final index validation checks the destination after both partitions committed', () => {
+  const h = fixture(true);
+  activeSeed(h, 'atletas', [person('atletas')]);
+  activeSeed(h, 'comissao', [person('comissao')]);
+  h.build();
+  h.state.onIndexChunkWrite = () => { h.state.equipesAtivas = ['Equipe A']; };
+  h.c.transferirAtletaElenco({
+    campeonatoId: 'c1', equipeId: 'e1', registroId: 'athlete', equipeDestinoId: 'e2'
+  });
+  assert(h.meta().dirty);
+  assert.equal(h.index(), null);
+  assert.equal(h.c.lerParticaoElenco_('c1', 'e1', 'atletas').length, 0);
+  assert.equal(h.c.lerParticaoElenco_('c1', 'e2', 'atletas')[0].id, 'athlete');
+});
 
 test('active V2 index reconciles both partition categories and retains Drive version checks for games', () => {
   const h = fixture(true);

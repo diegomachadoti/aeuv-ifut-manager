@@ -21,7 +21,7 @@ function harness(source = backend, opcoes = {}) {
   let triggerId = 0;
   const counts = {
     campeonatos: 0, equipes: 0, rosters: 0, history: 0, tables: 0, locks: 0,
-    sessoes: 0, bloqueios: 0, times: 0, registro: 0
+    sessoes: 0, bloqueios: 0, times: 0, registro: 0, metadataGet: 0, metadataList: 0
   };
   const writes = [], logs = [], reads = [], io = [], files = new Map(), properties = new Map();
   // Metadados Drive simulados: nome -> ID atual na pasta raiz e ID -> {nome, lixeira, pasta}.
@@ -86,6 +86,16 @@ function harness(source = backend, opcoes = {}) {
     }
   });
   const triggers = [];
+  const metadataSnapshot = id => {
+    const atual = meta.get(id);
+    if (!atual) throw new Error('metadata missing');
+    if (state.onMetadata) state.onMetadata(atual.name);
+    const key = atual.key || atual.name, contents = files.get(key);
+    return { id, name: atual.name, trashed: atual.trashed,
+      parents: [atual.parent === 'root' ? rootId : atual.parent],
+      version: state.metadataVersion ? String(state.metadataVersion(key)) : '1',
+      md5Checksum: contents === undefined ? '' : crypto.createHash('md5').update(contents, 'utf8').digest('hex') };
+  };
   const c = vm.createContext({
     Date: class extends Date {
       constructor(...args) { super(...(args.length ? args : ['2026-10-05T12:00:00.000Z'])); }
@@ -126,21 +136,47 @@ function harness(source = backend, opcoes = {}) {
       };
     } },
     Drive: { Files: { get(id, options) {
+      counts.metadataGet++;
       io.push({ operacao: 'metadata', id });
       if (options.fields !== 'id,name,trashed,parents,version,md5Checksum') {
         throw new Error('unexpected metadata fields');
       }
       if (state.failMetadata) throw new Error(state.failMetadata);
-      const atual = meta.get(id);
-      if (!atual) throw new Error('metadata missing');
-      const key = atual.key || atual.name;
-      const contents = files.get(key);
-      return {
-        id: id, name: atual.name, trashed: atual.trashed,
-        parents: [atual.parent === 'root' ? rootId : atual.parent],
-        version: '1',
-        md5Checksum: contents === undefined ? '' : crypto.createHash('md5').update(contents, 'utf8').digest('hex')
-      };
+      return metadataSnapshot(id);
+    }, list(options) {
+      counts.metadataList++;
+      const call = { operacao: 'metadataList', q: options.q, pageToken: options.pageToken };
+      io.push(call);
+      assert.equal(options.fields, 'nextPageToken,incompleteSearch,files(id,name,trashed,parents,version,md5Checksum)');
+      assert.equal(options.supportsAllDrives, true);
+      assert.equal(options.includeItemsFromAllDrives, true);
+      if (state.failMetadata || state.failMetadataList) throw Error('metadata list failure');
+      // Parse only the exact, bounded query grammar used by checkpoints; never enumerate history.
+      const literal = "'((?:\\\\.|[^'\\\\])*)'";
+      const match = options.q.match(new RegExp('^' + literal + ' in parents and trashed = false and \\((.*)\\)$'));
+      assert(match, 'unexpected list query: ' + options.q);
+      const unescape = value => value.replace(/\\([\\'])/g, '$1');
+      const parent = unescape(match[1]), names = [];
+      let remaining = match[2];
+      while (remaining) {
+        const term = remaining.match(new RegExp('^name = ' + literal + '(?: or |$)'));
+        assert(term, 'invalid exact name disjunction');
+        names.push(unescape(term[1]));
+        remaining = remaining.slice(term[0].length);
+      }
+      assert(names.length && names.length <= 100 && options.q.length <= 7000);
+      if (state.onMetadataList) state.onMetadataList(options);
+      const selected = [...meta].filter(([, item]) =>
+        files.has(item.key || item.name) && !item.trashed
+          && (item.parent === 'root' ? rootId : item.parent) === parent && names.includes(item.name));
+      const offset = Number(options.pageToken || 0), size = state.metadataPageSize || options.pageSize;
+      const page = selected.slice(offset, offset + size).map(([id]) => metadataSnapshot(id));
+      call.returnedNames = page.map(item => item.name);
+      const result = { files: page };
+      if (!state.omitIncompleteSearch) result.incompleteSearch = state.incompleteSearch || false;
+      if (offset + size < selected.length) result.nextPageToken = String(offset + size);
+      if (state.transformMetadataList) state.transformMetadataList(result, options);
+      return result;
     } } },
     ScriptApp: {
       EventType: { CLOCK: 'CLOCK' },

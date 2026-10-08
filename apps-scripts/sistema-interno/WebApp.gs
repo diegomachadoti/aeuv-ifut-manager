@@ -1390,9 +1390,11 @@ function lerElencoBrutoOperacao_(campeonatoId, tipo, recursos) {
   return brutos[chave];
 }
 
-function lerParticaoElencoOperacao_(campeonatoId, tipo, equipeId, recursos) {
-  const estado = lerEstadoElencosParticionados_(campeonatoId);
-  const assinatura = assinaturaEstadoElencoParticionado_(estado, null, recursos.equipes);
+function lerParticaoElencoOperacao_(campeonatoId, tipo, equipeId, recursos, checkpoint) {
+  checkpoint = checkpoint || recursos.checkpointsValidacaoElenco
+    && recursos.checkpointsValidacaoElenco[campeonatoId];
+  const estado = checkpoint ? checkpoint.estado : lerEstadoElencosParticionados_(campeonatoId);
+  const assinatura = assinaturaEstadoElencoParticionado_(estado, null, recursos.equipes, checkpoint);
   const estados = recursos.estadosElencosParticionados
     || (recursos.estadosElencosParticionados = Object.create(null));
   const anterior = estados[campeonatoId];
@@ -1401,7 +1403,13 @@ function lerParticaoElencoOperacao_(campeonatoId, tipo, equipeId, recursos) {
   }
   estados[campeonatoId] = { revisao: estado.manifesto.revisao, assinatura: assinatura };
   const chave = JSON.stringify([tipo, equipeId]);
-  const registros = lerParticaoElenco_(campeonatoId, equipeId, tipo, estado);
+  const validadas = recursos.particoesElencosValidadas
+    || (recursos.particoesElencosValidadas = Object.create(null));
+  const chaveValidada = JSON.stringify([campeonatoId, tipo, equipeId]);
+  const validada = validadas[chaveValidada];
+  const registros = checkpoint && validada && validada.assinatura === assinatura
+    ? validada.registros : lerParticaoElenco_(campeonatoId, equipeId, tipo, estado);
+  validadas[chaveValidada] = { assinatura: assinatura, registros: registros };
   const particoes = recursos.particoesElencos || (recursos.particoesElencos = Object.create(null));
   particoes[chave] = registros;
   return registros;
@@ -1523,6 +1531,12 @@ function validarAlvoElenco_(contexto, tipo, id, recursos, solicitacaoElenco) {
     ? exigirEdicaoElencoPorIds_(solicitacaoElenco.campeonatoId, solicitacaoElenco.equipeId, recursos)
     : exigirEdicaoElenco_(contexto, recursos);
   if (recursos) recursos.elencoEquipeId = atual.equipe.id;
+  if (recursos && elencosParticionadosCutoverAtivo_()) {
+    // One immutable validation phase; the writer establishes a fresh boundary.
+    recursos.checkpointsValidacaoElenco = Object.create(null);
+    recursos.checkpointsValidacaoElenco[atual.campeonato.id] =
+      checkpointElencoParticionado_(atual.campeonato.id, recursos.equipes);
+  }
   if (!id) return atual;
   const lista = medirRecursoCadastro_(recursos, 'lock_elenco_leitura', function () {
     return tipo === 'comissao' ? comissaoTecnicaCampeonato_(atual.campeonato.id, false, recursos)
@@ -1770,25 +1784,38 @@ function transferirAtletaElencoInterno_(payload) {
       const destinoDepois = destinoAntes.concat([
         Object.assign({}, atleta, { timeVinculado: destino.nome })
       ]);
-      const mutacaoIndice = iniciarMutacaoIndiceParticionado_(origemAtual.campeonato.id, recursos);
-      delete recursos.indicesValidacao;
-      marcarHistoricoElencoPendente_(origemAtual.campeonato.id);
-      marcarSnapshotsEsportivosPendentes_();
       try {
-        gravarParticoesElenco_(origemAtual.campeonato.id, [
-          { tipo: 'atletas', equipeId: origemId, registros: origemDepois },
-          { tipo: 'atletas', equipeId: destino.id, registros: destinoDepois }
-        ], recursos.estadosElencosParticionados[origemAtual.campeonato.id].revisao,
-        recursos.estadosElencosParticionados[origemAtual.campeonato.id].assinatura, false, recursos);
+        medirFaseCadastro_('gravacao_elenco', function () {
+          const checkpoint = medirFaseCadastro_('elenco_metadados_preparacao', function () {
+            delete recursos.checkpointsValidacaoElenco;
+            return checkpointElencoParticionado_(origemAtual.campeonato.id, recursos.equipes);
+          });
+          const anterior = recursos.estadosElencosParticionados[origemAtual.campeonato.id];
+          if (anterior.assinatura !== checkpoint.assinatura) {
+            throw new Error('Uma fonte do elenco mudou durante a operacao. Recarregue antes de repetir.');
+          }
+          const mutacaoIndice = medirFaseCadastro_('elenco_indice_base', function () {
+            return iniciarMutacaoIndiceParticionado_(origemAtual.campeonato.id, recursos, checkpoint);
+          });
+          delete recursos.indicesValidacao;
+          marcarHistoricoElencoPendente_(origemAtual.campeonato.id);
+          marcarSnapshotsEsportivosPendentes_();
+          gravarParticoesElenco_(origemAtual.campeonato.id, [
+            { tipo: 'atletas', equipeId: origemId, registros: origemDepois },
+            { tipo: 'atletas', equipeId: destino.id, registros: destinoDepois }
+          ], anterior.revisao, anterior.assinatura, false, recursos, checkpoint);
+          medirFaseCadastro_('elenco_indice_incremental', function () {
+            concluirMutacaoIndiceParticionado_(mutacaoIndice, origemAtual.campeonato.id, [
+              { tipo: 'atletas', equipeId: origemId, antes: origemAntes, depois: origemDepois },
+              { tipo: 'atletas', equipeId: destino.id, antes: destinoAntes, depois: destinoDepois }
+            ], recursos);
+          });
+        });
       } catch (causa) {
         const erro = new Error('Nao foi possivel confirmar a transferencia do elenco. Recarregue antes de repetir a operacao.');
         erro.cause = causa;
         throw erro;
       }
-      concluirMutacaoIndiceParticionado_(mutacaoIndice, origemAtual.campeonato.id, [
-        { tipo: 'atletas', equipeId: origemId, antes: origemAntes, depois: origemDepois },
-        { tipo: 'atletas', equipeId: destino.id, antes: destinoAntes, depois: destinoDepois }
-      ], recursos);
       cache[origemAtual.campeonato.id].atletas = origemDepois;
       const resposta = medirFaseCadastro_('resposta', function () {
         return montarRespostaElenco_(origemAtual, cache[origemAtual.campeonato.id], recursos);
@@ -2771,6 +2798,138 @@ function processarHistoricoElencoAgendado(evento) {
   } finally { lock.releaseLock(); }
 }
 
+function simularLimpezaHistoricoElencosTeste() {
+  return limparHistoricoElencosTeste_(false);
+}
+
+function executarLimpezaHistoricoElencosTeste() {
+  return limparHistoricoElencosTeste_(true);
+}
+
+// One-time reset for an empty test base, independent of the cutover gate.
+function limparHistoricoElencosTeste_(executar) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    exigirAdmin_();
+    if (campeonatos_().length) {
+      throw new Error('A limpeza exige uma base sem campeonatos. Nenhum historico foi alterado.');
+    }
+    const estadoBanco = lerEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO);
+    if (estadoBanco.lease && estadoBanco.lease.expiresAt > Date.now()) {
+      throw new Error('Aguarde o recalculo do Banco de Atletas terminar antes da limpeza.');
+    }
+    const props = PropertiesService.getScriptProperties(), propriedades = props.getProperties();
+    const ids = catalogoHistoricoParticionado_();
+    const filas = Object.keys(propriedades).filter(function (chave) {
+      return chave.indexOf(ELENCO_HISTORICO_FILA_PREFIXO) === 0;
+    });
+    filas.forEach(function (chave) {
+      const pendencia = interpretarJsonElencoParticionado_(propriedades[chave]);
+      if (!pendencia || typeof pendencia.campeonatoId !== 'string'
+          || chave !== chaveFilaHistoricoElenco_(pendencia.campeonatoId)) {
+        throw new Error('Fila de historico invalida. Corrija a fonte antes da limpeza.');
+      }
+      lerFilaHistoricoElenco_(chave, pendencia.campeonatoId);
+      if (ids.indexOf(pendencia.campeonatoId) === -1) ids.push(pendencia.campeonatoId);
+    });
+    const alvos = [];
+    const global = localizarArquivoCadastro_(ELENCO_HISTORICO_ARQUIVO, null, 'historico').arquivo;
+    if (global) {
+      const texto = global.getBlob().getDataAsString('UTF-8');
+      const dados = interpretarJsonElencoParticionado_(texto);
+      if (!dados || dados.versao !== 1 || !Array.isArray(dados.inscricoes)
+          || !Array.isArray(dados.participacoes) || !Number.isFinite(dados.sequencia)) {
+        throw new Error('Historico global invalido. Corrija a fonte antes da limpeza.');
+      }
+      alvos.push({ arquivo: global, texto: texto, quantidade: dados.inscricoes.length,
+        participacoes: dados.participacoes.length,
+        novo: JSON.stringify({ versao: 1, sequencia: 0, participacoes: [], inscricoes: [] }) });
+    }
+    const checkpoints = {};
+    ids.forEach(function (id) {
+      const estado = lerEstadoElencosParticionados_(id);
+      const equipes = Array.from(new Set(estado.manifesto.particoes
+        .concat(estado.manifesto.participacoes || []).map(function (item) { return item.equipeId; })));
+      const sequencia = estado.manifesto.sequenciaPublicacao || 0;
+      if (!Number.isSafeInteger(sequencia) || sequencia < 0) {
+        throw new Error('Sequencia de publicacao invalida. Corrija a fonte antes da limpeza.');
+      }
+      equipes.forEach(function (equipeId) {
+        const dados = lerHistoricoEquipeParticionado_(estado, equipeId);
+        const nome = nomeHistoricoEquipeParticionado_(equipeId);
+        const arquivo = itemUnicoElencoParticionado_(estado.pasta.getFilesByName(nome));
+        alvos.push({ arquivo: arquivo, pasta: estado.pasta, nome: nome,
+          texto: arquivo ? arquivo.getBlob().getDataAsString('UTF-8') : null,
+          quantidade: dados.inscricoes.length, participacoes: dados.participacoes.length,
+          novo: JSON.stringify(Object.assign({}, dados, {
+            ultimoCommit: sequencia, participacoes: [], inscricoes: []
+          })) });
+      });
+      // Keep the baseline so old immutable journals cannot recreate test records.
+      checkpoints[chaveCheckpointHistoricoParticionado_(id)] = estado.manifesto.revisao;
+    });
+    const resumo = {
+      simulacao: !executar, campeonatosHistoricos: ids.length, arquivosHistoricos: alvos.length,
+      inscricoesRemovidas: alvos.reduce(function (total, alvo) { return total + alvo.quantidade; }, 0),
+      participacoesRemovidas: alvos.reduce(function (total, alvo) { return total + alvo.participacoes; }, 0),
+      pendenciasDescartadas: filas.length,
+      recado: 'Solicitacoes, punicoes, sumulas, equipes, jogos e elencos originais sao preservados.'
+    };
+    if (executar) {
+      const chaves = filas.concat(Object.keys(checkpoints), [
+        ELENCO_HISTORICO_PARTICOES_CATALOGO, ELENCO_HISTORICO_STATUS, BANCO_ATLETAS_ESTADO
+      ]);
+      const anteriores = {};
+      chaves.forEach(function (chave) {
+        anteriores[chave] = Object.prototype.hasOwnProperty.call(propriedades, chave)
+          ? propriedades[chave] : null;
+      });
+      const backup = {
+        schema: 'aeuv.historico.limpeza.backup', versao: 1, criadoEm: new Date().toISOString(),
+        propriedades: anteriores,
+        arquivos: alvos.map(function (alvo) {
+          return { arquivoId: alvo.arquivo ? alvo.arquivo.getId() : null,
+            pastaId: alvo.pasta ? alvo.pasta.getId() : null,
+            nome: alvo.arquivo ? alvo.arquivo.getName() : alvo.nome, texto: alvo.texto };
+        })
+      };
+      const textoBackup = JSON.stringify(backup);
+      const arquivoBackup = pastaRaizProjeto_().createFile(Utilities.newBlob(textoBackup,
+        'application/json', 'AEUV - Backup limpeza historico - ' + Utilities.getUuid() + '.json'));
+      if (arquivoBackup.getBlob().getDataAsString('UTF-8') !== textoBackup) {
+        throw new Error('Backup nao confirmado. Nenhum historico foi alterado.');
+      }
+      resumo.backupId = arquivoBackup.getId();
+      console.log(JSON.stringify({ limpezaHistoricoBackupId: resumo.backupId }));
+      alvos.forEach(function (alvo) {
+        const arquivo = alvo.arquivo || alvo.pasta.createFile(
+          Utilities.newBlob(alvo.novo, 'application/json', alvo.nome));
+        if (alvo.arquivo) arquivo.setContent(alvo.novo);
+        if (arquivo.getBlob().getDataAsString('UTF-8') !== alvo.novo) {
+          throw new Error('Limpeza parcial: historico nao confirmado. Preserve o backup e execute novamente.');
+        }
+      });
+      Object.keys(checkpoints).forEach(function (chave) {
+        if (checkpoints[chave]) props.setProperty(chave, checkpoints[chave]);
+        else props.deleteProperty(chave);
+      });
+      props.setProperty(ELENCO_HISTORICO_PARTICOES_CATALOGO, JSON.stringify(ids));
+      filas.forEach(function (chave) { props.deleteProperty(chave); });
+      props.deleteProperty(ELENCO_HISTORICO_STATUS);
+      // Invalidate the ready copy; a later rebuild reads only the preserved sources.
+      delete estadoBanco.lease;
+      estadoBanco.currentId = '';
+      estadoBanco.previousId = '';
+      estadoBanco.lastError = 'Historico de testes limpo. Use Recalcular agora para gerar uma nova copia.';
+      gravarEstadoBancoAtletas_(BANCO_ATLETAS_ESTADO, estadoBanco);
+      resumo.recado += ' No Banco de Atletas, use Recalcular agora e depois Atualizar.';
+    }
+    console.log(JSON.stringify(resumo));
+    return resumo;
+  } finally { lock.releaseLock(); }
+}
+
 function lerHistoricoElenco_(recursos) {
   if (elencosParticionadosCutoverAtivo_()) return lerHistoricoParticionado_(false);
   const localizado = localizarArquivoCadastro_(ELENCO_HISTORICO_ARQUIVO, recursos, 'historico');
@@ -2910,9 +3069,12 @@ function prepararHistoricoElenco_(cache, recursos, campeonatoId, equipeId) {
       return !campeonatoId || item.id === campeonatoId;
     }).forEach(function (item) {
       if (recursos && recursos.elencoEquipeId) {
+        const checkpoint = recursos.checkpointsValidacaoElenco
+          && recursos.checkpointsValidacaoElenco[item.id]
+          || checkpointElencoParticionado_(item.id, equipes);
         cache[item.id] = {
-          atletas: lerParticaoElencoOperacao_(item.id, 'atletas', recursos.elencoEquipeId, recursos),
-          comissao: lerParticaoElencoOperacao_(item.id, 'comissao', recursos.elencoEquipeId, recursos)
+          atletas: lerParticaoElencoOperacao_(item.id, 'atletas', recursos.elencoEquipeId, recursos, checkpoint),
+          comissao: lerParticaoElencoOperacao_(item.id, 'comissao', recursos.elencoEquipeId, recursos, checkpoint)
         };
       } else {
         cache[item.id] = {
@@ -2996,8 +3158,12 @@ function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado
   try {
     const gravar = function () {
       if (elencosParticionadosCutoverAtivo_()) {
-        const estado = lerEstadoElencosParticionados_(campeonatoId);
-        const assinatura = assinaturaEstadoElencoParticionado_(estado, null, recursos && recursos.equipes);
+        const checkpoint = medirFaseCadastro_('elenco_metadados_preparacao', function () {
+          if (recursos) delete recursos.checkpointsValidacaoElenco;
+          return checkpointElencoParticionado_(campeonatoId, recursos && recursos.equipes);
+        });
+        const estado = checkpoint.estado;
+        const assinatura = checkpoint.assinatura;
         const anterior = recursos && recursos.estadosElencosParticionados
           && recursos.estadosElencosParticionados[campeonatoId];
         if (anterior && anterior.assinatura !== assinatura) {
@@ -3021,15 +3187,19 @@ function gravarElencoComHistorico_(campeonatoId, tipo, lista, historicoPreparado
             })) alteracoes.push({ tipo: tipo, equipeId: particao.equipeId, registros: [] });
           });
         }
-        const mutacaoIndice = iniciarMutacaoIndiceParticionado_(campeonatoId, recursos);
+        const mutacaoIndice = medirFaseCadastro_('elenco_indice_base', function () {
+          return iniciarMutacaoIndiceParticionado_(campeonatoId, recursos, checkpoint);
+        });
         if (recursos) delete recursos.indicesValidacao;
         marcarHistoricoElencoPendente_(campeonatoId);
         marcarSnapshotsEsportivosPendentes_();
         if (alteracoes.length) gravarParticoesElenco_(
-          campeonatoId, alteracoes, estado.manifesto.revisao, assinatura, false, recursos);
-        concluirMutacaoIndiceParticionado_(mutacaoIndice, campeonatoId, [{
-          tipo: tipo, equipeId: equipeIdAlvo || null, antes: listaAnterior, depois: lista
-        }], recursos);
+          campeonatoId, alteracoes, estado.manifesto.revisao, assinatura, false, recursos, checkpoint);
+        medirFaseCadastro_('elenco_indice_incremental', function () {
+          concluirMutacaoIndiceParticionado_(mutacaoIndice, campeonatoId, [{
+            tipo: tipo, equipeId: equipeIdAlvo || null, antes: listaAnterior, depois: lista
+          }], recursos);
+        });
         if (recursos && recursos.estadosElencosParticionados) {
           delete recursos.estadosElencosParticionados[campeonatoId];
         }
@@ -3818,7 +3988,7 @@ function arquivoCadastroPessoasCampeonato_(campeonatoId, tipo) {
 
 // Production remains legacy; active-gate integration is exercised only in VM fixtures.
 const ELENCOS_PARTICOES_MANIFESTO = 'manifesto.json';
-const ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = false;
+const ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = true;
 
 function elencosParticionadosCutoverAtivo_() {
   return ELENCOS_PARTICIONADOS_CUTOVER_ATIVO;
@@ -4070,7 +4240,12 @@ function metadadosFonteElencoParticionado_(estado, arquivo, nome, pastaEsperada)
   const meta = Drive.Files.get(id, {
     fields: 'id,name,trashed,parents,version,md5Checksum', supportsAllDrives: true
   });
-  if (!meta || String(meta.id) !== String(id) || meta.name !== nome || meta.trashed
+  return validarMetadadosFonteElencoParticionado_(meta, nome, pastaEsperada, id);
+}
+
+function validarMetadadosFonteElencoParticionado_(meta, nome, pastaEsperada, idEsperado) {
+  if (!meta || !meta.id || (idEsperado !== undefined && String(meta.id) !== String(idEsperado))
+      || meta.name !== nome || meta.trashed
       || !Array.isArray(meta.parents) || meta.parents.indexOf(pastaEsperada) === -1
       || !meta.version || !/^[a-f0-9]{32}$/i.test(meta.md5Checksum || '')) {
     throw new Error('Fonte particionada ausente, movida ou sem versao verificavel. Restaure os dados antes de continuar.');
@@ -4078,28 +4253,108 @@ function metadadosFonteElencoParticionado_(estado, arquivo, nome, pastaEsperada)
   return [String(meta.id), String(meta.version), String(meta.md5Checksum).toLowerCase()];
 }
 
-function fontesMetadadosElencoParticionado_(estado, equipes) {
+function literalConsultaDriveElenco_(valor) {
+  return "'" + String(valor).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+}
+
+function listarMetadadosCheckpointElenco_(estado) {
+  if (typeof Drive === 'undefined' || !Drive.Files || typeof Drive.Files.list !== 'function') {
+    throw new Error('Ative o servico avancado Drive v3 Files.list para validar as fontes particionadas.');
+  }
+  const pastaId = estado.pasta.getId(), encontrados = new Map();
+  const nomes = [ELENCOS_PARTICOES_MANIFESTO].concat(estado.manifesto.particoes.map(function (item) {
+    return item.arquivo;
+  }));
+  const filtro = literalConsultaDriveElenco_(pastaId) + ' in parents and trashed = false and (';
+  const lotes = [], limite = 7000;
+  let termos = [], tamanho = filtro.length + 1;
+  nomes.forEach(function (nome) {
+    const termo = 'name = ' + literalConsultaDriveElenco_(nome);
+    if (filtro.length + termo.length + 1 > limite) {
+      throw new Error('Nome de fonte particionada excede o limite seguro da consulta Drive.');
+    }
+    if (termos.length && (termos.length >= 100 || tamanho + 4 + termo.length > limite)) {
+      lotes.push(filtro + termos.join(' or ') + ')');
+      termos = [];
+      tamanho = filtro.length + 1;
+    }
+    tamanho += (termos.length ? 4 : 0) + termo.length;
+    termos.push(termo);
+  });
+  if (termos.length) lotes.push(filtro + termos.join(' or ') + ')');
+  const esperados = new Set(nomes);
+  lotes.forEach(function (q) {
+    let token;
+    const tokens = new Set();
+    do {
+      const opcoes = { q: q, pageSize: 1000,
+        fields: 'nextPageToken,incompleteSearch,files(id,name,trashed,parents,version,md5Checksum)',
+        supportsAllDrives: true, includeItemsFromAllDrives: true };
+      if (token) opcoes.pageToken = token;
+      const pagina = Drive.Files.list(opcoes);
+      // Drive can omit false/default fields; true or malformed values cannot prove completeness.
+      if (!pagina || (pagina.incompleteSearch !== undefined && pagina.incompleteSearch !== false)
+          || (pagina.files !== undefined && !Array.isArray(pagina.files))) {
+        throw new Error('Consulta de fontes particionadas incompleta. Recarregue antes de continuar.');
+      }
+      (pagina.files || []).forEach(function (meta) {
+        if (!meta || !esperados.has(meta.name)) {
+          throw new Error('Consulta Drive retornou uma fonte particionada inesperada.');
+        }
+        validarMetadadosFonteElencoParticionado_(meta, meta.name, pastaId);
+        if (encontrados.has(meta.name)) {
+          throw new Error('Fonte de elenco duplicada no Drive. Resolva a duplicidade antes de continuar.');
+        }
+        encontrados.set(meta.name, meta);
+      });
+      token = pagina.nextPageToken;
+      if (token !== undefined && token !== '' && (typeof token !== 'string' || tokens.has(token))) {
+        throw new Error('Paginacao de fontes particionadas invalida. Recarregue antes de continuar.');
+      }
+      if (token) tokens.add(token);
+    } while (token);
+  });
+  return encontrados;
+}
+
+function fontesMetadadosElencoParticionado_(estado, equipes, metadados) {
   if (!estado.pasta) {
     if (estado.manifesto.particoes.length) throw new Error('Pasta de particoes ausente.');
     return [];
   }
   const registroEquipes = equipes || lerRegistroEquipes_();
+  const fontes = metadados || listarMetadadosCheckpointElenco_(estado);
   return estado.manifesto.particoes.map(function (particao) {
-    const arquivo = itemUnicoElencoParticionado_(estado.pasta.getFilesByName(particao.arquivo));
-    if (!arquivo) throw new Error('Particao publicada de elenco nao encontrada. Restaure os dados antes de continuar.');
+    const meta = fontes.get(particao.arquivo);
+    if (!meta) throw new Error('Particao publicada de elenco nao encontrada. Restaure os dados antes de continuar.');
     const equipe = equipePermanenteElencoParticionado_(particao.equipeId, registroEquipes);
     return [particao.tipo, particao.equipeId, particao.arquivo, equipe.nome,
-      metadadosFonteElencoParticionado_(estado, arquivo, particao.arquivo, estado.pasta.getId())];
+      validarMetadadosFonteElencoParticionado_(meta, particao.arquivo, estado.pasta.getId())];
   });
 }
 
-function assinaturaEstadoElencoParticionado_(estado, conteudos, equipes) {
+// Explicit checkpoint bundle: never stored in Properties/CacheService or reused
+// across a write. Each boundary resolves names and validates all Drive metadata.
+function checkpointElencoParticionado_(campeonatoId, equipes, estadoPreparado) {
+  const estado = estadoPreparado || lerEstadoElencosParticionados_(campeonatoId);
+  const metadados = estado.pasta ? listarMetadadosCheckpointElenco_(estado) : new Map();
+  const fontes = fontesMetadadosElencoParticionado_(estado, equipes, metadados);
+  const manifesto = estado.arquivo
+    ? validarMetadadosFonteElencoParticionado_(metadados.get(ELENCOS_PARTICOES_MANIFESTO),
+      ELENCOS_PARTICOES_MANIFESTO, estado.pasta.getId(), estado.arquivo.getId())
+    : null;
+  if ((!estado.arquivo && metadados.has(ELENCOS_PARTICOES_MANIFESTO))
+      || (manifesto && manifesto[2] !== md5IndiceValidacao_(estado.texto))) {
+    throw new Error('Manifesto de elenco mudou durante a leitura. Recarregue antes de continuar.');
+  }
+  return { estado: estado, fontes: fontes, manifesto: manifesto,
+    assinatura: digestIndiceValidacao_(JSON.stringify(['aeuv.elencos.particoes.v2', manifesto, fontes])) };
+}
+
+function assinaturaEstadoElencoParticionado_(estado, conteudos, equipes, checkpoint) {
   if (elencosParticionadosCutoverAtivo_()) {
-    const manifesto = estado.arquivo
-      ? metadadosFonteElencoParticionado_(estado, estado.arquivo, ELENCOS_PARTICOES_MANIFESTO, estado.pasta.getId())
-      : null;
-    return digestIndiceValidacao_(JSON.stringify(['aeuv.elencos.particoes.v2', manifesto,
-      fontesMetadadosElencoParticionado_(estado, equipes)]));
+    return (checkpoint || checkpointElencoParticionado_(
+      estado.manifesto.campeonatoId, equipes, estado)).assinatura;
   }
   const fontes = (conteudos || fontesEstadoElencoParticionado_(estado)).map(function (conteudo) {
     const particao = conteudo.particao;
@@ -4485,8 +4740,12 @@ function publicarManifestoElenco_(pasta, estado, texto) {
 }
 
 function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assinaturaEsperada,
-    somenteParticipacoes, recursosOperacao) {
+    somenteParticipacoes, recursosOperacao, checkpointPreparado) {
   exigirLockElencoParticionado_();
+  if (recursosOperacao) {
+    delete recursosOperacao.checkpointsValidacaoElenco;
+    delete recursosOperacao.elencoCheckpointPosCommit;
+  }
   if (!Array.isArray(alteracoes) || (!alteracoes.length
       && !(somenteParticipacoes && elencosParticionadosCutoverAtivo_()))) {
     throw new Error('Informe as particoes alteradas.');
@@ -4499,7 +4758,11 @@ function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assin
     if (chaves.has(chave)) throw new Error('Particao repetida na gravacao.');
     chaves.add(chave);
   });
-  const estado = lerEstadoElencosParticionados_(campeonatoId);
+  const checkpoint = elencosParticionadosCutoverAtivo_()
+    ? (checkpointPreparado || medirFaseCadastro_('elenco_metadados_preparacao', function () {
+      return checkpointElencoParticionado_(campeonatoId, recursosOperacao && recursosOperacao.equipes);
+    })) : null;
+  const estado = checkpoint ? checkpoint.estado : lerEstadoElencosParticionados_(campeonatoId);
   if (revisaoEsperada !== undefined && revisaoEsperada !== estado.manifesto.revisao) {
     throw new Error('O elenco mudou. Recarregue antes de repetir a operacao.');
   }
@@ -4509,15 +4772,15 @@ function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assin
   let indiceBase = null;
   if (elencosParticionadosCutoverAtivo_()) {
     indiceBase = recursosOperacao && recursosOperacao.indiceBaseMutacao
-      || consultarIndiceValidacao_(campeonatoId, null);
+      || consultarIndiceValidacao_(campeonatoId, null, null, checkpoint);
     if (!indiceBase) conteudos = fontesEstadoElencoParticionado_(estado);
   } else {
     conteudos = fontesEstadoElencoParticionado_(estado);
   }
   const fontesAntes = elencosParticionadosCutoverAtivo_()
-    ? fontesMetadadosElencoParticionado_(estado, recursosOperacao && recursosOperacao.equipes) : null;
+    ? checkpoint.fontes : null;
   const equipes = recursosOperacao && recursosOperacao.equipes || lerRegistroEquipes_();
-  const assinatura = assinaturaEstadoElencoParticionado_(estado, conteudos, equipes);
+  const assinatura = assinaturaEstadoElencoParticionado_(estado, conteudos, equipes, checkpoint);
   if (assinaturaEsperada !== undefined && assinaturaEsperada !== assinatura) {
     throw new Error('Uma fonte do elenco mudou. Recarregue antes de repetir a operacao.');
   }
@@ -4541,7 +4804,7 @@ function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assin
       }
     });
   }
-  const preparadas = alteracoes.map(function (item) {
+  const preparadas = medirFaseCadastro_('elenco_preparacao_particoes', function () { return alteracoes.map(function (item) {
     const registros = registrosCanonicosElencoParticionado_(item.registros, item.equipeId, equipes);
     const referencia = estado.manifesto.particoes.find(function (particao) {
       return particao.tipo === item.tipo && particao.equipeId === item.equipeId;
@@ -4554,8 +4817,14 @@ function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assin
       anterior.registros, item.equipeId, equipes)) : '[]';
     return { item: { equipeId: item.equipeId, tipo: item.tipo, registros: registros },
       texto: texto, mudou: texto !== antes, anteriorTexto: anterior && anterior.texto };
-  }).filter(function (item) { return item.mudou; });
-  if (!preparadas.length && !mudouParticipacao) return estado.manifesto.revisao;
+  }).filter(function (item) { return item.mudou; }); });
+  if (!preparadas.length && !mudouParticipacao) {
+    if (checkpoint && recursosOperacao) {
+      recursosOperacao.elencoAssinaturaPosCommit = checkpoint.assinatura;
+      recursosOperacao.elencoCheckpointPosCommit = checkpoint;
+    }
+    return estado.manifesto.revisao;
+  }
   if (elencosParticionadosCutoverAtivo_() && !recursosOperacao) {
     invalidarIndiceValidacao_(campeonatoId);
   }
@@ -4571,7 +4840,9 @@ function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assin
       return particao.tipo === preparada.item.tipo && particao.equipeId === preparada.item.equipeId;
     })) manifesto.particoes.push({ tipo: preparada.item.tipo, equipeId: preparada.item.equipeId });
   });
-  validarIdsPublicacaoElenco_(manifesto, conteudos, preparadas, indiceBase, equipes);
+  medirFaseCadastro_('elenco_ids_publicacao', function () {
+    validarIdsPublicacaoElenco_(manifesto, conteudos, preparadas, indiceBase, equipes);
+  });
   const pasta = estado.pasta || pastaElencosParticionados_(campeonatoId, true);
   let conteudosSnapshot = conteudos;
   if (elencosParticionadosCutoverAtivo_()) {
@@ -4588,8 +4859,10 @@ function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assin
         algoritmo: preparada && preparada.anteriorTexto !== undefined ? 'sha256' : 'md5' };
     });
   }
-  const snapshot = prepararSnapshotPublicacaoElenco_(pasta, estado, conteudosSnapshot, manifesto.revisao, assinatura);
-  preparadas.forEach(function (preparada) {
+  const snapshot = medirFaseCadastro_('elenco_snapshot', function () {
+    return prepararSnapshotPublicacaoElenco_(pasta, estado, conteudosSnapshot, manifesto.revisao, assinatura);
+  });
+  medirFaseCadastro_('elenco_particoes', function () { preparadas.forEach(function (preparada) {
     const item = preparada.item, revisao = Utilities.getUuid();
     const nome = nomeArquivoParticaoElenco_(item.equipeId, item.tipo, revisao);
     if (itemUnicoElencoParticionado_(pasta.getFilesByName(nome))) {
@@ -4605,25 +4878,31 @@ function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assin
     });
     if (posicao === -1) manifesto.particoes.push(referencia);
     else manifesto.particoes[posicao] = referencia;
+  }); });
+  medirFaseCadastro_('elenco_journal', function () {
+    prepararPendenciaPublicacaoElenco_(pasta, manifesto, snapshot, assinatura, recursosOperacao, preparadas);
   });
-  prepararPendenciaPublicacaoElenco_(pasta, manifesto, snapshot, assinatura, recursosOperacao, preparadas);
   if (elencosParticionadosCutoverAtivo_()) {
     registrarCampeonatoHistoricoParticionado_(campeonatoId);
     marcarHistoricoElencoPendente_(campeonatoId);
   }
-  confirmarFontesPublicacaoElenco_(
-    campeonatoId, assinatura, recursosOperacao, alteracoes.map(function (item) { return item.equipeId; }));
+  medirFaseCadastro_('elenco_precommit', function () {
+    confirmarFontesPublicacaoElenco_(
+      campeonatoId, assinatura, recursosOperacao, alteracoes.map(function (item) { return item.equipeId; }));
+  });
   const texto = JSON.stringify(manifesto);
   // Copy-on-write: one publication point for every affected team/category.
   // A failure before this point leaves all old references intact. A failure
   // after it leaves the complete new state; never roll back one partition.
-  publicarManifestoElenco_(pasta, estado, texto);
+  medirFaseCadastro_('elenco_commit', function () { publicarManifestoElenco_(pasta, estado, texto); });
+  medirFaseCadastro_('elenco_poscommit', function () {
   if (elencosParticionadosCutoverAtivo_()) {
+    const estadoDepois = lerEstadoElencosParticionados_(campeonatoId);
     const equipesDepois = validarAssociacoesPublicacaoElenco_(
-      campeonatoId, lerEstadoElencosParticionados_(campeonatoId),
+      campeonatoId, estadoDepois,
       alteracoes.map(function (item) { return item.equipeId; }), recursosOperacao).equipes;
-    const fontesDepois = fontesMetadadosElencoParticionado_(
-      lerEstadoElencosParticionados_(campeonatoId), equipesDepois);
+    const checkpointDepois = checkpointElencoParticionado_(campeonatoId, equipesDepois, estadoDepois);
+    const fontesDepois = checkpointDepois.fontes;
     const chavesAlteradas = Object.create(null);
     preparadas.forEach(function (preparada) {
       chavesAlteradas[JSON.stringify([preparada.item.tipo, preparada.item.equipeId])] = preparada;
@@ -4653,18 +4932,16 @@ function gravarParticoesElenco_(campeonatoId, alteracoes, revisaoEsperada, assin
         throw new Error('Uma particao nao alterada mudou durante a publicacao.');
       }
     });
-    const manifestoPublicado = itemUnicoElencoParticionado_(
-      pasta.getFilesByName(ELENCOS_PARTICOES_MANIFESTO));
-    const metaManifesto = metadadosFonteElencoParticionado_(
-      { pasta: pasta }, manifestoPublicado, ELENCOS_PARTICOES_MANIFESTO, pasta.getId());
+    const metaManifesto = checkpointDepois.manifesto;
     if (metaManifesto[2] !== md5IndiceValidacao_(texto)) {
       throw new Error('Manifesto publicado divergiu dos dados preparados.');
     }
     if (recursosOperacao) {
-      recursosOperacao.elencoAssinaturaPosCommit = assinaturaEstadoElencoParticionado_(
-        lerEstadoElencosParticionados_(campeonatoId), null, equipesDepois);
+      recursosOperacao.elencoAssinaturaPosCommit = checkpointDepois.assinatura;
+      recursosOperacao.elencoCheckpointPosCommit = checkpointDepois;
     }
   }
+  });
   return manifesto.revisao;
 }
 
@@ -6611,7 +6888,12 @@ function gerarSumulaJogoCampeonato(payload) {
    marcarSnapshotsEsportivosPendentes_();
    const validos = lista.length ? higienizarEquipes_(lista) : [];
 
-   prepararHistoricoElenco_(null, null, elencosParticionadosCutoverAtivo_() ? campeonatoId : null);
+   const ativo = elencosParticionadosCutoverAtivo_();
+   // Capture removed empty enrollments before unlinking. Additions can capture
+   // both existing and new enrollments in the single post-write journal.
+   if (!ativo || timesCampeonato_(campeonatoId).some(function (nome) {
+     return !validos.some(function (atual) { return chaveEquipe_(atual) === chaveEquipe_(nome); });
+   })) prepararHistoricoElenco_(null, null, ativo ? campeonatoId : null);
    PropertiesService.getScriptProperties()
      .setProperty(chaveTimesCampeonato_(campeonatoId), JSON.stringify(validos));
    prepararHistoricoElenco_(null, null, elencosParticionadosCutoverAtivo_() ? campeonatoId : null);
@@ -6701,14 +6983,14 @@ function gerarSumulaJogoCampeonato(payload) {
      if (!equipe || !obterEquipes_().some(function (nome) { return chaveEquipe_(nome) === chaveEquipe_(equipe.nome); })) {
        throw new Error('Escolha uma equipe do Banco de Dados de Equipes.');
      }
-     salvarTimeCampeonatoInterno_({ campeonatoId: dados.campeonatoId, equipeExistente: equipe.nome });
+     salvarTimeCampeonatoInterno_({ campeonatoId: dados.campeonatoId, equipeExistente: equipe.nome }, true);
    } finally {
      lock.releaseLock();
    }
    return carregarEquipesParticipantesAtual(dados.campeonatoId);
  }
 
- function listarTimesCampeonato() {
+ function listarTimesCampeonato(campeonatoId) {
    sessaoCampeonato_();
 
    const campeonatos = campeonatosResumo_();
@@ -6716,7 +6998,9 @@ function gerarSumulaJogoCampeonato(payload) {
    return {
      campeonatos: campeonatos,
      equipesGlobais: obterEquipes_(),
-     registros: campeonatos.map(function (campeonato) {
+     registros: campeonatos.filter(function (campeonato) {
+       return !campeonatoId || campeonato.id === campeonatoId;
+     }).map(function (campeonato) {
        const times = timesCampeonato_(campeonato.id);
 
        return {
@@ -6745,7 +7029,7 @@ function gerarSumulaJogoCampeonato(payload) {
    }
  }
 
- function salvarTimeCampeonatoInterno_(payload) {
+ function salvarTimeCampeonatoInterno_(payload, semResposta) {
    const sessao = sessaoCampeonato_();
    const dados = payload || {};
    const campeonatoId = String(dados.campeonatoId || '').trim();
@@ -6801,7 +7085,8 @@ function gerarSumulaJogoCampeonato(payload) {
    gravarTimesCampeonato_(campeonatoId, lista);
    equipesRegistro_(true);
 
-   const tela = listarTimesCampeonato();
+   if (semResposta) return;
+   const tela = listarTimesCampeonato(campeonatoId);
    tela.recado = 'Time vinculado ao campeonato: ' + nomeFinal;
    return tela;
  }
@@ -6851,7 +7136,7 @@ function gerarSumulaJogoCampeonato(payload) {
    });
    gravarTimesCampeonato_(id, lista);
 
-   const tela = listarTimesCampeonato();
+   const tela = listarTimesCampeonato(id);
    tela.recado = 'Time removido do campeonato: ' + nome;
    return tela;
  }
@@ -8344,15 +8629,17 @@ function md5IndiceValidacao_(texto) {
     .map(function (byte) { return ('0' + ((byte + 256) % 256).toString(16)).slice(-2); }).join('');
 }
 
-function versoesFontesIndiceValidacao_(id, recursos, posicoes) {
+function versoesFontesIndiceValidacao_(id, recursos, posicoes, checkpoint) {
   const fontes = fontesIndiceValidacao_(id);
+  let elenco = checkpoint;
   return (posicoes || [0, 1, 2]).map(function (posicao) {
     const fonte = fontes[posicao];
     if (elencosParticionadosCutoverAtivo_() && fonte.tipo !== 'tabela') {
-      const estado = lerEstadoElencosParticionados_(id);
+      if (!elenco) elenco = checkpointElencoParticionado_(id);
+      const estado = elenco.estado;
       return ['aeuv.elencos.particoes.v2', fonte.tipo, digestIndiceValidacao_(JSON.stringify([
         estado.pasta ? estado.pasta.getId() : null, estado.arquivo ? estado.arquivo.getId() : null,
-        assinaturaEstadoElencoParticionado_(estado)
+        elenco.assinatura
       ]))];
     }
     if (typeof Drive === 'undefined') throw new Error('Ative o servico avancado Drive v3 para usar o indice.');
@@ -8501,12 +8788,16 @@ function lerPayloadIndiceValidacao_(id, meta) {
   return indice;
 }
 
-function consultarIndiceValidacao_(id, recursos, tipo) {
+function consultarIndiceValidacao_(id, recursos, tipo, checkpoint) {
   try {
+    checkpoint = checkpoint || recursos && recursos.checkpointsValidacaoElenco
+      && recursos.checkpointsValidacaoElenco[id];
     // Reuse only within the existing synchronous lock, never across requests.
     const reutilizar = !elencosParticionadosCutoverAtivo_() && recursos && LockService.getScriptLock().hasLock();
-    const cache = reutilizar && recursos.indicesValidacao;
+    const cache = checkpoint ? checkpoint.indicesValidacao : reutilizar && recursos.indicesValidacao;
     let entrada = cache && cache[id];
+    if (checkpoint && entrada
+        && JSON.stringify(lerMetaIndiceValidacao_(id)) !== JSON.stringify(entrada.meta)) entrada = null;
     if (!entrada) {
       const meta = lerMetaIndiceValidacao_(id);
       entrada = { meta: meta, indice: lerPayloadIndiceValidacao_(id, meta), verificadas: [] };
@@ -8514,15 +8805,16 @@ function consultarIndiceValidacao_(id, recursos, tipo) {
     const posicoes = (tipo ? [['atletas', 'comissao', 'tabela'].indexOf(tipo)] : [0, 1, 2])
       .filter(function (posicao) { return entrada.verificadas.indexOf(posicao) === -1; });
     if (entrada.indice && posicoes.length) {
-      const fontes = versoesFontesIndiceValidacao_(id, recursos, posicoes);
+      const fontes = versoesFontesIndiceValidacao_(id, recursos, posicoes, checkpoint);
       if (fontes.some(function (fonte, i) {
         return JSON.stringify(fonte) !== JSON.stringify(entrada.meta.fontes[posicoes[i]]);
       }) || JSON.stringify(lerMetaIndiceValidacao_(id)) !== JSON.stringify(entrada.meta)) entrada.indice = null;
       else entrada.verificadas = entrada.verificadas.concat(posicoes);
     }
-    if (reutilizar) {
-      if (!recursos.indicesValidacao) recursos.indicesValidacao = Object.create(null);
-      recursos.indicesValidacao[id] = entrada;
+    if (checkpoint || reutilizar) {
+      const destino = checkpoint || recursos;
+      if (!destino.indicesValidacao) destino.indicesValidacao = Object.create(null);
+      destino.indicesValidacao[id] = entrada;
     }
     return entrada.indice;
   } catch (e) {
@@ -8633,12 +8925,12 @@ function publicarIndiceValidacao_(id, indice, fontes, checkpoint, anterior, vali
   return meta;
 }
 
-function iniciarMutacaoIndiceParticionado_(id, recursos) {
+function iniciarMutacaoIndiceParticionado_(id, recursos, checkpointElenco) {
   let indice = null, meta = null;
   try {
     meta = lerMetaIndiceValidacao_(id);
     if (meta.versao === 2 && meta.dirty === false) {
-      indice = consultarIndiceValidacao_(id, recursos);
+      indice = consultarIndiceValidacao_(id, recursos, null, checkpointElenco);
       if (!indice || JSON.stringify(lerMetaIndiceValidacao_(id)) !== JSON.stringify(meta)) {
         indice = null;
         meta = null;
@@ -8654,11 +8946,14 @@ function iniciarMutacaoIndiceParticionado_(id, recursos) {
     meta = null;
   }
   const mutacao = { indice: indice, meta: meta, checkpoint: invalidarIndiceValidacao_(id) };
+  if (checkpointElenco) delete checkpointElenco.indicesValidacao;
   if (recursos) recursos.indiceBaseMutacao = indice;
   return mutacao;
 }
 
 function concluirMutacaoIndiceParticionado_(mutacao, id, deltas, recursos) {
+  const checkpointInicial = recursos && recursos.elencoCheckpointPosCommit;
+  if (recursos) delete recursos.elencoCheckpointPosCommit;
   if (!mutacao || !mutacao.indice || !mutacao.meta) {
     registrarFalhaIndiceValidacao_('incremental_sem_base_v2');
     return;
@@ -8667,37 +8962,40 @@ function concluirMutacaoIndiceParticionado_(mutacao, id, deltas, recursos) {
   try {
     const indice = mutacao.indice;
     fase = 'fingerprint_inicial';
-    const estadoAtual = lerEstadoElencosParticionados_(id);
     const equipesAlteradas = deltas.map(function (delta) { return delta.equipeId; })
       .filter(function (equipeId) { return !!equipeId; });
-    const contextoAtual = validarAssociacoesPublicacaoElenco_(
-      id, estadoAtual, equipesAlteradas, recursos);
-    recursos.equipes = contextoAtual.equipes;
-    const fontesAntes = versoesFontesIndiceValidacao_(id, recursos);
-    if (!recursos || !recursos.elencoAssinaturaPosCommit
-        || assinaturaEstadoElencoParticionado_(estadoAtual)
+    if (!checkpointInicial || checkpointInicial.estado.manifesto.campeonatoId !== id
+        || !recursos.elencoAssinaturaPosCommit
+        || checkpointInicial.assinatura
           !== recursos.elencoAssinaturaPosCommit) {
       throw new Error('Fontes divergiram apos a publicacao.');
     }
-    deltas.forEach(function (delta) {
+    const fontes = medirFaseCadastro_('elenco_indice_baseline', function () {
+      return versoesFontesIndiceValidacao_(id, null, [0, 1], checkpointInicial)
+        .concat([mutacao.meta.fontes[2]]);
+    });
+    medirFaseCadastro_('elenco_indice_delta', function () { deltas.forEach(function (delta) {
       if (delta.antes === null || delta.antes === undefined) {
         throw new Error('Delta de elenco incompleto.');
       }
       aplicarDeltaCadastroIndiceValidacao_(indice, delta.tipo, delta.antes, delta.depois);
-    });
-    fase = 'fingerprint';
-    const fontes = versoesFontesIndiceValidacao_(id, recursos);
-    if (JSON.stringify(fontesAntes) !== JSON.stringify(fontes)
-        || JSON.stringify(fontes[2]) !== JSON.stringify(mutacao.meta.fontes[2])
-        || assinaturaEstadoElencoParticionado_(lerEstadoElencosParticionados_(id), null, recursos.equipes)
-          !== recursos.elencoAssinaturaPosCommit) {
-      throw new Error('Uma fonte mudou durante a gravacao.');
-    }
+    }); });
     fase = 'publicacao';
-    publicarIndiceValidacao_(id, indice, fontes, mutacao.checkpoint, mutacao.meta, function () {
-      if (JSON.stringify(versoesFontesIndiceValidacao_(id, recursos)) !== JSON.stringify(fontes)) {
-        throw new Error('Fontes divergiram durante a publicacao incremental.');
-      }
+    medirFaseCadastro_('elenco_indice_publicacao', function () {
+      publicarIndiceValidacao_(id, indice, fontes, mutacao.checkpoint, mutacao.meta, function () {
+        medirFaseCadastro_('elenco_indice_confirmacao_fontes', function () {
+          // Chunks may invoke remote work: resolve ALL sources and associations
+          // afresh here, including the unchanged table from the old index base.
+          const estadoFinal = lerEstadoElencosParticionados_(id);
+          const contextoFinal = validarAssociacoesPublicacaoElenco_(
+            id, estadoFinal, equipesAlteradas, recursos);
+          const checkpointFinal = checkpointElencoParticionado_(id, contextoFinal.equipes, estadoFinal);
+          if (JSON.stringify(versoesFontesIndiceValidacao_(id, null, null, checkpointFinal))
+              !== JSON.stringify(fontes)) {
+            throw new Error('Fontes divergiram durante a publicacao incremental.');
+          }
+        });
+      });
     });
   } catch (e) {
     // The manifest is already committed; stale or unavailable indexes stay dirty.
@@ -11046,11 +11344,87 @@ function assinaturaAtas_() {
   return arquivo.getBlob();
 }
 
+function formatarNegritoAta_(paragrafo, conteudo, corBase, negritoBase) {
+  const intervalos = [];
+  let removidos = 0;
+  const texto = conteudo.replace(/\*\*(.+?)\*\*/g, function (_, trecho, indice) {
+    const inicio = indice - removidos;
+    intervalos.push({ inicio: inicio, fim: inicio + trecho.length - 1 });
+    removidos += 4;
+    return trecho;
+  });
+  const elemento = paragrafo.editAsText();
+  elemento.setText(texto);
+  if (!texto) return;
+  elemento.setFontFamily('Arial').setFontSize(11)
+    .setForegroundColor(corBase).setBold(negritoBase);
+  intervalos.forEach(function (intervalo) {
+    elemento.setBold(intervalo.inicio, intervalo.fim, true);
+    // Nas faixas escuras, mantenha o contraste branco do título.
+    elemento.setForegroundColor(intervalo.inicio, intervalo.fim,
+      corBase === '#FFFFFF' ? corBase : '#1F3A68');
+  });
+}
+
+function adicionarFaixaAta_(corpo, conteudo, clara) {
+  const tabela = corpo.appendTable([['']]);
+  tabela.setBorderWidth(0);
+  const celula = tabela.getCell(0, 0);
+  celula.setBackgroundColor(clara ? '#E9EEF8' : '#1F3A68')
+    .setPaddingTop(5).setPaddingBottom(5)
+    .setPaddingLeft(8).setPaddingRight(8);
+  const paragrafo = celula.getChild(0).asParagraph();
+  paragrafo.setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
+  formatarNegritoAta_(paragrafo, conteudo, clara ? '#1F3A68' : '#FFFFFF', true);
+}
+
+function adicionarTextoAta_(corpo, texto) {
+  let ultimoTopico = null;
+  String(texto || '').split(/\r\n|\r|\n/).forEach(function (linha) {
+    const limpa = linha.trim();
+    if (!limpa) {
+      corpo.appendParagraph('').setSpacingAfter(2);
+      ultimoTopico = null;
+      return;
+    }
+    // Não confunda **negrito** no início da linha com o marcador de faixa.
+    const marcador = limpa.match(/^(\*(?!\*)|>|-)\s*(.+)$/);
+    if (marcador && marcador[1] !== '-') {
+      adicionarFaixaAta_(corpo, marcador[2], marcador[1] === '>');
+      ultimoTopico = null;
+      return;
+    }
+    let paragrafo;
+    let conteudo = limpa;
+    if (marcador && marcador[1] === '-') {
+      conteudo = marcador[2];
+      paragrafo = corpo.appendListItem('');
+      if (ultimoTopico) paragrafo.setListId(ultimoTopico);
+      paragrafo.setGlyphType(DocumentApp.GlyphType.BULLET).setNestingLevel(0)
+        .setIndentStart(14).setIndentFirstLine(0).setIndentEnd(0);
+      ultimoTopico = paragrafo;
+    } else {
+      paragrafo = corpo.appendParagraph('');
+      paragrafo.setAlignment(DocumentApp.HorizontalAlignment.JUSTIFY);
+      ultimoTopico = null;
+    }
+    paragrafo.setLineSpacing(1.2).setSpacingAfter(6);
+    formatarNegritoAta_(paragrafo, conteudo, '#000000', false);
+  });
+}
+
 function formatarDocumentoAta_(documento, ata) {
   const azul = '#1F3A68';
   const cinza = '#5A6270';
+  const reuniao = ata.tipo === 'campeonato' ? 'Campeonato' : 'Associação';
   const corpo = documento.getBody();
+  corpo.setPageWidth(595.28).setPageHeight(841.89);
   corpo.setMarginTop(95).setMarginBottom(68).setMarginLeft(57).setMarginRight(57);
+  const estiloBase = {};
+  estiloBase[DocumentApp.Attribute.FONT_FAMILY] = 'Arial';
+  estiloBase[DocumentApp.Attribute.FONT_SIZE] = 11;
+  estiloBase[DocumentApp.Attribute.FOREGROUND_COLOR] = '#000000';
+  corpo.setAttributes(estiloBase);
 
   const cabecalho = documento.addHeader();
   const marca = cabecalho.appendParagraph('');
@@ -11059,26 +11433,26 @@ function formatarDocumentoAta_(documento, ata) {
   logo.setWidth(Math.round(logo.getWidth() * escala));
   logo.setHeight(Math.round(logo.getHeight() * escala));
   marca.appendText('   ' + ASSOCIACAO_NOME)
-    .setBold(true).setFontSize(12).setForegroundColor(azul);
+    .setFontFamily('Arial').setBold(true).setFontSize(12).setForegroundColor(azul);
   marca.setSpacingAfter(0);
-  const subtitulo = cabecalho.appendParagraph('Comissão Organizadora · '
-    + (ata.tipo === 'campeonato' ? (ata.competicao || 'Campeonato') : 'Associação'));
-  subtitulo.editAsText().setFontSize(9).setForegroundColor(cinza);
+  const subtitulo = cabecalho.appendParagraph('Comissão Organizadora · ' + reuniao);
+  subtitulo.editAsText().setFontFamily('Arial').setFontSize(9).setForegroundColor(cinza);
   subtitulo.setSpacingAfter(4);
+  cabecalho.appendHorizontalRule();
 
   const rodape = documento.addFooter();
   const linhaRodape = rodape.appendParagraph(ASSOCIACAO_NOME + ' · Ata de reunião');
   linhaRodape.editAsText().setFontSize(8).setForegroundColor(cinza);
 
-  const faixa = corpo.appendParagraph('ATA DE REUNIÃO · '
-    + (ata.tipo === 'campeonato' ? 'CAMPEONATO' : 'ASSOCIAÇÃO'))
-    .setHeading(DocumentApp.ParagraphHeading.HEADING1)
-    .setSpacingAfter(8);
-  faixa.editAsText().setForegroundColor(azul).setFontSize(15);
   const titulo = corpo.appendParagraph(ata.titulo)
-    .setHeading(DocumentApp.ParagraphHeading.HEADING2)
-    .setSpacingAfter(14);
-  titulo.editAsText().setForegroundColor(azul).setFontSize(13);
+    .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
+    .setSpacingBefore(12).setSpacingAfter(4);
+  titulo.editAsText().setFontFamily('Arial').setBold(true)
+    .setForegroundColor(azul).setFontSize(18);
+  const subtituloAta = corpo.appendParagraph(reuniao.toUpperCase())
+    .setAlignment(DocumentApp.HorizontalAlignment.CENTER).setSpacingAfter(14);
+  subtituloAta.editAsText().setFontFamily('Arial').setBold(true)
+    .setForegroundColor(cinza).setFontSize(11);
 
   const data = ata.data.slice(8, 10) + '/' + ata.data.slice(5, 7) + '/' + ata.data.slice(0, 4);
   const metadados = ['Data: ' + data];
@@ -11091,11 +11465,7 @@ function formatarDocumentoAta_(documento, ata) {
   });
 
   corpo.appendHorizontalRule();
-  ata.texto.split(/\r?\n/).forEach(function (linha) {
-    const paragrafo = corpo.appendParagraph(linha)
-      .setLineSpacing(1.25).setSpacingAfter(linha ? 6 : 2);
-    paragrafo.editAsText().setFontSize(11);
-  });
+  adicionarTextoAta_(corpo, ata.texto);
 
   const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
     'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
