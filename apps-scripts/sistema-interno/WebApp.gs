@@ -3988,7 +3988,7 @@ function arquivoCadastroPessoasCampeonato_(campeonatoId, tipo) {
 
 // Production remains legacy; active-gate integration is exercised only in VM fixtures.
 const ELENCOS_PARTICOES_MANIFESTO = 'manifesto.json';
-const ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = true;
+const ELENCOS_PARTICIONADOS_CUTOVER_ATIVO = false;
 
 function elencosParticionadosCutoverAtivo_() {
   return ELENCOS_PARTICIONADOS_CUTOVER_ATIVO;
@@ -11058,7 +11058,7 @@ function tamanhoLegivel_(bytes) {
 /** Perfis que podem cadastrar e editar. Os demais apenas consultam. */
 const ASSOCIADOS_PERFIS_EDICAO = ['admin', 'diretoria'];
 
-/** Situacoes possiveis de um associado. */
+/** Situações possíveis de um associado. */
 const ASSOCIADOS_STATUS = [
   { id: 'ativo', nome: 'Ativo', icone: '🟢' },
   { id: 'pendente', nome: 'Pendente', icone: '🟡' },
@@ -11071,12 +11071,15 @@ const ASSOCIADOS_STATUS = [
  * nome do arquivo no Drive.
  */
 const ASSOCIADOS_DOCUMENTOS = [
-  { id: 'estatuto', nome: 'Estatuto da equipe', apoio: 'Se a equipe tiver estatuto registrado.' },
-  { id: 'ata', nome: 'Ata de fundação', apoio: 'Ata que formalizou a criação da equipe.' },
-  { id: 'documentoResponsavel', nome: 'Documento do responsável', apoio: 'RG ou CNH do representante legal.' },
-  { id: 'comprovanteEndereco', nome: 'Comprovante de endereço', apoio: 'Emitido nos últimos três meses.' },
-  { id: 'termoAssociacao', nome: 'Termo de associação AEUV', apoio: 'Termo assinado pelo representante.' },
-  { id: 'regulamento', nome: 'Regulamento assinado', apoio: 'Regulamento da competição, assinado.' }
+  { id: 'estatuto', nome: 'Estatuto da equipe', categoria: 'complementar', apoio: 'Se a equipe tiver estatuto registrado.' },
+  { id: 'ata', nome: 'Ata de fundação', categoria: 'complementar', apoio: 'Se a equipe possuir ata de fundação.' },
+  { id: 'documentoResponsavel', nome: 'Documento do responsável', categoria: 'complementar', apoio: 'RG ou CNH do representante legal.' },
+  { id: 'comprovanteEndereco', nome: 'Comprovante de endereço', categoria: 'complementar', apoio: 'Emitido nos últimos três meses.' },
+  { id: 'termoAssociacao', nome: 'Termo de associação AEUV', categoria: 'complementar', apoio: 'Termo de responsabilidade assinado pelo representante.' },
+  { id: 'regulamento', nome: 'Regulamento assinado', categoria: 'complementar', apoio: 'Regulamento da competição, quando aplicável.' },
+  { id: 'fichaCadastro', nome: 'Ficha de filiação assinada', categoria: 'complementar', apoio: 'Ficha preenchida, com a relação da diretoria e comissão.' },
+  { id: 'comprovanteDesligamento', nome: 'Comprovante de desligamento', categoria: 'complementar', apoio: 'Se houve vínculo com outra associação varzeana, pode anexar o desligamento.' },
+  { id: 'comprovantePagamento', nome: 'Comprovante da taxa anual', categoria: 'aposAprovacao', apoio: 'Após aprovação e cobrança. O anexo não confirma pagamento automaticamente.' }
 ];
 
 /** Tipos de arquivo aceitos nos anexos. */
@@ -11110,7 +11113,22 @@ const ASSOCIADOS_COLUNAS = [
   { id: 'regulamento', titulo: 'Regulamento assinado' },
   { id: 'criadoEm', titulo: 'Criado em' },
   { id: 'atualizadoEm', titulo: 'Atualizado em' },
-  { id: 'atualizadoPor', titulo: 'Atualizado por' }
+  { id: 'atualizadoPor', titulo: 'Atualizado por' },
+  // Novos campos sempre ao final: preserva a posição dos cadastros existentes.
+  { id: 'razaoSocial', titulo: 'Razão social' },
+  { id: 'cnpjEquipe', titulo: 'CNPJ da equipe' },
+  { id: 'coresOficiais', titulo: 'Cores oficiais' },
+  { id: 'sedeCampo', titulo: 'Campo / sede' },
+  { id: 'enderecoEquipe', titulo: 'Endereço da equipe' },
+  { id: 'tipoFiliacao', titulo: 'Tipo de filiação' },
+  { id: 'exercicioFiliacao', titulo: 'Exercício da filiação' },
+  { id: 'diretoriaComissao', titulo: 'Diretoria e comissão (JSON)' },
+  { id: 'vinculoAnterior', titulo: 'Vínculo anterior' },
+  { id: 'associacaoAnterior', titulo: 'Associação anterior' },
+  { id: 'elegibilidadeConferida', titulo: 'Elegibilidade conferida' },
+  { id: 'fichaCadastro', titulo: 'Ficha de filiação assinada' },
+  { id: 'comprovanteDesligamento', titulo: 'Comprovante de desligamento' },
+  { id: 'comprovantePagamento', titulo: 'Comprovante da taxa anual' }
 ];
 
 /******************************************************
@@ -11941,9 +11959,7 @@ function publicarCadastrosAssociados() {
       const registro = linhaParaAssociado_(linha);
 
       if (registro.equipe) {
-        const chave = chaveConsultaAssociado_(registro.equipe);
-        propriedades.setProperty(chave, JSON.stringify(registro));
-        atuais[chave] = true;
+        publicarConsultaAssociado_(registro).forEach(function (chave) { atuais[chave] = true; });
       }
     });
 
@@ -11968,11 +11984,66 @@ function chaveConsultaAssociado_(equipe) {
   return CONFIG.associados.prefixoConsulta + chaveEquipe_(equipe);
 }
 
+// Publica em partes menores que 9 KB e troca o manifesto por último.
+function publicarConsultaAssociado_(registro) {
+  const propriedades = PropertiesService.getScriptProperties();
+  const chave = chaveConsultaAssociado_(registro.equipe);
+  const anterior = propriedades.getProperty(chave);
+  const texto = JSON.stringify(registro);
+  const chaves = [chave];
+  if (texto.length <= 2000) {
+    propriedades.setProperty(chave, texto);
+  } else {
+    const versao = Utilities.getUuid();
+    const caracteres = Array.from(texto);
+    const partes = Math.ceil(caracteres.length / 2000);
+    const valores = {};
+    for (let i = 0; i < partes; i++) {
+      const chaveParte = chave + '::parte::' + versao + '::' + i;
+      valores[chaveParte] = caracteres.slice(i * 2000, (i + 1) * 2000).join('');
+      chaves.push(chaveParte);
+    }
+    propriedades.setProperties(valores);
+    propriedades.setProperty(chave, JSON.stringify({
+      consultaPartes: partes, consultaVersao: versao,
+      equipe: registro.equipe, nome: registro.nome, telefone: registro.telefone
+    }));
+  }
+  removerPartesConsultaAssociado_(chave, anterior);
+  return chaves;
+}
+
+function removerPartesConsultaAssociado_(chave, bruto) {
+  if (!bruto) return;
+  const meta = JSON.parse(bruto);
+  if (!meta.consultaPartes) return;
+  const propriedades = PropertiesService.getScriptProperties();
+  for (let i = 0; i < meta.consultaPartes; i++) {
+    propriedades.deleteProperty(chave + '::parte::' + meta.consultaVersao + '::' + i);
+  }
+}
+
+function lerConsultaAssociado_(equipe) {
+  const propriedades = PropertiesService.getScriptProperties();
+  const chave = chaveConsultaAssociado_(equipe);
+  const bruto = propriedades.getProperty(chave);
+  if (!bruto) return null;
+  const meta = JSON.parse(bruto);
+  if (!meta.consultaPartes) return completarAssociado_(meta);
+  let texto = '';
+  for (let i = 0; i < meta.consultaPartes; i++) {
+    const parte = propriedades.getProperty(chave + '::parte::' + meta.consultaVersao + '::' + i);
+    if (parte === null) throw new Error('Cadastro publicado incompleto. Solicite a republicação à administração.');
+    texto += parte;
+  }
+  return completarAssociado_(JSON.parse(texto));
+}
+
 /**
  * Devolve os dados necessarios para montar a tela de associados.
  * Chamada pelo cliente; refaz a verificacao de permissao no servidor.
  * @return {{registros: Array<Object>, equipes: Array<string>, status: Array<Object>,
- *           documentos: Array<Object>, podeEditar: boolean, planilhaUrl: string}}
+ *           documentos: Array<Object>, podeEditar: boolean, podeExcluir: boolean, planilhaUrl: string}}
  */
 function listarAssociados() {
   const sessao = sessaoAssociados_();
@@ -11986,15 +12057,14 @@ function listarAssociados() {
 
     // O associado nao le a planilha geral nem recebe dados de outras
     // equipes: so consulta a copia publicada para a propria equipe.
-    const bruto = PropertiesService.getScriptProperties()
-      .getProperty(chaveConsultaAssociado_(sessao.usuario.equipe));
+    const registro = lerConsultaAssociado_(sessao.usuario.equipe);
 
-    if (!bruto) {
+    if (!registro) {
       throw new Error('O cadastro da sua equipe ainda não foi publicado. '
         + 'Peça à administração para cadastrar a equipe ou executar publicarCadastrosAssociados().');
     }
 
-    registros = [JSON.parse(bruto)];
+    registros = [registro];
   } else {
     registros = abaAssociados_().getDataRange().getValues().slice(1).map(function (linha) {
       return linhaParaAssociado_(linha);
@@ -12011,6 +12081,7 @@ function listarAssociados() {
     status: ASSOCIADOS_STATUS,
     documentos: ASSOCIADOS_DOCUMENTOS,
     podeEditar: podeEditarAssociados_(sessao.usuario.perfil),
+    podeExcluir: sessao.usuario.perfil === 'admin',
     somenteMinhaEquipe: daEquipe,
     minhaEquipe: daEquipe ? sessao.usuario.equipe : '',
     planilhaUrl: !daEquipe && podeEditarAssociados_(sessao.usuario.perfil)
@@ -12074,6 +12145,7 @@ function salvarAssociado(payload) {
 
     const agora = new Date();
     const registro = Object.assign({}, anterior || {}, dados);
+    validarVinculoAssociado_(registro);
 
     ASSOCIADOS_DOCUMENTOS.forEach(function (documento) {
       const enviado = payload.arquivos && payload.arquivos[documento.id];
@@ -12099,13 +12171,63 @@ function salvarAssociado(payload) {
       aba.appendRow(linha);
     }
 
-    PropertiesService.getScriptProperties()
-      .setProperty(chaveConsultaAssociado_(dados.equipe), JSON.stringify(linhaParaAssociado_(linha)));
+    publicarConsultaAssociado_(linhaParaAssociado_(linha));
     if (anterior && chaveOriginal !== chave) {
-      PropertiesService.getScriptProperties().deleteProperty(chaveConsultaAssociado_(anterior.equipe));
+      const propriedades = PropertiesService.getScriptProperties();
+      const chaveAntiga = chaveConsultaAssociado_(anterior.equipe);
+      removerPartesConsultaAssociado_(chaveAntiga, propriedades.getProperty(chaveAntiga));
+      propriedades.deleteProperty(chaveAntiga);
     }
 
     return { sucesso: true, equipe: dados.equipe, novo: !linhaExistente };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Exclui apenas o cadastro do associado. Equipe e arquivos do Drive são mantidos.
+ * A permissão é conferida no servidor, inclusive para chamadas diretas.
+ */
+function excluirAssociado(equipe) {
+  const sessao = sessaoAssociados_();
+  if (sessao.usuario.perfil !== 'admin') {
+    throw new Error('Somente administradores podem excluir associados.');
+  }
+  const nome = limparCampo_(equipe, 120);
+  if (!nome) throw new Error('Informe a equipe do associado que deseja excluir.');
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const aba = abaAssociados_();
+    const valores = aba.getDataRange().getValues();
+    const chaveEquipe = chaveEquipe_(nome);
+    const linhas = [];
+    for (let i = 1; i < valores.length; i++) {
+      if (chaveEquipe_(valores[i][0]) === chaveEquipe) linhas.push(i + 1);
+    }
+    if (!linhas.length) throw new Error('Associado não encontrado. Atualize a lista antes de excluir.');
+    if (linhas.length > 1) throw new Error('Há cadastros duplicados desta equipe. Corrija a planilha antes de excluir.');
+
+    const equipeExcluida = String(valores[linhas[0] - 1][0]).trim();
+    const propriedades = PropertiesService.getScriptProperties();
+    const chave = chaveConsultaAssociado_(equipeExcluida);
+    const anterior = propriedades.getProperty(chave);
+    const partes = Object.keys(propriedades.getProperties()).filter(function (item) {
+      return item.indexOf(chave + '::parte::') === 0;
+    });
+    // Revoga primeiro a consulta. Se a planilha falhar, restaura o manifesto;
+    // as partes ainda não foram removidas e o cadastro continua íntegro.
+    propriedades.deleteProperty(chave);
+    try {
+      aba.deleteRow(linhas[0]);
+    } catch (erro) {
+      if (anterior !== null) propriedades.setProperty(chave, anterior);
+      throw erro;
+    }
+    partes.forEach(function (item) { propriedades.deleteProperty(item); });
+    return { sucesso: true, equipe: equipeExcluida };
   } finally {
     lock.releaseLock();
   }
@@ -12146,11 +12268,28 @@ function linhaParaAssociado_(linha) {
     registro[coluna.id] = linha[i] === null || linha[i] === undefined ? '' : String(linha[i]).trim();
   });
 
-  registro.pendencias = ASSOCIADOS_DOCUMENTOS.filter(function (documento) {
-    return !registro[documento.id];
-  }).length;
+  return completarAssociado_(registro);
+}
 
+function documentoObrigatorioAssociado_(documento, registro) {
+  // Todos os anexos são opcionais, inclusive após aprovação ou vínculo anterior.
+  return false;
+}
+
+function completarAssociado_(registro) {
+  registro.pendencias = ASSOCIADOS_DOCUMENTOS.filter(function (documento) {
+    return documentoObrigatorioAssociado_(documento, registro) && !registro[documento.id];
+  }).length;
+  // Valor de referência apenas: não gera cobrança, aprovação ou baixa financeira.
+  registro.taxaAnual = registro.tipoFiliacao === 'inicial' ? 150
+    : registro.tipoFiliacao === 'renovacao' ? 100 : '';
   return registro;
+}
+
+function validarVinculoAssociado_(registro) {
+  if (registro.vinculoAnterior === 'sim' && !registro.associacaoAnterior) {
+    throw new Error('Informe o nome da associação anterior.');
+  }
 }
 
 /**
@@ -12248,8 +12387,76 @@ function validarAssociado_(payload) {
     cidade: exigirCampo_(dados.cidade, 80, 'Informe a cidade.'),
     uf: uf,
     rg: rg,
-    cpf: cpf
+    cpf: cpf,
+    ...validarCamposFiliacao_(dados)
   };
+}
+
+function validarCamposFiliacao_(dados) {
+  const campos = {};
+  // Clientes antigos podem omitir estes campos sem apagar valores já cadastrados.
+  ['razaoSocial', 'coresOficiais', 'sedeCampo', 'enderecoEquipe', 'associacaoAnterior'].forEach(function (id) {
+    if (Object.prototype.hasOwnProperty.call(dados, id)) {
+      campos[id] = limparCampo_(dados[id], id === 'enderecoEquipe' ? 300 : 150);
+    }
+  });
+  if (Object.prototype.hasOwnProperty.call(dados, 'cnpjEquipe')) {
+    campos.cnpjEquipe = somenteDigitos_(dados.cnpjEquipe);
+    if (campos.cnpjEquipe && !cnpjAssociadoValido_(campos.cnpjEquipe)) {
+      throw new Error('O CNPJ da equipe não é válido.');
+    }
+  }
+  const opcoes = {
+    tipoFiliacao: ['', 'inicial', 'renovacao'],
+    vinculoAnterior: ['', 'sim', 'nao'],
+    elegibilidadeConferida: ['', 'pendente', 'conferida']
+  };
+  Object.keys(opcoes).forEach(function (id) {
+    if (!Object.prototype.hasOwnProperty.call(dados, id)) return;
+    if (opcoes[id].indexOf(dados[id]) === -1) throw new Error('Opção inválida para ' + id + '.');
+    campos[id] = dados[id];
+  });
+  if (Object.prototype.hasOwnProperty.call(dados, 'exercicioFiliacao')) {
+    campos.exercicioFiliacao = limparCampo_(dados.exercicioFiliacao, 10);
+    if (campos.exercicioFiliacao && !/^[1-9]\d{3}$/.test(campos.exercicioFiliacao)) {
+      throw new Error('Informe o exercício da filiação com quatro dígitos.');
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(dados, 'diretoriaComissao')) {
+    const pessoas = dados.diretoriaComissao;
+    if (!Array.isArray(pessoas) || pessoas.length > 100) {
+      throw new Error('Informe uma relação de diretoria e comissão com até 100 pessoas.');
+    }
+    campos.diretoriaComissao = JSON.stringify(pessoas.map(function (pessoa) {
+      if (!pessoa || typeof pessoa !== 'object') throw new Error('Pessoa inválida na diretoria/comissão.');
+      const nome = exigirCampo_(pessoa.nome, 150, 'Informe o nome de cada pessoa da diretoria/comissão.');
+      if (nome.split(' ').filter(Boolean).length < 2) throw new Error('Informe o nome completo na diretoria/comissão.');
+      const cpf = somenteDigitos_(pessoa.cpf);
+      if (!cpfValido_(cpf)) throw new Error('CPF inválido na diretoria/comissão: ' + nome + '.');
+      return {
+        nome: nome,
+        cargo: exigirCampo_(pessoa.cargo, 100, 'Informe o cargo de ' + nome + '.'),
+        cpf: cpf,
+        rg: exigirCampo_(pessoa.rg, 30, 'Informe o RG de ' + nome + '.')
+      };
+    }));
+  }
+  return campos;
+}
+
+function cnpjAssociadoValido_(cnpj) {
+  if (!/^\d{14}$/.test(cnpj) || /^(\d)\1{13}$/.test(cnpj)) return false;
+  for (let tamanho = 12; tamanho <= 13; tamanho++) {
+    let soma = 0;
+    let peso = tamanho - 7;
+    for (let i = 0; i < tamanho; i++) {
+      soma += Number(cnpj.charAt(i)) * peso;
+      peso = peso === 2 ? 9 : peso - 1;
+    }
+    const resto = soma % 11;
+    if (Number(cnpj.charAt(tamanho)) !== (resto < 2 ? 0 : 11 - resto)) return false;
+  }
+  return true;
 }
 
 /**
@@ -12259,6 +12466,7 @@ function validarAssociado_(payload) {
  */
 function validarNascimento_(valor) {
   const texto = limparCampo_(valor, 10);
+  if (!texto) throw new Error('Informe a data de nascimento do representante legal.');
   const partes = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
   if (!partes) {
@@ -12275,7 +12483,8 @@ function validarNascimento_(valor) {
   }
 
   const hoje = new Date();
-  const idade = (hoje - data) / (365.25 * 24 * 60 * 60 * 1000);
+  let idade = hoje.getFullYear() - ano;
+  if (hoje.getMonth() < mes - 1 || (hoje.getMonth() === mes - 1 && hoje.getDate() < dia)) idade--;
 
   if (idade < 18) {
     throw new Error('O representante legal precisa ser maior de 18 anos.');
@@ -12955,6 +13164,9 @@ function abaAssociados_() {
   const aba = planilha.getSheetByName(CONFIG.associados.aba) || planilha.insertSheet(CONFIG.associados.aba);
 
   const titulos = ASSOCIADOS_COLUNAS.map(function (c) { return c.titulo; });
+  if (aba.getMaxColumns() < titulos.length) {
+    aba.insertColumnsAfter(aba.getMaxColumns(), titulos.length - aba.getMaxColumns());
+  }
   const primeira = aba.getRange(1, 1, 1, titulos.length).getValues()[0];
   const precisaCabecalho = titulos.some(function (titulo, i) {
     return String(primeira[i] || '') !== titulo;

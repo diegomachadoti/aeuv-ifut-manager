@@ -826,6 +826,21 @@
     .documento .situacao { font-size: 12px; }
     .documento .situacao.entregue { color: #1e8449; font-weight: bold; }
     .documento .situacao.falta { color: #8a5a00; }
+    .documento .selecao-anexo { position: relative; display: block; cursor: pointer; border: 2px dashed var(--apoio); border-radius: 10px; padding: 28px 16px; text-align: center; background: var(--fundo); }
+    .documento .selecao-anexo:hover { background: var(--azul-claro); }
+    .documento .selecao-anexo:focus-within { outline: 2px solid var(--azul); outline-offset: 3px; }
+    .documento .upload-titulo { display: block; font-size: 18px; color: var(--azul); margin-bottom: 5px; }
+    .documento .upload-ajuda { display: block; font-size: 12px; font-weight: normal; color: var(--apoio); }
+    .documento input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; padding: 0; }
+    .documento .arquivo-selecionado { overflow-wrap: anywhere; font-size: 12px; }
+    #areaAssociados .campo [aria-invalid="true"] { border: 2px solid #b42318; background: #fff1f0; color: #7a271a; }
+    #areaAssociados .campo:has([aria-invalid="true"]) label,
+    #areaAssociados .obrigatorio, #areaAssociados .erro-campo { color: #b42318; }
+    #areaAssociados .erro-campo { display: block; font-size: 12px; margin-top: 5px; }
+    #areaAssociados .excluir-associado { color: #b42318; border-color: #b42318; }
+    body.tema-escuro #areaAssociados .obrigatorio,
+    body.tema-escuro #areaAssociados .erro-campo { color: #fca5a5; }
+    .pessoa-filiacao { border: 1px solid var(--borda); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
 
     .acoes-formulario {
       margin-top: 20px;
@@ -9296,6 +9311,7 @@
       status: [],
       documentos: [],
       podeEditar: false,
+      podeExcluir: false,
       somenteMinhaEquipe: false,
       minhaEquipe: '',
       planilhaUrl: ''
@@ -9536,16 +9552,21 @@
         const url = registro ? registro[documento.id] : '';
         const situacao = url
           ? '<span class="situacao entregue">Entregue</span> '
-            + '<a href="' + escapar(url) + '" target="_blank" rel="noopener">abrir arquivo</a>'
+            + '<a href="' + escapar(url) + '" target="_blank" rel="noopener">Abrir anexo atual</a>'
           : '<span class="situacao falta">Ainda n&atilde;o enviado</span>';
 
         const envio = somenteLeitura
           ? ''
-          : '<input type="file" data-documento="' + escapar(documento.id) + '" '
-            + 'accept=".pdf,.jpg,.jpeg,.png,.webp">';
+          : '<label class="selecao-anexo">'
+            + '<input type="file" data-documento="' + escapar(documento.id) + '" '
+            + 'aria-label="' + escapar('Pesquisar arquivo: ' + documento.nome) + '" accept=".pdf,.jpg,.jpeg,.png,.webp">'
+            + '<strong class="upload-titulo">Pesquisar arquivo</strong>'
+            + '<span class="upload-ajuda">Selecione um PDF ou imagem de até 5 MB.</span></label>'
+            + '<span class="arquivo-selecionado" aria-live="polite">' + (url ? 'Anexo atual será mantido.' : 'Nenhum arquivo selecionado.') + '</span>';
 
         return '<div class="documento">'
           + '<span class="titulo">' + escapar(documento.nome) + '</span>'
+          + '<span class="dica">Opcional</span>'
           + '<span class="dica">' + escapar(documento.apoio) + '</span>'
           + '<span>' + situacao + '</span>'
           + envio
@@ -9573,15 +9594,43 @@
       document.getElementById('areaAssociados').innerHTML = '<div class="formulario">'
         + '<h3>' + escapar(titulo) + '</h3>'
         + historico
+        + '<p class="apoio">Campos com <span class="obrigatorio">*</span> são obrigatórios. Todos os uploads são opcionais.</p>'
         + '<div class="grupo"><h4>Equipe</h4><div class="campos">'
-        + '<div class="campo largo"><label for="fEquipe">Equipe associada</label>'
+        + '<div class="campo largo"><label for="fEquipe">Equipe associada / nome fantasia</label>'
         + '<select id="fEquipe"' + trava + '>'
         + (registro ? '' : '<option value="">Selecione</option>') + opcoesEquipe + '</select>'
         + (somenteLeitura ? '' : '<span class="dica">Equipe e CPF do representante devem ser exclusivos entre os associados.</span>')
         + '</div>'
         + '<div class="campo largo"><label for="fStatus">Situa&ccedil;&atilde;o</label>'
         + '<select id="fStatus"' + trava + '>' + opcoesStatus + '</select></div>'
+        + campoTexto('fRazaoSocial', 'Razão social (se houver)', registro ? registro.razaoSocial : '', 'largo', trava, 'text')
+        + campoTexto('fCnpjEquipe', 'CNPJ (se houver)', registro ? registro.cnpjEquipe : '', 'largo', trava, 'text')
+        + campoTexto('fCoresOficiais', 'Cores oficiais', registro ? registro.coresOficiais : '', 'largo', trava, 'text')
+        + campoTexto('fSedeCampo', 'Campo / sede utilizada', registro ? registro.sedeCampo : '', 'largo', trava, 'text')
+        + campoTexto('fEnderecoEquipe', 'Endereço da equipe', registro ? registro.enderecoEquipe : '', 'cheio', trava, 'text')
         + '</div></div>'
+        + '<div class="grupo"><h4>Filiação</h4><div class="campos">'
+        + campoSelecaoAssociado_('fTipoFiliacao', 'Tipo de filiação', registro ? registro.tipoFiliacao : '',
+          [['', 'Não informado'], ['inicial', 'Filiação inicial'], ['renovacao', 'Renovação anual']], trava)
+        + campoTexto('fExercicioFiliacao', 'Exercício anual', registro ? registro.exercicioFiliacao : '', '', trava, 'text')
+        + '</div><p class="apoio" id="taxaFiliacao"></p>'
+        + '<p class="apoio">Cadastro e anexos não aprovam a filiação nem confirmam pagamento. '
+        + 'A análise, aprovação, cobrança e confirmação do pagamento são etapas separadas.</p></div>'
+        + '<div class="grupo"><h4>Diretoria e comissão técnica</h4>'
+        + '<p class="apoio">Relacione nome completo, cargo/função, CPF e RG de cada pessoa.</p>'
+        + '<div id="pessoasFiliacao"></div>'
+        + (somenteLeitura ? '' : '<button type="button" class="botao-apoio" id="adicionarPessoaFiliacao">Adicionar pessoa</button>')
+        + '</div>'
+        + '<div class="grupo"><h4>Vínculos e conferência de elegibilidade</h4><div class="campos">'
+        + campoSelecaoAssociado_('fVinculoAnterior', 'Vínculo anterior com outra associação varzeana', registro ? registro.vinculoAnterior : '',
+          [['', 'Não informado'], ['nao', 'Não houve vínculo'], ['sim', 'Houve vínculo anterior']], trava)
+        + campoTexto('fAssociacaoAnterior', 'Nome da associação anterior (quando aplicável)', registro ? registro.associacaoAnterior : '', 'largo', trava, 'text')
+        + campoSelecaoAssociado_('fElegibilidadeConferida', 'Conferência administrativa de elegibilidade', registro ? registro.elegibilidadeConferida : '',
+          [['', 'Não registrada'], ['pendente', 'Aguardando conferência'], ['conferida', 'Conferência realizada']], trava)
+        + '</div><p class="apoio">Conferir ausência de filiação simultânea, desligamento quando aplicável '
+        + 'e vínculos/conflitos de dirigentes e comissão. Registrar a conferência não aprova automaticamente a equipe.</p>'
+        + '<p class="apoio" id="avisoDesligamento"></p>'
+        + '</div>'
         + '<div class="grupo"><h4>Representante legal</h4><div class="campos">'
         + campoTexto('fNome', 'Nome completo', registro ? registro.nome : '', 'cheio', trava, 'text')
         + campoTexto('fNascimento', 'Data de nascimento', paraDataInput(registro ? registro.nascimento : ''), '', trava, 'date')
@@ -9601,19 +9650,76 @@
         + '</div></div>'
         + '<div class="grupo"><h4>Documenta&ccedil;&atilde;o</h4>'
         + '<p class="apoio">Arquivos PDF, JPG, PNG ou WEBP, de at&eacute; 5 MB cada. '
-        + 'Enviar um arquivo novo substitui o anterior.</p>'
+        + 'Selecionar um arquivo novo substitui somente aquele documento ao salvar. Os demais anexos são mantidos. '
+        + 'Todos os anexos são opcionais e não impedem salvar o cadastro. O comprovante da taxa é apresentado após aprovação e cobrança.</p>'
         + '<div class="campos">' + documentos + '</div></div>'
         + '<div class="acoes-formulario">'
         + gravar
         + voltar
+        + botaoExcluirAssociado_(registro)
         + '<span class="espaco"></span>'
-        + '<span class="apoio" id="avisoAssociado"></span>'
+        + '<span class="apoio" id="avisoAssociado" role="status" aria-live="polite"></span>'
         + '</div></div>';
+
+      let pessoas = [];
+      if (registro && registro.diretoriaComissao) {
+        try {
+          pessoas = JSON.parse(registro.diretoriaComissao);
+          if (!Array.isArray(pessoas) || pessoas.some(function (pessoa) { return !pessoa || typeof pessoa !== 'object'; })) {
+            throw new Error('Relação inválida');
+          }
+        } catch (erro) {
+          pessoas = [];
+          document.getElementById('avisoAssociado').textContent = 'Relação de diretoria inválida. Corrija o cadastro antes de salvar.';
+          const salvar = document.getElementById('gravarAssociado');
+          if (salvar) salvar.disabled = true;
+        }
+      }
+      if (Array.isArray(pessoas)) pessoas.forEach(function (pessoa) { adicionarPessoaFiliacao_(pessoa, trava); });
+      const adicionar = document.getElementById('adicionarPessoaFiliacao');
+      if (adicionar) adicionar.addEventListener('click', function () { adicionarPessoaFiliacao_({}, trava); });
+      const atualizarIndicacoes = function () {
+        const tipo = document.getElementById('fTipoFiliacao').value;
+        document.getElementById('taxaFiliacao').textContent = tipo === 'inicial' ? 'Taxa anual de referência: R$ 150,00.'
+          : tipo === 'renovacao' ? 'Taxa anual de referência: R$ 100,00.' : 'Informe o tipo para indicar a taxa anual.';
+        const vinculo = document.getElementById('fVinculoAnterior').value;
+        document.getElementById('avisoDesligamento').textContent = vinculo === 'sim'
+          ? 'Informe a associação anterior. O comprovante de desligamento é opcional para análise.'
+          : vinculo === 'nao' ? 'Comprovante de desligamento opcional.' : 'Vínculo anterior ainda não informado.';
+        prepararCamposAssociado_();
+      };
+      ['fTipoFiliacao', 'fVinculoAnterior'].forEach(function (id) {
+        document.getElementById(id).addEventListener('change', atualizarIndicacoes);
+      });
+      atualizarIndicacoes();
+      const areaFormulario = document.getElementById('areaAssociados');
+      const revalidarCampo = function (evento) {
+        const campo = evento.target;
+        if (campo.matches('.campo input, .campo select') && campo.getAttribute('aria-invalid') === 'true') {
+          validarCampoAssociado_(campo);
+        }
+      };
+      areaFormulario.oninput = revalidarCampo;
+      areaFormulario.onchange = revalidarCampo;
+      document.querySelectorAll('#areaAssociados [data-documento]').forEach(function (campo) {
+        campo.addEventListener('change', function () {
+          const nome = campo.parentElement.nextElementSibling;
+          const documento = campo.dataset.documento;
+          nome.textContent = campo.files.length ? campo.files[0].name
+            + (registro && registro[documento] ? ' — substituirá somente este anexo ao salvar.' : ' — será enviado ao salvar.')
+            : registro && registro[documento] ? 'Anexo atual será mantido.' : 'Nenhum arquivo selecionado.';
+        });
+      });
 
       const botaoVoltar = document.getElementById('voltarAssociados');
 
       if (botaoVoltar) {
         botaoVoltar.addEventListener('click', montarTelaAssociados);
+      }
+
+      const botaoExcluir = document.getElementById('excluirAssociado');
+      if (botaoExcluir) {
+        botaoExcluir.addEventListener('click', function () { excluirAssociadoDaTela_(registro); });
       }
 
       const botaoGravar = document.getElementById('gravarAssociado');
@@ -9625,6 +9731,159 @@
 
         ligarMascaras();
       }
+    }
+
+    function botaoExcluirAssociado_(registro) {
+      return associados.podeExcluir && registro
+        ? '<button type="button" class="botao-apoio excluir-associado" id="excluirAssociado">Excluir associado</button>'
+        : '';
+    }
+
+    function excluirAssociadoDaTela_(registro) {
+      if (!associados.podeExcluir || !registro) return;
+      const botao = document.getElementById('excluirAssociado');
+      if (!botao || botao.disabled) return;
+      if (!window.confirm('Excluir o cadastro de associado da equipe "' + registro.equipe
+        + '"? Esta ação não pode ser desfeita. A equipe e os arquivos do Drive serão mantidos.')) return;
+
+      const aviso = document.getElementById('avisoAssociado');
+      const botoes = Array.from(document.querySelectorAll('#areaAssociados .acoes-formulario button')).map(function (item) {
+        const estado = { botao: item, disabled: item.disabled };
+        item.disabled = true;
+        return estado;
+      });
+      aviso.textContent = 'Excluindo associado...';
+      google.script.run
+        .withSuccessHandler(function (resposta) {
+          if (moduloAtual !== 'associados') return;
+          carregarAssociados();
+          const anterior = document.getElementById('sucessoAssociado');
+          if (anterior) anterior.remove();
+          document.getElementById('areaAssociados').insertAdjacentHTML('beforebegin',
+            '<div class="sucesso" id="sucessoAssociado">Cadastro de ' + escapar(resposta.equipe) + ' excluído com sucesso.</div>');
+          setTimeout(function () {
+            const recado = document.getElementById('sucessoAssociado');
+            if (recado) recado.remove();
+          }, 6000);
+        })
+        .withFailureHandler(function (erro) {
+          botoes.forEach(function (estado) { estado.botao.disabled = estado.disabled; });
+          aviso.innerHTML = '<span style="color:#922b21;">'
+            + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+        })
+        // Usa a equipe do cadastro aberto, não uma seleção ainda não salva.
+        .excluirAssociado(registro.equipe);
+    }
+
+    function campoSelecaoAssociado_(id, rotulo, valor, opcoes, trava) {
+      return '<div class="campo largo"><label for="' + id + '">' + escapar(rotulo) + '</label>'
+        + '<select id="' + id + '"' + trava + '>' + opcoes.map(function (opcao) {
+          return '<option value="' + escapar(opcao[0]) + '"' + (opcao[0] === (valor || '') ? ' selected' : '')
+            + '>' + escapar(opcao[1]) + '</option>';
+        }).join('') + '</select></div>';
+    }
+
+    let sequenciaPessoaFiliacao_ = 0;
+    function adicionarPessoaFiliacao_(pessoa, trava) {
+      const id = 'pessoaFiliacao' + (++sequenciaPessoaFiliacao_);
+      const div = document.createElement('div');
+      div.className = 'pessoa-filiacao';
+      div.innerHTML = '<div class="campos">'
+        + campoTexto(id + 'nome', 'Nome completo', pessoa.nome || '', 'largo', trava, 'text')
+        + campoTexto(id + 'cargo', 'Cargo / função', pessoa.cargo || '', 'largo', trava, 'text')
+        + campoTexto(id + 'cpf', 'CPF', formatarCpf(pessoa.cpf || ''), 'largo', trava, 'text')
+        + campoTexto(id + 'rg', 'RG', pessoa.rg || '', 'largo', trava, 'text') + '</div>'
+        + (trava ? '' : '<button type="button" class="botao-apoio">Remover pessoa</button>');
+      document.getElementById('pessoasFiliacao').appendChild(div);
+      ['nome', 'cargo', 'cpf', 'rg'].forEach(function (campo) {
+        document.getElementById(id + campo).dataset.pessoaCampo = campo;
+      });
+      prepararCamposAssociado_();
+      if (!trava) div.querySelector('button').addEventListener('click', function () { div.remove(); });
+    }
+
+    function prepararCamposAssociado_() {
+      const obrigatorios = ['fEquipe', 'fStatus', 'fNome', 'fNascimento', 'fCpf', 'fRg', 'fEmail',
+        'fTelefone', 'fCep', 'fLogradouro', 'fNumero', 'fBairro', 'fCidade', 'fUf'];
+      if (document.getElementById('fVinculoAnterior').value === 'sim') obrigatorios.push('fAssociacaoAnterior');
+      document.querySelectorAll('#areaAssociados .campo input, #areaAssociados .campo select').forEach(function (campo) {
+        campo.required = obrigatorios.indexOf(campo.id) !== -1 || !!campo.dataset.pessoaCampo;
+        const rotulo = campo.parentElement.querySelector('label');
+        const estrela = rotulo.querySelector('.obrigatorio');
+        if (campo.required && !estrela) rotulo.insertAdjacentHTML('beforeend', ' <span class="obrigatorio" aria-hidden="true">*</span>');
+        if (!campo.required && estrela) estrela.remove();
+        if (!campo.required && campo.getAttribute('aria-invalid') === 'true') validarCampoAssociado_(campo);
+      });
+    }
+
+    function documentoNumericoAssociadoValido_(valor, cnpj) {
+      const digitos = valor.replace(/\D/g, '');
+      if (digitos.length !== (cnpj ? 14 : 11) || /^(\d)\1+$/.test(digitos)) return false;
+      for (let posicao = cnpj ? 12 : 9; posicao < digitos.length; posicao++) {
+        let soma = 0, peso = cnpj ? posicao - 7 : posicao + 1;
+        for (let i = 0; i < posicao; i++) {
+          soma += Number(digitos[i]) * peso;
+          peso = cnpj && peso === 2 ? 9 : peso - 1;
+        }
+        const resto = cnpj ? soma % 11 : (soma * 10) % 11;
+        const verificador = cnpj ? (resto < 2 ? 0 : 11 - resto) : (resto === 10 ? 0 : resto);
+        if (Number(digitos[posicao]) !== verificador) return false;
+      }
+      return true;
+    }
+
+    function validarCampoAssociado_(campo) {
+      const valor = campo.value.trim();
+      const digitos = valor.replace(/\D/g, '');
+      let mensagem = campo.required && !valor ? 'Preencha este campo obrigatório.' : '';
+      if (!mensagem && valor) {
+        if ((campo.id === 'fNome' || campo.dataset.pessoaCampo === 'nome') && valor.split(/\s+/).length < 2) mensagem = 'Informe o nome completo.';
+        else if ((campo.id === 'fCpf' || campo.dataset.pessoaCampo === 'cpf') && !documentoNumericoAssociadoValido_(valor, false)) mensagem = 'Informe um CPF válido.';
+        else if (campo.id === 'fCnpjEquipe' && !documentoNumericoAssociadoValido_(valor, true)) mensagem = 'Informe um CNPJ válido.';
+        else if (campo.id === 'fEmail' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(valor)) mensagem = 'Informe um e-mail válido.';
+        else if (campo.id === 'fTelefone' && (digitos.length < 10 || digitos.length > 11)) mensagem = 'Informe o telefone com DDD (10 ou 11 dígitos).';
+        else if (campo.id === 'fCep' && digitos.length !== 8) mensagem = 'Informe o CEP com 8 dígitos.';
+        else if (campo.id === 'fUf' && !/^[A-Za-z]{2}$/.test(valor)) mensagem = 'Informe a UF com duas letras.';
+        else if (campo.id === 'fExercicioFiliacao' && !/^[1-9]\d{3}$/.test(valor)) mensagem = 'Informe o exercício com quatro dígitos.';
+        else if (campo.id === 'fNascimento') {
+          mensagem = validarCampoDataHora_(campo);
+          if (!mensagem) {
+            const partes = dataBrParaIso_(valor).split('-').map(Number);
+            const hoje = new Date();
+            let idade = hoje.getFullYear() - partes[0];
+            if (hoje.getMonth() + 1 < partes[1] || (hoje.getMonth() + 1 === partes[1] && hoje.getDate() < partes[2])) idade--;
+            if (idade < 18) mensagem = 'O representante legal precisa ter pelo menos 18 anos.';
+            else if (idade > 110) mensagem = 'Confira o ano de nascimento informado.';
+          }
+        }
+      }
+      campo.setCustomValidity(mensagem);
+      campo.setAttribute('aria-invalid', mensagem ? 'true' : 'false');
+      const idErro = campo.id + 'Erro';
+      let erro = document.getElementById(idErro);
+      if (mensagem && !erro) {
+        erro = document.createElement('span');
+        erro.id = idErro;
+        erro.className = 'erro-campo';
+        campo.insertAdjacentElement('afterend', erro);
+        campo.setAttribute('aria-describedby', idErro);
+      }
+      if (erro) erro.textContent = mensagem;
+      return mensagem;
+    }
+
+    function validarFormularioAssociado_(aviso) {
+      prepararCamposAssociado_();
+      const invalidos = [];
+      document.querySelectorAll('#areaAssociados .campo input, #areaAssociados .campo select').forEach(function (campo) {
+        if (!campo.disabled && validarCampoAssociado_(campo)) invalidos.push(campo);
+      });
+      aviso.textContent = invalidos.length ? 'Confira os ' + invalidos.length + ' campos destacados em vermelho.' : '';
+      if (invalidos.length) {
+        invalidos[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        invalidos[0].focus({ preventScroll: true });
+      }
+      return !invalidos.length;
     }
 
     /**
@@ -9689,9 +9948,11 @@
     function gravarAssociado(registro) {
       const botao = document.getElementById('gravarAssociado');
       const aviso = document.getElementById('avisoAssociado');
-      if (!validarCamposDataHora_(['fNascimento'], aviso)) return;
+      if (!validarFormularioAssociado_(aviso)) return;
 
       botao.disabled = true;
+      const botaoExcluir = document.getElementById('excluirAssociado');
+      if (botaoExcluir) botaoExcluir.disabled = true;
       aviso.textContent = 'Enviando...';
 
       const payload = {
@@ -9710,7 +9971,22 @@
         cidade: document.getElementById('fCidade').value,
         uf: document.getElementById('fUf').value,
         rg: document.getElementById('fRg').value,
-        cpf: document.getElementById('fCpf').value
+        cpf: document.getElementById('fCpf').value,
+        razaoSocial: document.getElementById('fRazaoSocial').value,
+        cnpjEquipe: document.getElementById('fCnpjEquipe').value,
+        coresOficiais: document.getElementById('fCoresOficiais').value,
+        sedeCampo: document.getElementById('fSedeCampo').value,
+        enderecoEquipe: document.getElementById('fEnderecoEquipe').value,
+        tipoFiliacao: document.getElementById('fTipoFiliacao').value,
+        exercicioFiliacao: document.getElementById('fExercicioFiliacao').value,
+        vinculoAnterior: document.getElementById('fVinculoAnterior').value,
+        associacaoAnterior: document.getElementById('fAssociacaoAnterior').value,
+        elegibilidadeConferida: document.getElementById('fElegibilidadeConferida').value,
+        diretoriaComissao: Array.from(document.querySelectorAll('#pessoasFiliacao .pessoa-filiacao')).map(function (linha) {
+          const pessoa = {};
+          linha.querySelectorAll('[data-pessoa-campo]').forEach(function (campo) { pessoa[campo.dataset.pessoaCampo] = campo.value; });
+          return pessoa;
+        }).filter(function (pessoa) { return Object.values(pessoa).some(function (valor) { return valor.trim(); }); })
       };
 
       lerAnexos().then(function (arquivos) {
@@ -9734,12 +10010,14 @@
           })
           .withFailureHandler(function (erro) {
             botao.disabled = false;
+            if (botaoExcluir) botaoExcluir.disabled = false;
             aviso.innerHTML = '<span style="color:#922b21;">'
               + escapar(erro && erro.message ? erro.message : erro) + '</span>';
           })
           .salvarAssociado(payload);
       }).catch(function (erro) {
         botao.disabled = false;
+        if (botaoExcluir) botaoExcluir.disabled = false;
         aviso.innerHTML = '<span style="color:#922b21;">'
           + escapar(erro && erro.message ? erro.message : erro) + '</span>';
       });

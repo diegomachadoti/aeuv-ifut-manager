@@ -1875,7 +1875,7 @@ ganho perceptível na escala da associação — algumas dezenas de registros.
 | O quê | Onde |
 | --- | --- |
 | Dados do cadastro | Planilha `AEUV - Associados`, aba `Associados` |
-| Documentos enviados | `Documentos - Associados/<EQUIPE>/` |
+| Documentos enviados | Pasta `Documentos - Associados` (a descrição identifica equipe e documento) |
 
 As duas são criadas dentro da pasta raiz `AEUV - Automação` pela função
 `prepararAssociados()`, e os ids ficam nas propriedades de script
@@ -1886,14 +1886,23 @@ A ordem das colunas (`ASSOCIADOS_COLUNAS`) é o que liga cada célula ao seu
 campo. **Não reordene nem remova colunas** da planilha sem ajustar a constante:
 os dados passariam a ser lidos trocados.
 
+Os campos da ficha de filiação foram acrescentados **após as 24 colunas
+originais**. A abertura administrativa ou a republicação amplia a aba quando
+necessário e atualiza apenas o cabeçalho, sem apagar linhas ou anexos. Campos
+novos ainda não preenchidos ficam vazios; clientes antigos que os omitem não
+apagam valores já cadastrados.
+
 #### Campos
 
 | Bloco | Campos |
 | --- | --- |
-| Equipe | Equipe associada, Situação |
-| Representante legal | Nome completo, data de nascimento, CPF, RG, e-mail, telefone |
-| Endereço | CEP, logradouro, número, complemento, bairro, cidade, UF |
-| Documentação | Estatuto, ata de fundação, documento do responsável, comprovante de endereço, termo de associação, regulamento assinado |
+| Equipe | Equipe/nome fantasia, situação, razão social e CNPJ (se houver), cores oficiais, campo/sede e endereço da equipe |
+| Filiação | Inicial ou renovação anual, exercício e indicação da taxa de referência |
+| Diretoria e comissão | Relação de pessoas com nome completo, cargo/função, CPF e RG |
+| Vínculos e elegibilidade | Vínculo anterior, associação anterior e conferência administrativa explícita |
+| Representante legal | Nome completo, data de nascimento **obrigatória**, CPF, RG, e-mail, telefone |
+| Endereço do representante | CEP, logradouro, número, complemento, bairro, cidade, UF |
+| Documentação | Anexos existentes, ficha de filiação assinada, comprovante de desligamento e comprovante da taxa anual |
 
 O endereço é separado em campos em vez de um único texto livre: assim dá para
 filtrar por cidade, conferir o CEP e aproveitar os dados depois, em mala direta
@@ -1902,12 +1911,23 @@ ou relatórios.
 As quatro situações possíveis são 🟢 Ativo, 🟡 Pendente, 🔴 Inativo e ⚫ Suspenso.
 Todo cadastro novo começa como **Pendente**.
 
-Os documentos são **todos opcionais** — nem toda equipe tem estatuto registrado,
-e a documentação costuma chegar aos poucos. Em vez de travar o cadastro, a tela
-conta o que falta e mostra na coluna "Docs." e no indicador "Com documento
-pendente". Aceita PDF, JPG, PNG e WEBP, até 5 MB por arquivo. Enviar um arquivo
-novo **substitui** o anterior: a versão antiga vai para a lixeira, para a pasta
-da equipe não acumular cópias.
+**Todos os uploads são opcionais**, inclusive os comprovantes de desligamento
+e pagamento. A ausência de anexos não bloqueia o salvamento nem gera pendências
+documentais automáticas. O comprovante da taxa continua indicado após aprovação
+e cobrança, sem confirmar pagamento automaticamente.
+
+Aceita PDF, JPG, PNG e WEBP, até 5 MB por arquivo. Cada cartão mostra "Opcional",
+o link para o anexo atual, uma área tracejada "Pesquisar arquivo" no padrão do
+portal de inscrição e o nome do novo arquivo. Salvar um arquivo
+novo **troca apenas a referência daquele documento**; sem seleção, o anexo atual
+permanece. As versões antigas continuam no Drive, sem exclusão automática.
+
+As taxas indicadas são **R$ 150,00 para filiação inicial** e **R$ 100,00 para
+renovação anual**, conforme a ficha. São valores de referência, não lançamentos
+financeiros. Marcar a conferência de elegibilidade ou anexar comprovante não
+aprova a filiação, não muda a situação automaticamente e não confirma/baixa
+pagamento. Análise, aprovação, cobrança e confirmação financeira continuam
+separadas e sob responsabilidade administrativa.
 
 #### Validações
 
@@ -1916,8 +1936,12 @@ confiável:
 
 - **CPF** com os dígitos verificadores calculados, recusando também sequências
   como `111.111.111-11`.
-- **Data de nascimento** precisa existir no calendário (não passa `31/02`) e o
-  representante precisa ser maior de 18 anos.
+- **Data de nascimento** é obrigatória e precisa existir no calendário
+  (não passa `31/02`); o representante precisa ter pelo menos 18 anos.
+- **CNPJ**, quando informado, deve ter dígitos verificadores válidos; exercício,
+  quando preenchido, usa quatro dígitos. Cada pessoa incluída na relação precisa
+  de nome completo, cargo, CPF válido e RG. O nome da associação anterior é
+  exigido quando houve vínculo anterior.
 - **Telefone** com 10 ou 11 dígitos, **CEP** com 8, **UF** com exatamente duas
   letras, e-mail no formato esperado e nome completo com ao menos duas palavras.
 
@@ -1925,11 +1949,19 @@ CPF, telefone e CEP são guardados **somente com dígitos** e formatados na
 exibição. Assim a busca funciona tanto por `52998224725` quanto pelo número
 pontuado.
 
+Os campos obrigatórios são identificados com **\***. Ao salvar, a interface
+valida todos os campos antes de ler anexos ou enviar dados: campos vazios ou
+inválidos ficam vermelhos, com mensagem individual, e a tela rola e move o foco
+para o primeiro erro. A indicação é removida conforme o campo é corrigido.
+Associação anterior passa a ser obrigatória somente quando houve vínculo;
+cada pessoa adicionada à diretoria/comissão exige nome, cargo, CPF e RG.
+
 #### Permissões
 
 | Perfil | Pode |
 | --- | --- |
-| `admin`, `diretoria` | Consultar, cadastrar e editar todas as equipes |
+| `admin` | Consultar, cadastrar, editar e excluir associados de todas as equipes |
+| `diretoria` | Consultar, cadastrar e editar todas as equipes; não pode excluir associados |
 | `associado` | Apenas consultar, e só a própria equipe |
 | `arbitragem` | Sem acesso à tela |
 
@@ -1938,6 +1970,30 @@ sem campo de envio — mas com os links dos documentos disponíveis. A regra est
 em `ASSOCIADOS_PERFIS_EDICAO` e é verificada de novo no servidor, dentro de
 `salvarAssociado()`. O recorte por equipe do perfil `associado` está descrito em
 [O associado só enxerga a própria equipe](#o-associado-só-enxerga-a-própria-equipe).
+
+O botão **Excluir associado** aparece apenas para `admin`, ao abrir um cadastro
+existente, e exige confirmação. `excluirAssociado()` verifica novamente a sessão
+e o perfil no servidor, sob trava de script para a alteração: remove a linha da
+planilha e revoga a consulta publicada, incluindo suas partes. A exclusão não
+remove a equipe do sistema, usuários, dados financeiros nem arquivos do Drive.
+Se a remoção da linha falhar, a consulta anterior é restaurada.
+
+Consultas individuais maiores são publicadas em partes nas propriedades do
+script, respeitando o limite por propriedade. O associado recebe apenas as
+partes da própria equipe, nunca a planilha geral. Contatos usados nos avisos de
+conflito de atletas continuam disponíveis no manifesto da consulta.
+
+#### Publicar esta atualização
+
+1. Atualize `WebApp.gs` e `Index.html` no projeto Apps Script do sistema interno.
+2. Execute `publicarCadastrosAssociados()` como administrador para ampliar o
+   cabeçalho e atualizar as consultas individuais dos cadastros existentes.
+3. Publique uma **nova versão da implantação**, mantendo "Executar como:
+   Usuário que acessa o app da web".
+4. Confira um cadastro existente como admin/diretoria e a consulta da própria
+   equipe como associado. Edições manuais na planilha exigem republicação.
+
+Testes locais: `node --test apps-scripts/sistema-interno/performance/associados-filiacao.test.cjs`.
 
 > **Atenção às permissões do Drive.** O sistema roda como *"Usuário que acessa"*,
 > então a gravação acontece com a conta de quem está usando a tela. Admins e
