@@ -74,12 +74,12 @@ estatuto = https://drive.google.com/file/d/1Hj0PRzRyXedn2uUFBf-eWQ3DMUkQa8BG/vie
 ata_eleicao = https://drive.google.com/file/d/1tQilVc3cnVYKHlZ-Ju0_WEurMrYDWwhs/view?usp=sharing
 documento_foto = https://drive.google.com/file/d/1FLuSGs_STswTwyINOXhfHBKbcQdEAYqp/view?usp=sharing
 cpf_dirigente = https://drive.google.com/file/d/1FLuSGs_STswTwyINOXhfHBKbcQdEAYqp/view?usp=sharing
-endereco_dirigente = https://drive.google.com/file/d/164j1TNVIzxPicpFE2UQ2WCRhWm8uus_-/view?usp=sharing
-cnd_federal = PENDENTE
-cnd_estadual = PENDENTE
+endereco_dirigente = https://drive.google.com/file/d/1E88Ao2uH97VS3lLyHdiCgvuGiKatU1f7/view?usp=sharing
+cnd_federal = https://drive.google.com/file/d/1svCxGHLmG-bA2k-5ZrRHLwb1F7bX6w1L/view?usp=sharing
+cnd_estadual = https://drive.google.com/file/d/1k8uKSzf6vvjq__IiLKEhvXnk8sRbPU5L/view?usp=sharing
 cnd_municipal_entidade = https://drive.google.com/file/d/1hA_2y-6oIED-qbTGjsDfqCzQxpWoy6G7/view?usp=sharing
 cnd_municipal_dirigente = https://drive.google.com/file/d/12xcH_hkVTb-MsQ3mmLGlCGbI4mtyQk5V/view?usp=sharing
-fgts = N/A
+fgts = Não aplicável: sem empregados registrados.
 cndt = https://drive.google.com/file/d/1QLQfwhZ7i8hLizEZ1RFFMEnjdA76GSfF/view?usp=sharing
 regulamento = https://drive.google.com/file/d/1Ky4OAvGJd9sJAudWPthKXnBUGLapU8Kk/view?usp=sharing
 folders = https://www.instagram.com/aeuv.varzea/
@@ -99,7 +99,7 @@ reportagens_finais = https://www.instagram.com/aeuv.varzea/
 # Licenças após assinatura do termo (item 3): não são declaradas emitidas.
 # ECAD e alvará sanitário são omitidos do PDF pelas condições acima.
 [licencas]
-alvara_evento = [PENDENTE APÓS TERMO: providenciar alvará de licença para realização de eventos — Secretaria Municipal de Finanças]
+alvara_evento = N/A: sem venda de alimentos e bebidas
 ecad = [NÃO APLICÁVEL: sem execução musical]
 alvara_infancia = [PENDENTE APÓS TERMO: confirmar entrada de menores e exigência do alvará com a Futel/TJMG]
 alvara_sanitario = [NÃO APLICÁVEL: sem venda de alimentos]

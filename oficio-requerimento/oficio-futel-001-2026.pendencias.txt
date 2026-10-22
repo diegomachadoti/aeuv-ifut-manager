@@ -1,8 +1,6 @@
 CHECKLIST FUTEL — OFÍCIO 001/2026
 
 PENDÊNCIAS DE PREENCHIMENTO / ANEXOS PARA O REQUERIMENTO E O TERMO
-- Anexo 2.2.5 — Certidão federal, Dívida Ativa da União e Previdência Social: substituir o link provisório por acesso HTTPS ao documento
-- Anexo 2.2.6 — Certidão negativa da Fazenda Estadual: substituir o link provisório por acesso HTTPS ao documento
 - Anexo 2.2.8 — Certificado de regularidade do FGTS (CRF): substituir o link provisório por acesso HTTPS ao documento
 
 ANTECEDÊNCIA / ALINHAMENTO
@@ -19,7 +17,7 @@ DOCUMENTOS ESPORTIVOS POSTERIORES (2.3.3.1 permite apresentação após o evento
 - 2.3.2 — Reportagens de jornais após o evento: https://www.instagram.com/aeuv.varzea/
 
 DOCUMENTOS APÓS ASSINATURA DO TERMO (item 3)
-- 3.1 — Alvará de licença para realização de eventos: [PENDENTE APÓS TERMO: providenciar alvará de licença para realização de eventos — Secretaria Municipal de Finanças]
+- 3.1 — Alvará de licença para realização de eventos: N/A: sem venda de alimentos e bebidas
 
 CONFERÊNCIAS ANTES DO PROTOCOLO
 - Links não substituem a apresentação exigida: confirmar com a Futel o formato aceito e anexar cópias quando solicitado.
