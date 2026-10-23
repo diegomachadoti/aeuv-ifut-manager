@@ -467,13 +467,43 @@ class Dosimetria:
     circunstancias: list[str]
 
 
-def dosimetria(o: Ocorrencia, ocorrencias: list[Ocorrencia], sumula: Sumula) -> Dosimetria:
+# Artigos com agravante de reincidencia de ATE 2 ANOS no regulamento (ART 22 e 24).
+# Para reincidentes nessas condutas, a pena deixa de ser em partidas e vai para a
+# comissao decidir (suspensao de ate 2 anos), conforme o § de reincidencia.
+REGRAS_REINCIDENCIA_DOIS_ANOS = ("art10_agressor", "art10_revide", "art10_torcedor", "art12")
+TEXTO_REINCIDENCIA_DOIS_ANOS = (
+    "atleta/membro REINCIDENTE — suspensão de até 2 (dois) anos de todas as competições "
+    "do organizador, em qualquer modalidade, a definir pela comissão"
+)
+
+
+def _eh_reincidente(o: Ocorrencia, reincidentes: dict | None) -> int:
+    """Quantas punicoes disciplinares anteriores o sujeito (atleta/comissao) tem."""
+    if not reincidentes or not isinstance(o.sujeito, Envolvido):
+        return 0
+    return int(reincidentes.get(o.sujeito.nome, 0))
+
+
+def dosimetria(o: Ocorrencia, ocorrencias: list[Ocorrencia], sumula: Sumula,
+               reincidentes: dict | None = None) -> Dosimetria:
     """Parte da pena minima e soma 1 partida por circunstancia registrada no relato, sem passar do maximo.
 
-    So usa fatos do relatorio (reiteracao, ameaca associada, continuidade apos a expulsao) e a faixa
-    literal do dispositivo. Penas sem faixa em partidas ficam com a penalidade prevista no dispositivo
-    ou para a comissao definir.
+    Usa fatos do relatorio (reiteracao, ameaca associada, continuidade apos a expulsao), a reincidencia
+    historica (nome+equipe, lida do controle de punicoes) e a faixa literal do dispositivo. Penas sem
+    faixa em partidas ficam com a penalidade prevista no dispositivo ou para a comissao definir.
     """
+    anteriores = _eh_reincidente(o, reincidentes)
+    reincidente = anteriores > 0
+
+    # ART 22/24: reincidencia leva a suspensao de ate 2 anos, decidida pela comissao.
+    if reincidente and o.regra.id in REGRAS_REINCIDENCIA_DOIS_ANOS:
+        return Dosimetria(
+            None,
+            destacar(TEXTO_REINCIDENCIA_DOIS_ANOS),
+            o.pena or "",
+            [f"reincidência (pessoa já possui {anteriores} punição(ões) disciplinar(es) anterior(es))"],
+        )
+
     pena = o.pena or ""
     numeros = [int(n) for n in re.findall(r"(\d+)\s*\(", pena)]
     if not pena or "anos" in pena or not numeros:
@@ -481,7 +511,10 @@ def dosimetria(o: Ocorrencia, ocorrencias: list[Ocorrencia], sumula: Sumula) -> 
             return Dosimetria(None, f"aplicação das penalidades previstas no {_referencia(o.regra)}", "", [])
         return Dosimetria(None, MARCADOR_DEFINIR, pena, [])
     if len(numeros) == 1:
-        return Dosimetria(numeros[0], partidas_texto(numeros[0]), pena, ["pena fixa prevista no dispositivo"])
+        circ = ["pena fixa prevista no dispositivo"]
+        if reincidente:
+            circ.append(f"reincidência registrada ({anteriores} punição(ões) anterior(es))")
+        return Dosimetria(numeros[0], partidas_texto(numeros[0]), pena, circ)
 
     minimo, maximo = numeros[0], numeros[1]
     circunstancias: list[str] = []
@@ -499,12 +532,17 @@ def dosimetria(o: Ocorrencia, ocorrencias: list[Ocorrencia], sumula: Sumula) -> 
         _casa(p, normalize_text(f)) for f in o.frases for p in PADRAO_APOS_EXPULSAO
     ):
         circunstancias.append("continuidade da conduta após a expulsão")
+    if reincidente:
+        circunstancias.append(
+            f"reincidência (pessoa já possui {anteriores} punição(ões) disciplinar(es) anterior(es))"
+        )
     partidas = min(maximo, minimo + len(circunstancias))
     return Dosimetria(partidas, partidas_texto(partidas), pena, circunstancias)
 
 
 def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: int,
-               competicao: str, cidade: str, hoje: date, associacao: str = ASSOCIACAO) -> str:
+               competicao: str, cidade: str, hoje: date, associacao: str = ASSOCIACAO,
+               reincidentes: dict | None = None) -> str:
     pessoas = [o for o in ocorrencias if isinstance(o.sujeito, Envolvido) and not o.regra.sem_dispositivo]
     equipes = [o for o in ocorrencias if o.regra.sujeito == "equipe" and o.sujeito]
     sem_sujeito = [o for o in ocorrencias if o.sujeito is None]
@@ -521,7 +559,7 @@ def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: 
         if descricao not in nomes:
             nomes.append(descricao)
     alvo = "aos fatos envolvendo " + "; ".join(nomes) if nomes else "aos fatos relatados"
-    doses = {id(o): dosimetria(o, ocorrencias, sumula) for o in enquadraveis}
+    doses = {id(o): dosimetria(o, ocorrencias, sumula, reincidentes) for o in enquadraveis}
 
     linhas = [
         "⚠️ NOTA GERADA AUTOMATICAMENTE (regras fixas) – as decisões sugeridas estão entre ** ** "
@@ -816,16 +854,39 @@ def processar_sumulas(config_path: Path = DEFAULT_CONFIG_PATH, local_only: bool 
         atualizar_valor_ini(config.path, "notas", "ano", str(ano))
 
     config.notas_dir.mkdir(parents=True, exist_ok=True)
+
+    # Reincidencia: le o controle de punicoes ANTES de julgar, para saber se
+    # cada envolvido ja tinha punicao disciplinar registrada. Como a nota atual
+    # ainda nao foi gravada, a contagem reflete apenas o historico anterior.
+    import controle_punicoes
+    try:
+        controle_arquivo = controle_punicoes.ConfigControle.carregar(config.path).arquivo
+        historico_reincidencia = controle_punicoes.contexto_reincidencia(controle_arquivo)
+    except Exception as exc:
+        logger.warning("[SUMULAS] Nao foi possivel ler o historico de reincidencia: %s", exc)
+        historico_reincidencia = {}
+
+    def reincidentes_da_sumula(sumula):
+        """Nomes (como no relato) dos envolvidos com punicao disciplinar anterior."""
+        achados = {}
+        for e in sumula.envolvidos:
+            chave = controle_punicoes.chave_pessoa_reincidencia(e.nome, e.equipe)
+            anteriores = historico_reincidencia.get(chave, 0)
+            if anteriores > 0:
+                achados[e.nome] = anteriores
+        return achados
+
     gerados: list[Path] = []
     for arquivo in iter_txt_files(config.download_dir):
         if not arquivo.name.upper().startswith("SUMULA_"):
             continue
         try:
             sumula = ler_sumula(arquivo)
+            reincidentes = reincidentes_da_sumula(sumula)
             if usar_ia:
                 resultado = sumula_ia.gerar_nota_ia(
                     sumula, regulamento, config_ia, config.competicao, config.cidade, hoje, chave_ia,
-                    config.associacao,
+                    config.associacao, reincidentes,
                 )
                 if resultado.ha_infracao and resultado.nota:
                     numero += 1
@@ -857,7 +918,7 @@ def processar_sumulas(config_path: Path = DEFAULT_CONFIG_PATH, local_only: bool 
                 destino = config.notas_dir / nome_arquivo_nota(numero, ano, sumula)
                 destino.write_text(
                     gerar_nota(sumula, ocorrencias, numero, ano, config.competicao, config.cidade, hoje,
-                               config.associacao),
+                               config.associacao, reincidentes),
                     encoding="utf-8",
                 )
                 atualizar_valor_ini(config.path, "notas", "ultimo_numero", str(numero))

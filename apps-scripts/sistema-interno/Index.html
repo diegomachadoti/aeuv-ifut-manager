@@ -553,21 +553,21 @@
     .punicoes { table-layout: fixed; font-size: 13px; }
     .punicoes th, .punicoes td { padding: 9px 10px; vertical-align: top; }
 
+    /* Todas as células quebram palavras longas para não transbordar nas colunas. */
+    .punicoes td { overflow-wrap: anywhere; word-break: break-word; }
+
     /* 10 colunas: Nota, Punido, Equipe, Partida, Artigo, Suspensão, Status,
        Situação, Aprovação, Ações. Percentuais somam 100% para não estourar. */
-    .punicoes th:nth-child(1) { width: 9%; }
+    .punicoes th:nth-child(1) { width: 8%; }
     .punicoes th:nth-child(2) { width: 15%; }
     .punicoes th:nth-child(3) { width: 9%; }
-    .punicoes th:nth-child(4) { width: 12%; }
-    .punicoes th:nth-child(5) { width: 8%; }
-    .punicoes th:nth-child(6) { width: 9%; }
-    .punicoes th:nth-child(7) { width: 9%; }
-    .punicoes th:nth-child(8) { width: 9%; }
+    .punicoes th:nth-child(4) { width: 11%; }
+    .punicoes th:nth-child(5) { width: 12%; }
+    .punicoes th:nth-child(6) { width: 8%; }
+    .punicoes th:nth-child(7) { width: 8%; }
+    .punicoes th:nth-child(8) { width: 8%; }
     .punicoes th:nth-child(9) { width: 10%; }
-    .punicoes th:nth-child(10) { width: 10%; }
-
-    .punicoes td:nth-child(1),
-    .punicoes td:nth-child(5) { white-space: nowrap; }
+    .punicoes th:nth-child(10) { width: 11%; }
 
     /* O protocolo da súmula é longo e a coluna da nota é estreita: o
        atalho mostra um rótulo curto, com o protocolo no title. */
@@ -618,6 +618,16 @@
       font-weight: 600;
     }
     .btn-desfazer-punicao:hover { background: #fff8ec; }
+
+    .btn-editar-punicao {
+      background: #fff;
+      color: #14213d;
+      border: 1px solid #c4d8fa;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-editar-punicao:hover { background: #eef4fd; }
 
     .btn-excluir-punicao {
       background: #fff;
@@ -7960,6 +7970,11 @@
                 + '>✔ Aprovar</button>');
             }
           }
+          // Editar: só punições retroativas (as do JSON) e só para quem aprova (admin/diretoria).
+          if (r.retroativa && punicoes.podeAprovar) {
+            botoes.push('<button type="button" class="btn-editar-punicao acao-editar-punicao" '
+              + 'data-idx="' + idxGlobal + '" title="Editar punição retroativa">✏️ Editar</button>');
+          }
           if (punicoes.podeExcluir) {
             botoes.push('<button type="button" class="btn-excluir-punicao acao-excluir-punicao" '
               + 'data-idx="' + idxGlobal + '" title="Excluir punição">🗑️ Excluir</button>');
@@ -7967,8 +7982,12 @@
           acoesHtml = celula('Ações', '<div class="punicoes-acoes">' + botoes.join('') + '</div>');
         }
 
+        var seloRetroativa = r.retroativa
+          ? '<div class="punido-dado"><span class="pilula nao-aprovada" title="Punição retroativa importada de nota antiga">Retroativa</span></div>'
+          : '';
+
         return '<tr>'
-          + celula('Nota', escapar(r.nota) + '<div class="punido-dado">' + escapar(r.dataNota) + '</div>' + origem)
+          + celula('Nota', escapar(r.nota) + '<div class="punido-dado">' + escapar(r.dataNota) + '</div>' + seloRetroativa + origem)
           + celula('Punido', '<span class="punido-nome">' + escapar(r.punido) + '</span>'
             + '<div class="punido-dado">' + escapar(detalhe) + '</div>')
           + celula('Equipe', escapar(r.equipe))
@@ -8004,13 +8023,102 @@
           acaoExcluirPunicao(Number(botao.dataset.idx), botao);
         });
       });
+      conteudo.querySelectorAll('#linhasPunicoes .acao-editar-punicao').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          abrirEdicaoPunicaoRetroativa(Number(botao.dataset.idx), botao);
+        });
+      });
+    }
+
+    /**
+     * Modal de edição de uma punição RETROATIVA (as do JSON). Permite corrigir
+     * nota, atleta, equipe, tipo, artigo, suspensão, competição, data e decisão.
+     */
+    function abrirEdicaoPunicaoRetroativa(idx, botaoOrigem) {
+      var r = (punicoes.registros || [])[idx];
+      if (!r || !r.retroativa) return;
+
+      // Guarda a chave original para o servidor localizar o registro.
+      var original = { nota: r.nota, punido: r.punido, artigo: r.artigo };
+
+      var modal = document.createElement('div');
+      modal.className = 'modal-fin-overlay';
+      function campo(id, rotulo, valor, tipo) {
+        return '<div class="fin-campo"><label for="' + id + '">' + rotulo + '</label>'
+          + '<input type="' + (tipo || 'text') + '" id="' + id + '" value="' + escapar(valor || '') + '"></div>';
+      }
+      var partidasVal = (r.partidas === '-' || r.partidas === undefined || r.partidas === null) ? '' : r.partidas;
+      var tipoOpcoes = ['Atleta', 'Comissão técnica'].map(function (t) {
+        return '<option value="' + t + '"' + (String(r.tipo) === t ? ' selected' : '') + '>' + t + '</option>';
+      }).join('');
+
+      modal.innerHTML = '<div class="modal-fin-caixa">'
+        + '<div class="modal-fin-cabecalho"><h3><span style="font-size:22px;">✏️</span> Editar punição retroativa</h3>'
+        + '<button type="button" class="modal-fin-fechar" id="btnFecharEdPun" title="Fechar">&times;</button></div>'
+        + '<form id="formEdicaoPunicao" class="fin-grupo-campos">'
+        + '<div class="fin-linha-2">' + campo('edpNota', 'Nota *', r.nota) + campo('edpAtleta', 'Atleta *', r.punido) + '</div>'
+        + '<div class="fin-linha-2">' + campo('edpEquipe', 'Equipe *', r.equipe)
+        + '<div class="fin-campo"><label for="edpTipo">Tipo</label><select id="edpTipo">' + tipoOpcoes + '</select></div></div>'
+        + '<div class="fin-linha-2">' + campo('edpArtigo', 'Artigo *', r.artigo)
+        + campo('edpPartidas', 'Suspensão (partidas, vazio = por tempo/anos)', partidasVal, 'number') + '</div>'
+        + '<div class="fin-linha-2">' + campo('edpCompeticao', 'Competição', r.competicao) + campo('edpPartida', 'Partida', r.partida) + '</div>'
+        + '<div class="fin-linha-2">' + campo('edpDataJogo', 'Data do jogo', r.dataJogo) + campo('edpDataNota', 'Data da nota', r.dataNota) + '</div>'
+        + '<div class="fin-campo"><label for="edpDecisao">Decisão / observação</label>'
+        + '<input type="text" id="edpDecisao" value="' + escapar(r.decisao || '') + '"></div>'
+        + '<div class="acoes-formulario">'
+        + '<button type="button" class="botao-principal" id="btnSalvarEdPun">Salvar</button>'
+        + '<button type="button" class="botao-apoio" id="btnCancelarEdPun">Cancelar</button>'
+        + '<span class="espaco"></span><span class="apoio" id="edpAviso"></span>'
+        + '</div></form></div>';
+
+      document.body.appendChild(modal);
+      function fechar() { modal.remove(); if (botaoOrigem && botaoOrigem.isConnected) botaoOrigem.focus(); }
+      document.getElementById('btnFecharEdPun').addEventListener('click', fechar);
+      document.getElementById('btnCancelarEdPun').addEventListener('click', fechar);
+      modal.addEventListener('click', function (e) { if (e.target === modal) fechar(); });
+
+      document.getElementById('btnSalvarEdPun').addEventListener('click', function () {
+        var botao = document.getElementById('btnSalvarEdPun');
+        var aviso = document.getElementById('edpAviso');
+        var dados = {
+          nota: document.getElementById('edpNota').value.trim(),
+          atleta: document.getElementById('edpAtleta').value.trim(),
+          equipe: document.getElementById('edpEquipe').value.trim(),
+          tipo: document.getElementById('edpTipo').value,
+          artigo: document.getElementById('edpArtigo').value.trim(),
+          partidas: document.getElementById('edpPartidas').value.trim(),
+          competicao: document.getElementById('edpCompeticao').value.trim(),
+          partida: document.getElementById('edpPartida').value.trim(),
+          data_jogo: document.getElementById('edpDataJogo').value.trim(),
+          data_nota: document.getElementById('edpDataNota').value.trim(),
+          decisao: document.getElementById('edpDecisao').value.trim()
+        };
+        if (!dados.nota || !dados.atleta || !dados.equipe || !dados.artigo) {
+          aviso.innerHTML = '<span class="alerta">Preencha Nota, Atleta, Equipe e Artigo.</span>';
+          return;
+        }
+        botao.disabled = true;
+        aviso.textContent = 'Salvando...';
+        mostrarOverlayPunicoes_('Salvando punição...');
+        google.script.run
+          .withSuccessHandler(function () {
+            modal.remove();
+            carregarPunicoesComOverlay_();
+          })
+          .withFailureHandler(function (erro) {
+            removerOverlayPunicoes_();
+            botao.disabled = false;
+            aviso.innerHTML = '<span class="alerta">' + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+          })
+          .editarPunicaoRetroativa({ original: original, dados: dados });
+      });
     }
 
     /**
      * Payload mínimo que o servidor usa para identificar a punição (chavePunicao_).
      */
     function payloadPunicao_(r) {
-      return { nota: r.nota, punido: r.punido, artigo: r.artigo, status: r.status };
+      return { nota: r.nota, punido: r.punido, artigo: r.artigo, status: r.status, retroativa: Boolean(r.retroativa) };
     }
 
     /** Overlay de "processando" enquanto a ação roda e a tela recarrega. */

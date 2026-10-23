@@ -47,7 +47,13 @@ const CONFIG = {
     // que guarda quais punições a diretoria aprovou. O Apps Script nunca escreve
     // no TXT do Python; a aprovação fica isolada aqui para evitar conflito.
     arquivoAprovacoes: 'AEUV - Punicoes Aprovadas.json',
-    chaveArquivoAprovacoes: 'PUNICOES_APROVACOES_ARQUIVO_ID'
+    chaveArquivoAprovacoes: 'PUNICOES_APROVACOES_ARQUIVO_ID',
+
+    // Punições RETROATIVAS: notas oficiais antigas extraídas por fora do fluxo
+    // normal (ingerir_notas_retroativas.py) e colocadas num JSON na pasta raiz
+    // do Drive. São mescladas ao controle na leitura; o Python nunca as toca.
+    arquivoRetroativas: 'AEUV - Punicoes Retroativas.json',
+    chaveArquivoRetroativas: 'PUNICOES_RETROATIVAS_ARQUIVO_ID'
   },
 
   // Contato exibido para quem tenta entrar sem autorizacao.
@@ -3862,7 +3868,16 @@ function listarPunicoes() {
 
   const arquivo = arquivoPunicoes_();
   const conteudo = arquivo.getBlob().getDataAsString('UTF-8');
-  const registros = interpretarPunicoes_(conteudo);
+  // Mescla o controle do Python (TXT) com as punições retroativas (JSON).
+  // Punições retroativas de mesma nota+punido+artigo que já existam no TXT
+  // são descartadas, para não duplicar (o TXT prevalece).
+  const doTxt = interpretarPunicoes_(conteudo);
+  const chavesTxt = {};
+  doTxt.forEach(function (r) { chavesTxt[chavePunicao_(r)] = true; });
+  const retroativas = lerPunicoesRetroativas_().filter(function (r) {
+    return !chavesTxt[chavePunicao_(r)];
+  });
+  const registros = doTxt.concat(retroativas);
 
   // Anexa o estado de aprovação de cada punição a partir do JSON gerido pelo
   // sistema interno. Só punições aprovadas contam no histórico do atleta.
@@ -3951,6 +3966,179 @@ function lerAprovacoesPunicoes_() {
 function gravarAprovacoesPunicoes_(aprovacoes) {
   const arquivo = arquivoAprovacoesPunicoes_();
   arquivo.setContent(JSON.stringify(aprovacoes || {}));
+}
+
+/**
+ * Localiza o arquivo JSON de punições retroativas na pasta raiz. Diferente dos
+ * outros, NÃO cria o arquivo se não existir (ele é gerado externamente e
+ * subido manualmente ao Drive). Retorna null quando ausente.
+ * @return {DriveApp.File|null}
+ */
+function arquivoRetroativasPunicoes_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const guardado = propriedades.getProperty(CONFIG.punicoes.chaveArquivoRetroativas);
+  if (guardado) {
+    try {
+      const arquivo = DriveApp.getFileById(guardado);
+      if (!arquivo.isTrashed()) return arquivo;
+    } catch (e) {}
+  }
+  const raiz = pastaRaizProjeto_();
+  const existentes = raiz.getFilesByName(CONFIG.punicoes.arquivoRetroativas);
+  if (!existentes.hasNext()) return null;
+  const arquivo = existentes.next();
+  propriedades.setProperty(CONFIG.punicoes.chaveArquivoRetroativas, arquivo.getId());
+  return arquivo;
+}
+
+/**
+ * Lê as punições retroativas do JSON e as converte para o formato de registro
+ * da tela (mesmas colunas de interpretarPunicoes_). Retorna [] quando ausente.
+ * @return {Array<Object>}
+ */
+function lerPunicoesRetroativas_() {
+  try {
+    const arquivo = arquivoRetroativasPunicoes_();
+    if (!arquivo) return [];
+    const dados = JSON.parse(arquivo.getBlob().getDataAsString('UTF-8') || '{}');
+    const lista = Array.isArray(dados.punicoes) ? dados.punicoes : [];
+    return lista.map(function (p) {
+      const partidas = (p.partidas === 0 || p.partidas) ? String(p.partidas) : '-';
+      return {
+        nota: String(p.nota || ''),
+        dataNota: String(p.data_nota || ''),
+        competicao: String(p.competicao || ''),
+        dataJogo: String(p.data_jogo || ''),
+        partida: String(p.partida || ''),
+        equipe: String(p.equipe || ''),
+        punido: String(p.atleta || ''),
+        tipo: String(p.tipo || 'Atleta'),
+        camisa: '-',
+        artigo: String(p.artigo || ''),
+        partidas: partidas,
+        tempo: '-',
+        decisao: String(p.decisao || ''),
+        cartaoVermelho: '-',
+        status: 'DEFINIDA',
+        situacao: 'A CUMPRIR',
+        sumula: '-',
+        modo: 'Retroativa',
+        retroativa: true
+      };
+    }).filter(function (r) { return r.nota && r.punido && r.artigo; });
+  } catch (e) {
+    // Arquivo ausente/corrompido não deve derrubar a tela de punições.
+    return [];
+  }
+}
+
+/**
+ * Remove uma punição retroativa do JSON (por nota + punido + artigo).
+ * @param {Object} registro
+ * @return {boolean} true se removeu algo.
+ */
+function removerPunicaoRetroativa_(registro) {
+  const arquivo = arquivoRetroativasPunicoes_();
+  if (!arquivo) return false;
+  const dados = JSON.parse(arquivo.getBlob().getDataAsString('UTF-8') || '{}');
+  const lista = Array.isArray(dados.punicoes) ? dados.punicoes : [];
+  const chaveAlvo = chavePunicao_(registro);
+  const restantes = lista.filter(function (p) {
+    return chavePunicao_({ nota: p.nota, punido: p.atleta, artigo: p.artigo }) !== chaveAlvo;
+  });
+  if (restantes.length === lista.length) return false;
+  dados.punicoes = restantes;
+  arquivo.setContent(JSON.stringify(dados));
+  return true;
+}
+
+/**
+ * Edita uma punição retroativa (só as do JSON). Só admin e diretoria.
+ * Localiza pela chave original (nota+punido+artigo) e aplica os novos valores.
+ * Como a edição pode mudar a chave, remove a aprovação antiga se a chave mudar.
+ * @param {Object} payload  { original: {nota,punido,artigo}, dados: {campos novos} }
+ * @return {{sucesso: boolean, mensagem: string}}
+ */
+function editarPunicaoRetroativa(payload) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || (sessao.usuario.perfil !== 'admin' && sessao.usuario.perfil !== 'diretoria')) {
+    throw new Error('Você não tem permissão para editar punições.');
+  }
+
+  const original = (payload && payload.original) || {};
+  const novos = (payload && payload.dados) || {};
+  const atleta = String(novos.atleta || '').trim();
+  const equipe = String(novos.equipe || '').trim();
+  const artigo = String(novos.artigo || '').trim();
+  const nota = String(novos.nota || '').trim();
+
+  if (!atleta || !equipe || !artigo || !nota) {
+    throw new Error('Preencha Nota, Atleta, Equipe e Artigo.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const arquivo = arquivoRetroativasPunicoes_();
+    if (!arquivo) throw new Error('Arquivo de punições retroativas não encontrado no Drive.');
+
+    const dados = JSON.parse(arquivo.getBlob().getDataAsString('UTF-8') || '{}');
+    const lista = Array.isArray(dados.punicoes) ? dados.punicoes : [];
+    const chaveOriginal = chavePunicao_(original);
+
+    let indice = -1;
+    for (let i = 0; i < lista.length; i++) {
+      const p = lista[i];
+      if (chavePunicao_({ nota: p.nota, punido: p.atleta, artigo: p.artigo }) === chaveOriginal) {
+        indice = i;
+        break;
+      }
+    }
+    if (indice === -1) {
+      throw new Error('Punição retroativa não encontrada. Recarregue a página.');
+    }
+
+    // partidas: inteiro >= 0, ou null quando vazio (ex.: suspensão por tempo/anos).
+    let partidas = null;
+    const partidasStr = String(novos.partidas === undefined || novos.partidas === null ? '' : novos.partidas).trim();
+    if (partidasStr !== '') {
+      const n = parseInt(partidasStr, 10);
+      if (isNaN(n) || n < 0) throw new Error('Suspensão (partidas) deve ser um número inteiro maior ou igual a zero, ou vazio.');
+      partidas = n;
+    }
+
+    const atual = lista[indice];
+    lista[indice] = Object.assign({}, atual, {
+      nota: nota,
+      atleta: atleta,
+      equipe: equipe,
+      tipo: String(novos.tipo || atual.tipo || 'Atleta').trim() || 'Atleta',
+      artigo: artigo,
+      partidas: partidas,
+      competicao: String(novos.competicao || atual.competicao || '').trim(),
+      data_jogo: String(novos.data_jogo || atual.data_jogo || '').trim(),
+      data_nota: String(novos.data_nota || atual.data_nota || '').trim(),
+      partida: String(novos.partida || atual.partida || '').trim(),
+      decisao: String(novos.decisao || atual.decisao || '').trim()
+    });
+
+    dados.punicoes = lista;
+    arquivo.setContent(JSON.stringify(dados));
+
+    // Se a chave mudou (nota/atleta/artigo), a aprovação antiga não vale mais.
+    const chaveNova = chavePunicao_({ nota: nota, punido: atleta, artigo: artigo });
+    if (chaveNova !== chaveOriginal) {
+      const aprovacoes = lerAprovacoesPunicoes_();
+      if (aprovacoes[chaveOriginal]) {
+        delete aprovacoes[chaveOriginal];
+        gravarAprovacoesPunicoes_(aprovacoes);
+      }
+    }
+
+    return { sucesso: true, mensagem: 'Punição retroativa atualizada com sucesso.' };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
@@ -4054,6 +4242,20 @@ function removerPunicao(registro) {
   lock.waitLock(30000);
 
   try {
+    // Punição retroativa (vinda do JSON) é removida do próprio JSON.
+    if (alvo.retroativa) {
+      const removida = removerPunicaoRetroativa_(alvo);
+      if (!removida) {
+        throw new Error('Punição retroativa não encontrada (nota "' + notaAlvo + '").');
+      }
+      const aprovacoesR = lerAprovacoesPunicoes_();
+      if (aprovacoesR[chaveAlvo]) {
+        delete aprovacoesR[chaveAlvo];
+        gravarAprovacoesPunicoes_(aprovacoesR);
+      }
+      return { sucesso: true, mensagem: 'Punição retroativa excluída com sucesso.' };
+    }
+
     const arquivo = arquivoPunicoes_();
     const conteudo = arquivo.getBlob().getDataAsString('UTF-8');
     const linhas = conteudo.split(/\r?\n/);

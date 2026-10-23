@@ -55,6 +55,11 @@ REGRAS OBRIGATÓRIAS (não negociáveis):
 7. Escreva em português formal, no mesmo padrão do modelo, com as seções: DOS FATOS, DO ENQUADRAMENTO LEGAL,
    DA PUNIÇÃO, DA PROPORCIONALIDADE DA DECISÃO e DISPOSIÇÕES FINAIS.
 8. Não inclua links/URLs na nota: o link do relatório oficial (PDF) é adicionado automaticamente depois.
+9. REINCIDÊNCIA: será fornecido um bloco "HISTÓRICO DE REINCIDÊNCIA" indicando quais envolvidos já possuem
+   punição disciplinar anterior. Para esses, aplique os dispositivos de reincidência do regulamento quando
+   existirem (ex.: § que preveem suspensão de até 2 anos para reincidentes). Cite o dispositivo de
+   reincidência na nota e justifique o agravamento na dosimetria. Se o dispositivo aplicado não tiver regra
+   de reincidência, agrave a pena dentro da faixa prevista, registrando a reincidência como circunstância.
 
 Responda APENAS com um JSON válido neste formato:
 {
@@ -112,7 +117,8 @@ def obter_chave(config: ConfigIA | None = None) -> str:
 
 
 def montar_mensagens(sumula: Sumula, texto_sumula: str, regulamento_texto: str, modelo_nota: str,
-                     competicao: str, cidade: str, hoje: date, associacao: str = ASSOCIACAO) -> list[dict]:
+                     competicao: str, cidade: str, hoje: date, associacao: str = ASSOCIACAO,
+                     reincidentes: dict | None = None) -> list[dict]:
     envolvidos = "\n".join(
         f"- {e.nome} | {e.tipo} | equipe {e.equipe}" + (f" | camisa {e.camisa}" if e.camisa else "")
         for e in sumula.envolvidos
@@ -126,11 +132,33 @@ def montar_mensagens(sumula: Sumula, texto_sumula: str, regulamento_texto: str, 
 
 ENVOLVIDOS INFORMADOS PELO ÁRBITRO
 {envolvidos}"""
+
+    # Bloco de reincidencia: lista de envolvidos com punicao disciplinar anterior
+    # registrada no controle da associacao (identificacao por nome + equipe).
+    if reincidentes:
+        linhas_reinc = "\n".join(
+            f"- {nome}: {qtd} punição(ões) disciplinar(es) anterior(es)"
+            for nome, qtd in reincidentes.items()
+        )
+        historico = (
+            "HISTÓRICO DE REINCIDÊNCIA (do controle oficial de punições da associação)\n"
+            "As pessoas abaixo JÁ POSSUEM punição disciplinar anterior registrada. São REINCIDENTES.\n"
+            "Ao aplicar a pena, considere os dispositivos de reincidência do REGULAMENTO (por exemplo, os\n"
+            "§ que preveem suspensão de até 2 anos para reincidentes em agressão ou entorpecente). Quando o\n"
+            "dispositivo previr agravamento por reincidência, aplique-o e justifique na dosimetria.\n"
+            f"{linhas_reinc}"
+        )
+    else:
+        historico = (
+            "HISTÓRICO DE REINCIDÊNCIA\n"
+            "Nenhum dos envolvidos possui punição disciplinar anterior registrada (não são reincidentes)."
+        )
+
     return [
         {"role": "system", "content": INSTRUCOES},
         {"role": "user", "content": f"=== REGULAMENTO (documento máximo) ===\n{regulamento_texto}"},
         {"role": "user", "content": f"=== MODELO DE NOTA (apenas formato) ===\n{modelo_nota}"},
-        {"role": "user", "content": f"{dados}\n\n=== SÚMULA (relatório do árbitro) ===\n{texto_sumula}"},
+        {"role": "user", "content": f"{dados}\n\n=== {historico} ===\n\n=== SÚMULA (relatório do árbitro) ===\n{texto_sumula}"},
     ]
 
 
@@ -222,12 +250,12 @@ def validar_resposta(dados: dict, regulamento: Regulamento) -> list[str]:
 
 
 def gerar_nota_ia(sumula: Sumula, regulamento: Regulamento, config: ConfigIA, competicao: str, cidade: str,
-                  hoje: date, chave: str, associacao: str = ASSOCIACAO) -> ResultadoIA:
+                  hoje: date, chave: str, associacao: str = ASSOCIACAO, reincidentes: dict | None = None) -> ResultadoIA:
     texto_sumula = sumula.arquivo.read_text(encoding="utf-8-sig", errors="ignore")
     regulamento_texto = regulamento.path.read_text(encoding="utf-8-sig")
     modelo_nota = config.modelo_nota.read_text(encoding="utf-8-sig") if config.modelo_nota.exists() else ""
     mensagens = montar_mensagens(sumula, texto_sumula, regulamento_texto, modelo_nota, competicao, cidade, hoje,
-                                 associacao)
+                                 associacao, reincidentes)
     dados = chamar_openai(mensagens, config, chave)
     return ResultadoIA(
         ha_infracao=bool(dados.get("ha_infracao")),

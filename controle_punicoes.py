@@ -197,6 +197,108 @@ def ler_controle(caminho: Path) -> list[Punicao]:
     return registros
 
 
+# ---------------------------------------------------------------------------
+# Reincidencia (identificacao por nome + equipe, sem janela temporal)
+# ---------------------------------------------------------------------------
+
+# Reincidencia conta para qualquer pessoa registrada no campeonato (atleta,
+# comissao tecnica, dirigente, etc.). So nao contam penalidades de equipe.
+TIPOS_DISCIPLINA_EQUIPE = ("equipe", "clube", "time")
+
+# Mantido por compatibilidade historica; hoje a regra e por exclusao de equipe.
+TIPOS_DISCIPLINA_INDIVIDUAL = ("atleta", "comissao tecnica", "comissao técnica", "dirigente")
+
+
+def _tipo_individual(tipo: str) -> bool:
+    """Qualquer tipo que nao seja penalidade de equipe conta como pessoa."""
+    return normalize_text(tipo) not in TIPOS_DISCIPLINA_EQUIPE
+
+
+def chave_pessoa_reincidencia(nome: str, equipe: str) -> tuple:
+    """Identidade da pessoa para reincidencia: nome + equipe normalizados.
+
+    Sem CPF nas sumulas, nome+equipe e o melhor identificador disponivel;
+    o risco de homonimo e o mesmo ja aceito no Banco de Atletas.
+    """
+    return (normalize_text(nome or ""), normalize_text(equipe or ""))
+
+
+def historico_punicoes_pessoa(registros: list[Punicao], nome: str, equipe: str) -> list[Punicao]:
+    """Punicoes disciplinares individuais anteriores de uma pessoa (nome+equipe).
+
+    Considera qualquer artigo disciplinar aplicado a atleta/comissao; ignora
+    penalidades de equipe (bolas, W.O., etc.) e registros sem artigo.
+    """
+    alvo = chave_pessoa_reincidencia(nome, equipe)
+    historico = []
+    for p in registros:
+        if not _tipo_individual(p.tipo):
+            continue
+        if not (p.artigo or "").strip() or (p.artigo or "").strip() == "-":
+            continue
+        if chave_pessoa_reincidencia(p.punido, p.equipe) == alvo:
+            historico.append(p)
+    return historico
+
+
+# Nome do JSON de punicoes retroativas (gerado por ingerir_notas_retroativas.py).
+# Procurado ao lado do arquivo de controle; se existir, suas punicoes tambem
+# contam para reincidencia.
+ARQUIVO_RETROATIVAS = "AEUV - Punicoes Retroativas.json"
+
+
+def _conta_para_reincidencia(tipo: str, artigo: str) -> bool:
+    """Punicao de qualquer pessoa com artigo aplicado conta para reincidencia."""
+    if not _tipo_individual(tipo):
+        return False
+    return bool((artigo or "").strip()) and (artigo or "").strip() != "-"
+
+
+def _retroativas_para_reincidencia(caminho_controle: Path) -> list[tuple]:
+    """Le o JSON de punicoes retroativas (se houver) e devolve [(nome, equipe), ...].
+
+    Procura o arquivo na mesma pasta do controle e no diretorio atual.
+    """
+    import json
+
+    candidatos = [caminho_controle.parent / ARQUIVO_RETROATIVAS, Path(ARQUIVO_RETROATIVAS)]
+    for caminho in candidatos:
+        if not caminho.exists():
+            continue
+        try:
+            dados = json.loads(caminho.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return []
+        pessoas = []
+        for p in dados.get("punicoes") or []:
+            if _conta_para_reincidencia(p.get("tipo", "Atleta"), p.get("artigo", "")):
+                pessoas.append((p.get("atleta", ""), p.get("equipe", "")))
+        return pessoas
+    return []
+
+
+def contexto_reincidencia(caminho: Path) -> dict:
+    """Mapa pessoa -> contagem de punicoes disciplinares anteriores.
+
+    Soma o controle oficial (TXT) e as punicoes retroativas (JSON, se existir).
+    Chave: (nome_normalizado, equipe_normalizada). Usado pelo julgamento para
+    saber, no momento de uma nova nota, se a pessoa ja tinha punicao registrada.
+    """
+    contagem: dict[tuple, int] = {}
+    for p in ler_controle(caminho):
+        if not _conta_para_reincidencia(p.tipo, p.artigo):
+            continue
+        chave = chave_pessoa_reincidencia(p.punido, p.equipe)
+        contagem[chave] = contagem.get(chave, 0) + 1
+
+    # Soma as punicoes retroativas (notas antigas importadas).
+    for nome, equipe in _retroativas_para_reincidencia(caminho):
+        chave = chave_pessoa_reincidencia(nome, equipe)
+        contagem[chave] = contagem.get(chave, 0) + 1
+
+    return contagem
+
+
 def _ordem(p: Punicao) -> tuple:
     achado = re.match(r"(\d+)/(\d{4})", p.nota)
     return (int(achado.group(2)), int(achado.group(1))) if achado else (0, 0)
