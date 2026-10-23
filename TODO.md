@@ -41,7 +41,7 @@
   - apos toda modificação sendo rodar os testes para garantir que nada quebre.
   - Toda nova impelmatação ir acrecentando testes nesta suite.
 
-- [⚠️] **TD12 — Pendente:** Na tela de "Usuarios de sistema" poder adicionar ou retirar permissoes de telas para os tipos de perfils que tem hoje (Associado, Diretoria e Arbitragem).
+- [✅] **TD12 — Pendente:** Na tela de "Usuarios de sistema" poder adicionar ou retirar permissoes de telas para os tipos de perfils que tem hoje (Associado, Diretoria e Arbitragem).
 
 - [✅] **TD13 — Pendente:** No "Banco de Dados de Atletas" o agrupamento e feito pelo CPF (provavelmente) como segundo campo seria bom agrupar também pelo "Nome Completo", pois em caso que o CPF estiver vazio para alguma linha (pq as incrições por portabilidade o CPF aparece vazio como nao informado).
 

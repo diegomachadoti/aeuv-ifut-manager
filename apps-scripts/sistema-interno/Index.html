@@ -313,12 +313,46 @@
 
     .perfil-legenda {
       display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 12px;
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+      background: var(--superficie, #fff);
+    }
+    body.tema-escuro .perfil-legenda { background: #141c2e; }
+
+    .perfil-legenda-cabecalho {
+      display: flex;
+      align-items: center;
       gap: 10px;
-      align-items: baseline;
       flex-wrap: wrap;
     }
 
     .perfil-legenda .apoio { font-size: 12px; }
+    .perfil-editar { padding: 4px 10px; font-size: 12px; }
+    .perfil-fixo { font-size: 11px; font-style: italic; }
+
+    /* Grade de permissões (matriz de checkboxes por módulo). */
+    .permissoes-grade {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 8px 16px;
+      margin: 14px 0;
+    }
+    .permissao-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .permissao-item:hover { background: #f1f5fb; }
+    body.tema-escuro .permissao-item:hover { background: #1b2440; }
+    .permissao-item input { width: 18px; height: 18px; flex: 0 0 auto; cursor: pointer; }
 
     .alerta { color: #922b21; }
 
@@ -3147,7 +3181,7 @@
      * Quem tem acesso e com qual perfil. So o admin chega ate aqui, e o
      * servidor refaz essa checagem a cada chamada.
      */
-    let usuarios = { registros: [], perfis: [], equipes: [], emailAtual: '' };
+    let usuarios = { registros: [], perfis: [], equipes: [], emailAtual: '', catalogoModulos: [] };
 
     /**
      * Busca no servidor a lista de autorizados (somente admin).
@@ -3226,6 +3260,98 @@
           removerUsuarioDoSistema(botao.dataset.remover);
         });
       });
+
+      document.querySelectorAll('[data-editar-perfil]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          abrirEditorPermissoes(botao.dataset.editarPerfil);
+        });
+      });
+    }
+
+    /**
+     * Editor da matriz de permissões de um perfil: um checkbox por módulo.
+     * Só perfis editáveis (diretoria, arbitragem, associado). Módulos
+     * exclusivos do admin não aparecem.
+     * @param {string} perfilId
+     */
+    function abrirEditorPermissoes(perfilId) {
+      const perfil = (usuarios.perfis || []).filter(function (p) { return p.id === perfilId; })[0];
+      if (!perfil || !perfil.editavel) return;
+
+      const marcados = {};
+      (perfil.modulosIds || []).forEach(function (id) { marcados[id] = true; });
+
+      const disponiveis = (usuarios.catalogoModulos || []).filter(function (m) {
+        return !m.exclusivoAdmin;
+      });
+
+      const checkboxes = disponiveis.map(function (m) {
+        const checado = marcados[m.id] ? ' checked' : '';
+        return '<label class="permissao-item">'
+          + '<input type="checkbox" value="' + escapar(m.id) + '"' + checado + '>'
+          + '<span>' + escapar(m.icone) + ' ' + escapar(m.nome) + '</span>'
+          + '</label>';
+      }).join('');
+
+      document.getElementById('areaUsuarios').innerHTML = '<div class="formulario">'
+        + '<h3>Permissões do perfil: <span class="pilula ' + escapar(perfil.id) + '">' + escapar(perfil.nome) + '</span></h3>'
+        + '<p class="apoio">Marque as telas que este perfil pode ver. As mudanças valem na hora; '
+        + 'quem estiver com o sistema aberto passa a ver ao recarregar a página. '
+        + 'As telas de Administração e Usuários do sistema são exclusivas do administrador.</p>'
+        + '<div class="permissoes-grade">' + checkboxes + '</div>'
+        + '<div class="acoes-formulario">'
+        + '<button type="button" class="botao-principal" id="gravarPermissoes">Salvar permissões</button>'
+        + '<button type="button" class="botao-apoio" id="marcarTodasPermissoes">Marcar todas</button>'
+        + '<button type="button" class="botao-apoio" id="limparPermissoes">Limpar todas</button>'
+        + '<button type="button" class="botao-apoio" id="voltarPermissoes">Voltar &agrave; lista</button>'
+        + '<span class="espaco"></span>'
+        + '<span class="apoio" id="avisoPermissoes"></span>'
+        + '</div></div>';
+
+      const grade = document.querySelector('.permissoes-grade');
+
+      document.getElementById('marcarTodasPermissoes').addEventListener('click', function () {
+        grade.querySelectorAll('input[type="checkbox"]').forEach(function (c) { c.checked = true; });
+      });
+      document.getElementById('limparPermissoes').addEventListener('click', function () {
+        grade.querySelectorAll('input[type="checkbox"]').forEach(function (c) { c.checked = false; });
+      });
+      document.getElementById('voltarPermissoes').addEventListener('click', function () {
+        montarTelaUsuarios();
+      });
+      document.getElementById('gravarPermissoes').addEventListener('click', function () {
+        gravarPermissoesPerfil(perfil.id);
+      });
+    }
+
+    /**
+     * Envia as permissões do perfil ao servidor, que valida e persiste.
+     * @param {string} perfilId
+     */
+    function gravarPermissoesPerfil(perfilId) {
+      const botao = document.getElementById('gravarPermissoes');
+      const aviso = document.getElementById('avisoPermissoes');
+      const grade = document.querySelector('.permissoes-grade');
+
+      const modulos = Array.prototype.map.call(
+        grade.querySelectorAll('input[type="checkbox"]:checked'),
+        function (c) { return c.value; }
+      );
+
+      botao.disabled = true;
+      aviso.textContent = 'Gravando...';
+
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          usuarios = dados;
+          montarTelaUsuarios(dados.recado);
+        })
+        .withFailureHandler(function (erro) {
+          botao.disabled = false;
+          aviso.innerHTML = '<span class="alerta">'
+            + escapar(erro && erro.message ? erro.message : erro) + '</span>';
+        })
+        .salvarPermissoesPerfil({ perfil: perfilId, modulos: modulos });
     }
 
     /**
@@ -3234,9 +3360,17 @@
      */
     function legendaPerfis() {
       const itens = (usuarios.perfis || []).map(function (perfil) {
+        const botaoEditar = perfil.editavel
+          ? '<button type="button" class="botao-apoio perfil-editar" data-editar-perfil="' + escapar(perfil.id)
+            + '">Editar permissões</button>'
+          : '<span class="apoio perfil-fixo">(acesso total · fixo)</span>';
+
         return '<div class="perfil-legenda">'
+          + '<div class="perfil-legenda-cabecalho">'
           + '<span class="pilula ' + escapar(perfil.id) + '">' + escapar(perfil.nome) + '</span>'
-          + '<span class="apoio">' + escapar((perfil.modulos || []).join(', ')) + '</span>'
+          + botaoEditar
+          + '</div>'
+          + '<span class="apoio">' + escapar((perfil.modulos || []).join(', ') || 'Nenhuma tela liberada') + '</span>'
           + '</div>';
       }).join('');
 

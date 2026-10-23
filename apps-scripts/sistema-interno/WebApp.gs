@@ -393,6 +393,112 @@ const MODULOS = [
   }
 ];
 
+/**
+ * Permissões por perfil editáveis pela tela "Usuários do sistema".
+ *
+ * A fonte original é o campo "perfis" de cada MODULOS (acima). Esta camada
+ * permite ao admin conceder/retirar telas dos perfis diretoria, arbitragem e
+ * associado, sem publicar nova versão. A matriz fica em PropertiesService
+ * (chave PERFIS_MODULOS), no mesmo padrão da lista de usuários.
+ *
+ * Travas de segurança, sempre aplicadas por obterPermissoes_():
+ *  - admin SEMPRE enxerga todos os módulos (não é editável).
+ *  - os módulos de MODULOS_EXCLUSIVOS_ADMIN só o admin pode ver.
+ */
+const PERFIS_MODULOS_CHAVE = 'PERFIS_MODULOS';
+
+/** Perfis cujas permissões o admin pode editar na tela. */
+const PERFIS_EDITAVEIS = ['diretoria', 'arbitragem', 'associado'];
+
+/** Módulos que permanecem exclusivos do admin, nunca concedidos a outro perfil. */
+const MODULOS_EXCLUSIVOS_ADMIN = ['administracao', 'usuarios'];
+
+/**
+ * Matriz perfil → [idsDeModulo] valendo agora. Lê a propriedade e, na falta
+ * dela (ou de um perfil específico), cai para o que está hardcoded em MODULOS.
+ * Sempre aplica as travas: admin recebe todos os módulos; os perfis não-admin
+ * nunca recebem os módulos exclusivos do admin.
+ * @return {Object<string, Array<string>>}
+ */
+function obterPermissoes_() {
+  const todosIds = MODULOS.map(function (m) { return m.id; });
+  const padrao = {};
+  Object.keys(PERFIS).forEach(function (perfil) {
+    padrao[perfil] = MODULOS.filter(function (m) {
+      return m.perfis.indexOf(perfil) !== -1;
+    }).map(function (m) { return m.id; });
+  });
+
+  let salvo = null;
+  try {
+    const bruto = PropertiesService.getScriptProperties().getProperty(PERFIS_MODULOS_CHAVE);
+    if (bruto) {
+      const parsed = JSON.parse(bruto);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        salvo = parsed;
+      }
+    }
+  } catch (e) {
+    // Propriedade ausente ou inválida: vale o padrão do código.
+  }
+
+  const resultado = {};
+  Object.keys(PERFIS).forEach(function (perfil) {
+    // admin sempre vê tudo, não editável.
+    if (perfil === 'admin') {
+      resultado[perfil] = todosIds.slice();
+      return;
+    }
+
+    const base = salvo && Array.isArray(salvo[perfil]) ? salvo[perfil] : padrao[perfil];
+    // Só ids que existem em MODULOS e que não são exclusivos do admin.
+    resultado[perfil] = base.filter(function (id) {
+      return todosIds.indexOf(id) !== -1 && MODULOS_EXCLUSIVOS_ADMIN.indexOf(id) === -1;
+    });
+  });
+
+  return resultado;
+}
+
+/**
+ * Grava a matriz de permissões (somente os perfis editáveis) e devolve a
+ * tela de usuários atualizada. Aplica as mesmas travas de obterPermissoes_.
+ * @param {string} perfil   Perfil a alterar (diretoria, arbitragem, associado).
+ * @param {Array<string>} modulosIds  Ids dos módulos concedidos.
+ * @param {Object} sessao
+ * @return {Object}
+ */
+function gravarPermissoesPerfil_(perfil, modulosIds, sessao) {
+  if (PERFIS_EDITAVEIS.indexOf(perfil) === -1) {
+    throw new Error('As permissões deste perfil não podem ser alteradas.');
+  }
+
+  const todosIds = MODULOS.map(function (m) { return m.id; });
+  const limpos = (Array.isArray(modulosIds) ? modulosIds : []).filter(function (id) {
+    return todosIds.indexOf(id) !== -1 && MODULOS_EXCLUSIVOS_ADMIN.indexOf(id) === -1;
+  });
+
+  // Parte da matriz atual (já higienizada) e substitui só o perfil alvo.
+  const atual = obterPermissoes_();
+  const novo = {};
+  PERFIS_EDITAVEIS.forEach(function (p) {
+    novo[p] = p === perfil ? limpos : (atual[p] || []).slice();
+  });
+
+  PropertiesService.getScriptProperties().setProperty(PERFIS_MODULOS_CHAVE, JSON.stringify(novo));
+
+  return montarTelaUsuarios_(obterUsuarios_(), sessao);
+}
+
+/**
+ * Remove a matriz personalizada e volta a valer o que está em MODULOS.
+ * Socorro pelo editor do Apps Script.
+ */
+function restaurarPermissoesPadrao() {
+  PropertiesService.getScriptProperties().deleteProperty(PERFIS_MODULOS_CHAVE);
+  Logger.log('Permissões personalizadas removidas. Valendo o padrão de MODULOS.');
+}
+
 /** A lista fica no Drive; a chave antiga permite migrar os registros do MVP. */
 const CAMPEONATOS_CHAVE = 'CAMPEONATOS_LISTA';
 const CAMPEONATOS_ARQUIVO = 'AEUV - Campeonatos.json';
@@ -649,8 +755,9 @@ function obterUsuarios_() {
  * @return {Array<Object>}
  */
 function modulosPermitidos_(perfil) {
+  const permitidos = obterPermissoes_()[perfil] || [];
   return MODULOS.filter(function (modulo) {
-    return modulo.perfis.indexOf(perfil) !== -1;
+    return permitidos.indexOf(modulo.id) !== -1;
   }).map(function (modulo) {
     return {
       id: modulo.id,
@@ -801,16 +908,52 @@ function montarTelaUsuarios_(lista, sessao) {
       };
     }),
     perfis: Object.keys(PERFIS).map(function (id) {
+      const permitidos = obterPermissoes_()[id] || [];
       return {
         id: id,
         nome: PERFIS[id],
         modulos: modulosDoPerfil_(id),
-        exigeEquipe: perfilDaEquipe_(id)
+        modulosIds: permitidos.slice(),
+        exigeEquipe: perfilDaEquipe_(id),
+        editavel: PERFIS_EDITAVEIS.indexOf(id) !== -1
+      };
+    }),
+    // Catálogo de todos os módulos, para a matriz de permissões. Os exclusivos
+    // do admin ficam marcados para a tela não oferecê-los a outros perfis.
+    catalogoModulos: MODULOS.map(function (modulo) {
+      return {
+        id: modulo.id,
+        nome: modulo.nome,
+        icone: modulo.icone,
+        grupo: modulo.grupo || '',
+        exclusivoAdmin: MODULOS_EXCLUSIVOS_ADMIN.indexOf(modulo.id) !== -1
       };
     }),
     equipes: obterEquipes_(),
     emailAtual: sessao.usuario.email
   };
+}
+
+/**
+ * Grava as permissões de um perfil (somente admin). Recebe o id do perfil
+ * e a lista de ids de módulos concedidos.
+ * @param {{perfil: string, modulos: Array<string>}} dados
+ * @return {Object}
+ */
+function salvarPermissoesPerfil(dados) {
+  const sessao = exigirAdmin_();
+  const perfil = dados && dados.perfil;
+
+  if (!PERFIS[perfil]) {
+    throw new Error('Perfil inválido.');
+  }
+  if (PERFIS_EDITAVEIS.indexOf(perfil) === -1) {
+    throw new Error('As permissões do perfil ' + (PERFIS[perfil] || perfil) + ' não podem ser alteradas.');
+  }
+
+  const tela = gravarPermissoesPerfil_(perfil, (dados && dados.modulos) || [], sessao);
+  tela.recado = 'Permissões do perfil ' + PERFIS[perfil] + ' atualizadas.';
+  return tela;
 }
 
 /**
@@ -820,8 +963,9 @@ function montarTelaUsuarios_(lista, sessao) {
  * @return {Array<string>}
  */
 function modulosDoPerfil_(perfil) {
+  const permitidos = obterPermissoes_()[perfil] || [];
   return MODULOS.filter(function (modulo) {
-    return modulo.perfis.indexOf(perfil) !== -1;
+    return permitidos.indexOf(modulo.id) !== -1;
   }).map(function (modulo) {
     return modulo.nome;
   });
@@ -4077,9 +4221,8 @@ function linhaAtualizacao_(conteudo) {
  * @return {boolean}
  */
 function moduloLiberado_(id, perfil) {
-  return MODULOS.some(function (modulo) {
-    return modulo.id === id && modulo.perfis.indexOf(perfil) !== -1;
-  });
+  const permitidos = obterPermissoes_()[perfil] || [];
+  return permitidos.indexOf(id) !== -1;
 }
 
 function limparEspacos_(valor) {
