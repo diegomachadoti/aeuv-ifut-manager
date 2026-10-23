@@ -604,3 +604,213 @@ test('subfases agregadas/privadas aninhadas, métricas desligadas preservam IO e
   assert.equal(disabled.logs.length, 0);
   assert.deepEqual(enabled.sourceIO, disabled.sourceIO);
 });
+
+test('CPF vazio agrupa pelo nome; nome e CPF ambos vazios mantém registro isolado', () => {
+  const h = banco();
+
+  // Dois vínculos do mesmo atleta sem CPF, mesma pessoa em campeonatos diferentes.
+  h.seed('c1', 'atletas', [
+    person('atletas', { id: 'portab-1', nome: 'João Portabilidade', cpf: '', timeVinculado: 'Equipe A' }),
+  ]);
+  h.seed('c2', 'atletas', [
+    person('atletas', { id: 'portab-2', nome: 'João Portabilidade', cpf: '', timeVinculado: 'Equipe B', ativo: false }),
+    // Nome e CPF ambos vazios → deve continuar isolado (sem agrupar com ninguém).
+    person('atletas', { id: 'sem-nome', nome: '', cpf: '', timeVinculado: 'Equipe C', ativo: false }),
+  ]);
+
+  const result = h.c.construirBancoAtletas_();
+
+  const joao = result.registros.filter(r => r.nome === 'João Portabilidade');
+  // Deve aparecer como UM único atleta, não dois.
+  assert.equal(joao.length, 1, 'atleta sem CPF com mesmo nome deve ser agrupado em um único registro');
+  assert.equal(joao[0].totalVinculos, 2, 'deve ter 2 vínculos (um por campeonato)');
+
+  // Registro sem nome e sem CPF ainda deve aparecer, mas sua chave deve ser REGISTRO: (não NOME:).
+  // O atleta sem nome pode ter sido fundido com Carlos Silva via solicitações, mas a chave do grupo
+  // não deve ser NOME: vazio — verificamos que não existe nenhuma chave 'NOME:' com valor vazio.
+  const chaves = result.registros.map(r => r.chave);
+  assert(!chaves.includes('NOME:'), 'chave NOME: vazia não deve existir; nome vazio usa REGISTRO:');
+});
+
+test('Opção C: vínculo sem CPF funde-se ao grupo CPF: quando o nome normalizado bate', () => {
+  const h = banco();
+
+  // Caso real do print: mesmo atleta, uma inscrição tem CPF, a outra (portabilidade) não.
+  // c1: inscrição com CPF válido
+  h.seed('c1', 'atletas', [
+    person('atletas', { id: 'com-cpf', nome: 'Lucas Matheus de Oliveira', cpf: '52998224725', timeVinculado: 'Equipe A' }),
+  ]);
+  // c2: portabilidade sem CPF, mesmo nome (capitalização diferente — não importa)
+  h.seed('c2', 'atletas', [
+    person('atletas', { id: 'sem-cpf', nome: 'Lucas matheus De Oliveira', cpf: '', timeVinculado: 'Equipe B', ativo: false }),
+  ]);
+
+  const result = h.c.construirBancoAtletas_();
+
+  const lucas = result.registros.filter(r =>
+    r.nome && r.nome.toUpperCase().includes('LUCAS MATHEUS'));
+  assert.equal(lucas.length, 1, 'deve existir somente UM registro para Lucas Matheus');
+  assert.equal(lucas[0].chave, 'CPF:52998224725', 'o grupo final deve usar a chave CPF:');
+  assert.equal(lucas[0].totalVinculos, 2, 'deve ter 2 vínculos: o com CPF e o sem CPF');
+
+  // Não deve existir nenhum grupo NOME: para esse atleta.
+  assert(!result.registros.some(r => r.chave === 'NOME:LUCAS MATHEUS DE OLIVEIRA'),
+    'não deve sobrar grupo NOME: isolado para Lucas');
+});
+
+test('Opção C: inscrição sem CPF processada antes da com CPF ainda funde ao chegar o CPF (ordem inversa)', () => {
+  const h = banco();
+
+  // c1: portabilidade sem CPF chega primeiro na ordem de processamento
+  h.seed('c1', 'atletas', [
+    person('atletas', { id: 'sem-cpf-primeiro', nome: 'Ana Souza', cpf: '', timeVinculado: 'Equipe A' }),
+  ]);
+  // c2: depois a inscrição com CPF válido
+  h.seed('c2', 'atletas', [
+    person('atletas', { id: 'com-cpf-depois', nome: 'Ana Souza', cpf: '11144477735', timeVinculado: 'Equipe B', ativo: false }),
+  ]);
+
+  const result = h.c.construirBancoAtletas_();
+
+  const ana = result.registros.filter(r => r.nome === 'Ana Souza');
+  assert.equal(ana.length, 1, 'Ana Souza deve aparecer como UM único registro mesmo processada fora de ordem');
+  assert.equal(ana[0].chave, 'CPF:11144477735', 'deve usar a chave CPF: após migração do grupo NOME:');
+  assert.equal(ana[0].totalVinculos, 2, 'deve ter os 2 vínculos fundidos');
+});
+
+test('caso real: portabilidade (NOME: no elenco) + solicitação (CPF:) + punição fundem em 1 registro', () => {
+  // Reproduz exatamente o caso do print: Lucas Matheus aparecia em 2 linhas.
+  // - Elenco via portabilidade: CPF vazio → chave NOME:LUCAS MATHEUS DE OLIVEIRA
+  // - Solicitação de inscrição: CPF válido → chave CPF:52998224725, equipe BOLEIROS
+  // - Punição: nome sem CPF, equipe CRUZMALTINO
+  // Resultado esperado: 1 registro, chave CPF:, punição e ambas as equipes annexadas.
+  const h = banco();
+
+  // Elenco: portabilidade sem CPF em c2
+  h.seed('c1', 'atletas', []);
+  h.seed('c2', 'atletas', [
+    person('atletas', { id: 'portab', nome: 'Lucas Matheus de Oliveira', cpf: '', timeVinculado: 'CRUZMALTINO', ativo: false }),
+  ]);
+
+  // Substitui listarSolicitacoes para incluir a solicitação com CPF (BOLEIROS)
+  const solOriginal = h.c.listarSolicitacoes;
+  h.c.listarSolicitacoes = () => ({
+    total: 1,
+    registros: [{
+      equipe: 'BOLEIROS', competicao: 'SUPER LIGA UNIAO', protocolo: 'protocolo-lucas',
+      situacao: 'Processada', ordem: 1, dataHora: '',
+      pessoas: [{ nome: 'Lucas matheus De Oliveira', cpf: '52998224725', nascimento: '04-09-1997', tipo: 'Atleta', acao: 'Inclusao' }]
+    }]
+  });
+  h.c.lerSolicitacoes_ = () => h.c.listarSolicitacoes();
+
+  // Substitui listarPunicoes para incluir a punição vinculada ao nome/CRUZMALTINO
+  h.c.listarPunicoes = () => ({
+    registros: [{
+      punido: 'Lucas Matheus de Oliveira', equipe: 'CRUZMALTINO',
+      competicao: 'SUPER LIGA UNIAO', tipo: 'Atleta',
+      nota: 'nota-lucas', dataNota: '10/10/2026', dataJogo: '09/10/2026',
+      partida: 'A x B', camisa: '9', artigo: '1', partidas: '2', tempo: '',
+      decisao: 'Suspenso 2 jogos', status: 'DEFINIDA', situacao: 'A CUMPRIR', sumula: ''
+    }]
+  });
+
+  const result = h.c.construirBancoAtletas_();
+
+  const lucas = result.registros.filter(r =>
+    r.nome && r.nome.toUpperCase().replace(/\s+/g, ' ').includes('LUCAS MATHEUS'));
+
+  assert.equal(lucas.length, 1, 'deve existir UM único registro para Lucas Matheus');
+  assert.equal(lucas[0].chave, 'CPF:52998224725', 'chave deve ser CPF:, não NOME:');
+  assert.equal(lucas[0].punicoes.length, 1, 'punição deve estar anexada ao registro correto');
+  assert(lucas[0].equipesHistorico.includes('BOLEIROS'), 'deve ter BOLEIROS no histórico');
+  assert(lucas[0].equipesHistorico.includes('CRUZMALTINO'), 'deve ter CRUZMALTINO no histórico');
+});
+
+test('solicitação sem CPF e solicitação com CPF para o mesmo atleta fundem histórico completo', () => {
+  // Reproduz o caso: portabilidade sem CPF (CRUZMALTINO) + inclusão com CPF (BOLEIROS)
+  // ambas devem aparecer no movimentacoes do mesmo atleta.
+  const h = banco();
+  h.seed('c1', 'atletas', []);
+  h.seed('c2', 'atletas', []);
+
+  // Solicitação 1: portabilidade sem CPF — gera chave NOME:|nascimento
+  // Solicitação 2: inclusão com CPF — gera chave CPF:
+  h.c.listarSolicitacoes = () => ({
+    total: 2,
+    registros: [
+      {
+        equipe: 'BOLEIROS', competicao: 'SLU', protocolo: 'INCLUSAO-CPF',
+        situacao: 'Processada', ordem: 2, dataHora: '09/10/2026 14:20',
+        pessoas: [{ nome: 'Lucas matheus De Oliveira', cpf: '52998224725', nascimento: '04-09-1997', tipo: 'Atleta', acao: 'Inclusao' }]
+      },
+      {
+        equipe: 'CRUZMALTINO', competicao: 'SLU', protocolo: 'PORTABILIDADE-SEM-CPF',
+        situacao: 'Processada', ordem: 1, dataHora: '24/09/2026 12:28',
+        pessoas: [{ nome: 'Lucas Matheus de Oliveira', cpf: '', nascimento: '04-09-1997', tipo: 'Atleta', acao: 'Portabilidade' }]
+      }
+    ]
+  });
+  h.c.lerSolicitacoes_ = () => h.c.listarSolicitacoes();
+  h.c.listarPunicoes = () => ({ registros: [] });
+  h.c.listarSumulas = () => ({ total: 0, registros: [] });
+  h.c.lerSumulas_ = () => h.c.listarSumulas();
+
+  const result = h.c.construirBancoAtletas_();
+  const lucas = result.registros.filter(r => r.nome && r.nome.toUpperCase().includes('LUCAS MATHEUS'));
+
+  assert.equal(lucas.length, 1, 'deve existir UM único registro');
+  assert.equal(lucas[0].chave, 'CPF:52998224725', 'chave deve ser CPF:');
+  assert.equal(lucas[0].totalMovimentacoes, 2, 'ambas as solicitações devem estar no histórico');
+
+  const protocolos = lucas[0].movimentacoes.map(m => m.protocolo);
+  assert(protocolos.includes('INCLUSAO-CPF'), 'inclusão com CPF deve estar no histórico');
+  assert(protocolos.includes('PORTABILIDADE-SEM-CPF'), 'portabilidade sem CPF deve estar no histórico');
+  assert(lucas[0].equipesHistorico.includes('BOLEIROS'), 'BOLEIROS deve estar no histórico');
+  assert(lucas[0].equipesHistorico.includes('CRUZMALTINO'), 'CRUZMALTINO deve estar no histórico');
+});
+
+test('punição só conta no histórico disciplinar depois de aprovada', () => {
+  // Usa um atleta avulso (só na punição, sem elenco/solicitação) para isolar a regra.
+  function cenario(aprovada) {
+    const h = banco();
+    h.seed('c1', 'atletas', []);
+    h.seed('c2', 'atletas', []);
+    h.c.listarSolicitacoes = () => ({ total: 0, registros: [] });
+    h.c.lerSolicitacoes_ = () => h.c.listarSolicitacoes();
+    h.c.listarSumulas = () => ({ total: 0, registros: [] });
+    h.c.lerSumulas_ = () => h.c.listarSumulas();
+    h.c.listarPunicoes = () => ({
+      registros: [{ punido: 'Fulano Punido Teste', equipe: 'Equipe A', competicao: 'Atual',
+        status: 'DEFINIDA', situacao: 'A CUMPRIR', nota: '001/2026', artigo: 'ART. 1', aprovada: aprovada }]
+    });
+    const res = h.c.construirBancoAtletas_();
+    return res.registros.find(r => r.nome === 'Fulano Punido Teste');
+  }
+
+  // Não aprovada: atleta NÃO deve ficar suspenso, mas a punição aparece na lista.
+  const semAprovar = cenario(false);
+  assert(semAprovar, 'atleta da punição deve existir');
+  assert.equal(semAprovar.totalPunicoes, 1, 'a punição ainda aparece na lista (totalPunicoes=1)');
+  assert.equal(semAprovar.punicoesACumprir, 0, 'punição não aprovada não conta como A CUMPRIR');
+  assert.notEqual(semAprovar.situacaoDisciplina, 'Suspenso', 'não aprovada não deve suspender');
+
+  // Aprovada: atleta DEVE ficar suspenso.
+  const comAprovar = cenario(true);
+  assert.equal(comAprovar.totalPunicoes, 1, 'a punição continua na lista');
+  assert.equal(comAprovar.punicoesACumprir, 1, 'punição aprovada conta como A CUMPRIR');
+  assert.equal(comAprovar.situacaoDisciplina, 'Suspenso', 'aprovada deve suspender');
+});
+
+test('chavePunicao_ é estável e aprovarPunicao exige status DEFINIDA', () => {
+  const h = banco();
+
+  // chavePunicao_ normaliza nome e artigo
+  const chave1 = h.c.chavePunicao_({ nota: '007/2026', punido: 'Lucas Matheus de Oliveira', artigo: 'ART. 11, §1º' });
+  const chave2 = h.c.chavePunicao_({ nota: '007/2026', punido: 'Lucas matheus De Oliveira', artigo: 'art. 11, §1º' });
+  assert.equal(chave1, chave2, 'chave deve ser estável a variações de caixa no nome e artigo');
+
+  // aprovarPunicao rejeita status != DEFINIDA
+  assert.throws(() => h.c.aprovarPunicao({ nota: '1/2026', punido: 'Fulano', artigo: 'ART. 1', status: 'PENDENTE' }),
+    /DEFINIDA/, 'não deve aprovar punição PENDENTE');
+});

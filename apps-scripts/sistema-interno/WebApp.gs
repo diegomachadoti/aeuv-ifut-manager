@@ -41,7 +41,13 @@ const CONFIG = {
     arquivo: 'CONTROLE DE PUNIÇÕES - AEUV.txt',
 
     // Guarda o id do arquivo encontrado para evitar nova busca a cada abertura.
-    chaveArquivo: 'PUNICOES_ARQUIVO_ID'
+    chaveArquivo: 'PUNICOES_ARQUIVO_ID',
+
+    // Arquivo JSON na pasta raiz do projeto, gerenciado só pelo sistema interno,
+    // que guarda quais punições a diretoria aprovou. O Apps Script nunca escreve
+    // no TXT do Python; a aprovação fica isolada aqui para evitar conflito.
+    arquivoAprovacoes: 'AEUV - Punicoes Aprovadas.json',
+    chaveArquivoAprovacoes: 'PUNICOES_APROVACOES_ARQUIVO_ID'
   },
 
   // Contato exibido para quem tenta entrar sem autorizacao.
@@ -3712,12 +3718,260 @@ function listarPunicoes() {
 
   const arquivo = arquivoPunicoes_();
   const conteudo = arquivo.getBlob().getDataAsString('UTF-8');
+  const registros = interpretarPunicoes_(conteudo);
 
+  // Anexa o estado de aprovação de cada punição a partir do JSON gerido pelo
+  // sistema interno. Só punições aprovadas contam no histórico do atleta.
+  const aprovacoes = lerAprovacoesPunicoes_();
+  registros.forEach(function (registro) {
+    const chave = chavePunicao_(registro);
+    const aprovacao = aprovacoes[chave] || null;
+    registro.aprovada = Boolean(aprovacao);
+    registro.aprovadaEm = aprovacao ? aprovacao.aprovadaEm : '';
+    registro.aprovadaPor = aprovacao ? aprovacao.aprovadaPor : '';
+  });
+
+  const perfil = sessao.usuario.perfil;
   return {
     atualizadoEm: linhaAtualizacao_(conteudo),
     arquivoUrl: arquivo.getUrl(),
-    registros: interpretarPunicoes_(conteudo)
+    registros: registros,
+    podeAprovar: perfil === 'admin' || perfil === 'diretoria',
+    podeExcluir: perfil === 'admin'
   };
+}
+
+/**
+ * Chave única de uma punição, estável entre releituras do arquivo.
+ * Usa nota + punido normalizado + artigo — a mesma identidade que a
+ * automação Python usa para preservar a SITUAÇÃO entre atualizações.
+ * @param {Object} registro
+ * @return {string}
+ */
+function chavePunicao_(registro) {
+  const nota = String(registro.nota || '').trim();
+  const punido = chaveNomePessoa_(registro.punido);
+  const artigo = String(registro.artigo || '').trim().toUpperCase();
+  return nota + '|' + punido + '|' + artigo;
+}
+
+/**
+ * Localiza (ou cria) o arquivo JSON de aprovações na pasta raiz do projeto.
+ * @return {DriveApp.File}
+ */
+function arquivoAprovacoesPunicoes_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const guardado = propriedades.getProperty(CONFIG.punicoes.chaveArquivoAprovacoes);
+
+  if (guardado) {
+    try {
+      const arquivo = DriveApp.getFileById(guardado);
+      if (!arquivo.isTrashed()) {
+        return arquivo;
+      }
+    } catch (e) {
+      // Arquivo removido ou sem acesso: recria.
+    }
+  }
+
+  const raiz = pastaRaizProjeto_();
+  const existentes = raiz.getFilesByName(CONFIG.punicoes.arquivoAprovacoes);
+  const arquivo = existentes.hasNext()
+    ? existentes.next()
+    : raiz.createFile(Utilities.newBlob('{}', 'application/json', CONFIG.punicoes.arquivoAprovacoes));
+
+  propriedades.setProperty(CONFIG.punicoes.chaveArquivoAprovacoes, arquivo.getId());
+  return arquivo;
+}
+
+/**
+ * Lê o mapa de aprovações { chavePunicao: { aprovadaEm, aprovadaPor } }.
+ * @return {Object}
+ */
+function lerAprovacoesPunicoes_() {
+  try {
+    const arquivo = arquivoAprovacoesPunicoes_();
+    const texto = arquivo.getBlob().getDataAsString('UTF-8');
+    const dados = JSON.parse(texto || '{}');
+    return dados && typeof dados === 'object' && !Array.isArray(dados) ? dados : {};
+  } catch (e) {
+    // Arquivo ausente ou corrompido: trata como nenhuma aprovação.
+    return {};
+  }
+}
+
+/**
+ * Grava o mapa de aprovações no Drive.
+ * @param {Object} aprovacoes
+ */
+function gravarAprovacoesPunicoes_(aprovacoes) {
+  const arquivo = arquivoAprovacoesPunicoes_();
+  arquivo.setContent(JSON.stringify(aprovacoes || {}));
+}
+
+/**
+ * Aprova uma punição. Só admin e diretoria. Só punições com status DEFINIDA.
+ * Depois de aprovada, a punição passa a contar no histórico do atleta.
+ * @param {Object} registro  Objeto da punição (precisa de nota, punido, artigo, status).
+ * @return {{sucesso: boolean, chave: string, mensagem: string}}
+ */
+function aprovarPunicao(registro) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || (sessao.usuario.perfil !== 'admin' && sessao.usuario.perfil !== 'diretoria')) {
+    throw new Error('Você não tem permissão para aprovar punições.');
+  }
+
+  const chave = chavePunicao_(registro || {});
+  if (!chave || chave === '||') {
+    throw new Error('Punição inválida: nota, punido ou artigo ausente.');
+  }
+
+  if (String(registro.status || '').trim().toUpperCase() !== 'DEFINIDA') {
+    throw new Error('Só é possível aprovar punições com status DEFINIDA (pena já decidida).');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const aprovacoes = lerAprovacoesPunicoes_();
+    aprovacoes[chave] = {
+      aprovadaEm: formatarDataHora_(new Date()),
+      aprovadaPor: sessao.email
+    };
+    gravarAprovacoesPunicoes_(aprovacoes);
+    return {
+      sucesso: true,
+      chave: chave,
+      mensagem: 'Punição aprovada. Ela passa a contar no histórico disciplinar do atleta após o próximo recálculo do Banco de Atletas.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Desfaz a aprovação de uma punição (reprovar). Só admin e diretoria.
+ * @param {Object} registro
+ * @return {{sucesso: boolean, chave: string, mensagem: string}}
+ */
+function reprovarPunicao(registro) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || (sessao.usuario.perfil !== 'admin' && sessao.usuario.perfil !== 'diretoria')) {
+    throw new Error('Você não tem permissão para alterar aprovações de punições.');
+  }
+
+  const chave = chavePunicao_(registro || {});
+  if (!chave || chave === '||') {
+    throw new Error('Punição inválida: nota, punido ou artigo ausente.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const aprovacoes = lerAprovacoesPunicoes_();
+    if (!aprovacoes[chave]) {
+      return { sucesso: true, chave: chave, mensagem: 'Punição já não estava aprovada.' };
+    }
+    delete aprovacoes[chave];
+    gravarAprovacoesPunicoes_(aprovacoes);
+    return {
+      sucesso: true,
+      chave: chave,
+      mensagem: 'Aprovação removida. A punição deixa de contar no histórico do atleta após o próximo recálculo.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Exclui uma punição do arquivo de controle pelo número da nota + punido + artigo.
+ * SOMENTE admin. Usado para remover punições de teste.
+ * O arquivo TXT é relido, a(s) linha(s) correspondente(s) removida(s) e o arquivo regravado.
+ * Atenção: ao rodar a automação Python novamente, punições de notas ainda
+ * existentes serão recriadas. Também remove a aprovação associada, se houver.
+ * @param {Object} registro  Punição a excluir (nota, punido, artigo).
+ * @return {{sucesso: boolean, mensagem: string}}
+ */
+function removerPunicao(registro) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || sessao.usuario.perfil !== 'admin') {
+    throw new Error('Apenas administradores podem excluir punições.');
+  }
+
+  const alvo = registro || {};
+  const notaAlvo = String(alvo.nota || '').trim();
+  if (!notaAlvo) {
+    throw new Error('Número da nota não informado.');
+  }
+  const chaveAlvo = chavePunicao_(alvo);
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const arquivo = arquivoPunicoes_();
+    const conteudo = arquivo.getBlob().getDataAsString('UTF-8');
+    const linhas = conteudo.split(/\r?\n/);
+
+    const cabecalho = [];
+    const corpo = [];
+    let cabecalhoFechado = false;
+
+    linhas.forEach(function (linha) {
+      const celulas = linha.split('|').map(function (c) { return c.trim(); });
+      const ehDado = celulas.length === PUNICOES_COLUNAS.length && celulas[0] && celulas[0].indexOf('NOTA') !== 0;
+      if (!cabecalhoFechado && !ehDado) {
+        cabecalho.push(linha);
+      } else {
+        cabecalhoFechado = true;
+        if (ehDado) {
+          const reg = {};
+          PUNICOES_COLUNAS.forEach(function (campo, i) { reg[campo] = celulas[i]; });
+          corpo.push({ linha: linha, chave: chavePunicao_(reg), ehDado: true });
+        } else {
+          corpo.push({ linha: linha, chave: null, ehDado: false });
+        }
+      }
+    });
+
+    const totalDadosAntes = corpo.filter(function (c) { return c.ehDado; }).length;
+    const corpoFiltrado = corpo.filter(function (c) {
+      return !c.ehDado || c.chave !== chaveAlvo;
+    });
+    const totalDadosDepois = corpoFiltrado.filter(function (c) { return c.ehDado; }).length;
+
+    if (totalDadosDepois === totalDadosAntes) {
+      throw new Error('Punição não encontrada no arquivo de controle (nota "' + notaAlvo + '").');
+    }
+
+    // Atualiza a contagem na linha "Atualizado em ... N registro(s)".
+    const cabecalhoAtualizado = cabecalho.map(function (linha) {
+      if (linha.indexOf('Atualizado em') === -1) return linha;
+      return linha.replace(/\d+\s*registro\(s\)/, totalDadosDepois + ' registro(s)');
+    });
+
+    const novoConteudo = cabecalhoAtualizado
+      .concat(corpoFiltrado.map(function (c) { return c.linha; }))
+      .join('\n');
+
+    arquivo.setContent(novoConteudo);
+
+    // Remove também a aprovação associada, se existir.
+    const aprovacoes = lerAprovacoesPunicoes_();
+    if (aprovacoes[chaveAlvo]) {
+      delete aprovacoes[chaveAlvo];
+      gravarAprovacoesPunicoes_(aprovacoes);
+    }
+
+    return {
+      sucesso: true,
+      mensagem: 'Punição excluída com sucesso. Atenção: ao rodar a automação Python novamente, '
+        + 'punições de notas ainda existentes serão recriadas.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
@@ -6634,7 +6888,8 @@ function suspensosSumulaTabela_(controle, campeonato) {
     const equipe = chaveEquipe_(item.equipe);
     const pessoa = chaveEquipe_(item.punido);
     const tipo = chaveEquipe_(item.tipo);
-    if (!competicao || !equipe || !pessoa || chaveEquipe_(item.competicao) !== competicao
+    // Só punições APROVADAS pela diretoria suspendem na tabela de súmulas.
+    if (!item.aprovada || !competicao || !equipe || !pessoa || chaveEquipe_(item.competicao) !== competicao
         || chaveEquipe_(item.status) !== 'DEFINIDA'
         || !/^A CUMPRIR(?:\b|$)/.test(chaveEquipe_(item.situacao))
         || (tipo !== 'ATLETA' && tipo !== 'COMISSAO TECNICA')) return;
@@ -10854,6 +11109,33 @@ function consolidarAtletasBanco_(elenco, dadosSolicitacoes, dadosPunicoes, dados
   const lista = [];
   const indiceNome = {};
 
+  // Resolve qual atleta usar para uma chave: se a chave for NOME: e já existir
+  // um único candidato no indiceNome (ex: atleta com CPF de outra fonte),
+  // retorna esse candidato e registra o alias no mapa para lookups futuros.
+  function resolverOuCriarAtleta_(chave, dadosCriacao) {
+    let atleta = mapa[chave];
+    if (atleta) return atleta;
+
+    // Para chaves NOME: (sem CPF), tenta encontrar no indiceNome antes de criar.
+    if (chave.indexOf('NOME:') === 0) {
+      // A chave pode ter nascimento: 'NOME:NOME|nascimento' — extrai só o nome.
+      const nomeNorm = chave.slice(5).split('|')[0];
+      const candidatos = indiceNome[nomeNorm] || [];
+      if (candidatos.length === 1) {
+        atleta = candidatos[0];
+        mapa[chave] = atleta; // alias para lookups futuros
+        return atleta;
+      }
+    }
+
+    // Cria novo atleta.
+    atleta = criarAtletaConsolidado_(chave, dadosCriacao);
+    mapa[chave] = atleta;
+    lista.push(atleta);
+    registrarIndiceNomeAtleta_(indiceNome, atleta);
+    return atleta;
+  }
+
   (dadosSolicitacoes.registros || []).forEach(function (solicitacao) {
     (solicitacao.pessoas || []).forEach(function (pessoa) {
       const chave = chaveAtletaSolicitacao_(pessoa);
@@ -10862,21 +11144,14 @@ function consolidarAtletasBanco_(elenco, dadosSolicitacoes, dadosPunicoes, dados
         return;
       }
 
-      let atleta = mapa[chave];
-
-      if (!atleta) {
-        atleta = criarAtletaConsolidado_(chave, {
-          nome: pessoa.nome,
-          cpf: pessoa.cpf,
-          nascimento: pessoa.nascimento,
-          tipo: pessoa.tipo,
-          equipe: solicitacao.equipe,
-          competicao: solicitacao.competicao
-        });
-        mapa[chave] = atleta;
-        lista.push(atleta);
-        registrarIndiceNomeAtleta_(indiceNome, atleta);
-      }
+      const atleta = resolverOuCriarAtleta_(chave, {
+        nome: pessoa.nome,
+        cpf: pessoa.cpf,
+        nascimento: pessoa.nascimento,
+        tipo: pessoa.tipo,
+        equipe: solicitacao.equipe,
+        competicao: solicitacao.competicao
+      });
 
       atualizarBaseAtleta_(atleta, {
         nome: pessoa.nome,
@@ -10909,20 +11184,18 @@ function consolidarAtletasBanco_(elenco, dadosSolicitacoes, dadosPunicoes, dados
 
   // Roster links come before name-based sources so punishments/súmulas can attach to them.
   elenco.grupos.forEach(function (grupo) {
-    let atleta = mapa[grupo.chave];
-    const criado = !atleta;
+    const primeiroVinculo = grupo.vinculos[0];
+    const existiaNoMapa = Boolean(mapa[grupo.chave]);
 
-    if (!atleta) {
-      // The most recent roster name wins for roster-only athletes.
-      atleta = criarAtletaConsolidado_(grupo.chave, {
-        nome: grupo.vinculos[0].nome,
-        cpf: grupo.vinculos[0].cpf,
-        nascimento: dataIsoParaBrAtleta_(grupo.vinculos[0].dataNascimento),
-        tipo: 'Atleta'
-      });
-      mapa[grupo.chave] = atleta;
-      lista.push(atleta);
-    }
+    const atleta = resolverOuCriarAtleta_(grupo.chave, {
+      nome: primeiroVinculo.nome,
+      cpf: primeiroVinculo.cpf,
+      nascimento: dataIsoParaBrAtleta_(primeiroVinculo.dataNascimento),
+      tipo: 'Atleta'
+    });
+
+    // criado=true somente quando o atleta foi criado agora (não existia por nenhuma chave).
+    const criado = !existiaNoMapa && mapa[grupo.chave] === atleta && atleta.vinculos.length === 0;
 
     grupo.vinculos.forEach(function (vinculo) {
       atualizarBaseAtleta_(atleta, {
@@ -10988,7 +11261,8 @@ function consolidarAtletasBanco_(elenco, dadosSolicitacoes, dadosPunicoes, dados
       decisao: registro.decisao || '',
       status: registro.status || '',
       situacao: registro.situacao || '',
-      sumula: registro.sumula || ''
+      sumula: registro.sumula || '',
+      aprovada: Boolean(registro.aprovada)
     });
   });
 
@@ -11070,11 +11344,13 @@ function consolidarAtletasBanco_(elenco, dadosSolicitacoes, dadosPunicoes, dados
     atleta.pendenciasCadastro = atleta.aguardandoCadastro + atleta.falhasCadastro;
     atleta.totalMovimentacoes = atleta.movimentacoes.length;
     atleta.totalPunicoes = atleta.punicoes.length;
+    // Só punições APROVADAS pela diretoria contam no histórico disciplinar.
+    // Punições não aprovadas aparecem na lista, mas não marcam o atleta como suspenso.
     atleta.punicoesACumprir = atleta.punicoes.filter(function (item) {
-      return String(item.situacao || '').indexOf('A CUMPRIR') === 0;
+      return item.aprovada && String(item.situacao || '').indexOf('A CUMPRIR') === 0;
     }).length;
     atleta.punicoesPendentes = atleta.punicoes.filter(function (item) {
-      return item.status !== 'DEFINIDA';
+      return item.aprovada && item.status !== 'DEFINIDA';
     }).length;
     atleta.totalSumulas = atleta.sumulas.length;
     atleta.ultimaMovimentacao = ultimaMovimentacao ? ultimaMovimentacao.dataHora : '';
@@ -11212,6 +11488,9 @@ function vinculosAtletasElenco_() {
   const cobertos = {};
   const grupos = {};
   const ordem = [];
+  // Índice secundário: nome normalizado → chave CPF: já existente no mapa.
+  // Permite que vínculos sem CPF se juntem a um grupo CPF: quando o nome bate exatamente.
+  const nomeParaCpfChave = {};
   let atuais = 0;
   let anteriores = 0;
 
@@ -11222,11 +11501,43 @@ function vinculosAtletasElenco_() {
   });
 
   function adicionar(vinculo) {
-    // Valid CPF links the same person across teams/championships; otherwise
-    // only the stable roster record does — names are never used to merge.
-    const chave = cpfValido_(vinculo.cpf)
-      ? 'CPF:' + vinculo.cpf
-      : 'REGISTRO:' + vinculo.campeonatoId + ':' + (vinculo.registroId || vinculo.id);
+    // 1. CPF válido → chave primária CPF:xxx. Também registra o nome no índice secundário
+    //    para que vínculos sem CPF (ex: portabilidade) se agreguem a este grupo.
+    //    Se já existia um grupo NOME: com este nome, migra todos os seus vínculos para CPF:.
+    // 2. Sem CPF mas com nome → verifica se o nome normalizado já existe num grupo CPF:;
+    //    se sim, usa essa chave (mesma pessoa cadastrada com CPF em outro vínculo).
+    //    Se não, cria/usa chave NOME: para agregar sem-CPF de mesmo nome entre si.
+    // 3. Sem CPF e sem nome → chave REGISTRO: isolada (não há base para agrupar).
+    let chave;
+    const nomeNorm = chaveNomePessoa_(vinculo.nome);
+
+    if (cpfValido_(vinculo.cpf)) {
+      chave = 'CPF:' + vinculo.cpf;
+
+      // Registra o nome no índice secundário.
+      if (nomeNorm && !nomeParaCpfChave[nomeNorm]) {
+        nomeParaCpfChave[nomeNorm] = chave;
+      }
+
+      // Se já existe um grupo NOME: para este nome (sem-CPF chegou primeiro),
+      // migra todos os seus vínculos para o grupo CPF: e descarta o grupo NOME:.
+      const chaveNome = nomeNorm ? 'NOME:' + nomeNorm : null;
+      if (chaveNome && grupos[chaveNome]) {
+        if (!grupos[chave]) {
+          grupos[chave] = { chave: chave, vinculos: [] };
+          ordem.push(chave);
+        }
+        grupos[chaveNome].vinculos.forEach(function (v) { grupos[chave].vinculos.push(v); });
+        delete grupos[chaveNome];
+        const idx = ordem.indexOf(chaveNome);
+        if (idx !== -1) ordem.splice(idx, 1);
+      }
+    } else if (nomeNorm) {
+      // Prefere o grupo CPF: existente (mesmo atleta que já foi cadastrado com CPF).
+      chave = nomeParaCpfChave[nomeNorm] || 'NOME:' + nomeNorm;
+    } else {
+      chave = 'REGISTRO:' + vinculo.campeonatoId + ':' + (vinculo.registroId || vinculo.id);
+    }
 
     if (!grupos[chave]) {
       grupos[chave] = { chave: chave, vinculos: [] };

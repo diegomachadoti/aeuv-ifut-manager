@@ -43,7 +43,7 @@
 
 - [⚠️] **TD12 — Pendente:** Na tela de "Usuarios de sistema" poder adicionar ou retirar permissoes de telas para os tipos de perfils que tem hoje (Associado, Diretoria e Arbitragem).
 
-- [⚠️] **TD13 — Pendente:** No "Banco de Dados de Atletas" o agrupamento e feito pelo CPF (provavelmente) como segundo campo seria bom agrupar também pelo "Nome Completo", pois em caso que o CPF estiver vazio para alguma linha (pq as incrições por portabilidade o CPF aparece vazio como nao informado).
+- [✅] **TD13 — Pendente:** No "Banco de Dados de Atletas" o agrupamento e feito pelo CPF (provavelmente) como segundo campo seria bom agrupar também pelo "Nome Completo", pois em caso que o CPF estiver vazio para alguma linha (pq as incrições por portabilidade o CPF aparece vazio como nao informado).
 
 - [✅] **TD14 — Concluída:** No "Financeiro e Prestação de Contas" ter um olho para ocultar a exibição de valores de toda a tela. **OK**
 

@@ -517,16 +517,20 @@
 
     /* Larguras fixas: a tabela cabe na tela sem empurrar as colunas curtas. */
     .punicoes { table-layout: fixed; font-size: 13px; }
-    .punicoes th, .punicoes td { padding: 9px 10px; }
+    .punicoes th, .punicoes td { padding: 9px 10px; vertical-align: top; }
 
-    .punicoes th:nth-child(1) { width: 11%; }
-    .punicoes th:nth-child(2) { width: 17%; }
-    .punicoes th:nth-child(3) { width: 11%; }
-    .punicoes th:nth-child(4) { width: 15%; }
-    .punicoes th:nth-child(5) { width: 10%; }
-    .punicoes th:nth-child(6) { width: 12%; }
-    .punicoes th:nth-child(7) { width: 11%; }
-    .punicoes th:nth-child(8) { width: 13%; }
+    /* 10 colunas: Nota, Punido, Equipe, Partida, Artigo, Suspensão, Status,
+       Situação, Aprovação, Ações. Percentuais somam 100% para não estourar. */
+    .punicoes th:nth-child(1) { width: 9%; }
+    .punicoes th:nth-child(2) { width: 15%; }
+    .punicoes th:nth-child(3) { width: 9%; }
+    .punicoes th:nth-child(4) { width: 12%; }
+    .punicoes th:nth-child(5) { width: 8%; }
+    .punicoes th:nth-child(6) { width: 9%; }
+    .punicoes th:nth-child(7) { width: 9%; }
+    .punicoes th:nth-child(8) { width: 9%; }
+    .punicoes th:nth-child(9) { width: 10%; }
+    .punicoes th:nth-child(10) { width: 10%; }
 
     .punicoes td:nth-child(1),
     .punicoes td:nth-child(5) { white-space: nowrap; }
@@ -542,6 +546,82 @@
     .pilula.cumprida { background: #e4f4e9; color: #1e8449; font-weight: bold; }
     .pilula.alerta { background: #fdecea; color: #922b21; font-weight: bold; }
     .pilula.definida { background: #e4f4e9; color: #1e8449; }
+
+    /* Ações da punição: empilhadas, compactas e alinhadas. */
+    .punicoes-acoes {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: stretch;
+    }
+
+    .punicoes-acoes .botao-principal,
+    .punicoes-acoes .botao-apoio {
+      padding: 5px 8px;
+      font-size: 12px;
+      line-height: 1.1;
+      white-space: nowrap;
+      text-align: center;
+    }
+
+    .btn-aprovar-punicao {
+      background: #1e8449;
+      color: #fff;
+      border: 1px solid #1a6e3c;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-aprovar-punicao:hover { background: #176e3b; }
+    .btn-aprovar-punicao:disabled { background: #cbd5e1; border-color: #cbd5e1; color: #64748b; cursor: not-allowed; }
+
+    .btn-desfazer-punicao {
+      background: #fff;
+      color: #8a5a00;
+      border: 1px solid #e0b968;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-desfazer-punicao:hover { background: #fff8ec; }
+
+    .btn-excluir-punicao {
+      background: #fff;
+      color: #922b21;
+      border: 1px solid #e6a79f;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .btn-excluir-punicao:hover { background: #fdecea; }
+
+    /* Badge de aprovação em bloco, com a data embaixo. */
+    .aprovacao-info { font-size: 11px; color: var(--apoio); margin-top: 3px; white-space: normal; }
+    .pilula.nao-aprovada { background: #f1f3f5; color: #51606e; font-weight: bold; }
+
+    /* Overlay de processamento das ações de punição (aprovar/desfazer/excluir). */
+    .punicoes-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(255, 255, 255, .78);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      z-index: 1000;
+    }
+    body.tema-escuro .punicoes-overlay { background: rgba(16, 22, 38, .82); }
+    .punicoes-overlay .spinner {
+      width: 38px; height: 38px;
+      border: 4px solid var(--borda, #d6dbe4);
+      border-top-color: var(--azul, #14213d);
+      border-radius: 50%;
+      animation: punicoes-girar .8s linear infinite;
+    }
+    body.tema-escuro .punicoes-overlay .spinner { border-top-color: var(--dourado, #c9a227); }
+    .punicoes-overlay .texto { font-weight: 600; color: var(--azul, #14213d); }
+    body.tema-escuro .punicoes-overlay .texto { color: var(--texto, #e6eaf2); }
+    @keyframes punicoes-girar { to { transform: rotate(360deg); } }
 
     /* ----- Solicitações de inscrição ----- */
 
@@ -1733,6 +1813,9 @@
     .pilula.encerrado { background: #e6e8ec; color: #3b4254; font-weight: bold; }
     /* Mantém as colunas esportivas legíveis com rolagem em telas estreitas. */
     body.modulo-tabela .container { max-width: 1500px; }
+
+    /* Punições tem 10 colunas (inclui Aprovação e Ações): precisa de mais largura. */
+    body.modulo-punicoes .container { max-width: 1400px; }
     .tabela-campeonato { min-width: 0; }
     .tabela-barra, .tabela-abas, .tabela-acoes { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 16px 0; }
     .tabela-barra .campo { flex: 1 1 200px; min-width: 0; }
@@ -1934,7 +2017,8 @@
     body.tema-escuro .pilula.alerta,
     body.tema-escuro .pilula.falha,
     body.tema-escuro .pilula.inativo { background: #3b1a1d; color: #f87171; }
-    body.tema-escuro .pilula.suspenso { background: #262c38; color: #b8c1d1; }
+    body.tema-escuro .pilula.suspenso,
+    body.tema-escuro .pilula.nao-aprovada { background: #262c38; color: #b8c1d1; }
     body.tema-escuro .pilula.arbitragem { background: #2a2346; color: #c4b5fd; }
 
     body.tema-escuro .alerta { color: #f87171; }
@@ -2874,6 +2958,7 @@
      */
     function renderizarModulo(modulo, estadoInicial) {
       document.body.classList.toggle('modulo-tabela', modulo.id === 'jogos-campeonato' || modulo.id === 'sumula-campeonato');
+      document.body.classList.toggle('modulo-punicoes', modulo.id === 'punicoes');
       fecharDetalhesPessoaElenco(false);
       elencoAtual = null;
       const cabecalho = '<div class="cabecalho-modulo">'
@@ -6628,6 +6713,89 @@
       });
     }
 
+    /**
+     * Confirmação genérica estilizada (dialog nativo do app), no mesmo padrão
+     * visual do descarte de elenco. Resolve uma Promise: true ao confirmar,
+     * false ao cancelar/Esc/fundo. Opções: titulo, mensagem, confirmar,
+     * cancelar (padrão "Cancelar"), perigo (padrão true), origemFoco.
+     */
+    function confirmarDialogo_(opcoes) {
+      opcoes = opcoes || {};
+      return new Promise(function (resolver) {
+        const origem = opcoes.origemFoco || document.activeElement;
+        const dialogo = document.createElement('dialog');
+        const conteudo = document.createElement('div');
+        const marca = document.createElement('div');
+        const titulo = document.createElement('h3');
+        const mensagem = document.createElement('p');
+        const acoes = document.createElement('div');
+        const cancelar = document.createElement('button');
+        const confirmar = document.createElement('button');
+        let finalizado = false;
+
+        dialogo.className = 'elenco-confirmacao-dialog';
+        dialogo.setAttribute('role', 'alertdialog');
+        dialogo.setAttribute('aria-modal', 'true');
+        dialogo.setAttribute('aria-labelledby', 'dialogoConfirmacaoTitulo');
+        dialogo.setAttribute('aria-describedby', 'dialogoConfirmacaoMensagem');
+        conteudo.className = 'elenco-confirmacao-conteudo';
+        marca.className = 'elenco-detalhes-marca';
+        if (CONFIG.logoUrl) {
+          const logo = document.createElement('img');
+          logo.src = CONFIG.logoUrl;
+          logo.alt = '';
+          marca.appendChild(logo);
+        }
+        marca.appendChild(document.createElement('span'));
+        marca.lastChild.textContent = 'AEUV';
+        titulo.id = 'dialogoConfirmacaoTitulo';
+        titulo.textContent = opcoes.titulo || 'Confirmar ação';
+        mensagem.id = 'dialogoConfirmacaoMensagem';
+        mensagem.textContent = opcoes.mensagem || '';
+        acoes.className = 'elenco-confirmacao-acoes';
+        cancelar.type = 'button';
+        cancelar.className = 'botao-apoio';
+        cancelar.textContent = opcoes.cancelar || 'Cancelar';
+        confirmar.type = 'button';
+        confirmar.className = opcoes.perigo === false ? 'botao-principal' : 'botao-apoio perigo';
+        confirmar.textContent = opcoes.confirmar || 'Confirmar';
+        acoes.appendChild(cancelar);
+        acoes.appendChild(confirmar);
+        conteudo.appendChild(marca);
+        conteudo.appendChild(titulo);
+        conteudo.appendChild(mensagem);
+        conteudo.appendChild(acoes);
+        dialogo.appendChild(conteudo);
+
+        function finalizar(resultado) {
+          if (finalizado) return;
+          finalizado = true;
+          if (dialogo.open && typeof dialogo.close === 'function') dialogo.close();
+          else dialogo.removeAttribute('open');
+          if (dialogo.parentNode) dialogo.parentNode.removeChild(dialogo);
+          if (!resultado && origem && origem.isConnected && typeof origem.focus === 'function') origem.focus();
+          resolver(resultado);
+        }
+
+        cancelar.addEventListener('click', function () { finalizar(false); });
+        confirmar.addEventListener('click', function () { finalizar(true); });
+        dialogo.addEventListener('cancel', function (evento) { evento.preventDefault(); finalizar(false); });
+        dialogo.addEventListener('keydown', function (evento) {
+          if (evento.key !== 'Escape') return;
+          evento.preventDefault();
+          finalizar(false);
+        });
+        dialogo.addEventListener('click', function (evento) {
+          if (evento.target === dialogo) finalizar(false);
+        });
+
+        document.body.appendChild(dialogo);
+        if (typeof dialogo.showModal === 'function') dialogo.showModal();
+        else dialogo.setAttribute('open', '');
+        cancelar.focus();
+      });
+    }
+
     function voltarEquipesElenco_() {
       if (!elencoAtual || elencoAtual.salvando || confirmacaoElencoAtual) return;
       const formulario = document.getElementById('cadastroPessoasFormArea');
@@ -7432,7 +7600,7 @@
      * Estado da tela de punicoes: o arquivo e lido uma vez e os filtros
      * trabalham sobre essa copia, sem novas idas ao servidor.
      */
-    let punicoes = { registros: [], atualizadoEm: '', arquivoUrl: '' };
+    let punicoes = { registros: [], atualizadoEm: '', arquivoUrl: '', podeAprovar: false, podeExcluir: false };
 
     /**
      * Busca no servidor o controle de punicoes publicado no Drive.
@@ -7496,6 +7664,8 @@
         + '<div class="tabela-rolagem"><table class="punicoes"><thead><tr>'
         + '<th>Nota</th><th>Punido</th><th>Equipe</th><th>Partida</th><th>Artigo</th>'
         + '<th>Suspens&atilde;o</th><th>Status</th><th>Situa&ccedil;&atilde;o</th>'
+        + '<th>Aprova&ccedil;&atilde;o</th>'
+        + (punicoes.podeAprovar || punicoes.podeExcluir ? '<th>A&ccedil;&otilde;es</th>' : '')
         + '</tr></thead><tbody id="linhasPunicoes"></tbody></table></div>';
 
       document.getElementById('buscaPunicoes').addEventListener('input', filtrarPunicoes);
@@ -7583,12 +7753,14 @@
       const cumprir = registros.filter(function (r) { return r.situacao.indexOf('A CUMPRIR') === 0; }).length;
       const cumpridas = registros.filter(function (r) { return r.situacao.indexOf('CUMPRIDA') === 0; }).length;
       const pendentes = registros.filter(function (r) { return r.status !== 'DEFINIDA'; }).length;
+      const naoAprovadas = registros.filter(function (r) { return !r.aprovada; }).length;
 
       const itens = [
         ['', registros.length, 'Punições'],
         ['cumprir', cumprir, 'A cumprir'],
         ['cumprida', cumpridas, 'Cumpridas'],
-        ['pendente', pendentes, 'Pena a definir']
+        ['pendente', pendentes, 'Pena a definir'],
+        ['pendente', naoAprovadas, 'Não aprovadas']
       ];
 
       document.getElementById('resumoPunicoes').innerHTML = itens.map(function (item) {
@@ -7607,14 +7779,17 @@
      * Desenha as linhas da tabela (fichas empilhadas no celular).
      */
     function desenharLinhas(registros) {
+      const temAcoes = punicoes.podeAprovar || punicoes.podeExcluir;
+      const colunas = temAcoes ? 10 : 9;
+
       if (!registros.length) {
         document.getElementById('linhasPunicoes').innerHTML =
-          '<tr><td colspan="8" style="text-align:center;color:var(--apoio);">'
+          '<tr><td colspan="' + colunas + '" style="text-align:center;color:var(--apoio);">'
           + 'Nenhuma puni&ccedil;&atilde;o encontrada com os filtros atuais.</td></tr>';
         return;
       }
 
-      document.getElementById('linhasPunicoes').innerHTML = registros.map(function (r) {
+      document.getElementById('linhasPunicoes').innerHTML = registros.map(function (r, indice) {
         const detalhe = r.tipo + (r.camisa && r.camisa !== '-' ? ' · camisa ' + r.camisa : '')
           + (r.cartaoVermelho === 'Sim' ? ' · cartão vermelho' : '');
 
@@ -7626,6 +7801,38 @@
             + escapar(r.sumula) + '" data-sumula="' + escapar(r.sumula) + '">Ver súmula</a></div>'
           : '';
 
+        // Índice do registro na lista global, para os handlers localizarem a punição.
+        const idxGlobal = (punicoes.registros || []).indexOf(r);
+
+        const aprovada = Boolean(r.aprovada);
+        const badgeAprovacao = aprovada
+          ? '<span class="pilula cumprida">✔ Aprovada</span>'
+            + (r.aprovadaEm ? '<div class="aprovacao-info">' + escapar(r.aprovadaEm)
+                + (r.aprovadaPor ? '<br>por ' + escapar(r.aprovadaPor) : '') + '</div>' : '')
+          : '<span class="pilula nao-aprovada">Não aprovada</span>';
+
+        let acoesHtml = '';
+        if (punicoes.podeAprovar || punicoes.podeExcluir) {
+          const botoes = [];
+          if (punicoes.podeAprovar) {
+            if (aprovada) {
+              botoes.push('<button type="button" class="btn-desfazer-punicao acao-reprovar-punicao" '
+                + 'data-idx="' + idxGlobal + '">Desfazer</button>');
+            } else {
+              // Só punições DEFINIDA podem ser aprovadas.
+              const podeEsta = String(r.status || '').toUpperCase() === 'DEFINIDA';
+              botoes.push('<button type="button" class="btn-aprovar-punicao acao-aprovar-punicao" '
+                + 'data-idx="' + idxGlobal + '"' + (podeEsta ? '' : ' disabled title="Só punições DEFINIDA podem ser aprovadas"')
+                + '>✔ Aprovar</button>');
+            }
+          }
+          if (punicoes.podeExcluir) {
+            botoes.push('<button type="button" class="btn-excluir-punicao acao-excluir-punicao" '
+              + 'data-idx="' + idxGlobal + '" title="Excluir punição">🗑️ Excluir</button>');
+          }
+          acoesHtml = celula('Ações', '<div class="punicoes-acoes">' + botoes.join('') + '</div>');
+        }
+
         return '<tr>'
           + celula('Nota', escapar(r.nota) + '<div class="punido-dado">' + escapar(r.dataNota) + '</div>' + origem)
           + celula('Punido', '<span class="punido-nome">' + escapar(r.punido) + '</span>'
@@ -7636,6 +7843,8 @@
           + celula('Suspensão', escapar(suspensao(r)))
           + celula('Status', '<span class="' + classeStatus(r.status) + '">' + escapar(r.status) + '</span>')
           + celula('Situação', '<span class="' + classeSituacao(r.situacao) + '">' + escapar(r.situacao) + '</span>')
+          + celula('Aprovação', badgeAprovacao)
+          + acoesHtml
           + '</tr>';
       }).join('');
 
@@ -7644,6 +7853,157 @@
           evento.preventDefault();
           abrirModulo('sumulas', link.dataset.sumula);
         });
+      });
+
+      conteudo.querySelectorAll('#linhasPunicoes .acao-aprovar-punicao').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          acaoAprovarPunicao(Number(botao.dataset.idx), botao);
+        });
+      });
+      conteudo.querySelectorAll('#linhasPunicoes .acao-reprovar-punicao').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          acaoReprovarPunicao(Number(botao.dataset.idx), botao);
+        });
+      });
+      conteudo.querySelectorAll('#linhasPunicoes .acao-excluir-punicao').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          acaoExcluirPunicao(Number(botao.dataset.idx), botao);
+        });
+      });
+    }
+
+    /**
+     * Payload mínimo que o servidor usa para identificar a punição (chavePunicao_).
+     */
+    function payloadPunicao_(r) {
+      return { nota: r.nota, punido: r.punido, artigo: r.artigo, status: r.status };
+    }
+
+    /** Overlay de "processando" enquanto a ação roda e a tela recarrega. */
+    let punicoesOverlayAtual = null;
+    function mostrarOverlayPunicoes_(texto) {
+      removerOverlayPunicoes_();
+      const overlay = document.createElement('div');
+      overlay.className = 'punicoes-overlay';
+      overlay.setAttribute('role', 'status');
+      overlay.setAttribute('aria-live', 'polite');
+      overlay.innerHTML = '<div class="spinner" aria-hidden="true"></div>'
+        + '<p class="texto">' + escapar(texto || 'Processando...') + '</p>';
+      document.body.appendChild(overlay);
+      punicoesOverlayAtual = overlay;
+    }
+    function removerOverlayPunicoes_() {
+      if (punicoesOverlayAtual && punicoesOverlayAtual.parentNode) {
+        punicoesOverlayAtual.parentNode.removeChild(punicoesOverlayAtual);
+      }
+      punicoesOverlayAtual = null;
+    }
+
+    /**
+     * Executa uma ação de punição (aprovar/desfazer/excluir) com confirmação,
+     * overlay de carregamento e recarga da tela ao final.
+     * @param {Object} opcoes  { idx, botao, metodo, confirmacao{}, textoLoading, aoSucesso }
+     */
+    function executarAcaoPunicao_(opcoes) {
+      const r = (punicoes.registros || [])[opcoes.idx];
+      if (!r) return;
+
+      confirmarDialogo_(Object.assign({ origemFoco: opcoes.botao }, opcoes.confirmacao)).then(function (ok) {
+        if (!ok) return;
+        if (opcoes.botao) opcoes.botao.disabled = true;
+        mostrarOverlayPunicoes_(opcoes.textoLoading);
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (typeof opcoes.aoSucesso === 'function') opcoes.aoSucesso(r, res);
+            // carregarPunicoes redesenha a tela; o overlay sai quando os dados chegam.
+            carregarPunicoesComOverlay_();
+          })
+          .withFailureHandler(function (erro) {
+            removerOverlayPunicoes_();
+            if (opcoes.botao) opcoes.botao.disabled = false;
+            confirmarDialogo_({
+              titulo: 'Não foi possível concluir',
+              mensagem: erro && erro.message ? erro.message : String(erro),
+              confirmar: 'Fechar', cancelar: 'Fechar', perigo: false
+            });
+          })[opcoes.metodo](payloadPunicao_(r));
+      });
+    }
+
+    /** Recarrega as punições e remove o overlay quando a tela termina de montar. */
+    function carregarPunicoesComOverlay_() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          removerOverlayPunicoes_();
+          if (moduloAtual !== 'punicoes') return;
+          punicoes = dados;
+          montarTelaPunicoes();
+        })
+        .withFailureHandler(function (erro) {
+          removerOverlayPunicoes_();
+          if (moduloAtual !== 'punicoes') return;
+          const el = document.getElementById('statusPunicoes') || document.getElementById('resumoPunicoes');
+          if (el) el.outerHTML = '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+        })
+        .listarPunicoes();
+    }
+
+    function acaoAprovarPunicao(idx, botao) {
+      const r = (punicoes.registros || [])[idx];
+      if (!r) return;
+      if (String(r.status || '').toUpperCase() !== 'DEFINIDA') {
+        confirmarDialogo_({
+          titulo: 'Não é possível aprovar',
+          mensagem: 'Só é possível aprovar punições com status DEFINIDA (pena já decidida).',
+          confirmar: 'Entendi',
+          cancelar: 'Fechar',
+          perigo: false,
+          origemFoco: botao
+        });
+        return;
+      }
+      executarAcaoPunicao_({
+        idx: idx, botao: botao, metodo: 'aprovarPunicao',
+        textoLoading: 'Aprovando punição...',
+        confirmacao: {
+          titulo: 'Aprovar punição',
+          mensagem: 'Aprovar a punição da nota ' + r.nota + ' para ' + r.punido
+            + '? Após aprovada, ela passa a contar no histórico disciplinar do atleta.',
+          confirmar: 'Aprovar',
+          perigo: false
+        },
+        aoSucesso: function (reg) { reg.aprovada = true; }
+      });
+    }
+
+    function acaoReprovarPunicao(idx, botao) {
+      const r = (punicoes.registros || [])[idx];
+      if (!r) return;
+      executarAcaoPunicao_({
+        idx: idx, botao: botao, metodo: 'reprovarPunicao',
+        textoLoading: 'Desfazendo aprovação...',
+        confirmacao: {
+          titulo: 'Desfazer aprovação',
+          mensagem: 'Desfazer a aprovação da punição da nota ' + r.nota + ' para ' + r.punido
+            + '? Ela deixará de contar no histórico disciplinar do atleta.',
+          confirmar: 'Desfazer aprovação'
+        },
+        aoSucesso: function (reg) { reg.aprovada = false; }
+      });
+    }
+
+    function acaoExcluirPunicao(idx, botao) {
+      const r = (punicoes.registros || [])[idx];
+      if (!r) return;
+      executarAcaoPunicao_({
+        idx: idx, botao: botao, metodo: 'removerPunicao',
+        textoLoading: 'Excluindo punição...',
+        confirmacao: {
+          titulo: 'Excluir punição',
+          mensagem: 'Excluir definitivamente a punição da nota ' + r.nota + ' para ' + r.punido
+            + '? Atenção: ao rodar a automação novamente, punições de notas ainda existentes serão recriadas.',
+          confirmar: 'Excluir'
+        }
       });
     }
 
