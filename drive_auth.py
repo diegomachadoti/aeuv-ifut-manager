@@ -30,13 +30,19 @@ CLIENT_JSON_PADRAO = "google-oauth-client.json"
 TOKEN_JSON_PADRAO = "google-oauth-token.json"
 
 
+class ErroAutenticacaoDrive(RuntimeError):
+    """Credencial do Drive exige intervencao e o fluxo nao pode abrir navegador."""
+
+
+
 def _caminho(parser: configparser.ConfigParser, chave: str, padrao: str) -> Path:
     return Path(parser.get("drive", chave, fallback=padrao))
 
 
 def credenciais_oauth(client_json: Path, token_json: Path,
-                      logger: logging.Logger | None = None):
-    """Devolve credenciais OAuth, abrindo o navegador na primeira vez."""
+                      logger: logging.Logger | None = None, *,
+                      permitir_reautorizacao: bool = True):
+    """Devolve credenciais OAuth; a reautorizacao interativa pode ser proibida."""
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
@@ -46,7 +52,11 @@ def credenciais_oauth(client_json: Path, token_json: Path,
     if token_json.exists():
         try:
             credenciais = Credentials.from_authorized_user_file(str(token_json), ESCOPOS)
-        except ValueError:
+        except (OSError, ValueError) as exc:
+            if not permitir_reautorizacao:
+                raise ErroAutenticacaoDrive(
+                    "Token OAuth ausente ou ilegivel. Autorize previamente o Drive em um ambiente com navegador."
+                ) from exc
             logger.warning("[DRIVE] Token OAuth ilegivel; autorizando de novo.")
 
     if credenciais and credenciais.valid:
@@ -58,8 +68,21 @@ def credenciais_oauth(client_json: Path, token_json: Path,
             token_json.write_text(credenciais.to_json(), encoding="utf-8")
             return credenciais
         except Exception as exc:
+            if not permitir_reautorizacao:
+                raise ErroAutenticacaoDrive(
+                    "Nao foi possivel renovar o token OAuth. Autorize novamente o Drive antes de repetir."
+                ) from exc
             # invalid_grant: token revogado, senha trocada ou 6 meses sem uso.
             logger.warning("[DRIVE] Nao foi possivel renovar o token (%s); autorizando de novo.", exc)
+    elif credenciais and not credenciais.refresh_token and not permitir_reautorizacao:
+        raise ErroAutenticacaoDrive(
+            "A credencial OAuth nao possui refresh token. Autorize previamente o Drive."
+        )
+
+    if not permitir_reautorizacao:
+        raise ErroAutenticacaoDrive(
+            "Token OAuth valido nao encontrado. Autorize previamente o Drive em um ambiente com navegador."
+        )
 
     if not client_json.exists():
         raise FileNotFoundError(
@@ -80,7 +103,8 @@ def credenciais_oauth(client_json: Path, token_json: Path,
 
 
 def credenciais_drive(parser: configparser.ConfigParser,
-                      logger: logging.Logger | None = None):
+                      logger: logging.Logger | None = None, *,
+                      permitir_reautorizacao: bool = True):
     """OAuth quando houver cliente configurado; conta de servico caso contrario."""
     from google.oauth2 import service_account
 
@@ -88,13 +112,24 @@ def credenciais_drive(parser: configparser.ConfigParser,
     client_json = _caminho(parser, "oauth_client_json", CLIENT_JSON_PADRAO)
     if client_json.exists():
         token_json = _caminho(parser, "oauth_token_json", TOKEN_JSON_PADRAO)
-        return credenciais_oauth(client_json, token_json, logger)
+        return credenciais_oauth(
+            client_json, token_json, logger,
+            permitir_reautorizacao=permitir_reautorizacao,
+        )
 
     logger.debug("[DRIVE] Sem cliente OAuth (%s); usando a conta de servico.", client_json)
     service_account_json = _caminho(parser, "service_account_json", "google-service-account.json")
-    return service_account.Credentials.from_service_account_file(
-        str(service_account_json), scopes=ESCOPOS
-    )
+    try:
+        return service_account.Credentials.from_service_account_file(
+            str(service_account_json), scopes=ESCOPOS
+        )
+    except Exception as exc:
+        if not permitir_reautorizacao:
+            raise ErroAutenticacaoDrive(
+                "Credencial do Drive nao encontrada ou invalida. Configure OAuth previamente autorizado "
+                "ou uma conta de servico valida."
+            ) from exc
+        raise
 
 
 def _parser_de(config_path: Path) -> configparser.ConfigParser:
@@ -105,9 +140,13 @@ def _parser_de(config_path: Path) -> configparser.ConfigParser:
     return parser
 
 
-def credenciais_por_arquivo(config_path: Path, logger: logging.Logger | None = None):
+def credenciais_por_arquivo(config_path: Path, logger: logging.Logger | None = None, *,
+                            permitir_reautorizacao: bool = True):
     """Mesma escolha de credencial, partindo do caminho do config.ini."""
-    return credenciais_drive(_parser_de(config_path), logger)
+    return credenciais_drive(
+        _parser_de(config_path), logger,
+        permitir_reautorizacao=permitir_reautorizacao,
+    )
 
 
 def usando_oauth(parser: configparser.ConfigParser) -> bool:

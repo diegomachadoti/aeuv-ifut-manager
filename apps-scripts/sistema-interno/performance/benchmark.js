@@ -8,10 +8,18 @@
     throw new Error('Selecione no Console o iframe do sistema que possui google.script.run.');
   }
 
+  const contratoSolicitacoes = (dados, provisorio) => Boolean(dados
+    && Array.isArray(dados.registros) && Array.isArray(dados.situacoes) && Array.isArray(dados.acoes)
+    && Number.isSafeInteger(dados.total) && Number.isSafeInteger(dados.limite)
+    && typeof dados.pastaUrl === 'string' && dados.provisorio === provisorio
+    && typeof dados.consultadoEm === 'string' && dados.snapshotStatusPublico
+    && typeof dados.snapshotStatusPublico === 'object');
   const consultas = {
     listarEquipesParticipantes: dados => Array.isArray(dados.campeonatos) && Array.isArray(dados.registros),
     listarElenco: dados => Boolean(dados.equipe) && Array.isArray(dados.registros),
-    listarTabelaCampeonato: dados => Array.isArray(dados.jogos) && Array.isArray(dados.equipes)
+    listarTabelaCampeonato: dados => Array.isArray(dados.jogos) && Array.isArray(dados.equipes),
+    listarSnapshotSolicitacoesProcessadas: dados => contratoSolicitacoes(dados, true),
+    listarSolicitacoes: dados => contratoSolicitacoes(dados, false)
   };
   const metodos = new Set([
     ...Object.keys(consultas), 'transferirAtletaElenco', 'removerCadastroElenco',
@@ -21,6 +29,7 @@
   const registros = [];
   let etiqueta = 'sem-etiqueta', executando = false, instalado = true;
   const aberturas = new WeakMap();
+  const aberturasSolicitacoes = new Map();
   const xhrPrototype = global.XMLHttpRequest.prototype;
   const originalOpen = xhrPrototype.open;
   const originalSend = xhrPrototype.send;
@@ -33,10 +42,53 @@
     return valor;
   }
 
+  function validarRepeticoes(valor) {
+    const repeticoes = valor === undefined ? 3 : valor;
+    if (!Number.isInteger(repeticoes) || repeticoes < 1 || repeticoes > 10) {
+      throw new Error('Use de 1 a 10 repeticoes sequenciais.');
+    }
+    return repeticoes;
+  }
+
   function registrar(dados) {
     registros.push({ etiqueta, registradoEm: new Date().toISOString(), ...dados });
     console.info('[AEUV performance]', dados.metodo, dados.tipo, dados.estado,
       (dados.duracaoMs / 1000).toFixed(2) + ' s', dados.bytesResposta + ' bytes');
+  }
+
+  function eventoPerformanceSolicitacoes(evento) {
+    const detalhe = evento && evento.detail;
+    if (!detalhe || !Number.isSafeInteger(detalhe.token) || detalhe.token < 1
+        || ['abertura', 'primeiro-conteudo', 'final-autoritativo'].indexOf(detalhe.fase) === -1) return;
+    const agora = performance.now();
+    if (detalhe.fase === 'abertura') {
+      aberturasSolicitacoes.set(detalhe.token, { inicio: agora, etiqueta: etiqueta, primeiro: false });
+      return;
+    }
+    const abertura = aberturasSolicitacoes.get(detalhe.token);
+    if (!abertura) return;
+    if (detalhe.fase === 'primeiro-conteudo' && !abertura.primeiro) {
+      abertura.primeiro = true;
+      registrar({
+        etiqueta: abertura.etiqueta, tipo: 'interface', modo: 'acao-manual', metodo: 'abrirSolicitacoes',
+        marco: 'primeiro-conteudo', duracaoMs: agora - abertura.inicio, bytesResposta: 0, estado: 'sucesso'
+      });
+      return;
+    }
+    if (detalhe.fase === 'final-autoritativo') {
+      if (!abertura.primeiro) {
+        abertura.primeiro = true;
+        registrar({
+          etiqueta: abertura.etiqueta, tipo: 'interface', modo: 'acao-manual', metodo: 'abrirSolicitacoes',
+          marco: 'primeiro-conteudo', duracaoMs: agora - abertura.inicio, bytesResposta: 0, estado: 'sucesso'
+        });
+      }
+      registrar({
+        etiqueta: abertura.etiqueta, tipo: 'interface', modo: 'acao-manual', metodo: 'abrirSolicitacoes',
+        marco: 'final-autoritativo', duracaoMs: agora - abertura.inicio, bytesResposta: 0, estado: 'sucesso'
+      });
+      aberturasSolicitacoes.delete(detalhe.token);
+    }
   }
 
   function metodoRequisicao(corpo) {
@@ -118,7 +170,7 @@
   function resumo() {
     const grupos = new Map();
     registros.forEach(item => {
-      const chave = [item.etiqueta, item.tipo, item.modo, item.metodo, item.estado].join('|');
+      const chave = [item.etiqueta, item.tipo, item.modo, item.metodo, item.marco || '', item.estado].join('|');
       if (!grupos.has(chave)) grupos.set(chave, []);
       grupos.get(chave).push(item);
     });
@@ -128,7 +180,7 @@
       const mediana = tempos.length % 2 ? tempos[meio] : (tempos[meio - 1] + tempos[meio]) / 2;
       return {
         etiqueta: itens[0].etiqueta, tipo: itens[0].tipo, modo: itens[0].modo,
-        metodo: itens[0].metodo, estado: itens[0].estado, amostras: itens.length,
+        metodo: itens[0].metodo, marco: itens[0].marco || '', estado: itens[0].estado, amostras: itens.length,
         primeiraMs: itens[0].duracaoMs, minMs: tempos[0], medianaMs: mediana,
         p95Ms: tempos[Math.ceil(tempos.length * 0.95) - 1], maxMs: tempos[tempos.length - 1],
         mediaBytes: itens.every(item => item.bytesResposta !== null)
@@ -139,6 +191,9 @@
 
   xhrPrototype.open = open;
   xhrPrototype.send = send;
+  if (typeof global.addEventListener === 'function') {
+    global.addEventListener('aeuv:solicitacoes-performance', eventoPerformanceSolicitacoes);
+  }
   global.aeuvPerformance = {
     marcar(valor) { etiqueta = validarEtiqueta(valor); },
     async executarConsultas(opcoes) {
@@ -147,10 +202,7 @@
       if (!config.campeonatoId || !config.equipeId) {
         throw new Error('Informe campeonatoId e equipeId da base que deseja medir.');
       }
-      const repeticoes = config.repeticoes === undefined ? 3 : config.repeticoes;
-      if (!Number.isInteger(repeticoes) || repeticoes < 1 || repeticoes > 10) {
-        throw new Error('Use de 1 a 10 repeticoes sequenciais.');
-      }
+      const repeticoes = validarRepeticoes(config.repeticoes);
       etiqueta = validarEtiqueta(config.etiqueta || etiqueta);
       executando = true;
       try {
@@ -158,6 +210,23 @@
           await chamadaConsulta('listarEquipesParticipantes', [config.campeonatoId]);
           await chamadaConsulta('listarElenco', [config.campeonatoId, config.equipeId]);
           await chamadaConsulta('listarTabelaCampeonato', [config.campeonatoId]);
+        }
+        console.table(resumo());
+        return resumo();
+      } finally {
+        executando = false;
+      }
+    },
+    async executarSolicitacoes(opcoes) {
+      if (!instalado || executando) throw new Error('Benchmark desinstalado ou consulta em andamento.');
+      const config = opcoes || {};
+      const repeticoes = validarRepeticoes(config.repeticoes);
+      etiqueta = validarEtiqueta(config.etiqueta || etiqueta);
+      executando = true;
+      try {
+        for (let i = 0; i < repeticoes; i++) {
+          await chamadaConsulta('listarSnapshotSolicitacoesProcessadas', []);
+          await chamadaConsulta('listarSolicitacoes', []);
         }
         console.table(resumo());
         return resumo();
@@ -184,6 +253,7 @@
     limpar() {
       if (executando) throw new Error('Aguarde as consultas terminarem antes de limpar.');
       registros.length = 0;
+      aberturasSolicitacoes.clear();
     },
     desinstalar() {
       if (executando) throw new Error('Aguarde as consultas terminarem antes de desinstalar.');
@@ -192,6 +262,10 @@
       }
       xhrPrototype.open = originalOpen;
       xhrPrototype.send = originalSend;
+      if (typeof global.removeEventListener === 'function') {
+        global.removeEventListener('aeuv:solicitacoes-performance', eventoPerformanceSolicitacoes);
+      }
+      aberturasSolicitacoes.clear();
       instalado = false;
       delete global.aeuvPerformance;
     }

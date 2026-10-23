@@ -1633,6 +1633,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
              "Tambem aceita o caminho de um JSON de lancamentos ou 'exemplo' para demonstrativos modelo",
     )
     parser.add_argument(
+        "--publicar-relatorio-financeiro",
+        metavar="CAMINHO.pdf",
+        help="Publica novamente um relatorio financeiro local, sem regenera-lo",
+    )
+    parser.add_argument(
         "--origem",
         metavar="COMPETICAO",
         help="Competicao/origem do relatorio financeiro por competicao (ex.: \"SUPER LIGA UNIÃO\")",
@@ -1671,12 +1676,80 @@ def build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def validar_modos_cli(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    modos = [
+        ("--sync-drive-only", args.sync_drive_only),
+        ("--login-only", args.login_only),
+        ("--update-all-team-counts", args.update_all_team_counts),
+        ("--analisar-sumulas", args.analisar_sumulas),
+        ("--gerar-pdf-nota", bool(args.gerar_pdf_nota)),
+        ("--gerar-pdf-regulamento", bool(args.gerar_pdf_regulamento)),
+        ("--gerar-pdf-forma-disputa", bool(args.gerar_pdf_forma_disputa)),
+        ("--criar-modelo-oficio", bool(args.criar_modelo_oficio)),
+        ("--gerar-pdf-oficio", bool(args.gerar_pdf_oficio)),
+        ("--criar-modelos-filiacao", bool(args.criar_modelos_filiacao)),
+        ("--gerar-pdf-filiacao", bool(args.gerar_pdf_filiacao)),
+        ("--gerar-pdf-documento", bool(args.gerar_pdf_documento)),
+        ("--gerar-pdf-financeiro", bool(args.gerar_pdf_financeiro)),
+        ("--publicar-relatorio-financeiro", bool(args.publicar_relatorio_financeiro)),
+        ("--atualizar-controle-punicoes", args.atualizar_controle_punicoes),
+        ("--publicar-drive", args.publicar_drive),
+    ]
+    ativos = [nome for nome, ativo in modos if ativo]
+    if len(ativos) > 1:
+        parser.error("modos de execucao mutuamente exclusivos: " + ", ".join(ativos))
+    if args.ia and not args.analisar_sumulas:
+        parser.error("--ia exige --analisar-sumulas")
+    if args.oficio_final and not args.gerar_pdf_oficio:
+        parser.error("--oficio-final exige --gerar-pdf-oficio")
+    if args.process_local_only and ativos and not (
+        args.analisar_sumulas or args.login_only or args.update_all_team_counts
+    ):
+        parser.error("--process-local-only nao pode ser combinado com " + ativos[0])
+    filtros_financeiros = [args.origem, args.emenda, args.periodo, args.data_inicio, args.data_fim]
+    if any(filtros_financeiros) and not args.gerar_pdf_financeiro:
+        parser.error("filtros financeiros exigem --gerar-pdf-financeiro")
+
+
+def gerar_e_publicar_relatorio_financeiro(filtro, lancamentos, config_pdf, config_path: Path,
+                                           logger: logging.Logger):
+    from financeiro_pdf import gerar_pdf_financeiro
+    from publicacao_drive import publicar_relatorio_financeiro
+
+    pdf = Path(gerar_pdf_financeiro(filtro, lancamentos, config_pdf, logger=logger))
+    try:
+        resultado = publicar_relatorio_financeiro(pdf, config_path, logger)
+    except Exception as exc:
+        exc.caminho = pdf
+        raise
+    logger.info("Relatorio financeiro %s no Drive: %s (%s)", resultado.acao, resultado.nome, resultado.url)
+    return pdf, resultado
+
+
 def main() -> int:
     write_default_config()
     parser = build_argument_parser()
     args = parser.parse_args()
-    if args.oficio_final and not args.gerar_pdf_oficio:
-        parser.error("--oficio-final exige --gerar-pdf-oficio")
+    validar_modos_cli(parser, args)
+    if args.publicar_relatorio_financeiro:
+        from publicacao_drive import (
+            ErroArquivoRelatorio, ErroPublicacaoRelatorio, publicar_relatorio_financeiro,
+        )
+
+        logger = configure_logging(DEFAULT_LOG_PATH)
+        caminho = Path(args.publicar_relatorio_financeiro)
+        try:
+            resultado = publicar_relatorio_financeiro(caminho, Path(args.config), logger)
+            logger.info("Relatorio financeiro %s no Drive: %s (%s)",
+                        resultado.acao, resultado.nome, resultado.url)
+            return 0
+        except ErroPublicacaoRelatorio as exc:
+            logger.error("PDF local gerado; publicação no Drive falhou. Caminho: %s; categoria: %s; "
+                         "ação recomendada: %s", caminho, exc.categoria, exc.acao)
+            return 2
+        except (ErroArquivoRelatorio, configparser.Error, ValueError, OSError) as exc:
+            logger.exception("Falha local ao publicar o relatorio financeiro %s: %s", caminho, exc)
+            return 1
     if args.criar_modelos_filiacao or args.gerar_pdf_filiacao or args.gerar_pdf_documento:
         from documento_pdf import criar_modelos_filiacao, gerar_pdf_documento, gerar_pdfs_filiacao
         from nota_pdf import ConfigPdf
@@ -1753,92 +1826,102 @@ def main() -> int:
     if args.gerar_pdf_financeiro:
         from datetime import date, timedelta
         from financeiro_pdf import (
-            gerar_pdf_financeiro,
-            carregar_dados_exemplo,
-            carregar_lancamentos_de_json,
-            FiltroRelatorio,
-            parse_data_flexivel,
+            FiltroRelatorio, carregar_dados_exemplo, carregar_lancamentos_de_json,
         )
         from nota_pdf import ConfigPdf
+        from publicacao_drive import ErroArquivoRelatorio, ErroPublicacaoRelatorio
 
-        config = AppConfig(Path(args.config))
-        logger = configure_logging(config.log_path)
-        cfg_pdf = ConfigPdf.carregar(Path(args.config))
-        alvo = args.gerar_pdf_financeiro.strip()
-        tipo_alvo = alvo.lower()
-        # Sem tipo explicito: --origem/--emenda definem o relatorio.
-        if tipo_alvo == "geral" and args.origem:
-            tipo_alvo = "competicao"
-        elif tipo_alvo == "geral" and args.emenda:
-            tipo_alvo = "emenda"
+        parser_config = configparser.ConfigParser()
+        parser_config.read(Path(args.config), encoding="utf-8")
+        parser_config.read(Path(args.config).with_name("config.local.ini"), encoding="utf-8")
+        logger = configure_logging(Path(parser_config.get(
+            "app", "log_path", fallback=str(DEFAULT_LOG_PATH),
+        )))
+        falhas_remotas = []
 
-        # Determinacao de periodo e datas
-        dt_ini_str = args.data_inicio.strip() if args.data_inicio else ""
-        dt_fim_str = args.data_fim.strip() if args.data_fim else ""
-
-        if args.periodo:
-            p = args.periodo.strip().lower()
-            hoje = date.today()
-            if p in ("hoje", "today"):
-                dt_ini_str = hoje.strftime("%d/%m/%Y")
-                dt_fim_str = hoje.strftime("%d/%m/%Y")
-            elif p in ("mes", "mes_atual", "mes-atual"):
-                import calendar
-                dt_ini_str = f"01/{hoje.month:02d}/{hoje.year}"
-                ultimo_dia = calendar.monthrange(hoje.year, hoje.month)[1]
-                dt_fim_str = f"{ultimo_dia:02d}/{hoje.month:02d}/{hoje.year}"
-            elif p in ("3m", "3meses", "trimestre"):
-                dt_ini_str = (hoje - timedelta(days=90)).strftime("%d/%m/%Y")
-                dt_fim_str = hoje.strftime("%d/%m/%Y")
-            elif p in ("6m", "6meses", "semestre"):
-                dt_ini_str = (hoje - timedelta(days=180)).strftime("%d/%m/%Y")
-                dt_fim_str = hoje.strftime("%d/%m/%Y")
-            elif p in ("anual", "ano", "12m", "1ano"):
-                dt_ini_str = f"01/01/{hoje.year}"
-                dt_fim_str = f"31/12/{hoje.year}"
-
-        if tipo_alvo == "exemplo":
-            dados = carregar_dados_exemplo()
-            gerar_pdf_financeiro(FiltroRelatorio("geral", periodo_inicio=dt_ini_str, periodo_fim=dt_fim_str), dados, cfg_pdf, logger=logger)
-            gerar_pdf_financeiro(FiltroRelatorio("emenda", numero_emenda="Emenda 042/2026", periodo_inicio=dt_ini_str, periodo_fim=dt_fim_str), dados, cfg_pdf, logger=logger)
-            gerar_pdf_financeiro(FiltroRelatorio("competicao", competicao="7ª Super Liga União 2026", periodo_inicio=dt_ini_str, periodo_fim=dt_fim_str), dados, cfg_pdf, logger=logger)
-            logger.info("3 demonstrativos de prestacao de contas gerados em downloads/financeiro/")
-        elif tipo_alvo in ("geral", "emenda", "competicao"):
-            from financeiro_planilha import carregar_lancamentos_da_planilha
-
-            if tipo_alvo == "competicao" and not (args.origem or "").strip():
-                logger.error("Informe a competicao com --origem \"NOME DA COMPETICAO\"")
-                return 1
-            if tipo_alvo == "emenda" and not (args.emenda or "").strip():
-                logger.error("Informe a emenda com --emenda \"Emenda 042/2026\"")
-                return 1
+        def gerar_publicar(filtro, lancamentos):
             try:
+                return gerar_e_publicar_relatorio_financeiro(
+                    filtro, lancamentos, cfg_pdf, Path(args.config), logger,
+                )
+            except ErroPublicacaoRelatorio as exc:
+                falhas_remotas.append(exc)
+                caminho_local = getattr(exc, "caminho", "downloads/financeiro")
+                logger.error("PDF local gerado; publicação no Drive falhou. Caminho: %s; categoria: %s; "
+                             "ação recomendada: %s", caminho_local, exc.categoria, exc.acao)
+                return None
+
+        try:
+            cfg_pdf = ConfigPdf.carregar(Path(args.config))
+            alvo = args.gerar_pdf_financeiro.strip()
+            tipo_alvo = alvo.lower()
+            if tipo_alvo == "geral" and args.origem:
+                tipo_alvo = "competicao"
+            elif tipo_alvo == "geral" and args.emenda:
+                tipo_alvo = "emenda"
+
+            dt_ini_str = args.data_inicio.strip() if args.data_inicio else ""
+            dt_fim_str = args.data_fim.strip() if args.data_fim else ""
+            if args.periodo:
+                p = args.periodo.strip().lower()
+                hoje = date.today()
+                if p in ("hoje", "today"):
+                    dt_ini_str = dt_fim_str = hoje.strftime("%d/%m/%Y")
+                elif p in ("mes", "mes_atual", "mes-atual"):
+                    import calendar
+                    dt_ini_str = f"01/{hoje.month:02d}/{hoje.year}"
+                    dt_fim_str = f"{calendar.monthrange(hoje.year, hoje.month)[1]:02d}/{hoje.month:02d}/{hoje.year}"
+                elif p in ("3m", "3meses", "trimestre"):
+                    dt_ini_str = (hoje - timedelta(days=90)).strftime("%d/%m/%Y")
+                    dt_fim_str = hoje.strftime("%d/%m/%Y")
+                elif p in ("6m", "6meses", "semestre"):
+                    dt_ini_str = (hoje - timedelta(days=180)).strftime("%d/%m/%Y")
+                    dt_fim_str = hoje.strftime("%d/%m/%Y")
+                elif p in ("anual", "ano", "12m", "1ano"):
+                    dt_ini_str, dt_fim_str = f"01/01/{hoje.year}", f"31/12/{hoje.year}"
+                else:
+                    raise ValueError("Periodo invalido: use hoje, mes, 3m, 6m ou anual")
+
+            if tipo_alvo == "exemplo":
+                dados = carregar_dados_exemplo()
+                filtros = [
+                    FiltroRelatorio("geral", periodo_inicio=dt_ini_str, periodo_fim=dt_fim_str),
+                    FiltroRelatorio("emenda", numero_emenda="Emenda 042/2026",
+                                    periodo_inicio=dt_ini_str, periodo_fim=dt_fim_str),
+                    FiltroRelatorio("competicao", competicao="7ª Super Liga União 2026",
+                                    periodo_inicio=dt_ini_str, periodo_fim=dt_fim_str),
+                ]
+                for filtro in filtros:
+                    gerar_publicar(filtro, dados)
+                logger.info("3 demonstrativos de prestacao de contas gerados em downloads/financeiro/")
+            elif tipo_alvo in ("geral", "emenda", "competicao"):
+                from financeiro_planilha import carregar_lancamentos_da_planilha
+
+                if tipo_alvo == "competicao" and not (args.origem or "").strip():
+                    raise ValueError('Informe a competicao com --origem "NOME DA COMPETICAO"')
+                if tipo_alvo == "emenda" and not (args.emenda or "").strip():
+                    raise ValueError('Informe a emenda com --emenda "Emenda 042/2026"')
                 lancamentos = carregar_lancamentos_da_planilha(Path(args.config), logger)
-            except Exception as exc:
-                logger.error("Falha ao ler a planilha financeira no Drive: %s", exc)
-                return 1
-            filtro = FiltroRelatorio(
-                tipo_alvo,
-                competicao=(args.origem or "").strip(),
-                numero_emenda=(args.emenda or "").strip(),
-                periodo_inicio=dt_ini_str,
-                periodo_fim=dt_fim_str,
-            )
-            pdf_path = gerar_pdf_financeiro(filtro, lancamentos, cfg_pdf, logger=logger)
-            logger.info("PDF financeiro gerado com sucesso: %s", pdf_path)
-        else:
-            caminho_json = Path(alvo)
-            if not caminho_json.exists():
-                logger.error("Arquivo JSON nao encontrado: %s", caminho_json)
-                return 1
-            filtro, lancamentos = carregar_lancamentos_de_json(caminho_json)
-            if dt_ini_str:
-                filtro.periodo_inicio = dt_ini_str
-            if dt_fim_str:
-                filtro.periodo_fim = dt_fim_str
-            pdf_path = gerar_pdf_financeiro(filtro, lancamentos, cfg_pdf, logger=logger)
-            logger.info("PDF financeiro gerado com sucesso: %s", pdf_path)
-        return 0
+                filtro = FiltroRelatorio(
+                    tipo_alvo, competicao=(args.origem or "").strip(),
+                    numero_emenda=(args.emenda or "").strip(),
+                    periodo_inicio=dt_ini_str, periodo_fim=dt_fim_str,
+                )
+                gerar_publicar(filtro, lancamentos)
+            else:
+                caminho_json = Path(alvo)
+                if not caminho_json.is_file():
+                    raise ValueError(f"Arquivo JSON nao encontrado: {caminho_json}")
+                filtro, lancamentos = carregar_lancamentos_de_json(caminho_json)
+                if dt_ini_str:
+                    filtro.periodo_inicio = dt_ini_str
+                if dt_fim_str:
+                    filtro.periodo_fim = dt_fim_str
+                gerar_publicar(filtro, lancamentos)
+        except Exception as exc:
+            logger.exception("Falha local ao gerar o relatorio financeiro: %s", exc)
+            return 1
+        return 2 if falhas_remotas else 0
     if args.gerar_pdf_nota:
         from nota_pdf import regerar_pdf
 

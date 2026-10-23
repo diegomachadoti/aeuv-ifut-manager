@@ -1,0 +1,48 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "MEDIUM",
+      "problem": "PublicadorDrive ainda é construído a partir da pasta de súmulas, mas o design não define uma assinatura que receba root_folder_id nem como preservar os fluxos legados.",
+      "where": "Configuração e pasta; Autenticação e publicação Python",
+      "fix": "Definir __init__/carregar com root_folder_id opcional lido da mesma configuração; exigir a raiz explícita só no método financeiro e manter raiz_id() inferido para notas/regulamentos, com teste de regressão."
+    },
+    {
+      "id": 2,
+      "severity": "MEDIUM",
+      "problem": "Validação do PDF local e falha remota não têm exceções distintas, embora entrada inválida de retry deva retornar 1 e somente falha operacional do Drive deva retornar 2.",
+      "where": "Autenticação e publicação Python; Orquestração CLI e falha parcial; critérios 4 e 5",
+      "fix": "Criar ErroArquivoRelatorio para validações locais (exit 1) e reservar ErroPublicacaoRelatorio para autenticação/rede/API (exit 2); definir também como exceções escapadas do gerador/ReportLab são mapeadas."
+    },
+    {
+      "id": 3,
+      "severity": "MEDIUM",
+      "problem": "O retry é proibido com geração financeira e filtros, mas ainda pode ser combinado com outros modos de topo e um deles será ignorado pela cadeia de if de main.py.",
+      "where": "Orquestração CLI e falha parcial",
+      "fix": "Tornar todos os modos de topo mutuamente exclusivos ou validar a contagem de modos antes dos branches; testar retry combinado com ao menos um modo não financeiro."
+    },
+    {
+      "id": 4,
+      "severity": "MEDIUM",
+      "problem": "A premissa exige acesso apenas à subpasta, enquanto a descoberta revalida obrigatoriamente o pai e usa a raiz no fallback; esse usuário pode não ter acesso à raiz.",
+      "where": "Premissas explícitas; Descoberta e contrato no Apps Script",
+      "fix": "Exigir e documentar acesso de Leitor à raiz, ou configurar um ID canônico da subpasta e permitir leitura/revalidação sem abrir o pai; não depender de Script Property global descoberto por outro usuário."
+    },
+    {
+      "id": 5,
+      "severity": "MEDIUM",
+      "problem": "A sequência list-then-create não é atômica e permite dois arquivos para o mesmo UUID quando o mesmo retry roda concorrentemente.",
+      "where": "Nome, identidade e duplicatas; critério 7",
+      "fix": "Limitar explicitamente a garantia a retries sequenciais e serializar onde possível, ou definir reconciliação pós-create; ajustar requisitos e testes para a fronteira escolhida."
+    },
+    {
+      "id": 6,
+      "severity": "MEDIUM",
+      "problem": "Mesmo UUID e nome são tratados como reutilização sem comparar conteúdo, podendo reportar sucesso para um remoto com bytes diferentes do PDF local.",
+      "where": "Nome, identidade e duplicatas; critérios 3 e 7",
+      "fix": "Persistir e comparar SHA-256 em propriedade para o formato novo e comparar checksum remoto/local para legados; divergência deve ser erro de duplicidade sem update."
+    }
+  ],
+  "reviewDoc": "/Users/tqi_dmachado/workspace/aeuv-ifut-manager/apps-scripts/sistema-interno/.agents/tasks/design-review.md"
+}

@@ -792,7 +792,7 @@ pode declarar `grupo` para entrar num submenu.
 | `sumulas` | Súmulas Enviadas; busca os dados com `listarSumulas()`. |
 | `notas` | Notas oficiais; busca os dados com `listarNotas()`. |
 | `regulamentos` | Central de Documentos; busca os dados com `listarRegulamentos()` (identificadores mantidos por compatibilidade). |
-| `financeiro` | Financeiro e Prestação de Contas; controle de entradas/saídas, anexos e relatórios oficiais em PDF com `listarFinanceiro()` e `salvarLancamentoFinanceiro()`. |
+| `financeiro` | Financeiro e Prestação de Contas; controle de entradas/saídas, anexos e relatórios oficiais em PDF com `listarFinanceiro()`, `listarRelatoriosFinanceiros()` e `salvarLancamentoFinanceiro()`. |
 | `atas` | Atas de reuniões da associação ou campeonato; usa `listarAtas()`, `salvarAta()`, `exportarAtaPdf()` e `excluirAta()`. |
 | `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
 | `equipes` | Equipes participantes; usa `listarEquipes()`, `salvarEquipe()` e `removerEquipe()`. |
@@ -803,6 +803,94 @@ Módulos publicados hoje: Início, Formulários (Súmula digital e Inscrição e
 portabilidade), Solicitações de Inscrições, Súmulas Enviadas, Notas oficiais,
 Central de Documentos, Controle de punições, Financeiro e Prestação de Contas, Atas de reuniões, Associados,
 Banco de Dados de Atletas e Usuários do sistema.
+
+#### Relatórios financeiros publicados
+
+A tela financeira consulta diretamente a subpasta canônica `Relatorios
+Financeiros`, destaca o último PDF publicado e mantém até 19 anteriores em uma
+lista recolhível. A consulta devolve somente nome, tipo, data e link; não abre o
+conteúdo dos PDFs nem expõe proprietário ou permissões.
+
+Antes da implantação, um administrador deve definir a Script Property
+`FINANCEIRO_RELATORIOS_PASTA_ID` com o ID dessa subpasta. O servidor abre e
+revalida diretamente esse ID, sem descobrir a pasta pela raiz e sem gravar uma
+propriedade encontrada durante a requisição de outro usuário. Compartilhe
+**somente essa subpasta** como Leitor com os usuários admin/diretoria que
+consultarão os relatórios; acesso à pasta raiz não é necessário. A implantação
+continua como `Usuário que acessa`, e o Advanced Drive Service v3 deve estar
+habilitado. Pasta renomeada, excluída, sem propriedade ou sem permissão aparece
+como erro recuperável na seção; pasta válida sem PDFs aparece como estado vazio.
+
+A automação Python publica cada PDF depois da geração local bem-sucedida. O
+arquivo local nunca é removido; falha remota usa código `2` e pode ser repetida
+com `main.py --publicar-relatorio-financeiro CAMINHO.pdf`. OAuth deve estar
+previamente autorizado, pois esse fluxo é não interativo. Se uma conta de
+serviço não puder criar a pasta/arquivo por falta de cota, crie a pasta com o
+proprietário e compartilhe-a como Editor com a credencial de publicação.
+
+#### Pré-carga de Solicitações de Inscrições
+
+A tela dispara duas consultas em paralelo. `listarSnapshotSolicitacoesProcessadas()`
+lê uma cópia durável **somente** das solicitações `Processada` para mostrar o
+primeiro conteúdo; `listarSolicitacoes()` sempre reinventa as fontes e os
+resultados atuais, lê `Aguardando`, `Falha` e qualquer processada sem fingerprint
+idêntico, e substitui integralmente o conteúdo provisório. Criação, edição,
+movimentação, exclusão e resultado tardio feitos fora do Apps Script não usam
+estado `dirty`: aparecem na resposta final da mesma abertura e entram no próximo
+build periódico. Esta funcionalidade é somente leitura e o snapshot nunca deve
+ser usado para autorizar uma mutação.
+
+O JSON contém protocolo, CPF, telefone e URLs de comprovantes. Antes de ativar:
+
+1. Com a conta administradora que publicará as cópias, crie manualmente uma
+   pasta **My Drive dedicada**, fora de uma árvore com compartilhamento amplo.
+   Não use Shared Drive nem uma pasta pública.
+2. Na tela **Compartilhar**, audite proprietário, herança, grupos e links.
+   Mantenha o publicador como proprietário/editor e conceda leitura somente às
+   contas ou ao grupo controlado de `admin`/`diretoria` que já podem abrir o
+   módulo. O código valida pasta, owner e acesso, mas não consegue provar a
+   composição de grupos nem permissões herdadas.
+3. Preencha juntos `CONFIG.solicitacoes.snapshotPastaId` e
+   `CONFIG.solicitacoes.snapshotOwnerEmail` em `WebApp.gs`. Valores vazios fazem
+   a publicação falhar fechada. O e-mail deve ser o administrador efetivo que é
+   dono da pasta e executará a primeira geração e o acionador.
+4. Publique `WebApp.gs` e `Index.html` juntos em uma tarefa autorizada. Entre
+   como esse owner, abra **Administração** e use **Gerar solicitações agora**.
+   Confira timestamp/status e confirme na pasta que existe uma cópia íntegra
+   antes de configurar a periodicidade.
+5. Use o único botão **Configurar agendamento**. Ele reutiliza o handler
+   `atualizarBancoAtletasAgendado`, compartilhado com o Banco de Atletas; não
+   gera a primeira cópia. Em **Apps Script > Acionadores**, confira exatamente
+   um acionador CLOCK desse handler, sob o owner esperado. Não crie um handler
+   separado para Solicitações.
+
+O snapshot aceita no máximo 200 registros, 30 pessoas por registro e 8 MiB de
+JSON UTF-8; cada TXT de origem é limitado a 256 KiB. O contrato persiste apenas
+os 17 campos públicos do registro (`situacao`, `protocolo`, `dataHora`, `ordem`,
+`competicao`, `equipe`, `responsavel`, `arquivoUrl`, `resultadoTxtUrl`,
+`resultadoPdfUrl`, `pessoas`, `icone`, `telefone`, `comprovanteUrl`,
+`arquivoNome`, `quantidade`, `resumo`) e, por pessoa, `acao`, `tipo`, `nome`,
+`nascimento`, `cpf`, `competicaoAnterior`. Campos desconhecidos, strings/listas
+acima dos limites, contagens incoerentes e documentos parciais são rejeitados.
+O servidor confere `file.size` antes do blob e o tamanho serializado antes de
+criar/publicar.
+
+Na leitura, arquivo atual inválido, grande, corrompido ou vencido leva à tentativa
+integral do slot anterior. Na reconciliação, cada processada tenta em ordem o
+fingerprint de `current` e de `previous`; divergência vira miss e leitura viva.
+Se nenhum slot for válido, a tela aguarda a resposta autoritativa. Falha do
+híbrido tenta uma única vez o leitor legado e nunca entrega payload parcial.
+Em falha de build, preserve as propriedades `current`/`previous` e os arquivos
+referenciados; corrija pasta, ACL, owner, quota ou fonte e execute **Gerar
+solicitações agora** novamente. Não edite JSON nem ponteiros manualmente.
+
+Checklist pós-publicação, somente em uma tarefa autorizada: validar uma
+processada criada, editada, movida e excluída; uma `Aguardando`; uma `Falha`;
+TXT/PDF de resultado publicado depois; usuário sem acesso à pasta de snapshot;
+e falha isolada de cada build no acionador compartilhado. Confirmar que a
+resposta final corrige o provisório, que o outro build ainda é tentado e que
+**Apps Script > Acionadores** continua mostrando exatamente um
+`atualizarBancoAtletasAgendado`.
 
 #### Banco de Dados de Atletas
 
@@ -2054,7 +2142,8 @@ escolher uma opção.
   `listarPunicoes()`,
   `listarSolicitacoes()`, `listarSumulas()`, `listarNotas()`,
   `listarRegulamentos()`, `listarAssociados()`, `salvarAssociado()`,
-  `listarFinanceiro()`, `salvarLancamentoFinanceiro()` e `removerLancamentoFinanceiro()`.
+  `listarFinanceiro()`, `listarRelatoriosFinanceiros()`,
+  `salvarLancamentoFinanceiro()` e `removerLancamentoFinanceiro()`.
 - Ao alterar equipes, competições ou outros dados de configuração, atualize as
   opções da interface e as validações do servidor em conjunto.
 - Mantenha a conta executora com acesso às planilhas, pastas e logo; verifique

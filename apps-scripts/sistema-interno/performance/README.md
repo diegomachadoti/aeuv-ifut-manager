@@ -304,6 +304,65 @@ Não confundir com sucesso funcional nem comparar uma resposta de erro com
 dados válidos. Envie somente `metricas-consultas.json` para avaliação.
 Para outra versão, troque a etiqueta; para outra sessão, atualize a configuração.
 
+## Medir Solicitações de Inscrições em duas fases
+
+A coleta autenticada deve ser feita somente depois de uma publicação autorizada,
+com a mesma conta, pasta, rede e conjunto de arquivos usados na baseline. A
+medição local/VM não representa a latência do Apps Script ou do Google Drive.
+Use pelo menos 10 repetições válidas por versão e descarte respostas de erro.
+
+Depois de instalar `benchmark.js` no iframe autenticado, meça separadamente as
+RPCs rápida e final, sem argumentos ou payload privado:
+
+```javascript
+await aeuvPerformance.executarSolicitacoes({
+  etiqueta: 'solicitacoes-depois',
+  repeticoes: 10
+});
+```
+
+Cada repetição chama sequencialmente
+`listarSnapshotSolicitacoesProcessadas()` e `listarSolicitacoes()`. O relatório
+registra método, duração e bytes UTF-8, mas não guarda registros, protocolo,
+pessoa, CPF, URL, ID, token, cookie, corpo nem mensagem do servidor. Uma falha
+interrompe a rodada e fica em grupo separado. A execução sequencial serve para
+comparar RPCs; ela não substitui a abertura real, na qual as duas chamadas são
+paralelas.
+
+Para medir a experiência real, marque a amostra e abra **Solicitações de
+Inscrições** pelo menu ou pelo botão **Atualizar**:
+
+```javascript
+aeuvPerformance.marcar('solicitacoes-depois-ui');
+```
+
+`Index.html` emite somente fase e token efêmero. O benchmark registra
+`abrirSolicitacoes/primeiro-conteudo` (clique/abertura até a primeira coleção
+provisória ou final) e `abrirSolicitacoes/final-autoritativo` (até a resposta
+final renderizada), sem conteúdo da tela. Repita pelo menos dez aberturas, sem
+operações simultâneas. As marcas de interface são do tipo `interface`; as RPCs
+são do tipo `rpc` e o XHR observado é `transporte`: são visões da mesma abertura
+e **não devem ser somadas**.
+
+Colete uma baseline equivalente na versão anterior com `listarSolicitacoes()`
+e o painel Performance/Network do navegador; como essa versão não emite os
+marcos novos, registre manualmente clique→conteúdo final. Na comparação, aceite:
+
+- mediana da RPC rápida ≤ 50% da mediana da baseline;
+- mediana da RPC final híbrida ≤ 70% da baseline;
+- p95 da final no máximo 10% pior que o p95 da baseline;
+- melhoria perceptível em clique→primeiro conteúdo, sem regressão indevida em
+  clique→final.
+
+Nos logs da mesma execução, filtre `"metrica":"solicitacoes"` e registre apenas
+contagens/durações das fases `inventario`, `snapshot`, `resultados`, `drive_ler`,
+`interpretar`, `consolidar`, `fallback` e `total`, incluindo hits, misses,
+ativos lidos e bytes. Não copie payloads. Documente quantidade de arquivos e
+blobs abertos; no cenário quente, processadas com fingerprint idêntico devem ter
+zero blob de origem, enquanto ativos e misses são lidos. Guarde JSONs exportados
+fora do repositório ou em `resultados/` ignorado. Esta implementação não executou
+essa coleta autenticada.
+
 ## Instalar e medir consultas
 
 1. Abra a implantação do sistema, faça login e aguarde o carregamento inicial.

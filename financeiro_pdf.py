@@ -21,6 +21,7 @@ import configparser
 import json
 import logging
 import re
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, date
 from pathlib import Path
@@ -38,6 +39,37 @@ from nota_pdf import (
 )
 
 PASTA_RELATORIOS = Path("downloads") / "financeiro"
+TIPOS_RELATORIO_FINANCEIRO = ("geral", "emenda", "competicao")
+PADRAO_NOME_RELATORIO_FINANCEIRO = re.compile(
+    r"^relatorio-financeiro-(geral|emenda|competicao)-(\d{8}-\d{6})"
+    r"(?:-(\d{6})(?:-([0-9a-f]{32}))?)?\.pdf$"
+)
+
+
+@dataclass(frozen=True)
+class IdentidadeRelatorioFinanceiro:
+    tipo: str
+    data_hora: str
+    microssegundos: str | None
+    emissao_id: str | None
+
+
+def gerar_nome_relatorio_financeiro(tipo: str, agora: datetime | None = None) -> str:
+    if tipo not in TIPOS_RELATORIO_FINANCEIRO:
+        raise ValueError("Tipo de relatorio financeiro invalido: use geral, emenda ou competicao")
+    instante = agora or datetime.now()
+    return (f"relatorio-financeiro-{tipo}-{instante:%Y%m%d-%H%M%S}-{instante:%f}-"
+            f"{uuid.uuid4().hex}.pdf")
+
+
+def analisar_nome_relatorio_financeiro(nome: str) -> IdentidadeRelatorioFinanceiro:
+    achado = PADRAO_NOME_RELATORIO_FINANCEIRO.fullmatch(str(nome or ""))
+    if not achado:
+        raise ValueError("Nome de relatorio financeiro invalido")
+    return IdentidadeRelatorioFinanceiro(
+        tipo=achado.group(1), data_hora=achado.group(2),
+        microssegundos=achado.group(3), emissao_id=achado.group(4),
+    )
 
 
 def parse_data_flexivel(data_str: str) -> date | None:
@@ -224,6 +256,8 @@ def gerar_pdf_financeiro(
     )
 
     log = logger or LOGGER
+    if filtro.tipo_relatorio not in TIPOS_RELATORIO_FINANCEIRO:
+        raise ValueError("Tipo de relatorio financeiro invalido: use geral, emenda ou competicao")
 
     # Filtra lancamentos caso especificado
     itens = list(lancamentos)
@@ -265,9 +299,7 @@ def gerar_pdf_financeiro(
 
     PASTA_RELATORIOS.mkdir(parents=True, exist_ok=True)
     if saida is None:
-        agora_str = datetime.now().strftime("%Y%m%d-%H%M%S")
-        nome_arq = f"relatorio-financeiro-{filtro.tipo_relatorio}-{agora_str}.pdf"
-        saida = PASTA_RELATORIOS / nome_arq
+        saida = PASTA_RELATORIOS / gerar_nome_relatorio_financeiro(filtro.tipo_relatorio)
 
     # Estilos de texto
     estilo_titulo = ParagraphStyle(

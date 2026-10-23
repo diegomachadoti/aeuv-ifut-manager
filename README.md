@@ -333,6 +333,8 @@ Mapa `nome do time = url direta do time no iFut`.
 ### `[drive]`
 
 - `folder_embed_url`
+- `root_folder_id` — ID da pasta raiz `AEUV - Automação`, exigido somente pela publicação financeira
+- `financial_reports_folder_name` — nome canônico `Relatorios Financeiros`
 - `service_account_json` (opcional, caminho do JSON local da service account)
 - `download_dir`
 - `processed_dir`
@@ -402,7 +404,22 @@ Gerar relatórios financeiros a partir da planilha do Drive:
 ./.venv/bin/python main.py --gerar-pdf-financeiro geral --data-inicio 01/01/2026 --data-fim 31/03/2026
 ```
 
-Esses relatórios exigem acesso à planilha `AEUV - Financeiro` no Drive.
+Esses relatórios exigem acesso à planilha `AEUV - Financeiro` no Drive. O PDF
+permanece em `downloads/financeiro` e, após a geração local terminar, também é
+publicado em `AEUV - Automação/Relatorios Financeiros`. Cada emissão nova recebe
+microssegundos e UUID no nome e grava SHA-256 no Drive; arquivos publicados são
+imutáveis. Para repetir somente uma publicação sem regenerar:
+
+```bash
+./.venv/bin/python main.py --publicar-relatorio-financeiro "downloads/financeiro/relatorio-financeiro-geral-AAAAMMDD-HHMMSS-microssegundos-uuid32.pdf"
+```
+
+O código de saída é `0` para sucesso/reutilização, `1` para erro local e `2`
+quando o PDF local foi gerado mas autenticação/rede/API do Drive falhou. O fluxo
+financeiro nunca abre autorização interativa: autorize o OAuth previamente. Um
+lock local serializa retries no mesmo host; a reconciliação detecta corridas no
+Drive, mas não coordena hosts diferentes. Conteúdo divergente ou checksum que
+não prove igualdade é recusado, sem sobrescrever nem apagar o arquivo local.
 
 ## Fluxos suportados
 
@@ -488,6 +505,7 @@ AEUV - Automação/
 │   ├── Controle de Punicoes/               ← TXT + PDF lidos pelo sistema interno
 │   └── Notas Oficiais/                     ← TXT + PDF das notas finais, lidos pelo sistema interno
 ├── Regulamentos/                           ← PDFs dos regulamentos e formas de disputa, lidos pelo sistema interno
+├── Relatorios Financeiros/                 ← PDFs imutáveis publicados após a geração local
 ├── PDF - Sumulas Digitais/
 ├── Anexos - Sumulas Digitais/
 ├── Arquivos TXT - Inscricoes de Atletas/   ← [drive] folder_embed_url
@@ -1101,6 +1119,7 @@ Drive. Quem leva os arquivos para lá é `publicacao_drive.py`:
 | PDF do regulamento | `AEUV - Automação/Regulamentos/` | ao rodar `--gerar-pdf-regulamento` |
 | PDF da forma de disputa | `AEUV - Automação/Regulamentos/` | ao rodar `--gerar-pdf-forma-disputa` |
 | Nota oficial (TXT + PDF) | `Arquivos TXT - Sumulas Digitais/Notas Oficiais/` | ao rodar `--gerar-pdf-nota` |
+| Relatório financeiro (PDF imutável) | `AEUV - Automação/Relatorios Financeiros/` | após cada `--gerar-pdf-financeiro` bem-sucedido |
 
 Ou seja, a publicação acontece no momento em que o documento final é gerado, e
 não exige um passo a mais. Para reenviar tudo de uma vez — na primeira carga,
@@ -1116,11 +1135,13 @@ na máquina de quem gerou — o mesmo critério que faz o PDF sair com a marca
 d'água RASCUNHO. Assim a diretoria nunca abre a tela e lê uma decisão que ainda
 pode mudar.
 
-Nenhum ID novo entra no `config.ini`: as duas pastas são descobertas a partir do
-`[sumulas] folder_embed_url` (o ID da URL é a pasta das súmulas, e a pasta pai
-dela é a raiz `AEUV - Automação`). O Apps Script segue a mesma regra, então os
-dois lados continuam apontando para o mesmo lugar sozinhos. Arquivo que já
-existe é **atualizado**, não duplicado.
+Nenhum ID novo é inferido para regulamentos e notas: essas duas pastas continuam
+descobertas a partir do `[sumulas] folder_embed_url` (o ID da URL é a pasta das
+súmulas, e a pasta pai dela é a raiz `AEUV - Automação`). Somente relatórios
+financeiros exigem `[drive] root_folder_id` explícito e
+`financial_reports_folder_name = Relatorios Financeiros`. Arquivos legados de
+notas e regulamentos continuam sendo atualizados; relatórios financeiros nunca
+são sobrescritos.
 
 ### Quem a automação é quando fala com o Drive
 

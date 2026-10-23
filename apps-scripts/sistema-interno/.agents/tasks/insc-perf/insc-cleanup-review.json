@@ -1,0 +1,8 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    "Provisionamento e ACL pendentes — confirmed, non-blocking: snapshotPastaId e snapshotOwnerEmail vazios mantêm a publicação fechada. Antes de ativar, criar a pasta My Drive dedicada, auditar proprietário, herança, grupos e links e preencher os dois valores em conjunto.",
+    "Aceite no ambiente Google pendente — confirmed, non-blocking: a evidência local não mede latência, quotas nem ACL efetiva. Após uma publicação autorizada, executar as medições e os cenários pós-deploy documentados no runbook."
+  ],
+  "reviewDoc": "/Users/tqi_dmachado/workspace/aeuv-ifut-manager/apps-scripts/sistema-interno/.agents/tasks/insc-perf/insc-cleanup-review.md"
+}

@@ -1453,6 +1453,55 @@
       flex: 1;
     }
 
+    .fin-relatorios {
+      margin: 0 0 16px;
+      padding: 14px;
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+      background: var(--superficie, #fff);
+      color: var(--texto);
+    }
+
+    .fin-relatorios-status { margin: 0; color: var(--apoio); }
+    .fin-relatorio-destaque { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .fin-relatorio-destaque h3 { margin: 0 0 5px; font-size: 16px; }
+    .fin-relatorio-meta { color: var(--apoio); font-size: 12px; overflow-wrap: anywhere; }
+    .fin-relatorios details { margin-top: 12px; border-top: 1px solid var(--borda); padding-top: 10px; }
+    .fin-relatorios summary { cursor: pointer; font-weight: 600; color: var(--azul); }
+    .fin-relatorios summary:focus-visible,
+    .fin-relatorios a:focus-visible,
+    .fin-relatorios button:focus-visible { outline: 2px solid var(--dourado); outline-offset: 2px; }
+    .fin-relatorios-lista { display: grid; gap: 8px; margin-top: 10px; }
+    .fin-relatorio-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+    .fin-relatorios-aviso { margin: 10px 0 0; color: var(--apoio); font-size: 12px; }
+
+    .fin-alternar-valores {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .fin-alternar-valores svg {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .fin-alternar-valores:focus-visible {
+      outline: 2px solid var(--dourado);
+      outline-offset: 2px;
+    }
+
+    .fin-alternar-valores[aria-pressed="true"] {
+      background: var(--fundo);
+      border-color: var(--azul);
+    }
+
     .fin-barra-filtros {
       display: flex;
       flex-wrap: wrap;
@@ -1541,8 +1590,10 @@
       .fin-barra-filtros select { flex: 1 1 100%; }
       .fin-linha-datas { flex-direction: column; align-items: stretch; }
       .fin-grupo-data { justify-content: space-between; width: 100%; }
+      .fin-relatorio-destaque, .fin-relatorio-item { align-items: stretch; flex-direction: column; }
       .fin-linha-2 { grid-template-columns: 1fr; }
       .modal-fin-caixa { padding: 18px 14px; }
+      .fin-alternar-valores { flex: 1 1 100%; justify-content: center; }
     }
     .atas-lista { display: grid; gap: 12px; margin-top: 16px; }
     .ata-item { border: 1px solid var(--borda); border-radius: 10px; padding: 16px; background: var(--fundo); }
@@ -1818,6 +1869,7 @@
     body.tema-escuro .menu,
     body.tema-escuro .abrir-menu,
     body.tema-escuro .cartao,
+    body.tema-escuro .fin-relatorios,
     body.tema-escuro .indicador,
     body.tema-escuro .regulamento,
     body.tema-escuro .detalhe-caixa,
@@ -1845,6 +1897,10 @@
 
     body.tema-escuro .fin-grupo-data input[type="text"] { background: transparent; }
     body.tema-escuro .fin-campo .fin-input-valor { color: #4ade80; }
+    body.tema-escuro .fin-alternar-valores[aria-pressed="true"] {
+      background: #1a2540;
+      border-color: var(--azul);
+    }
     body.tema-escuro input::placeholder,
     body.tema-escuro textarea::placeholder { color: #6f7c95; }
 
@@ -2790,6 +2846,8 @@
         importacaoElencoAtual = null;
       }
 
+      const estadoVisualSolicitacoes = moduloAtual === 'solicitacoes' && id === 'solicitacoes'
+        ? capturarEstadoVisualSolicitacoes_() : null;
       if (moduloAtual === 'sumula-campeonato') sumulasRestaurarTabela_();
       moduloAtual = id;
 
@@ -2797,7 +2855,10 @@
       // tiver sobrado de uma navegacao anterior.
       buscaPendente = busca || '';
       destacarMenu(id);
-      renderizarModulo(modulo);
+      if (id === 'solicitacoes') {
+        sinalizarPerformanceSolicitacoes_('abertura', solicitacoesCarga.token + 1);
+      }
+      renderizarModulo(modulo, estadoVisualSolicitacoes);
 
       if (window.innerWidth <= 900) {
         menu.classList.remove('aberto');
@@ -2811,7 +2872,7 @@
     /**
      * Desenha a tela de um modulo. Novas funcionalidades entram aqui.
      */
-    function renderizarModulo(modulo) {
+    function renderizarModulo(modulo, estadoInicial) {
       document.body.classList.toggle('modulo-tabela', modulo.id === 'jogos-campeonato' || modulo.id === 'sumula-campeonato');
       fecharDetalhesPessoaElenco(false);
       elencoAtual = null;
@@ -2900,7 +2961,7 @@
 
       if (modulo.tipo === 'solicitacoes') {
         conteudo.innerHTML = cabecalho + blocoCarregando('statusSolicitacoes');
-        carregarSolicitacoes();
+        carregarSolicitacoes(estadoInicial);
         return;
       }
 
@@ -3448,16 +3509,17 @@
       const statusRequisicao = ++administracaoStatusRequisicao_;
       administracaoFontes_ = null;
       document.getElementById('areaAdministracao').innerHTML = '<section class="formulario">'
-        + '<h3>Banco de Atletas — atualização programada</h3>'
-        + '<p class="apoio">Cópia de consulta para admin/diretoria, atualizada pelo acionador configurado no Apps Script. '
-        + 'Confira ou altere o intervalo efetivo em Apps Script &gt; Acionadores; esta tela não detecta mudanças feitas lá. '
-        + 'Instale com a conta administradora que possui acesso a todas as fontes no Drive. '
-        + 'O gatilho pertence a essa conta; outros administradores não podem removê-lo por esta tela.</p>'
-        + '<p id="statusSnapshotAdmin" class="apoio" role="status" aria-live="polite">Consultando configuração...</p>'
+        + '<h3>Pré-cargas compartilhadas — Banco de Atletas e Solicitações processadas</h3>'
+        + '<p class="apoio">atualização programada por um único acionador do Apps Script. A falha de uma pré-carga não impede a tentativa da outra. '
+        + 'Confira o acionador <strong>atualizarBancoAtletasAgendado</strong> em Apps Script &gt; Acionadores. '
+        + 'Instale com a conta administradora que possui acesso a todas as fontes no Drive.</p>'
+        + '<p id="statusSnapshotAdmin" class="apoio" role="status" aria-live="polite">Consultando Banco de Atletas...</p>'
+        + '<p id="statusSolicitacoesSnapshotAdmin" class="apoio" role="status" aria-live="polite">Consultando solicitações processadas...</p>'
         + '<div class="barra-acoes"><button type="button" class="botao-principal" id="configurarSnapshotAdmin">Configurar agendamento</button>'
-        + '<button type="button" class="botao-apoio" id="desativarSnapshotAdmin">Desativar meu agendamento</button></div>'
-        + '<p class="apoio">Para a primeira geração ou atualização imediata, abra Banco de Atletas e use Recalcular agora. '
-        + 'Configurar o gatilho não gera a primeira cópia nem atualiza a tela automaticamente. Se um novo gatilho for criado, confira seu intervalo em Acionadores.</p>'
+        + '<button type="button" class="botao-apoio" id="desativarSnapshotAdmin">Desativar meu agendamento</button>'
+        + '<button type="button" class="botao-apoio" id="gerarSolicitacoesSnapshotAdmin">Gerar solicitações agora</button></div>'
+        + '<p class="apoio">A pasta My Drive dedicada, sua ACL e a conta proprietária precisam ser configuradas antes da primeira geração das solicitações. '
+        + 'Configurar o gatilho afeta as duas pré-cargas, mas não gera a primeira cópia nem atualiza esta tela automaticamente.</p>'
         + '</section><section class="formulario"><h3>Indice privado de validacao</h3>'
         + '<p class="apoio">CPF entre atletas/comissao e participacao por ID ou CPF. Alteracoes continuam sincronas. '
         + 'Reconciliacao independente por acionador, com conferencia de versoes das fontes em cada operacao. '
@@ -3495,6 +3557,9 @@
       document.getElementById('desativarSnapshotAdmin').onclick = function () {
         executarAgendaSnapshotAdmin_('desativarAgendamentoBancoAtletas', requisicao);
       };
+      document.getElementById('gerarSolicitacoesSnapshotAdmin').onclick = function () {
+        recalcularSnapshotSolicitacoesAdmin_(requisicao);
+      };
       google.script.run.withSuccessHandler(function (estado) {
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_
             || statusRequisicao !== administracaoStatusRequisicao_) return;
@@ -3504,6 +3569,19 @@
             || statusRequisicao !== administracaoStatusRequisicao_) return;
         document.getElementById('statusSnapshotAdmin').textContent = erro.message || String(erro);
       }).obterStatusBancoAtletas();
+      const executorStatusSolicitacoes = google.script.run.withSuccessHandler(function (estado) {
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_
+            || statusRequisicao !== administracaoStatusRequisicao_) return;
+        document.getElementById('statusSolicitacoesSnapshotAdmin').textContent =
+          textoStatusSnapshotSolicitacoes_(estado);
+      }).withFailureHandler(function (erro) {
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_
+            || statusRequisicao !== administracaoStatusRequisicao_) return;
+        document.getElementById('statusSolicitacoesSnapshotAdmin').textContent = erro.message || String(erro);
+      });
+      if (typeof executorStatusSolicitacoes.obterStatusSnapshotSolicitacoes === 'function') {
+        executorStatusSolicitacoes.obterStatusSnapshotSolicitacoes();
+      }
       google.script.run.withSuccessHandler(function (fontes) {
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
         administracaoFontes_ = fontes;
@@ -3534,6 +3612,48 @@
       }).listarFontesOtimizacaoImagens();
     }
 
+    function textoStatusSnapshotSolicitacoes_(estado) {
+      estado = estado || {};
+      return 'Solicitações processadas: ' + (estado.disponivel
+        ? 'cópia de ' + dataSnapshot_(estado.generatedAt) + '. '
+        : 'nenhuma cópia válida. ')
+        + (estado.configurado ? '' : 'Pasta/owner ainda não configurados. ')
+        + (estado.agendado ? 'Usa o agendamento compartilhado de ' + estado.responsavel + '. '
+          : 'Agendamento compartilhado desativado. ')
+        + (estado.emRecalculo ? 'Recálculo em andamento. ' : '')
+        + (estado.stale ? 'A cópia está defasada; a consulta final continua lendo as fontes atuais. ' : '')
+        + (estado.ultimoErro || '');
+    }
+
+    function recalcularSnapshotSolicitacoesAdmin_(requisicao) {
+      if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_
+          || administracaoOcupada_ || administracaoSnapshotOcupada_) return;
+      administracaoSnapshotOcupada_ = true;
+      administracaoStatusRequisicao_++;
+      const area = document.getElementById('areaAdministracao');
+      const controles = Array.from(area.querySelectorAll('button, select'));
+      const anteriores = controles.map(function (item) { return item.disabled; });
+      controles.forEach(function (item) { item.disabled = true; });
+      document.getElementById('statusSolicitacoesSnapshotAdmin').textContent =
+        'Gerando e validando a pré-carga completa de solicitações processadas...';
+      const concluir = function (estado, erro) {
+        administracaoSnapshotOcupada_ = false;
+        if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
+        controles.forEach(function (item, indice) {
+          if (item.isConnected) item.disabled = anteriores[indice];
+        });
+        document.getElementById('statusSolicitacoesSnapshotAdmin').textContent = erro
+          ? (erro.message || String(erro)) : textoStatusSnapshotSolicitacoes_(estado);
+      };
+      const executor = google.script.run.withSuccessHandler(function (estado) { concluir(estado); })
+        .withFailureHandler(function (erro) { concluir(null, erro); });
+      if (typeof executor.recalcularSnapshotSolicitacoes === 'function') {
+        executor.recalcularSnapshotSolicitacoes();
+      } else {
+        concluir(null, new Error('A geração de solicitações não está disponível nesta versão.'));
+      }
+    }
+
     function executarAgendaSnapshotAdmin_(metodo, requisicao) {
       if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_
           || administracaoOcupada_ || administracaoSnapshotOcupada_) return;
@@ -3543,13 +3663,19 @@
       const controles = Array.from(area.querySelectorAll('button, select'));
       const anteriores = controles.map(function (item) { return item.disabled; });
       controles.forEach(function (item) { item.disabled = true; });
-      document.getElementById('statusSnapshotAdmin').textContent = 'Alterando agendamento do Banco de Atletas...';
+      document.getElementById('statusSnapshotAdmin').textContent = 'Alterando agendamento compartilhado das duas pré-cargas...';
       const concluir = function (estado, erro) {
         administracaoSnapshotOcupada_ = false;
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
         controles.forEach(function (item, indice) { if (item.isConnected) item.disabled = anteriores[indice]; });
         document.getElementById('statusSnapshotAdmin').textContent = erro
           ? (erro.message || String(erro)) : textoStatusSnapshot_(estado);
+        if (!erro) {
+          const statusSolicitacoes = document.getElementById('statusSolicitacoesSnapshotAdmin');
+          statusSolicitacoes.textContent = estado.agendado
+            ? 'Solicitações processadas usam o mesmo agendamento, responsável: ' + estado.responsavel + '.'
+            : 'Agendamento compartilhado desativado para as duas pré-cargas.';
+        }
       };
       google.script.run.withSuccessHandler(function (estado) { concluir(estado); })
         .withFailureHandler(function (erro) { concluir(null, erro); })[metodo]();
@@ -7568,60 +7694,206 @@
      */
     let solicitacoes = { registros: [], situacoes: [], acoes: [], total: 0, limite: 0, pastaUrl: '' };
 
-    /** Protocolos com o detalhe aberto. */
+    /** Arquivos com o detalhe aberto e paginacao local da geracao atual. */
     let solicitacoesAbertas = {};
+    let solicitacoesFiltradas = [];
+    let solicitacoesPagina = 0;
+    let solicitacoesPorPagina = 25;
+    function sinalizarPerformanceSolicitacoes_(fase, token) {
+      if (typeof window.CustomEvent !== 'function' || typeof window.dispatchEvent !== 'function') return;
+      window.dispatchEvent(new CustomEvent('aeuv:solicitacoes-performance', {
+        detail: { fase: fase, token: token }
+      }));
+    }
+
+    let solicitacoesCarga = {
+      token: 0,
+      snapshot: { estado: 'pendente', dados: null, erro: '' },
+      final: { estado: 'pendente', dados: null, erro: '' },
+      estadoVisual: null,
+      renderizado: false,
+      primeiroConteudoSinalizado: false,
+      finalSinalizado: false
+    };
+
+    function estadoVisualSolicitacoesVazio_() {
+      return {
+        busca: '',
+        filtros: { situacao: '', competicao: '', equipe: '' },
+        pagina: 0,
+        porPagina: 25,
+        abertas: {}
+      };
+    }
+
+    function normalizarEstadoVisualSolicitacoes_(estado) {
+      const base = estadoVisualSolicitacoesVazio_();
+      estado = estado || {};
+      base.busca = typeof estado.busca === 'string' ? estado.busca : '';
+      ['situacao', 'competicao', 'equipe'].forEach(function (campo) {
+        base.filtros[campo] = estado.filtros && typeof estado.filtros[campo] === 'string'
+          ? estado.filtros[campo] : '';
+      });
+      base.pagina = Number.isSafeInteger(estado.pagina) && estado.pagina >= 0 ? estado.pagina : 0;
+      base.porPagina = estado.porPagina === 50 ? 50 : 25;
+      if (estado.abertas && typeof estado.abertas === 'object' && !Array.isArray(estado.abertas)) {
+        Object.keys(estado.abertas).forEach(function (chave) {
+          if (estado.abertas[chave]) base.abertas[chave] = true;
+        });
+      }
+      return base;
+    }
+
+    function capturarEstadoVisualSolicitacoes_(base) {
+      const estado = normalizarEstadoVisualSolicitacoes_(base);
+      const busca = document.getElementById('buscaSolicitacoes');
+      if (busca) estado.busca = String(busca.value || '');
+      if (conteudo && conteudo.querySelectorAll) {
+        conteudo.querySelectorAll('[data-filtro]').forEach(function (campo) {
+          if (Object.prototype.hasOwnProperty.call(estado.filtros, campo.dataset.filtro)) {
+            estado.filtros[campo.dataset.filtro] = String(campo.value || '');
+          }
+        });
+      }
+      estado.pagina = solicitacoesPagina;
+      estado.porPagina = solicitacoesPorPagina;
+      estado.abertas = Object.assign({}, solicitacoesAbertas);
+      return estado;
+    }
+
+    function cargaSolicitacoesAtual_(token) {
+      return moduloAtual === 'solicitacoes' && solicitacoesCarga.token === token;
+    }
 
     /**
-     * Busca no servidor as solicitacoes enviadas pelas equipes.
+     * Dispara em paralelo a copia rapida e a consulta autoritativa. Cada
+     * callback altera apenas seu ramo e o reducer decide o que pode aparecer.
      */
-    function carregarSolicitacoes() {
+    function carregarSolicitacoes(estadoInicial) {
+      const token = solicitacoesCarga.token + 1;
+      solicitacoesCarga = {
+        token: token,
+        snapshot: { estado: 'pendente', dados: null, erro: '' },
+        final: { estado: 'pendente', dados: null, erro: '' },
+        estadoVisual: normalizarEstadoVisualSolicitacoes_(estadoInicial),
+        renderizado: false,
+        primeiroConteudoSinalizado: false,
+        finalSinalizado: false
+      };
+
       google.script.run
         .withSuccessHandler(function (dados) {
-          if (moduloAtual !== 'solicitacoes') {
-            return;
-          }
-
-          solicitacoes = dados;
-          solicitacoesAbertas = {};
-          montarTelaSolicitacoes();
+          if (!cargaSolicitacoesAtual_(token)) return;
+          solicitacoesCarga.snapshot = { estado: 'sucesso', dados: dados, erro: '' };
+          renderizarCargaSolicitacoes_(token);
         })
         .withFailureHandler(function (erro) {
-          if (moduloAtual !== 'solicitacoes') {
-            return;
-          }
+          if (!cargaSolicitacoesAtual_(token)) return;
+          solicitacoesCarga.snapshot = {
+            estado: 'falha', dados: null, erro: erro && erro.message ? erro.message : String(erro)
+          };
+          renderizarCargaSolicitacoes_(token);
+        })
+        .listarSnapshotSolicitacoesProcessadas();
 
-          document.getElementById('statusSolicitacoes').outerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (!cargaSolicitacoesAtual_(token)) return;
+          solicitacoesCarga.final = { estado: 'sucesso', dados: dados, erro: '' };
+          renderizarCargaSolicitacoes_(token);
+        })
+        .withFailureHandler(function (erro) {
+          if (!cargaSolicitacoesAtual_(token)) return;
+          solicitacoesCarga.final = {
+            estado: 'falha', dados: null, erro: erro && erro.message ? erro.message : String(erro)
+          };
+          renderizarCargaSolicitacoes_(token);
         })
         .listarSolicitacoes();
+    }
+
+    function statusCargaSolicitacoes_(texto, classe) {
+      const status = document.getElementById('statusSolicitacoes');
+      if (!status) return;
+      status.className = classe || 'carregando';
+      status.setAttribute('role', 'status');
+      status.setAttribute('aria-live', 'polite');
+      status.textContent = texto;
+    }
+
+    function renderizarCargaSolicitacoes_(token) {
+      if (!cargaSolicitacoesAtual_(token)) return;
+      const carga = solicitacoesCarga;
+      const final = carga.final;
+      const snapshot = carga.snapshot;
+      let dados = null;
+      let aviso = '';
+      let provisorio = false;
+
+      if (final.estado === 'sucesso') {
+        dados = final.dados;
+      } else if (snapshot.estado === 'sucesso' && (snapshot.dados.registros || []).length) {
+        dados = snapshot.dados;
+        provisorio = true;
+        aviso = final.estado === 'falha'
+          ? 'Não foi possível conferir os dados atuais. Exibindo somente o histórico processado da pré-carga; tente Atualizar novamente.'
+          : 'Exibindo solicitações processadas da pré-carga enquanto os dados atuais são conferidos.';
+      } else if (final.estado === 'falha' && snapshot.estado !== 'pendente') {
+        statusCargaSolicitacoes_(final.erro || 'Não foi possível consultar as solicitações.', 'erro');
+        return;
+      } else {
+        statusCargaSolicitacoes_('Consultando solicitações atuais...', 'carregando');
+        return;
+      }
+
+      const estado = carga.renderizado
+        ? capturarEstadoVisualSolicitacoes_(carga.estadoVisual) : carga.estadoVisual;
+      carga.estadoVisual = normalizarEstadoVisualSolicitacoes_(estado);
+      carga.renderizado = true;
+      solicitacoes = dados || { registros: [] };
+      montarTelaSolicitacoes(carga.estadoVisual, aviso, provisorio);
+      if (!carga.primeiroConteudoSinalizado) {
+        carga.primeiroConteudoSinalizado = true;
+        sinalizarPerformanceSolicitacoes_('primeiro-conteudo', token);
+      }
+      if (final.estado === 'sucesso' && !carga.finalSinalizado) {
+        carga.finalSinalizado = true;
+        sinalizarPerformanceSolicitacoes_('final-autoritativo', token);
+      }
     }
 
     /**
      * Monta os indicadores, os filtros e a tabela das solicitacoes.
      */
-    function montarTelaSolicitacoes() {
+    function montarTelaSolicitacoes(estadoVisual, aviso, provisorio) {
       const registros = solicitacoes.registros || [];
-
-      if (!registros.length) {
-        document.getElementById('statusSolicitacoes').outerHTML =
-          '<div class="vazio">Nenhuma solicita&ccedil;&atilde;o enviada at&eacute; o momento.</div>';
-        return;
-      }
+      const status = document.getElementById('statusSolicitacoes');
+      if (!status) return;
+      estadoVisual = normalizarEstadoVisualSolicitacoes_(estadoVisual);
 
       const recorte = solicitacoes.total > registros.length
         ? escapar(registros.length + ' mais recentes de ' + solicitacoes.total)
         : '';
+      const geradoEm = solicitacoes.snapshotStatusPublico && solicitacoes.snapshotStatusPublico.generatedAt;
+      const estadoCarga = aviso
+        ? '<div class="' + (provisorio ? 'aviso' : 'apoio')
+          + '" id="estadoCargaSolicitacoes" role="status" aria-live="polite">'
+          + escapar(aviso + (geradoEm ? ' Gerada em ' + dataSnapshot_(geradoEm) + '.' : '')) + '</div>'
+        : '<p class="apoio" id="estadoCargaSolicitacoes" role="status" aria-live="polite">Dados atuais conferidos.</p>';
+      const vazio = !registros.length
+        ? '<div class="vazio">Nenhuma solicita&ccedil;&atilde;o enviada at&eacute; o momento.</div>' : '';
 
-      document.getElementById('statusSolicitacoes').outerHTML = ''
-        + '<div class="resumo" id="resumoSolicitacoes"></div>'
-        + '<div class="filtros">'
-        + '<input type="search" id="buscaSolicitacoes" placeholder="Buscar por protocolo, equipe, respons&aacute;vel ou atleta">'
-        + opcoesFiltro('situacao', 'Todas as situa&ccedil;&otilde;es', registros)
-        + opcoesFiltro('competicao', 'Todas as competi&ccedil;&otilde;es', registros)
-        + opcoesFiltro('equipe', 'Todas as equipes', registros)
-        + '</div>'
+      status.outerHTML = '<div id="statusSolicitacoes">'
+        + estadoCarga
+        + (registros.length ? '<div class="resumo" id="resumoSolicitacoes"></div>' : '')
+        + (registros.length ? '<div class="filtros">'
+          + '<input type="search" id="buscaSolicitacoes" placeholder="Buscar por protocolo, equipe, respons&aacute;vel ou atleta">'
+          + opcoesFiltro('situacao', 'Todas as situa&ccedil;&otilde;es', registros)
+          + opcoesFiltro('competicao', 'Todas as competi&ccedil;&otilde;es', registros)
+          + opcoesFiltro('equipe', 'Todas as equipes', registros)
+          + '</div>' : '')
         + '<div class="barra-acoes">'
-        + '<span id="contagemSolicitacoes"></span>'
+        + (registros.length ? '<span id="contagemSolicitacoes"></span>' : '')
         + '<span class="espaco"></span>'
         + (recorte ? '<span>' + recorte + '</span>' : '')
         + '<button type="button" class="botao-apoio" id="recarregarSolicitacoes">Atualizar</button>'
@@ -7629,28 +7901,72 @@
           ? '<a class="botao-apoio" href="' + escapar(solicitacoes.pastaUrl) + '" target="_blank" rel="noopener">Abrir pasta</a>'
           : '')
         + '</div>'
-        + '<div class="tabela-rolagem"><table class="solicitacoes"><thead><tr>'
-        + '<th>Situa&ccedil;&atilde;o</th><th>Protocolo</th><th>Enviada em</th><th>Equipe</th>'
-        + '<th>Respons&aacute;vel</th><th>Registros</th><th>Resultado</th>'
-        + '</tr></thead><tbody id="linhasSolicitacoes"></tbody></table></div>';
+        + vazio
+        + (registros.length ? '<div class="tabela-rolagem"><table class="solicitacoes"><thead><tr>'
+          + '<th>Situa&ccedil;&atilde;o</th><th>Protocolo</th><th>Enviada em</th><th>Equipe</th>'
+          + '<th>Respons&aacute;vel</th><th>Registros</th><th>Resultado</th>'
+          + '</tr></thead><tbody id="linhasSolicitacoes"></tbody></table></div>'
+          + '<nav class="atletas-bd-paginacao" aria-label="Paginação de solicitações">'
+          + '<label for="porPaginaSolicitacoes">Solicitações por página</label>'
+          + '<select id="porPaginaSolicitacoes"><option value="25">25</option><option value="50">50</option></select>'
+          + '<button type="button" class="botao-apoio" id="anteriorSolicitacoes" aria-controls="linhasSolicitacoes">Anterior</button>'
+          + '<span id="paginaSolicitacoes" role="status" aria-live="polite" aria-atomic="true"></span>'
+          + '<button type="button" class="botao-apoio" id="proximaSolicitacoes" aria-controls="linhasSolicitacoes">Próxima</button>'
+          + '</nav>' : '')
+        + '</div>';
 
-      document.getElementById('buscaSolicitacoes').addEventListener('input', filtrarSolicitacoes);
       document.getElementById('recarregarSolicitacoes').addEventListener('click', function () {
         abrirModulo('solicitacoes');
       });
+      if (!registros.length) {
+        solicitacoesAbertas = {};
+        solicitacoesFiltradas = [];
+        return;
+      }
 
+      document.getElementById('buscaSolicitacoes').value = estadoVisual.busca;
       conteudo.querySelectorAll('[data-filtro]').forEach(function (campo) {
-        campo.addEventListener('change', filtrarSolicitacoes);
+        const valor = estadoVisual.filtros[campo.dataset.filtro];
+        campo.value = valor && registros.some(function (registro) {
+          return registro[campo.dataset.filtro] === valor;
+        }) ? valor : '';
+        campo.addEventListener('change', function () { filtrarSolicitacoes(false); });
       });
-
-      filtrarSolicitacoes();
+      document.getElementById('buscaSolicitacoes').addEventListener('input', function () {
+        filtrarSolicitacoes(false);
+      });
+      solicitacoesPorPagina = estadoVisual.porPagina;
+      solicitacoesPagina = estadoVisual.pagina;
+      document.getElementById('porPaginaSolicitacoes').value = String(solicitacoesPorPagina);
+      document.getElementById('porPaginaSolicitacoes').addEventListener('change', function () {
+        solicitacoesPorPagina = this.value === '50' ? 50 : 25;
+        solicitacoesPagina = 0;
+        desenharPaginaSolicitacoes_();
+      });
+      document.getElementById('anteriorSolicitacoes').addEventListener('click', function () {
+        solicitacoesPagina--;
+        desenharPaginaSolicitacoes_();
+      });
+      document.getElementById('proximaSolicitacoes').addEventListener('click', function () {
+        solicitacoesPagina++;
+        desenharPaginaSolicitacoes_();
+      });
+      const presentes = {};
+      registros.forEach(function (registro) { presentes[registro.arquivoNome] = true; });
+      solicitacoesAbertas = {};
+      Object.keys(estadoVisual.abertas).forEach(function (chave) {
+        if (presentes[chave]) solicitacoesAbertas[chave] = true;
+      });
+      filtrarSolicitacoes(true);
     }
 
     /**
      * Aplica a busca e os seletores e redesenha a tabela.
      */
-    function filtrarSolicitacoes() {
-      const busca = simplificar(document.getElementById('buscaSolicitacoes').value.trim());
+    function filtrarSolicitacoes(preservarPagina) {
+      const buscaCampo = document.getElementById('buscaSolicitacoes');
+      if (!buscaCampo) return [];
+      const busca = simplificar(buscaCampo.value.trim());
       const selecionados = {};
 
       conteudo.querySelectorAll('[data-filtro]').forEach(function (campo) {
@@ -7673,8 +7989,27 @@
         return simplificar(textoDaSolicitacao(registro)).indexOf(busca) !== -1;
       });
 
+      solicitacoesFiltradas = filtrados;
+      if (!preservarPagina) solicitacoesPagina = 0;
       desenharResumoSolicitacoes(filtrados);
-      desenharLinhasSolicitacoes(filtrados);
+      desenharPaginaSolicitacoes_();
+      return filtrados;
+    }
+
+    function desenharPaginaSolicitacoes_() {
+      const paginas = Math.max(1, Math.ceil(solicitacoesFiltradas.length / solicitacoesPorPagina));
+      solicitacoesPagina = Math.max(0, Math.min(solicitacoesPagina, paginas - 1));
+      const inicio = solicitacoesPagina * solicitacoesPorPagina;
+      const fim = Math.min(inicio + solicitacoesPorPagina, solicitacoesFiltradas.length);
+      desenharLinhasSolicitacoes(solicitacoesFiltradas.slice(inicio, fim));
+      const rotulo = document.getElementById('paginaSolicitacoes');
+      const anterior = document.getElementById('anteriorSolicitacoes');
+      const proxima = document.getElementById('proximaSolicitacoes');
+      if (rotulo) rotulo.textContent = 'Página ' + (solicitacoesPagina + 1) + ' de ' + paginas
+        + ' · ' + (solicitacoesFiltradas.length ? inicio + 1 : 0) + '–' + fim
+        + ' de ' + solicitacoesFiltradas.length + ' solicitação(ões)';
+      if (anterior) anterior.disabled = solicitacoesPagina === 0;
+      if (proxima) proxima.disabled = solicitacoesPagina === paginas - 1;
     }
 
     /**
@@ -7773,7 +8108,7 @@
             solicitacoesAbertas[chave] = true;
           }
 
-          filtrarSolicitacoes();
+          filtrarSolicitacoes(true);
         });
       });
 
@@ -10435,13 +10770,64 @@
 
     var financeiroDados = null;
     var financeiroFiltros = { busca: '', tipo: '', categoria: '', origem: '', periodo: '', dataInicio: '', dataFim: '' };
+    var financeiroValoresOcultos = false;
+    var financeiroRelatorios = { estado: 'inicial', relatorios: [], limite: 20, temMais: false, erro: '' };
+    var financeiroRelatoriosRequisicao = 0;
+    var FINANCEIRO_CHAVE_VALORES_OCULTOS = 'aeuv-financeiro-valores-ocultos';
+    var FINANCEIRO_MASCARA_VALOR = '••••••';
 
-    function carregarFinanceiro() {
+    try {
+      financeiroValoresOcultos = sessionStorage.getItem(FINANCEIRO_CHAVE_VALORES_OCULTOS) === 'true';
+    } catch (erro) {
+      financeiroValoresOcultos = false;
+    }
+
+    function sincronizarVisibilidadeValoresFinanceiro() {
+      document.querySelectorAll('[data-valor-financeiro]').forEach(function (elemento) {
+        var original = elemento.getAttribute('data-valor-original') || '';
+        elemento.textContent = financeiroValoresOcultos ? FINANCEIRO_MASCARA_VALOR : original;
+        if (financeiroValoresOcultos) {
+          elemento.setAttribute('aria-label', 'Valor financeiro oculto');
+        } else {
+          elemento.removeAttribute('aria-label');
+        }
+      });
+
+      document.querySelectorAll('[data-campo-valor-financeiro]').forEach(function (campo) {
+        campo.type = financeiroValoresOcultos ? 'password' : 'text';
+      });
+
+      var botao = document.getElementById('btnAlternarValoresFinanceiro');
+      if (!botao) return;
+      var acao = financeiroValoresOcultos ? 'Exibir valores financeiros' : 'Ocultar valores financeiros';
+      botao.title = acao;
+      botao.setAttribute('aria-label', acao);
+      botao.setAttribute('aria-pressed', financeiroValoresOcultos ? 'true' : 'false');
+      document.getElementById('iconeFinValoresVisiveis').hidden = financeiroValoresOcultos;
+      document.getElementById('iconeFinValoresOcultos').hidden = !financeiroValoresOcultos;
+      document.getElementById('textoAlternarValoresFinanceiro').textContent = financeiroValoresOcultos ? 'Exibir valores' : 'Ocultar valores';
+    }
+
+    function alternarVisibilidadeValoresFinanceiro() {
+      financeiroValoresOcultos = !financeiroValoresOcultos;
+      try {
+        sessionStorage.setItem(FINANCEIRO_CHAVE_VALORES_OCULTOS, financeiroValoresOcultos ? 'true' : 'false');
+      } catch (erro) {}
+      sincronizarVisibilidadeValoresFinanceiro();
+    }
+
+    function atualizarValorFinanceiro(elemento, valorFormatado) {
+      if (!elemento) return;
+      elemento.setAttribute('data-valor-original', valorFormatado);
+      elemento.textContent = valorFormatado;
+    }
+
+    function carregarFinanceiro(relatoriosJaSolicitados) {
       google.script.run
         .withSuccessHandler(function (dados) {
           if (moduloAtual !== 'financeiro') return;
           financeiroDados = dados;
-          montarTelaFinanceiro();
+          montarTelaFinanceiro(Boolean(relatoriosJaSolicitados));
         })
         .withFailureHandler(function (erro) {
           if (moduloAtual !== 'financeiro') return;
@@ -10449,6 +10835,72 @@
           if (el) el.innerHTML = '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
         })
         .listarFinanceiro();
+    }
+
+    function carregarRelatoriosFinanceiros() {
+      var requisicao = ++financeiroRelatoriosRequisicao;
+      financeiroRelatorios = { estado: 'loading', relatorios: [], limite: 20, temMais: false, erro: '' };
+      renderizarRelatoriosFinanceiros();
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (requisicao !== financeiroRelatoriosRequisicao || moduloAtual !== 'financeiro') return;
+          financeiroRelatorios = {
+            estado: 'sucesso', relatorios: (dados && dados.relatorios) || [],
+            limite: (dados && dados.limite) || 20, temMais: Boolean(dados && dados.temMais), erro: ''
+          };
+          renderizarRelatoriosFinanceiros();
+        })
+        .withFailureHandler(function (erro) {
+          if (requisicao !== financeiroRelatoriosRequisicao || moduloAtual !== 'financeiro') return;
+          financeiroRelatorios = {
+            estado: 'erro', relatorios: [], limite: 20, temMais: false,
+            erro: erro && erro.message ? erro.message : String(erro || 'Falha ao consultar relatórios.')
+          };
+          renderizarRelatoriosFinanceiros();
+        })
+        .listarRelatoriosFinanceiros();
+    }
+
+    function renderizarRelatoriosFinanceiros() {
+      var area = document.getElementById('areaRelatoriosFinanceiros');
+      if (!area) return;
+      var estado = financeiroRelatorios || {};
+      if (estado.estado === 'loading' || estado.estado === 'inicial') {
+        area.innerHTML = '<p class="fin-relatorios-status">Carregando relatórios financeiros...</p>';
+        return;
+      }
+      if (estado.estado === 'erro') {
+        area.innerHTML = '<div class="erro">' + escapar(estado.erro)
+          + '</div><button type="button" class="botao-apoio" id="btnTentarRelatoriosFinanceiros">Tentar novamente</button>';
+        document.getElementById('btnTentarRelatoriosFinanceiros')
+          .addEventListener('click', carregarRelatoriosFinanceiros);
+        return;
+      }
+      var lista = estado.relatorios || [];
+      if (!lista.length) {
+        area.innerHTML = '<p class="fin-relatorios-status">Nenhum relatório financeiro publicado</p>';
+        return;
+      }
+      var ultimo = lista[0];
+      var html = '<div class="fin-relatorio-destaque"><div><h3>Último relatório publicado</h3>'
+        + '<div>' + escapar(ultimo.nome) + '</div><div class="fin-relatorio-meta">'
+        + escapar(ultimo.tipo) + ' · ' + escapar(ultimo.publicadoEm) + '</div></div>'
+        + '<a class="botao-apoio destaque" href="' + escapar(ultimo.url)
+        + '" target="_blank" rel="noopener">Abrir relatório</a></div>';
+      if (lista.length > 1) {
+        html += '<details><summary>Relatórios anteriores</summary><div class="fin-relatorios-lista">'
+          + lista.slice(1).map(function (item) {
+            return '<div class="fin-relatorio-item"><div><div>' + escapar(item.nome)
+              + '</div><div class="fin-relatorio-meta">' + escapar(item.tipo) + ' · '
+              + escapar(item.publicadoEm) + '</div></div><a class="botao-apoio" href="'
+              + escapar(item.url) + '" target="_blank" rel="noopener">Abrir relatório</a></div>';
+          }).join('') + '</div></details>';
+      }
+      if (estado.temMais) {
+        html += '<p class="fin-relatorios-aviso">Exibindo os ' + escapar(estado.limite)
+          + ' relatórios mais recentes.</p>';
+      }
+      area.innerHTML = html;
     }
 
     function formatarMoedaJs(num) {
@@ -10535,7 +10987,7 @@
       });
     }
 
-    function montarTelaFinanceiro() {
+    function montarTelaFinanceiro(relatoriosJaSolicitados) {
       var d = financeiroDados;
       var lancamentos = d.lancamentos || [];
 
@@ -10543,15 +10995,15 @@
         + '<div class="resumo" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;">'
         + '  <div class="cartao" style="background:#eefbf0;border-color:#bbf2c2;">'
         + '    <div style="font-size:12px;color:#1e7b34;font-weight:bold;text-transform:uppercase;">Total de Entradas</div>'
-        + '    <div id="cardFinTotalEntradas" style="font-size:20px;font-weight:bold;color:#1e7b34;margin-top:4px;">' + formatarMoedaJs(d.totalEntradas) + '</div>'
+        + '    <div id="cardFinTotalEntradas" data-valor-financeiro data-valor-original="' + escapar(formatarMoedaJs(d.totalEntradas)) + '" style="font-size:20px;font-weight:bold;color:#1e7b34;margin-top:4px;">' + formatarMoedaJs(d.totalEntradas) + '</div>'
         + '  </div>'
         + '  <div class="cartao" style="background:#fdf2f2;border-color:#f8c8c8;">'
         + '    <div style="font-size:12px;color:#b3261e;font-weight:bold;text-transform:uppercase;">Total de Saídas</div>'
-        + '    <div id="cardFinTotalSaidas" style="font-size:20px;font-weight:bold;color:#b3261e;margin-top:4px;">' + formatarMoedaJs(d.totalSaidas) + '</div>'
+        + '    <div id="cardFinTotalSaidas" data-valor-financeiro data-valor-original="' + escapar(formatarMoedaJs(d.totalSaidas)) + '" style="font-size:20px;font-weight:bold;color:#b3261e;margin-top:4px;">' + formatarMoedaJs(d.totalSaidas) + '</div>'
         + '  </div>'
         + '  <div class="cartao" style="background:#eef4fd;border-color:#c4d8fa;">'
         + '    <div id="cardFinRotuloSaldo" style="font-size:12px;color:#14213d;font-weight:bold;text-transform:uppercase;">Saldo em Caixa</div>'
-        + '    <div id="cardFinSaldoAtual" style="font-size:20px;font-weight:bold;color:#14213d;margin-top:4px;">' + formatarMoedaJs(d.saldoAtual) + '</div>'
+        + '    <div id="cardFinSaldoAtual" data-valor-financeiro data-valor-original="' + escapar(formatarMoedaJs(d.saldoAtual)) + '" style="font-size:20px;font-weight:bold;color:#14213d;margin-top:4px;">' + formatarMoedaJs(d.saldoAtual) + '</div>'
         + '  </div>'
         + '</div>';
 
@@ -10562,9 +11014,16 @@
         + '<button type="button" class="botao-apoio" id="btnRelatorioEmenda" title="Prestação de contas para Emendas Impositivas e Poder Público">🏛️ PDF Emenda Impositiva</button>'
         + '<button type="button" class="botao-apoio" id="btnRelatorioCompeticao" title="Prestação de contas filtrada por Campeonato">🏆 PDF Competição</button>'
         + '<span class="espaco"></span>'
+        + '<button type="button" class="botao-apoio fin-alternar-valores" id="btnAlternarValoresFinanceiro" title="Ocultar valores financeiros" aria-label="Ocultar valores financeiros" aria-pressed="false">'
+        + '  <svg id="iconeFinValoresVisiveis" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>'
+        + '  <svg id="iconeFinValoresOcultos" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 3l18 18"></path><path d="M10.6 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17.4 17.4 0 0 1-2.1 3.1"></path><path d="M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7a10.2 10.2 0 0 0 4.1-.9"></path></svg>'
+        + '  <span id="textoAlternarValoresFinanceiro">Ocultar valores</span>'
+        + '</button>'
         + (d.planilhaUrl ? '<a class="botao-apoio" href="' + escapar(d.planilhaUrl) + '" target="_blank" rel="noopener">Abrir Planilha</a>' : '')
         + '<button type="button" class="botao-apoio" id="btnRecarregarFinanceiro">Atualizar</button>'
         + '</div>';
+
+      html += '<section id="areaRelatoriosFinanceiros" class="fin-relatorios" role="status" aria-live="polite"></section>';
 
       // Filtros
       html += '<div class="fin-barra-filtros">'
@@ -10620,9 +11079,18 @@
         + '</div>';
 
       document.getElementById('areaFinanceiro').innerHTML = html;
+      if (relatoriosJaSolicitados) {
+        renderizarRelatoriosFinanceiros();
+      } else {
+        carregarRelatoriosFinanceiros();
+      }
 
       // Eventos
-      document.getElementById('btnRecarregarFinanceiro').addEventListener('click', carregarFinanceiro);
+      document.getElementById('btnRecarregarFinanceiro').addEventListener('click', function () {
+        carregarRelatoriosFinanceiros();
+        carregarFinanceiro(true);
+      });
+      document.getElementById('btnAlternarValoresFinanceiro').addEventListener('click', alternarVisibilidadeValoresFinanceiro);
       if (document.getElementById('btnNovoLancamento')) {
         document.getElementById('btnNovoLancamento').addEventListener('click', function() { abrirModalNovoLancamento(); });
       }
@@ -10828,11 +11296,11 @@
       var elCardSaidas = document.getElementById('cardFinTotalSaidas');
       var elCardSaldo = document.getElementById('cardFinSaldoAtual');
       var elRotuloSaldo = document.getElementById('cardFinRotuloSaldo');
-      if (elCardEntradas) elCardEntradas.textContent = formatarMoedaJs(somaEntradas);
-      if (elCardSaidas) elCardSaidas.textContent = formatarMoedaJs(somaSaidas);
+      if (elCardEntradas) atualizarValorFinanceiro(elCardEntradas, formatarMoedaJs(somaEntradas));
+      if (elCardSaidas) atualizarValorFinanceiro(elCardSaidas, formatarMoedaJs(somaSaidas));
       if (elCardSaldo) {
         var saldoCalc = somaEntradas - somaSaidas;
-        elCardSaldo.textContent = formatarMoedaJs(saldoCalc);
+        atualizarValorFinanceiro(elCardSaldo, formatarMoedaJs(saldoCalc));
         elCardSaldo.style.color = saldoCalc >= 0 ? '#14213d' : '#b3261e';
       }
       if (elRotuloSaldo) {
@@ -10852,6 +11320,7 @@
         if (btnLimparVazio) {
           btnLimparVazio.addEventListener('click', limparTodosFiltrosFinanceiro);
         }
+        if (typeof sincronizarVisibilidadeValoresFinanceiro === 'function') sincronizarVisibilidadeValoresFinanceiro();
         return;
       }
 
@@ -10860,6 +11329,7 @@
         var corTipo = ehEntrada ? '#1e7b34' : '#b3261e';
         var bgTipo = ehEntrada ? '#eefbf0' : '#fdf2f2';
         var sinal = ehEntrada ? '+ ' : '- ';
+        var valorExibido = sinal + formatarMoedaJs(item.valor);
 
         var docInfo = [];
         if (item.favorecidoPagador) docInfo.push('<strong>' + escapar(item.favorecidoPagador) + '</strong>');
@@ -10886,7 +11356,7 @@
           + '<td><span class="fin-desc-texto">' + escapar(item.descricao) + '</span><small class="fin-desc-id">' + escapar(item.idLancamento) + '</small></td>'
           + '<td>' + (docInfo.join('<br>') || '—') + '</td>'
           + '<td style="text-align:center;">' + compLink + '</td>'
-          + '<td style="text-align:right;white-space:nowrap;font-weight:bold;color:' + corTipo + ';">' + sinal + formatarMoedaJs(item.valor) + '</td>'
+          + '<td data-valor-financeiro data-valor-original="' + escapar(valorExibido) + '" style="text-align:right;white-space:nowrap;font-weight:bold;color:' + corTipo + ';">' + valorExibido + '</td>'
           + btnExcluirHtml
           + '</tr>';
       }).join('');
@@ -10910,6 +11380,7 @@
           });
         });
       }
+      if (typeof sincronizarVisibilidadeValoresFinanceiro === 'function') sincronizarVisibilidadeValoresFinanceiro();
     }
 
     function abrirModalNovoLancamento(itemEdicao) {
@@ -10961,7 +11432,7 @@
         + '    </div>'
         + '    <div class="fin-campo">'
         + '      <label for="finValor">Valor (R$) *</label>'
-        + '      <input type="text" id="finValor" class="fin-input-valor" placeholder="R$ 0,00" inputmode="numeric" required autocomplete="off">'
+        + '      <input type="text" id="finValor" class="fin-input-valor" data-campo-valor-financeiro placeholder="R$ 0,00" inputmode="numeric" required autocomplete="off">'
         + '    </div>'
         + '    <div class="fin-linha-2">'
         + '      <div class="fin-campo">'
@@ -11074,6 +11545,8 @@
         document.getElementById('finIdTransacao').value = edicao.idTransacaoBancaria || '';
         document.getElementById('finEmenda').value = edicao.emenda || '';
       }
+
+      sincronizarVisibilidadeValoresFinanceiro();
 
       function fecharModal() {
         modal.remove();
@@ -11312,7 +11785,7 @@
         + '    <div style="background:#fdf2f2;border:1px solid #f8c8c8;border-radius:8px;padding:12px 14px;">'
         + '      <div><strong>Protocolo:</strong> ' + escapar(idLancamento) + '</div>'
         + '      <div style="margin-top:4px;"><strong>Descrição:</strong> ' + escapar(descricao) + '</div>'
-        + '      <div style="margin-top:4px;"><strong>Valor:</strong> ' + escapar(valorFormatado) + '</div>'
+        + '      <div style="margin-top:4px;"><strong>Valor:</strong> <span data-valor-financeiro data-valor-original="' + escapar(valorFormatado) + '">' + escapar(valorFormatado) + '</span></div>'
         + '    </div>'
         + '    <p style="font-size:12px;color:#b3261e;margin:10px 0 0;">Esta ação removerá a linha da planilha de prestação de contas do Google Drive e não poderá ser desfeita.</p>'
         + '  </div>'
@@ -11325,6 +11798,7 @@
 
       modal.innerHTML = html;
       document.body.appendChild(modal);
+      sincronizarVisibilidadeValoresFinanceiro();
 
       function fechar() {
         modal.remove();

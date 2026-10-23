@@ -54,6 +54,11 @@ const CONFIG = {
   solicitacoes: {
     pastaRaizId: '10hhnvDF_J7C0LE5JU9BrPST9D8Rf9qk1',
 
+    // Pasta My Drive dedicada e conta proprietaria da pre-carga. Permanecem
+    // vazias ate o provisionamento manual; sem ambas nenhum snapshot e publicado.
+    snapshotPastaId: '',
+    snapshotOwnerEmail: '',
+
     // Teto de arquivos abertos por consulta. A listagem le todos os nomes,
     // mas so abre os mais recentes, para a tela nao estourar o tempo do
     // Apps Script quando a temporada acumular centenas de envios.
@@ -124,6 +129,9 @@ const CONFIG = {
     planilha: 'AEUV - Financeiro',
     aba: 'Movimentacoes',
     pastaComprovantes: 'Comprovantes - Financeiro',
+    pastaRelatorios: 'Relatorios Financeiros',
+    chavePastaRelatorios: 'FINANCEIRO_RELATORIOS_PASTA_ID',
+    maxRelatorios: 20,
     chavePlanilha: 'FINANCEIRO_PLANILHA_ID',
     chavePasta: 'FINANCEIRO_PASTA_ID',
     maxArquivoBytes: 8 * 1024 * 1024
@@ -7810,8 +7818,989 @@ const SOLICITACOES_ACOES = ['Inclusao', 'Remocao', 'Portabilidade'];
  * @return {{registros: Array<Object>, situacoes: Array<Object>, total: number,
  *           limite: number, pastaUrl: string}}
  */
+const SOLICITACOES_PROCESSADAS_ESTADO = 'SOLICITACOES_PROCESSADAS_SNAPSHOT_V1';
+const SOLICITACOES_SNAPSHOT_LEASE_MS = 10 * 60 * 1000;
+const SOLICITACOES_SNAPSHOT_STALE_MS = 30 * 60 * 1000;
+const SOLICITACOES_SNAPSHOT_VALIDADE_MS = 24 * 60 * 60 * 1000;
+const SOLICITACOES_TXT_MAX_BYTES = 256 * 1024;
+const SOLICITACOES_SNAPSHOT_MAX_BYTES = 8 * 1024 * 1024;
+const SOLICITACOES_MAX_REGISTROS = 200;
+const SOLICITACOES_MAX_PESSOAS = 30;
+const SOLICITACOES_ERRO_CONSULTA = 'Não foi possível consultar as solicitações atuais. Tente novamente; se o problema continuar, contate a administração.';
+const SOLICITACOES_DADOS_CAMPOS = [
+  'situacao', 'protocolo', 'dataHora', 'ordem', 'competicao', 'equipe', 'responsavel',
+  'arquivoUrl', 'resultadoTxtUrl', 'resultadoPdfUrl', 'pessoas', 'icone', 'telefone',
+  'comprovanteUrl', 'arquivoNome', 'quantidade', 'resumo'
+];
+const SOLICITACOES_PESSOA_CAMPOS = [
+  'acao', 'tipo', 'nome', 'nascimento', 'cpf', 'competicaoAnterior'
+];
+const SOLICITACOES_FINGERPRINT_CAMPOS = [
+  'arquivoNome', 'arquivoId', 'parentId', 'modifiedTime', 'size', 'version', 'md5Checksum'
+];
+let bancoAtletasLendoSolicitacoes_ = false;
+
+function erroSolicitacoes_(codigo) {
+  const erro = new Error(codigo);
+  erro.codigo = codigo;
+  return erro;
+}
+
+function criarMetricasSolicitacoes_() {
+  return CADASTRO_METRICAS_ATIVAS && typeof Drive !== 'undefined' && Drive.Files
+    && typeof Drive.Files.get === 'function' && typeof Drive.Files.list === 'function' ? {
+    fases: {}, inventariados: 0, selecionados: 0, ativosLidos: 0, hits: 0, misses: 0, bytes: 0,
+    inventarioConcluido: false
+  } : null;
+}
+
+function medirFaseSolicitacoes_(metricas, fase, acao) {
+  if (!metricas) return acao();
+  const inicio = Date.now();
+  try { return acao(); }
+  finally { metricas.fases[fase] = (metricas.fases[fase] || 0) + Date.now() - inicio; }
+}
+
+function registrarMetricasSolicitacoes_(metricas, resultado) {
+  if (!metricas) return;
+  Object.keys(metricas.fases).forEach(function (fase) {
+    console.log(JSON.stringify({
+      metrica: 'solicitacoes', fase: fase, duracaoMs: metricas.fases[fase],
+      inventariados: metricas.inventariados, selecionados: metricas.selecionados,
+      ativosLidos: metricas.ativosLidos, hits: metricas.hits, misses: metricas.misses,
+      bytes: metricas.bytes, resultado: resultado
+    }));
+  });
+  console.log(JSON.stringify({
+    metrica: 'solicitacoes', fase: 'total',
+    duracaoMs: Object.keys(metricas.fases).reduce(function (total, fase) {
+      return total + metricas.fases[fase];
+    }, 0), inventariados: metricas.inventariados, selecionados: metricas.selecionados,
+    ativosLidos: metricas.ativosLidos, hits: metricas.hits, misses: metricas.misses,
+    bytes: metricas.bytes, resultado: resultado
+  }));
+}
+
+function exigirLeituraSolicitacoes_() {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !sessao.usuario || !moduloLiberado_('solicitacoes', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar as solicitacoes de inscrição.');
+  }
+  return sessao;
+}
+
+// UTF-8 real, inclusive pares substitutos. Os limites abaixo sao medidos em
+// bytes, nao em unidades UTF-16 do JavaScript.
+function bytesUtf8Solicitacoes_(texto) {
+  let bytes = 0;
+  texto = String(texto == null ? '' : texto);
+  for (let i = 0; i < texto.length; i++) {
+    const codigo = texto.charCodeAt(i);
+    if (codigo < 0x80) bytes++;
+    else if (codigo < 0x800) bytes += 2;
+    else if (codigo >= 0xD800 && codigo <= 0xDBFF && i + 1 < texto.length
+        && texto.charCodeAt(i + 1) >= 0xDC00 && texto.charCodeAt(i + 1) <= 0xDFFF) {
+      bytes += 4;
+      i++;
+    } else bytes += 3;
+  }
+  return bytes;
+}
+
+function objetoSolicitacoes_(valor) {
+  return !!valor && typeof valor === 'object' && !Array.isArray(valor);
+}
+
+function chavesExatasSolicitacoes_(valor, campos) {
+  if (!objetoSolicitacoes_(valor)) return false;
+  const chaves = Object.keys(valor).sort();
+  const esperadas = campos.slice().sort();
+  return chaves.length === esperadas.length && chaves.every(function (chave, indice) {
+    return chave === esperadas[indice];
+  });
+}
+
+function stringLimitadaSolicitacoes_(valor, maximo, permiteVazia) {
+  return typeof valor === 'string' && (permiteVazia || !!valor)
+    && bytesUtf8Solicitacoes_(valor) <= maximo;
+}
+
+function dataIsoSolicitacoes_(valor) {
+  return typeof valor === 'string' && Number.isFinite(Date.parse(valor))
+    && new Date(valor).toISOString() === valor;
+}
+
+function numeroDriveSolicitacoes_(valor, maximo) {
+  if (typeof valor !== 'string' && typeof valor !== 'number') return null;
+  const texto = String(valor);
+  if (!/^\d+$/.test(texto)) return null;
+  const numero = Number(texto);
+  return Number.isSafeInteger(numero) && numero >= 0 && (maximo === undefined || numero <= maximo)
+    ? numero : null;
+}
+
+function escaparConsultaDriveSolicitacoes_(valor) {
+  return String(valor).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function contextoDriveSolicitacoes_() {
+  if (typeof Drive === 'undefined' || !Drive.Files || typeof Drive.Files.get !== 'function'
+      || typeof Drive.Files.list !== 'function') {
+    throw erroSolicitacoes_('DRIVE_V3_INDISPONIVEL');
+  }
+  const id = CONFIG.solicitacoes.pastaRaizId;
+  const meta = Drive.Files.get(id, {
+    fields: 'id,mimeType,trashed,driveId', supportsAllDrives: true
+  });
+  if (!objetoSolicitacoes_(meta) || meta.id !== id
+      || meta.mimeType !== 'application/vnd.google-apps.folder' || meta.trashed !== false
+      || (meta.driveId !== undefined && typeof meta.driveId !== 'string')) {
+    throw erroSolicitacoes_('PASTA_RAIZ_INVALIDA');
+  }
+  return {
+    raizId: id,
+    driveId: meta.driveId || '',
+    pastaUrl: 'https://drive.google.com/drive/folders/' + encodeURIComponent(id)
+  };
+}
+
+function listarFilhosDriveSolicitacoes_(parentId, contexto) {
+  const arquivos = [];
+  const tokens = {};
+  let token;
+  let paginas = 0;
+  do {
+    paginas++;
+    if (paginas > 100) throw erroSolicitacoes_('PAGINACAO_EXCEDIDA');
+    const opcoes = {
+      q: "'" + escaparConsultaDriveSolicitacoes_(parentId) + "' in parents and trashed = false",
+      spaces: 'drive', pageSize: 1000,
+      fields: 'nextPageToken,incompleteSearch,files(id,name,mimeType,modifiedTime,size,webViewLink,parents,trashed,version,md5Checksum)',
+      supportsAllDrives: true
+    };
+    if (contexto.driveId) {
+      opcoes.corpora = 'drive';
+      opcoes.driveId = contexto.driveId;
+      opcoes.includeItemsFromAllDrives = true;
+    } else {
+      opcoes.corpora = 'user';
+    }
+    if (token) opcoes.pageToken = token;
+    const pagina = Drive.Files.list(opcoes);
+    if (!objetoSolicitacoes_(pagina)
+        || (pagina.incompleteSearch !== undefined && pagina.incompleteSearch !== false)
+        || (pagina.files !== undefined && !Array.isArray(pagina.files))) {
+      throw erroSolicitacoes_('RESPOSTA_DRIVE_INVALIDA');
+    }
+    (pagina.files || []).forEach(function (meta) {
+      if (!objetoSolicitacoes_(meta) || !stringLimitadaSolicitacoes_(meta.id, 256, false)
+          || !stringLimitadaSolicitacoes_(meta.name, 512, false)
+          || typeof meta.mimeType !== 'string' || meta.trashed !== false
+          || !Array.isArray(meta.parents) || meta.parents.length !== 1 || meta.parents[0] !== parentId) {
+        throw erroSolicitacoes_('METADADO_DRIVE_INVALIDO');
+      }
+      arquivos.push(meta);
+    });
+    if (Object.prototype.hasOwnProperty.call(pagina, 'nextPageToken')) {
+      if (typeof pagina.nextPageToken !== 'string' || !pagina.nextPageToken || tokens[pagina.nextPageToken]) {
+        throw erroSolicitacoes_('TOKEN_DRIVE_INVALIDO');
+      }
+      token = pagina.nextPageToken;
+      tokens[token] = true;
+    } else {
+      token = '';
+    }
+  } while (token);
+  return arquivos;
+}
+
+function normalizarDescritorSolicitacao_(meta, parentId, situacao, icone, prioridade) {
+  const ordem = carimboDoNome_(meta.name);
+  if (!Number.isSafeInteger(ordem) || ordem <= 0) return null;
+  if (!dataIsoSolicitacoes_(meta.modifiedTime)) throw erroSolicitacoes_('METADADO_DATA_INVALIDO');
+  const tamanho = numeroDriveSolicitacoes_(meta.size, SOLICITACOES_TXT_MAX_BYTES);
+  const versao = meta.version == null ? '' : String(meta.version);
+  const md5 = meta.md5Checksum == null ? '' : String(meta.md5Checksum).toLowerCase();
+  if (tamanho === null || !/^\d+$/.test(versao) || !stringLimitadaSolicitacoes_(versao, 32, false)
+      || (md5 && !/^[a-f0-9]{32}$/.test(md5))) {
+    throw erroSolicitacoes_('METADADO_FINGERPRINT_INVALIDO');
+  }
+  const url = meta.webViewLink == null || meta.webViewLink === ''
+    ? 'https://drive.google.com/open?id=' + encodeURIComponent(meta.id) : meta.webViewLink;
+  if (!stringLimitadaSolicitacoes_(url, 2048, false)) throw erroSolicitacoes_('URL_DRIVE_INVALIDA');
+  return {
+    id: meta.id,
+    nome: meta.name,
+    parentId: parentId,
+    modifiedTime: meta.modifiedTime,
+    size: tamanho,
+    version: versao,
+    md5Checksum: md5,
+    arquivoUrl: url,
+    situacao: situacao,
+    icone: icone,
+    ordem: ordem,
+    prioridade: prioridade
+  };
+}
+
+function compararDescritoresSolicitacoes_(a, b) {
+  return b.ordem - a.ordem || a.prioridade - b.prioridade
+    || Date.parse(b.modifiedTime) - Date.parse(a.modifiedTime) || String(a.id).localeCompare(String(b.id));
+}
+
+function consolidarDescritoresSolicitacoes_(descritores) {
+  const mapa = {};
+  descritores.forEach(function (descritor) {
+    const atual = mapa[descritor.nome];
+    if (!atual || descritor.prioridade < atual.prioridade
+        || (descritor.prioridade === atual.prioridade
+          && (Date.parse(descritor.modifiedTime) > Date.parse(atual.modifiedTime)
+            || (descritor.modifiedTime === atual.modifiedTime
+              && String(descritor.id).localeCompare(String(atual.id)) < 0)))) {
+      mapa[descritor.nome] = descritor;
+    }
+  });
+  return Object.keys(mapa).map(function (nome) { return mapa[nome]; }).sort(compararDescritoresSolicitacoes_);
+}
+
+function resolverPastaReservadaSolicitacoes_(raiz, nome) {
+  const pastas = raiz.filter(function (meta) {
+    return meta.name === nome && meta.mimeType === 'application/vnd.google-apps.folder';
+  });
+  if (pastas.length > 1) throw erroSolicitacoes_('PASTA_RESERVADA_DUPLICADA');
+  return pastas.length ? pastas[0] : null;
+}
+
+function inventariarSolicitacoes_() {
+  const contexto = contextoDriveSolicitacoes_();
+  const raiz = listarFilhosDriveSolicitacoes_(contexto.raizId, contexto);
+  const configuracoes = [
+    { pasta: 'Entrada', situacao: 'Aguardando', icone: '🕒', prioridade: 0 },
+    { pasta: '', situacao: 'Aguardando', icone: '🕒', prioridade: 1 },
+    { pasta: 'Falhas', situacao: 'Falha', icone: '🔴', prioridade: 2 },
+    { pasta: 'Processados', situacao: 'Processada', icone: '🟢', prioridade: 3 }
+  ];
+  const pastas = {};
+  ['Entrada', 'Falhas', 'Processados', 'Resultados'].forEach(function (nome) {
+    pastas[nome] = resolverPastaReservadaSolicitacoes_(raiz, nome);
+  });
+  const descritores = [];
+  configuracoes.forEach(function (origem) {
+    const pasta = origem.pasta ? pastas[origem.pasta] : null;
+    const parentId = origem.pasta ? (pasta && pasta.id) : contexto.raizId;
+    if (!parentId) return;
+    const arquivos = origem.pasta ? listarFilhosDriveSolicitacoes_(parentId, contexto) : raiz;
+    arquivos.forEach(function (meta) {
+      if (meta.mimeType === 'application/vnd.google-apps.folder') return;
+      const descritor = normalizarDescritorSolicitacao_(
+        meta, parentId, origem.situacao, origem.icone, origem.prioridade);
+      if (descritor) descritores.push(descritor);
+    });
+  });
+  const resultados = pastas.Resultados
+    ? listarFilhosDriveSolicitacoes_(pastas.Resultados.id, contexto) : [];
+  const consolidados = consolidarDescritoresSolicitacoes_(descritores);
+  return {
+    contexto: contexto,
+    descritores: consolidados,
+    selecionados: consolidados.slice(0, Math.min(CONFIG.solicitacoes.maxLeitura, SOLICITACOES_MAX_REGISTROS)),
+    total: consolidados.length,
+    resultados: resultados
+  };
+}
+
+function indexarResultadosSolicitacoes_(arquivos, descritores) {
+  const bases = {};
+  descritores.forEach(function (descritor) { bases[nomeBase_(descritor.nome)] = true; });
+  const indice = {};
+  arquivos.forEach(function (meta) {
+    if (meta.mimeType === 'application/vnd.google-apps.folder') return;
+    const achado = String(meta.name).match(/^(.+)-resultado-\d{8}-\d{6}\.(txt|pdf)$/i);
+    if (!achado || !bases[achado[1]]) return;
+    const url = meta.webViewLink == null || meta.webViewLink === ''
+      ? 'https://drive.google.com/open?id=' + encodeURIComponent(meta.id) : meta.webViewLink;
+    if (!stringLimitadaSolicitacoes_(url, 2048, false)) throw erroSolicitacoes_('URL_RESULTADO_INVALIDA');
+    const campo = achado[2].toLowerCase() === 'pdf' ? 'pdfUrl' : 'txtUrl';
+    if (!indice[achado[1]]) indice[achado[1]] = { txtUrl: '', pdfUrl: '' };
+    if (!indice[achado[1]][campo] || meta.name > indice[achado[1]][campo + 'Nome']) {
+      indice[achado[1]][campo] = url;
+      indice[achado[1]][campo + 'Nome'] = meta.name;
+    }
+  });
+  return indice;
+}
+
+function fingerprintSolicitacao_(descritor) {
+  return {
+    arquivoNome: descritor.nome,
+    arquivoId: descritor.id,
+    parentId: descritor.parentId,
+    modifiedTime: descritor.modifiedTime,
+    size: descritor.size,
+    version: descritor.version,
+    md5Checksum: descritor.md5Checksum
+  };
+}
+
+function validarFingerprintSolicitacao_(fingerprint) {
+  if (!chavesExatasSolicitacoes_(fingerprint, SOLICITACOES_FINGERPRINT_CAMPOS)
+      || !stringLimitadaSolicitacoes_(fingerprint.arquivoNome, 512, false)
+      || !stringLimitadaSolicitacoes_(fingerprint.arquivoId, 256, false)
+      || !stringLimitadaSolicitacoes_(fingerprint.parentId, 256, false)
+      || !dataIsoSolicitacoes_(fingerprint.modifiedTime)
+      || !Number.isSafeInteger(fingerprint.size) || fingerprint.size < 0
+      || fingerprint.size > SOLICITACOES_TXT_MAX_BYTES
+      || !stringLimitadaSolicitacoes_(fingerprint.version, 32, false) || !/^\d+$/.test(fingerprint.version)
+      || typeof fingerprint.md5Checksum !== 'string' || bytesUtf8Solicitacoes_(fingerprint.md5Checksum) > 32
+      || (fingerprint.md5Checksum && !/^[a-f0-9]{32}$/.test(fingerprint.md5Checksum))) {
+    throw erroSolicitacoes_('FINGERPRINT_INVALIDO');
+  }
+  return fingerprint;
+}
+
+function fingerprintsSolicitacaoIguais_(a, b) {
+  try {
+    validarFingerprintSolicitacao_(a);
+    validarFingerprintSolicitacao_(b);
+  } catch (e) {
+    return false;
+  }
+  if (a.arquivoNome !== b.arquivoNome || a.arquivoId !== b.arquivoId
+      || a.parentId !== b.parentId || a.modifiedTime !== b.modifiedTime
+      || a.size !== b.size || a.version !== b.version) return false;
+  if (a.md5Checksum || b.md5Checksum) {
+    return !!a.md5Checksum && !!b.md5Checksum && a.md5Checksum === b.md5Checksum;
+  }
+  return true;
+}
+
+function lerDescritorSolicitacaoConfirmado_(descritor) {
+  const meta = Drive.Files.get(descritor.id, {
+    fields: 'id,name,modifiedTime,size,trashed,parents,version,md5Checksum', supportsAllDrives: true
+  });
+  const tamanho = meta && numeroDriveSolicitacoes_(meta.size, SOLICITACOES_TXT_MAX_BYTES);
+  const versao = meta && meta.version != null ? String(meta.version) : '';
+  const md5 = meta && meta.md5Checksum != null ? String(meta.md5Checksum).toLowerCase() : '';
+  const confirmado = meta && {
+    arquivoNome: meta.name,
+    arquivoId: meta.id,
+    parentId: Array.isArray(meta.parents) && meta.parents.length === 1 ? meta.parents[0] : '',
+    modifiedTime: meta.modifiedTime,
+    size: tamanho,
+    version: versao,
+    md5Checksum: md5
+  };
+  if (!objetoSolicitacoes_(meta) || meta.trashed !== false || tamanho === null
+      || !fingerprintsSolicitacaoIguais_(fingerprintSolicitacao_(descritor), confirmado)) {
+    throw erroSolicitacoes_('FONTE_ALTERADA_DURANTE_LEITURA');
+  }
+  const texto = DriveApp.getFileById(descritor.id).getBlob().getDataAsString('UTF-8');
+  if (bytesUtf8Solicitacoes_(texto) > SOLICITACOES_TXT_MAX_BYTES) {
+    throw erroSolicitacoes_('TXT_ACIMA_DO_LIMITE');
+  }
+  return texto;
+}
+
+function projetarDadosPublicosSolicitacao_(dados) {
+  const pessoas = Array.isArray(dados && dados.pessoas) ? dados.pessoas.map(function (pessoa) {
+    return {
+      acao: pessoa && pessoa.acao,
+      tipo: pessoa && pessoa.tipo,
+      nome: pessoa && pessoa.nome,
+      nascimento: pessoa && pessoa.nascimento,
+      cpf: pessoa && pessoa.cpf,
+      competicaoAnterior: pessoa && pessoa.competicaoAnterior
+    };
+  }) : dados && dados.pessoas;
+  const resumo = dados && dados.resumo;
+  const projetado = {
+    situacao: dados && dados.situacao,
+    protocolo: dados && dados.protocolo,
+    dataHora: dados && dados.dataHora,
+    ordem: dados && dados.ordem,
+    competicao: dados && dados.competicao,
+    equipe: dados && dados.equipe,
+    responsavel: dados && dados.responsavel,
+    arquivoUrl: dados && dados.arquivoUrl,
+    resultadoTxtUrl: dados && dados.resultadoTxtUrl,
+    resultadoPdfUrl: dados && dados.resultadoPdfUrl,
+    pessoas: pessoas,
+    icone: dados && dados.icone,
+    telefone: dados && dados.telefone,
+    comprovanteUrl: dados && dados.comprovanteUrl,
+    arquivoNome: dados && dados.arquivoNome,
+    quantidade: dados && dados.quantidade,
+    resumo: resumo && {
+      Inclusao: resumo.Inclusao,
+      Remocao: resumo.Remocao,
+      Portabilidade: resumo.Portabilidade
+    }
+  };
+  return validarDadosPublicosSolicitacao_(projetado);
+}
+
+function validarDadosPublicosSolicitacao_(dados) {
+  const limites = {
+    situacao: 32, protocolo: 256, dataHora: 64, competicao: 256, equipe: 256,
+    responsavel: 256, arquivoUrl: 2048, resultadoTxtUrl: 2048, resultadoPdfUrl: 2048,
+    icone: 16, telefone: 128, comprovanteUrl: 2048, arquivoNome: 512
+  };
+  if (!chavesExatasSolicitacoes_(dados, SOLICITACOES_DADOS_CAMPOS)
+      || !Number.isSafeInteger(dados.ordem) || dados.ordem < 0
+      || !Number.isSafeInteger(dados.quantidade) || dados.quantidade < 0
+      || !Array.isArray(dados.pessoas) || dados.pessoas.length > SOLICITACOES_MAX_PESSOAS
+      || dados.quantidade !== dados.pessoas.length
+      || !chavesExatasSolicitacoes_(dados.resumo, SOLICITACOES_ACOES)) {
+    throw erroSolicitacoes_('DADOS_PUBLICOS_INVALIDOS');
+  }
+  Object.keys(limites).forEach(function (campo) {
+    if (!stringLimitadaSolicitacoes_(dados[campo], limites[campo], true)) {
+      throw erroSolicitacoes_('CAMPO_PUBLICO_INVALIDO');
+    }
+  });
+  let soma = 0;
+  SOLICITACOES_ACOES.forEach(function (acao) {
+    if (!Number.isSafeInteger(dados.resumo[acao]) || dados.resumo[acao] < 0) {
+      throw erroSolicitacoes_('RESUMO_INVALIDO');
+    }
+    soma += dados.resumo[acao];
+  });
+  if (soma !== dados.quantidade) throw erroSolicitacoes_('RESUMO_INCONSISTENTE');
+  dados.pessoas.forEach(function (pessoa) {
+    if (!chavesExatasSolicitacoes_(pessoa, SOLICITACOES_PESSOA_CAMPOS)) {
+      throw erroSolicitacoes_('PESSOA_INVALIDA');
+    }
+    const limitesPessoa = { acao: 32, tipo: 64, nome: 256, nascimento: 64, cpf: 32, competicaoAnterior: 256 };
+    Object.keys(limitesPessoa).forEach(function (campo) {
+      if (!stringLimitadaSolicitacoes_(pessoa[campo], limitesPessoa[campo], true)) {
+        throw erroSolicitacoes_('CAMPO_PESSOA_INVALIDO');
+      }
+    });
+  });
+  return dados;
+}
+
+function interpretarDescritorSolicitacao_(descritor, resultado, metricas) {
+  const achado = {
+    situacao: descritor.situacao,
+    icone: descritor.icone,
+    ordem: descritor.ordem,
+    nome: descritor.nome,
+    arquivoUrl: descritor.arquivoUrl,
+    resultado: resultado || null
+  };
+  const texto = medirFaseSolicitacoes_(metricas, 'drive_ler', function () {
+    return lerDescritorSolicitacaoConfirmado_(descritor);
+  });
+  if (metricas) metricas.bytes += bytesUtf8Solicitacoes_(texto);
+  return medirFaseSolicitacoes_(metricas, 'interpretar', function () {
+    return projetarDadosPublicosSolicitacao_(interpretarSolicitacao_(texto, achado, false, null));
+  });
+}
+
+function lerEstadoSnapshotSolicitacoes_() {
+  const texto = PropertiesService.getScriptProperties().getProperty(SOLICITACOES_PROCESSADAS_ESTADO);
+  if (!texto) return {};
+  let estado;
+  try { estado = JSON.parse(texto); }
+  catch (e) { throw erroSolicitacoes_('ESTADO_SNAPSHOT_INVALIDO'); }
+  if (!objetoSolicitacoes_(estado)) throw erroSolicitacoes_('ESTADO_SNAPSHOT_INVALIDO');
+  const permitidas = ['current', 'previous', 'lease', 'lastAttemptAt', 'lastError'];
+  if (Object.keys(estado).some(function (chave) { return permitidas.indexOf(chave) === -1; })) {
+    throw erroSolicitacoes_('ESTADO_SNAPSHOT_INVALIDO');
+  }
+  // Slots sao validados isoladamente ao serem lidos. Assim um current
+  // corrompido nao impede a tentativa integral do previous.
+  if (estado.lease !== undefined && (!chavesExatasSolicitacoes_(estado.lease, ['token', 'expiresAt'])
+      || !stringLimitadaSolicitacoes_(estado.lease.token, 128, false)
+      || !Number.isSafeInteger(estado.lease.expiresAt) || estado.lease.expiresAt < 0)) {
+    throw erroSolicitacoes_('LEASE_SNAPSHOT_INVALIDO');
+  }
+  if (estado.lastAttemptAt !== undefined && !dataIsoSolicitacoes_(estado.lastAttemptAt)) {
+    throw erroSolicitacoes_('TENTATIVA_SNAPSHOT_INVALIDA');
+  }
+  if (estado.lastError !== undefined && !stringLimitadaSolicitacoes_(estado.lastError, 512, true)) {
+    throw erroSolicitacoes_('ERRO_SNAPSHOT_INVALIDO');
+  }
+  return estado;
+}
+
+function gravarEstadoSnapshotSolicitacoes_(estado) {
+  PropertiesService.getScriptProperties().setProperty(
+    SOLICITACOES_PROCESSADAS_ESTADO, JSON.stringify(estado));
+}
+
+function comLockSnapshotSolicitacoes_(acao) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try { return acao(); }
+  finally { lock.releaseLock(); }
+}
+
+function exigirDonoSnapshotSolicitacoes_(sessao) {
+  const configurado = normalizarEmail_(CONFIG.solicitacoes.snapshotOwnerEmail);
+  const efetivo = normalizarEmail_(Session.getEffectiveUser().getEmail());
+  if (!configurado || !efetivo || efetivo !== configurado || !sessao || sessao.email !== efetivo
+      || !sessao.usuario || sessao.usuario.perfil !== 'admin') {
+    throw new Error('Configure a pasta dedicada e a conta proprietária da pré-carga de solicitações; somente esse administrador pode publicá-la.');
+  }
+  return efetivo;
+}
+
+function validarPastaSnapshotSolicitacoes_(paraPublicar) {
+  const id = CONFIG.solicitacoes.snapshotPastaId;
+  if (!stringLimitadaSolicitacoes_(id, 256, false)) throw erroSolicitacoes_('PASTA_SNAPSHOT_NAO_CONFIGURADA');
+  if (paraPublicar) exigirDonoSnapshotSolicitacoes_(exigirAdministracao_());
+  const meta = Drive.Files.get(id, {
+    fields: 'id,mimeType,trashed,driveId', supportsAllDrives: true
+  });
+  if (!objetoSolicitacoes_(meta) || meta.id !== id
+      || meta.mimeType !== 'application/vnd.google-apps.folder' || meta.trashed !== false
+      || (meta.driveId !== undefined && meta.driveId !== '')) {
+    throw erroSolicitacoes_('PASTA_SNAPSHOT_INVALIDA');
+  }
+  return { id: id, pasta: DriveApp.getFolderById(id) };
+}
+
+function validarSnapshotSolicitacoes_(dados) {
+  if (!chavesExatasSolicitacoes_(dados, [
+    'schema', 'tipo', 'generatedAt', 'expiresAt', 'totalProcessadas', 'limite', 'pastaUrl', 'registros'
+  ]) || dados.schema !== 1 || dados.tipo !== 'solicitacoes-processadas'
+      || !dataIsoSolicitacoes_(dados.generatedAt) || !dataIsoSolicitacoes_(dados.expiresAt)
+      || Date.parse(dados.expiresAt) !== Date.parse(dados.generatedAt) + SOLICITACOES_SNAPSHOT_VALIDADE_MS
+      || !Number.isSafeInteger(dados.totalProcessadas) || dados.totalProcessadas < 0
+      || dados.limite !== SOLICITACOES_MAX_REGISTROS
+      || !stringLimitadaSolicitacoes_(dados.pastaUrl, 2048, true)
+      || !Array.isArray(dados.registros) || dados.registros.length > SOLICITACOES_MAX_REGISTROS
+      || dados.totalProcessadas < dados.registros.length) {
+    throw erroSolicitacoes_('SNAPSHOT_INVALIDO');
+  }
+  const fingerprints = {};
+  const nomes = {};
+  dados.registros.forEach(function (registro) {
+    if (!chavesExatasSolicitacoes_(registro, ['fingerprint', 'dados'])) {
+      throw erroSolicitacoes_('REGISTRO_SNAPSHOT_INVALIDO');
+    }
+    validarFingerprintSolicitacao_(registro.fingerprint);
+    validarDadosPublicosSolicitacao_(registro.dados);
+    if (registro.dados.situacao !== 'Processada'
+        || registro.dados.arquivoNome !== registro.fingerprint.arquivoNome) {
+      throw erroSolicitacoes_('REGISTRO_SNAPSHOT_INCONSISTENTE');
+    }
+    const chave = JSON.stringify(registro.fingerprint);
+    if (fingerprints[chave] || nomes[registro.fingerprint.arquivoNome]) {
+      throw erroSolicitacoes_('REGISTRO_SNAPSHOT_DUPLICADO');
+    }
+    fingerprints[chave] = true;
+    nomes[registro.fingerprint.arquivoNome] = true;
+  });
+  if (bytesUtf8Solicitacoes_(JSON.stringify(dados)) > SOLICITACOES_SNAPSHOT_MAX_BYTES) {
+    throw erroSolicitacoes_('SNAPSHOT_ACIMA_DO_LIMITE');
+  }
+  return dados;
+}
+
+function lerVersaoSnapshotSolicitacoes_(slot, modo, pastaValidada) {
+  if (!chavesExatasSolicitacoes_(slot, ['id', 'generatedAt', 'expiresAt'])
+      || !stringLimitadaSolicitacoes_(slot.id, 256, false)
+      || !dataIsoSolicitacoes_(slot.generatedAt) || !dataIsoSolicitacoes_(slot.expiresAt)
+      || Date.parse(slot.expiresAt) !== Date.parse(slot.generatedAt) + SOLICITACOES_SNAPSHOT_VALIDADE_MS
+      || (modo === 'provisorio' && Date.now() >= Date.parse(slot.expiresAt))) {
+    throw erroSolicitacoes_('SLOT_SNAPSHOT_INVALIDO');
+  }
+  const pasta = pastaValidada || validarPastaSnapshotSolicitacoes_(false);
+  const meta = Drive.Files.get(slot.id, {
+    fields: 'id,name,mimeType,size,trashed,parents', supportsAllDrives: true
+  });
+  const tamanho = meta && numeroDriveSolicitacoes_(meta.size, SOLICITACOES_SNAPSHOT_MAX_BYTES);
+  if (!objetoSolicitacoes_(meta) || meta.id !== slot.id || meta.trashed !== false
+      || meta.mimeType !== 'application/json' || tamanho === null
+      || !Array.isArray(meta.parents) || meta.parents.length !== 1 || meta.parents[0] !== pasta.id) {
+    throw erroSolicitacoes_('ARQUIVO_SNAPSHOT_INVALIDO');
+  }
+  const texto = DriveApp.getFileById(slot.id).getBlob().getDataAsString('UTF-8');
+  if (bytesUtf8Solicitacoes_(texto) > SOLICITACOES_SNAPSHOT_MAX_BYTES) {
+    throw erroSolicitacoes_('SNAPSHOT_ACIMA_DO_LIMITE');
+  }
+  let dados;
+  try { dados = JSON.parse(texto); }
+  catch (e) { throw erroSolicitacoes_('JSON_SNAPSHOT_INVALIDO'); }
+  validarSnapshotSolicitacoes_(dados);
+  if (dados.generatedAt !== slot.generatedAt || dados.expiresAt !== slot.expiresAt) {
+    throw erroSolicitacoes_('SLOT_DIVERGENTE');
+  }
+  return dados;
+}
+
+function statusPublicoSnapshotSolicitacoes_(estado, snapshot) {
+  const generatedAt = snapshot && snapshot.generatedAt || '';
+  const expiresAt = snapshot && snapshot.expiresAt || '';
+  return {
+    generatedAt: generatedAt,
+    expiresAt: expiresAt,
+    stale: !!generatedAt && Date.now() >= Date.parse(generatedAt) + SOLICITACOES_SNAPSHOT_STALE_MS,
+    emRecalculo: !!(estado && estado.lease && estado.lease.expiresAt > Date.now())
+  };
+}
+
+function statusAdminSnapshotSolicitacoes_(estado, agenda) {
+  let snapshot = null;
+  let pasta;
+  try { pasta = validarPastaSnapshotSolicitacoes_(false); }
+  catch (e) { pasta = null; }
+  if (pasta) {
+    ['current', 'previous'].some(function (campo) {
+      if (!estado[campo]) return false;
+      try {
+        snapshot = lerVersaoSnapshotSolicitacoes_(estado[campo], 'hit', pasta);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    });
+  }
+  const publico = statusPublicoSnapshotSolicitacoes_(estado, snapshot);
+  return {
+    disponivel: !!snapshot,
+    generatedAt: publico.generatedAt,
+    expiresAt: publico.expiresAt,
+    stale: publico.stale,
+    emRecalculo: publico.emRecalculo,
+    ultimaTentativaEm: estado.lastAttemptAt || '',
+    ultimoErro: estado.lease && estado.lease.expiresAt <= Date.now()
+      ? 'O último recálculo não terminou dentro do prazo. A cópia anterior foi preservada.'
+      : (estado.lastError || ''),
+    agendado: !!agenda.triggerId,
+    responsavel: agenda.owner || '',
+    agendaCompartilhada: true,
+    configurado: !!(CONFIG.solicitacoes.snapshotPastaId && CONFIG.solicitacoes.snapshotOwnerEmail)
+  };
+}
+
+function lerSnapshotsSolicitacoesParaHit_(estado) {
+  const snapshots = [];
+  let pasta;
+  try { pasta = validarPastaSnapshotSolicitacoes_(false); }
+  catch (e) { return snapshots; }
+  ['current', 'previous'].forEach(function (campo) {
+    if (!estado[campo]) return;
+    try { snapshots.push(lerVersaoSnapshotSolicitacoes_(estado[campo], 'hit', pasta)); }
+    catch (e) { /* Versao invalida e um miss integral; a consulta viva continua. */ }
+  });
+  return snapshots;
+}
+
+function lerSnapshotSolicitacoesApresentavel_(estado) {
+  const pasta = validarPastaSnapshotSolicitacoes_(false);
+  for (const campo of ['current', 'previous']) {
+    if (!estado[campo]) continue;
+    try { return lerVersaoSnapshotSolicitacoes_(estado[campo], 'provisorio', pasta); }
+    catch (e) { /* Tenta o slot anterior completo. */ }
+  }
+  return null;
+}
+
+function respostaSolicitacoes_(dados, provisorio, estado, snapshotStatus) {
+  const registros = (dados.registros || []).map(projetarDadosPublicosSolicitacao_);
+  if (registros.length > SOLICITACOES_MAX_REGISTROS
+      || !Number.isSafeInteger(dados.total) || dados.total < registros.length
+      || !Number.isSafeInteger(dados.limite) || dados.limite !== SOLICITACOES_MAX_REGISTROS
+      || !stringLimitadaSolicitacoes_(dados.pastaUrl || '', 2048, true)) {
+    throw erroSolicitacoes_('RESPOSTA_SOLICITACOES_INVALIDA');
+  }
+  return {
+    registros: registros,
+    situacoes: SOLICITACOES_PASTAS.map(function (item) {
+      return { pasta: item.pasta, situacao: item.situacao, icone: item.icone };
+    }),
+    acoes: SOLICITACOES_ACOES.slice(),
+    total: dados.total,
+    limite: SOLICITACOES_MAX_REGISTROS,
+    pastaUrl: dados.pastaUrl || '',
+    provisorio: provisorio,
+    consultadoEm: new Date().toISOString(),
+    snapshotStatusPublico: snapshotStatus || statusPublicoSnapshotSolicitacoes_(estado || {}, null)
+  };
+}
+
+function construirSolicitacoesHibridas_(estado, metricas) {
+  const snapshots = medirFaseSolicitacoes_(metricas, 'snapshot', function () {
+    return lerSnapshotsSolicitacoesParaHit_(estado);
+  });
+  const inventario = medirFaseSolicitacoes_(metricas, 'inventario', inventariarSolicitacoes_);
+  if (metricas) {
+    metricas.inventarioConcluido = true;
+    metricas.inventariados = inventario.total;
+    metricas.selecionados = inventario.selecionados.length;
+  }
+  const resultados = medirFaseSolicitacoes_(metricas, 'resultados', function () {
+    return indexarResultadosSolicitacoes_(inventario.resultados, inventario.selecionados);
+  });
+  const candidatosPorNome = {};
+  snapshots.forEach(function (snapshot) {
+    snapshot.registros.forEach(function (registro) {
+      const nome = registro.fingerprint.arquivoNome;
+      if (!candidatosPorNome[nome]) candidatosPorNome[nome] = [];
+      candidatosPorNome[nome].push(registro);
+    });
+  });
+  const registros = inventario.selecionados.map(function (descritor) {
+    const resultado = resultados[nomeBase_(descritor.nome)] || null;
+    const fingerprint = fingerprintSolicitacao_(descritor);
+    const candidato = descritor.situacao === 'Processada'
+      ? (candidatosPorNome[descritor.nome] || []).find(function (registro) {
+        return fingerprintsSolicitacaoIguais_(fingerprint, registro.fingerprint);
+      }) : null;
+    if (candidato) {
+      if (metricas) metricas.hits++;
+      const dados = projetarDadosPublicosSolicitacao_(candidato.dados);
+      dados.situacao = descritor.situacao;
+      dados.icone = descritor.icone;
+      dados.ordem = descritor.ordem;
+      dados.arquivoNome = descritor.nome;
+      dados.arquivoUrl = descritor.arquivoUrl;
+      dados.resultadoTxtUrl = resultado ? resultado.txtUrl : '';
+      dados.resultadoPdfUrl = resultado ? resultado.pdfUrl : '';
+      return validarDadosPublicosSolicitacao_(dados);
+    }
+    if (metricas) {
+      metricas.misses++;
+      if (descritor.situacao !== 'Processada') metricas.ativosLidos++;
+    }
+    return interpretarDescritorSolicitacao_(descritor, resultado, metricas);
+  });
+  return medirFaseSolicitacoes_(metricas, 'consolidar', function () {
+    return respostaSolicitacoes_({
+      registros: registros,
+      total: inventario.total,
+      limite: SOLICITACOES_MAX_REGISTROS,
+      pastaUrl: inventario.contexto.pastaUrl
+    }, false, estado, statusPublicoSnapshotSolicitacoes_(estado, snapshots[0] || null));
+  });
+}
+
+/**
+ * Consulta autoritativa: inventaria sempre as fontes atuais e so reaproveita
+ * uma Processada cujo fingerprint vivo seja identico. Alteracoes externas nao
+ * marcam dirty: aparecem nesta resposta final e entram no proximo build.
+ */
 function listarSolicitacoes() {
-  return lerSolicitacoes_(false);
+  if (bancoAtletasLendoSolicitacoes_) {
+    const caminhoVivo = lerSolicitacoes_;
+    return caminhoVivo(false);
+  }
+  const metricas = criarMetricasSolicitacoes_();
+  medirFaseSolicitacoes_(metricas, 'autorizacao', exigirLeituraSolicitacoes_);
+  let estado;
+  try {
+    estado = medirFaseSolicitacoes_(metricas, 'snapshot', lerEstadoSnapshotSolicitacoes_);
+    const resposta = construirSolicitacoesHibridas_(estado, metricas);
+    registrarMetricasSolicitacoes_(metricas, 'sucesso');
+    return resposta;
+  } catch (erro) {
+    if (erro && erro.codigo === 'PASTA_RESERVADA_DUPLICADA') {
+      registrarMetricasSolicitacoes_(metricas, 'configuracao');
+      throw new Error('A configuração da pasta de solicitações possui pastas reservadas duplicadas. Contate a administração.');
+    }
+    try {
+      const legado = medirFaseSolicitacoes_(metricas, 'fallback', function () {
+        return lerSolicitacoes_(false);
+      });
+      if (metricas) {
+        metricas.inventariados = legado.total;
+        metricas.selecionados = legado.registros.length;
+      }
+      const resposta = respostaSolicitacoes_({
+        registros: legado.registros,
+        total: legado.total,
+        limite: SOLICITACOES_MAX_REGISTROS,
+        pastaUrl: legado.pastaUrl
+      }, false, estado || {}, statusPublicoSnapshotSolicitacoes_(estado || {}, null));
+      if (metricas && metricas.inventarioConcluido) registrarMetricasSolicitacoes_(metricas, 'fallback');
+      return resposta;
+    } catch (falhaLegada) {
+      if (metricas && metricas.inventarioConcluido) registrarMetricasSolicitacoes_(metricas, 'falha');
+      throw new Error(SOLICITACOES_ERRO_CONSULTA);
+    }
+  }
+}
+
+function listarSnapshotSolicitacoesProcessadas() {
+  const metricas = criarMetricasSolicitacoes_();
+  medirFaseSolicitacoes_(metricas, 'autorizacao', exigirLeituraSolicitacoes_);
+  const estado = medirFaseSolicitacoes_(metricas, 'snapshot', lerEstadoSnapshotSolicitacoes_);
+  let snapshot;
+  try {
+    snapshot = medirFaseSolicitacoes_(metricas, 'snapshot', function () {
+      return lerSnapshotSolicitacoesApresentavel_(estado);
+    });
+  } catch (e) {
+    snapshot = null;
+  }
+  if (!snapshot) {
+    registrarMetricasSolicitacoes_(metricas, 'miss');
+    throw new Error('A pré-carga das solicitações processadas está indisponível; os dados atuais continuam sendo consultados.');
+  }
+  if (metricas) {
+    metricas.hits = snapshot.registros.length;
+    metricas.selecionados = snapshot.registros.length;
+    metricas.inventariados = snapshot.totalProcessadas;
+  }
+  const resposta = respostaSolicitacoes_({
+    registros: snapshot.registros.map(function (registro) { return registro.dados; }),
+    total: snapshot.totalProcessadas,
+    limite: SOLICITACOES_MAX_REGISTROS,
+    pastaUrl: snapshot.pastaUrl
+  }, true, estado, statusPublicoSnapshotSolicitacoes_(estado, snapshot));
+  registrarMetricasSolicitacoes_(metricas, 'sucesso');
+  return resposta;
+}
+
+function obterStatusSnapshotSolicitacoes() {
+  exigirAdministracao_();
+  return statusAdminSnapshotSolicitacoes_(
+    lerEstadoSnapshotSolicitacoes_(), lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA));
+}
+
+function recalcularSnapshotSolicitacoes() {
+  exigirDonoSnapshotSolicitacoes_(exigirAdministracao_());
+  return gerarSnapshotSolicitacoesProcessadas_();
+}
+
+function gerarSnapshotSolicitacoesProcessadas_(opcoes) {
+  const sessao = exigirAdministracao_();
+  if (opcoes && opcoes.permitirNaoConfigurado
+      && (!CONFIG.solicitacoes.snapshotPastaId || !CONFIG.solicitacoes.snapshotOwnerEmail)) {
+    return { ignorado: true, motivo: 'nao-configurado' };
+  }
+  exigirDonoSnapshotSolicitacoes_(sessao);
+  const pasta = validarPastaSnapshotSolicitacoes_(true);
+  const token = Utilities.getUuid();
+  comLockSnapshotSolicitacoes_(function () {
+    const estado = lerEstadoSnapshotSolicitacoes_();
+    const agora = Date.now();
+    if (estado.lease && estado.lease.expiresAt > agora) {
+      throw new Error('A pré-carga de solicitações já está sendo recalculada. Aguarde a cópia completa.');
+    }
+    estado.lease = { token: token, expiresAt: agora + SOLICITACOES_SNAPSHOT_LEASE_MS };
+    estado.lastAttemptAt = new Date(agora).toISOString();
+    gravarEstadoSnapshotSolicitacoes_(estado);
+  });
+  let novoArquivo;
+  try {
+    const estadoAnterior = lerEstadoSnapshotSolicitacoes_();
+    let slotAnteriorValido = null;
+    ['current', 'previous'].some(function (campo) {
+      if (!estadoAnterior[campo]) return false;
+      try {
+        lerVersaoSnapshotSolicitacoes_(estadoAnterior[campo], 'hit', pasta);
+        slotAnteriorValido = estadoAnterior[campo];
+        return true;
+      } catch (e) {
+        return false;
+      }
+    });
+    const inventario = inventariarSolicitacoes_();
+    const processadas = inventario.descritores.filter(function (descritor) {
+      return descritor.situacao === 'Processada';
+    });
+    const selecionadas = processadas.slice(0, SOLICITACOES_MAX_REGISTROS);
+    const resultados = indexarResultadosSolicitacoes_(inventario.resultados, selecionadas);
+    const generatedAt = new Date().toISOString();
+    const dados = {
+      schema: 1,
+      tipo: 'solicitacoes-processadas',
+      generatedAt: generatedAt,
+      expiresAt: new Date(Date.parse(generatedAt) + SOLICITACOES_SNAPSHOT_VALIDADE_MS).toISOString(),
+      totalProcessadas: processadas.length,
+      limite: SOLICITACOES_MAX_REGISTROS,
+      pastaUrl: inventario.contexto.pastaUrl,
+      registros: selecionadas.map(function (descritor) {
+        return {
+          fingerprint: fingerprintSolicitacao_(descritor),
+          dados: interpretarDescritorSolicitacao_(
+            descritor, resultados[nomeBase_(descritor.nome)] || null)
+        };
+      })
+    };
+    validarSnapshotSolicitacoes_(dados);
+    const texto = JSON.stringify(dados);
+    if (bytesUtf8Solicitacoes_(texto) > SOLICITACOES_SNAPSHOT_MAX_BYTES) {
+      throw erroSolicitacoes_('SNAPSHOT_ACIMA_DO_LIMITE');
+    }
+    novoArquivo = pasta.pasta.createFile(Utilities.newBlob(
+      texto, 'application/json', 'AEUV - Solicitacoes Processadas - ' + token + '.json'));
+    const slotNovo = { id: novoArquivo.getId(), generatedAt: dados.generatedAt, expiresAt: dados.expiresAt };
+    const confirmado = lerVersaoSnapshotSolicitacoes_(slotNovo, 'hit', pasta);
+    if (JSON.stringify(confirmado) !== texto) throw erroSolicitacoes_('READBACK_SNAPSHOT_DIVERGENTE');
+    const publicado = comLockSnapshotSolicitacoes_(function () {
+      const estado = lerEstadoSnapshotSolicitacoes_();
+      if (!estado.lease || estado.lease.token !== token || estado.lease.expiresAt <= Date.now()) {
+        throw new Error('O prazo do recálculo de solicitações expirou; a cópia anterior foi preservada.');
+      }
+      const obsoletos = ['current', 'previous'].map(function (campo) {
+        return estado[campo] && typeof estado[campo].id === 'string' ? estado[campo].id : '';
+      }).filter(function (id) {
+        return id && (!slotAnteriorValido || id !== slotAnteriorValido.id);
+      });
+      if (slotAnteriorValido) estado.previous = slotAnteriorValido;
+      else delete estado.previous;
+      estado.current = slotNovo;
+      estado.lastError = '';
+      delete estado.lease;
+      gravarEstadoSnapshotSolicitacoes_(estado);
+      return { obsoletos: obsoletos };
+    });
+    publicado.obsoletos.forEach(limparVersaoSnapshotSolicitacoes_);
+    return statusAdminSnapshotSolicitacoes_(
+      lerEstadoSnapshotSolicitacoes_(), lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA));
+  } catch (erro) {
+    try {
+      comLockSnapshotSolicitacoes_(function () {
+        const estado = lerEstadoSnapshotSolicitacoes_();
+        if (estado.lease && estado.lease.token === token) {
+          delete estado.lease;
+          estado.lastError = 'O último recálculo falhou. A cópia anterior foi preservada; tente gerar novamente.';
+          gravarEstadoSnapshotSolicitacoes_(estado);
+        }
+      });
+    } catch (falhaEstado) {
+      console.log('Solicitações: falha ao registrar o estado sanitizado do recálculo.');
+    }
+    if (novoArquivo) limparVersaoSnapshotSolicitacoes_(novoArquivo.getId());
+    throw erro;
+  }
+}
+
+function limparVersaoSnapshotSolicitacoes_(id) {
+  try {
+    const referenciado = comLockSnapshotSolicitacoes_(function () {
+      const estado = lerEstadoSnapshotSolicitacoes_();
+      return (estado.current && estado.current.id === id) || (estado.previous && estado.previous.id === id);
+    });
+    if (referenciado) return;
+    const pastaId = CONFIG.solicitacoes.snapshotPastaId;
+    const meta = Drive.Files.get(id, { fields: 'id,trashed,parents', supportsAllDrives: true });
+    if (meta && meta.id === id && meta.trashed === false && Array.isArray(meta.parents)
+        && meta.parents.length === 1 && meta.parents[0] === pastaId) {
+      DriveApp.getFileById(id).setTrashed(true);
+    }
+  } catch (e) {
+    console.log('Solicitações: uma versão obsoleta não pôde ser removida; cópias publicadas preservadas.');
+  }
+}
+
+function lerTextoSolicitacaoLegada_(arquivo, metricas) {
+  if (arquivo && typeof arquivo.getSize === 'function'
+      && arquivo.getSize() > SOLICITACOES_TXT_MAX_BYTES) {
+    throw erroSolicitacoes_('TXT_ACIMA_DO_LIMITE');
+  }
+  const texto = lerTextoFonteAtleta_(arquivo, metricas);
+  if (bytesUtf8Solicitacoes_(texto) > SOLICITACOES_TXT_MAX_BYTES) {
+    throw erroSolicitacoes_('TXT_ACIMA_DO_LIMITE');
+  }
+  return texto;
 }
 
 function lerSolicitacoes_(paraAtletas) {
@@ -7897,7 +8886,7 @@ function lerSolicitacoes_(paraAtletas) {
     });
     const registros = selecionados.map(function (achado) {
       achado.resultado = resultados[nomeBase_(achado.nome)] || null;
-      const conteudo = lerTextoFonteAtleta_(achado.arquivo, metricas);
+      const conteudo = lerTextoSolicitacaoLegada_(achado.arquivo, metricas);
       return medirFonteAtleta_(metricas, 'interpretar', function () {
         return interpretarSolicitacao_(conteudo, achado, paraAtletas, metricas);
       });
@@ -8069,7 +9058,9 @@ function interpretarSolicitacao_(conteudo, achado, paraAtletas, metricas) {
     competicao: cabecalho['COMPETICAO'] || '',
     equipe: cabecalho['EQUIPE'] || '',
     responsavel: cabecalho['RESPONSAVEL'] || '',
-    arquivoUrl: medirFonteAtleta_(metricas, 'metadados', function () { return achado.arquivo.getUrl(); }),
+    arquivoUrl: achado.arquivoUrl === undefined
+      ? medirFonteAtleta_(metricas, 'metadados', function () { return achado.arquivo.getUrl(); })
+      : achado.arquivoUrl,
     resultadoTxtUrl: achado.resultado ? achado.resultado.txtUrl : '',
     resultadoPdfUrl: achado.resultado ? achado.resultado.pdfUrl : '',
     pessoas: registros
@@ -9770,6 +10761,9 @@ function validarGatilhoAgendado_(sessao, agenda, handler, evento, mensagemErro) 
 
 function configurarAgendamentoBancoAtletas() {
   const sessao = exigirAdministracao_();
+  if (CONFIG.solicitacoes.snapshotPastaId || CONFIG.solicitacoes.snapshotOwnerEmail) {
+    exigirDonoSnapshotSolicitacoes_(sessao);
+  }
   return comLockBancoAtletas_(function () {
     const agenda = lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA);
     const owner = exigirDonoAgendaBancoAtletas_(sessao, agenda);
@@ -9803,19 +10797,51 @@ function desativarAgendamentoBancoAtletas() {
   });
 }
 
+function atualizarPreCargasCompartilhadas_() {
+  const resultados = {};
+  const falhas = [];
+  try {
+    resultados.bancoAtletas = gerarSnapshotBancoAtletas_();
+  } catch (erroBanco) {
+    falhas.push(erroBanco);
+  }
+  try {
+    resultados.solicitacoes = gerarSnapshotSolicitacoesProcessadas_({ permitirNaoConfigurado: true });
+  } catch (erroSolicitacoes) {
+    falhas.push(erroSolicitacoes);
+  }
+  if (falhas.length) {
+    // Preserva o objeto da primeira falha para compatibilidade das Execucoes,
+    // mas substitui qualquer mensagem externa por um resumo sem dados.
+    const agregado = falhas[0] && typeof falhas[0] === 'object'
+      ? falhas[0] : new Error('Falha nas pré-cargas compartilhadas.');
+    agregado.message = 'Pré-cargas compartilhadas: ' + falhas.length
+      + ' build(s) falharam; os demais foram tentados e as cópias anteriores foram preservadas.';
+    throw agregado;
+  }
+  return resultados;
+}
+
 function atualizarBancoAtletasAgendado(evento) {
   const sessao = exigirAdministracao_();
   const agenda = lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA);
   validarGatilhoAgendado_(sessao, agenda, BANCO_ATLETAS_HANDLER, evento,
-    'Gatilho do Banco de Atletas não configurado para esta conta.');
-  return gerarSnapshotBancoAtletas_();
+    'Gatilho compartilhado do Banco de Atletas e Solicitações não configurado para esta conta.');
+  return atualizarPreCargasCompartilhadas_();
 }
 
 function construirBancoAtletas_() {
   exigirBancoAtletas_();
 
   const elenco = medirFaseAtletaBanco_('elenco', vinculosAtletasElenco_);
-  const dadosSolicitacoes = medirFaseAtletaBanco_('solicitacoes', function () { return lerSolicitacoes_(true); });
+  const dadosSolicitacoes = medirFaseAtletaBanco_('solicitacoes', function () {
+    bancoAtletasLendoSolicitacoes_ = true;
+    try {
+      return lerSolicitacoes_(true);
+    } finally {
+      bancoAtletasLendoSolicitacoes_ = false;
+    }
+  });
   const dadosPunicoes = medirFaseAtletaBanco_('punicoes', listarPunicoes);
   const dadosSumulas = medirFaseAtletaBanco_('sumulas', function () { return lerSumulas_(true); });
   return medirFaseAtletaBanco_('consolidacao', function () {
@@ -11646,6 +12672,110 @@ function compararLancamentosFinanceiro_(a, b) {
   const idA = String(a.idLancamento || '');
   const idB = String(b.idLancamento || '');
   return idA < idB ? 1 : idA > idB ? -1 : 0;
+}
+
+function pastaRelatoriosFinanceiros_() {
+  const id = PropertiesService.getScriptProperties()
+    .getProperty(CONFIG.financeiro.chavePastaRelatorios);
+  if (!id) {
+    throw new Error('A pasta de relatórios financeiros ainda não foi configurada. Peça à administração para definir '
+      + CONFIG.financeiro.chavePastaRelatorios + ' com o ID da subpasta "'
+      + CONFIG.financeiro.pastaRelatorios + '".');
+  }
+  try {
+    const pasta = DriveApp.getFolderById(id);
+    if (pasta.isTrashed() || pasta.getName() !== CONFIG.financeiro.pastaRelatorios) {
+      throw new Error('pasta inválida');
+    }
+    return pasta;
+  } catch (e) {
+    throw new Error('Não foi possível abrir a pasta "' + CONFIG.financeiro.pastaRelatorios
+      + '". Peça à administração para conferir o ID, o nome da pasta e o acesso de Leitor.');
+  }
+}
+
+/** Retorna somente metadados dos 20 relatórios financeiros mais recentes. */
+function listarRelatoriosFinanceiros() {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !moduloLiberado_('financeiro', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar os relatórios financeiros.');
+  }
+
+  const pasta = pastaRelatoriosFinanceiros_();
+  const pastaId = pasta.getId();
+  const limite = CONFIG.financeiro.maxRelatorios;
+  const padrao = /^relatorio-financeiro-(geral|emenda|competicao)-\d{8}-\d{6}(?:-\d{6}(?:-[0-9a-f]{32})?)?\.pdf$/;
+  const relatorios = [];
+  const ids = {};
+  const tokens = {};
+  let token;
+
+  try {
+    do {
+      const opcoes = {
+        q: "'" + String(pastaId).replace(/'/g, "\\'") + "' in parents and trashed = false "
+          + "and mimeType = 'application/pdf' and name contains 'relatorio-financeiro-'",
+        orderBy: 'modifiedTime desc,name',
+        pageSize: 100,
+        fields: 'nextPageToken,incompleteSearch,files(id,name,mimeType,modifiedTime)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      };
+      if (token) opcoes.pageToken = token;
+      const resposta = Drive.Files.list(opcoes);
+      if (!resposta || resposta.incompleteSearch === true) {
+        throw new Error('A busca no Drive ficou incompleta. Tente novamente.');
+      }
+      const arquivos = resposta.files === undefined ? [] : resposta.files;
+      if (!Array.isArray(arquivos)) throw new Error('Resposta inválida do Drive. Tente novamente.');
+
+      for (let i = 0; i < arquivos.length && relatorios.length <= limite; i++) {
+        const arquivo = arquivos[i] || {};
+        const nome = String(arquivo.name || '');
+        const achado = padrao.exec(nome);
+        const data = new Date(arquivo.modifiedTime);
+        const idArquivo = String(arquivo.id || '');
+        if (arquivo.mimeType !== 'application/pdf' || !achado || !idArquivo || isNaN(data.getTime())) continue;
+        if (ids[idArquivo]) throw new Error('Foram encontrados relatórios duplicados. Peça uma revisão da pasta.');
+        ids[idArquivo] = true;
+        relatorios.push({
+          nome: nome,
+          tipo: achado[1],
+          publicadoEm: Utilities.formatDate(data, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm'),
+          url: 'https://drive.google.com/file/d/' + encodeURIComponent(idArquivo) + '/view',
+          ordem: data.getTime()
+        });
+      }
+
+      const temProximo = Object.prototype.hasOwnProperty.call(resposta, 'nextPageToken');
+      const proximo = resposta.nextPageToken;
+      if (temProximo) {
+        if (typeof proximo !== 'string' || !proximo.trim() || tokens[proximo]) {
+          throw new Error('A paginação do Drive ficou inválida. Tente novamente.');
+        }
+        tokens[proximo] = true;
+        token = proximo;
+      } else {
+        token = '';
+      }
+    } while (token && relatorios.length <= limite);
+  } catch (e) {
+    console.error('[FINANCEIRO][RELATORIOS] Falha ao listar metadados.');
+    if (/configurada|Não foi possível|incompleta|inválida|duplicados/.test(String(e && e.message))) throw e;
+    throw new Error('Não foi possível consultar os relatórios financeiros. Tente novamente.');
+  }
+
+  relatorios.sort(function (a, b) {
+    return b.ordem - a.ordem || a.nome.localeCompare(b.nome);
+  });
+  const temMais = relatorios.length > limite;
+  return {
+    relatorios: relatorios.slice(0, limite).map(function (item) {
+      return { nome: item.nome, tipo: item.tipo, publicadoEm: item.publicadoEm, url: item.url };
+    }),
+    limite: limite,
+    temMais: temMais
+  };
 }
 
 /**

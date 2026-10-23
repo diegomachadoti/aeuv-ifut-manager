@@ -1,0 +1,30 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "severity": "MEDIUM",
+      "problem": "O design cria handler, agenda e trigger CLOCK próprios para Solicitações, embora o Banco de Atletas já rode a cada 15 minutos e já leia a mesma fonte; deduplicar apenas pelo novo handler ainda deixa dois triggers e trabalho periódico duplicado.",
+      "where": "Schema, slots e validade; Build, publicação, invalidação e trigger; critério de aceite 16",
+      "fix": "Usar um único trigger compartilhado: fazer o handler existente do Banco de Atletas executar os dois builds com leases e erros independentes, ou substituí-lo por um dispatcher único. A configuração de Solicitações deve consultar a agenda compartilhada e não criar/excluir outro CLOCK."
+    },
+    {
+      "severity": "MEDIUM",
+      "problem": "A invalidação por marcarSnapshotSolicitacoesPendente_ e o rebuild assíncrono são citados sem campo de estado, efeito na RPC rápida ou mecanismo de acionamento; criar, editar, mover/processar e excluir não têm uma matriz normativa completa.",
+      "where": "Functional Requirements; Build, publicação, invalidação e trigger",
+      "fix": "Para o escopo atual somente leitura, remover a função futura e declarar que mudanças externas não invalidam o provisório, são sempre detectadas na resposta final e entram no próximo build periódico. Se mutações internas entrarem no escopo, definir dirty:{at,reason}, suprimir provisório enquanto dirty, gravar antes da escrita, limpar só após publicação e especificar como o worker é acordado."
+    },
+    {
+      "severity": "MEDIUM",
+      "problem": "A preservação visual no refresh não está ligada à ordem real de abrirModulo: hoje o DOM da tela é substituído pelo loading antes de carregarSolicitacoes, portanto capturar dentro da carga perde busca, selects e expansões.",
+      "where": "Estado e renderização no frontend; Index.html, ramo de solicitações de abrirModulo",
+      "fix": "Capturar o estado visual em abrirModulo antes de substituir conteudo.innerHTML, passá-lo a carregarSolicitacoes(estadoInicial), vinculá-lo ao token da carga e impedir que callbacks antigos o sobrescrevam."
+    },
+    {
+      "severity": "MEDIUM",
+      "problem": "A validação limita registros a 200, mas não limita bytes do JSON nem tamanho de strings/listas; snapshot corrompido ou TXT enorme pode exceder memória, tempo ou payload RPC antes de ser rejeitado. O conjunto exato de campos públicos também não está enumerado.",
+      "where": "Schema, slots e validade; contratos RPC; proteção contra payload parcial/corrompido",
+      "fix": "Definir teto UTF-8 do documento e limites por campo/lista, verificar file.size antes do blob e o JSON serializado antes da criação, enumerar todos os campos permitidos de dados/pessoa e descartar integralmente versões acima do teto seguindo current → previous e depois misses/fallback seguro."
+    }
+  ],
+  "reviewDoc": "/Users/tqi_dmachado/workspace/aeuv-ifut-manager/apps-scripts/sistema-interno/.agents/tasks/insc-perf/insc-design-review.md"
+}
