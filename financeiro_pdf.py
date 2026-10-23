@@ -89,7 +89,7 @@ def parse_data_flexivel(data_str: str) -> date | None:
 class LancamentoFinanceiro:
     id_lancamento: str
     data_movimentacao: str
-    tipo: str  # "Entrada" ou "Saída"
+    tipo: str  # "Entrada", "Saída" ou "Pendente" (controle interno, excluído dos relatórios)
     origem: str  # Nome da competicao ou "Geral / Administrativo"
     categoria: str
     descricao: str
@@ -265,6 +265,10 @@ def gerar_pdf_financeiro(
         itens = [i for i in itens if filtro.competicao.lower() in i.origem.lower()]
     elif filtro.tipo_relatorio == "emenda" and filtro.numero_emenda:
         itens = [i for i in itens if filtro.numero_emenda.lower() in i.emenda.lower()]
+
+    # Lançamentos com tipo "Pendente" são controle interno de pagamentos a regularizar;
+    # NÃO entram em nenhum relatório oficial nem nos totais.
+    itens = [i for i in itens if i.tipo.strip().lower() != "pendente"]
 
     # Filtro opcional por intervalo de data (periodo_inicio e periodo_fim)
     dt_inicio = parse_data_flexivel(filtro.periodo_inicio) if filtro.periodo_inicio else None

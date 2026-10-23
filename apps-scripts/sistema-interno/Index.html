@@ -11037,7 +11037,7 @@
         + '  <option value="anual">Ano Atual</option>'
         + '  <option value="custom">Personalizado (De / Até)</option>'
         + '</select>'
-        + '<select id="filtroFinTipo"><option value="">Todos os tipos</option><option value="Entrada">Entrada (Receita)</option><option value="Saída">Saída (Despesa)</option></select>'
+        + '<select id="filtroFinTipo"><option value="">Todos os tipos</option><option value="Entrada">Entrada (Receita)</option><option value="Saída">Saída (Despesa)</option><option value="Pendente">⏳ Pendente (controle interno)</option></select>'
         + '<select id="filtroFinOrigem"><option value="">Todas as origens</option>'
         + (d.competicoes || []).map(function(c) { return '<option value="' + escapar(c) + '">' + escapar(c) + '</option>'; }).join('')
         + '</select>'
@@ -11286,6 +11286,8 @@
       var somaSaidas = 0;
       for (var f = 0; f < filtrados.length; f++) {
         var it = filtrados[f];
+        // Lançamentos "Pendente" não entram nos totais (só servem para controle interno).
+        if (it.tipo.toLowerCase() === 'pendente') continue;
         if (it.tipo.toLowerCase() === 'entrada') {
           somaEntradas += Number(it.valor || 0);
         } else {
@@ -11325,10 +11327,12 @@
       }
 
       var linhasHtml = filtrados.map(function (item) {
-        var ehEntrada = item.tipo.toLowerCase() === 'entrada';
-        var corTipo = ehEntrada ? '#1e7b34' : '#b3261e';
-        var bgTipo = ehEntrada ? '#eefbf0' : '#fdf2f2';
-        var sinal = ehEntrada ? '+ ' : '- ';
+        var tipoLow = item.tipo.toLowerCase();
+        var ehEntrada = tipoLow === 'entrada';
+        var ehPendente = tipoLow === 'pendente';
+        var corTipo = ehPendente ? '#7a5200' : (ehEntrada ? '#1e7b34' : '#b3261e');
+        var bgTipo  = ehPendente ? '#fff7e0' : (ehEntrada ? '#eefbf0' : '#fdf2f2');
+        var sinal = ehPendente ? '⏳ ' : (ehEntrada ? '+ ' : '- ');
         var valorExibido = sinal + formatarMoedaJs(item.valor);
 
         var docInfo = [];
@@ -11413,6 +11417,7 @@
         + '        <select id="finTipo" required>'
         + '          <option value="Entrada">🟢 Entrada (Receita)</option>'
         + '          <option value="Saída" selected>🔴 Saída (Despesa)</option>'
+        + '          <option value="Pendente">⏳ Pendente (controle interno)</option>'
         + '        </select>'
         + '      </div>'
         + '    </div>'
@@ -11514,12 +11519,31 @@
       });
 
       function atualizarCategorias() {
+        // Pendente usa as mesmas categorias de Saída (despesa a confirmar).
         var ehEntrada = selTipo.value === 'Entrada';
         var cats = ehEntrada ? (d.categoriasEntrada || []) : (d.categoriasSaida || []);
         selCat.innerHTML = cats.map(function(c) { return '<option value="' + escapar(c) + '">' + escapar(c) + '</option>'; }).join('');
       }
 
-      selTipo.addEventListener('change', atualizarCategorias);
+      selTipo.addEventListener('change', function() {
+        atualizarCategorias();
+        // Aviso informativo ao selecionar Pendente
+        var aviso = document.getElementById('finAvisoPendente');
+        if (selTipo.value === 'Pendente') {
+          if (!aviso) {
+            var el = document.createElement('div');
+            el.id = 'finAvisoPendente';
+            el.className = 'fin-aviso-edicao';
+            el.style.background = '#fff7e0';
+            el.style.borderLeft = '4px solid #f59e0b';
+            el.style.color = '#7a5200';
+            el.innerHTML = '⏳ <strong>Controle interno:</strong> lançamentos Pendentes <strong>não aparecem nos relatórios PDF</strong> e <strong>não entram nos totais</strong>. Use para registrar obrigações ainda não pagas.';
+            selTipo.closest('.fin-campo').insertAdjacentElement('afterend', el);
+          }
+        } else if (aviso) {
+          aviso.remove();
+        }
+      });
       atualizarCategorias();
 
       if (edicao) {
@@ -11534,8 +11558,20 @@
           }
           sel.value = valor;
         };
-        selTipo.value = String(edicao.tipo).toLowerCase() === 'entrada' ? 'Entrada' : 'Saída';
+        selTipo.value = String(edicao.tipo).toLowerCase() === 'entrada' ? 'Entrada'
+          : String(edicao.tipo).toLowerCase() === 'pendente' ? 'Pendente' : 'Saída';
         atualizarCategorias();
+        // Mostra o aviso de Pendente se o lançamento editado for Pendente
+        if (selTipo.value === 'Pendente') {
+          var elAvisoPend = document.createElement('div');
+          elAvisoPend.id = 'finAvisoPendente';
+          elAvisoPend.className = 'fin-aviso-edicao';
+          elAvisoPend.style.background = '#fff7e0';
+          elAvisoPend.style.borderLeft = '4px solid #f59e0b';
+          elAvisoPend.style.color = '#7a5200';
+          elAvisoPend.innerHTML = '⏳ <strong>Controle interno:</strong> lançamentos Pendentes <strong>não aparecem nos relatórios PDF</strong> e <strong>não entram nos totais</strong>. Use para registrar obrigações ainda não pagas.';
+          selTipo.closest('.fin-campo').insertAdjacentElement('afterend', elAvisoPend);
+        }
         garantirOpcao(selCat, edicao.categoria);
         garantirOpcao(document.getElementById('finOrigem'), edicao.origem);
         document.getElementById('finDesc').value = edicao.descricao || '';

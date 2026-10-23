@@ -56,8 +56,8 @@ const CONFIG = {
 
     // Pasta My Drive dedicada e conta proprietaria da pre-carga. Permanecem
     // vazias ate o provisionamento manual; sem ambas nenhum snapshot e publicado.
-    snapshotPastaId: '',
-    snapshotOwnerEmail: '',
+    snapshotPastaId: '17x8v2GlZk5KG_6kyDUltBG0K59ZJNPMq',
+    snapshotOwnerEmail: 'deejaydiego@gmail.com',
 
     // Teto de arquivos abertos por consulta. A listagem le todos os nomes,
     // mas so abre os mais recentes, para a tela nao estourar o tempo do
@@ -12796,12 +12796,18 @@ function listarFinanceiro() {
 
   const lancamentos = valores.slice(1).map(function (linha) {
     const valNum = parseFloat(String(linha[6] || 0).replace(',', '.')) || 0;
-    const ehEntrada = String(linha[2] || '').trim().toLowerCase() === 'entrada';
+    const tipoLinha = String(linha[2] || '').trim().toLowerCase();
+    const ehEntrada = tipoLinha === 'entrada';
+    const ehPendente = tipoLinha === 'pendente';
 
-    if (ehEntrada) {
-      totalEntradas += valNum;
-    } else {
-      totalSaidas += valNum;
+    // Lançamentos "Pendente" não entram nos totais nem nos relatórios;
+    // servem apenas como controle interno de pagamentos a regularizar.
+    if (!ehPendente) {
+      if (ehEntrada) {
+        totalEntradas += valNum;
+      } else {
+        totalSaidas += valNum;
+      }
     }
 
     return {

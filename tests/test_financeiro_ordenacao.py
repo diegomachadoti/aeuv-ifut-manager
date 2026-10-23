@@ -96,6 +96,25 @@ class FinanceiroOrdenacaoTests(unittest.TestCase):
                 self.assertEqual([descricao for _, descricao in linhas], esperado)
         self.assertEqual([i.id_lancamento for i in itens], ["antigo", "recente", "retroativo", "outra"])
 
+    def test_lancamentos_pendente_excluidos_dos_relatorios_e_totais(self):
+        """Lançamentos com tipo 'Pendente' não aparecem no PDF nem entram nos totais."""
+        itens = [
+            LancamentoFinanceiro("pend-1", "10/10/2026", "Pendente", "Liga A", "Arbitragem e Mesários",
+                                 "Taxa pendente de regularização", 500.0),
+            lancamento("ent-1", "09/10/2026", valor=200),
+            LancamentoFinanceiro("sai-1", "08/10/2026", "Saída", "Liga A", "Arbitragem e Mesários",
+                                 "sai-1", 50.0),
+        ]
+        for tipo in ("geral", "competicao", "emenda"):
+            with self.subTest(tipo=tipo):
+                filtro = FiltroRelatorio(tipo, competicao="Liga A", numero_emenda="Emenda Teste")
+                linhas = self.pdf(filtro, itens)
+                protocolos = [descricao for _, descricao in linhas]
+                self.assertNotIn("Taxa pendente de regularização", protocolos,
+                                 f"[{tipo}] Lançamento Pendente não deveria aparecer no PDF")
+                self.assertNotIn("pend-1", protocolos,
+                                 f"[{tipo}] ID pend-1 não deveria aparecer no PDF")
+
     def test_json_tambem_produz_pdf_em_ordem_crescente(self):
         itens = [lancamento("primeiro", "05/10/2026"), lancamento("segundo", "2026-10-08"),
                  lancamento("retroativo", "01/09/2026")]

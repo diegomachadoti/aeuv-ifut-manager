@@ -67,6 +67,20 @@ test('datas ausentes/invalidas vao ao final; totais e autorizacao permanecem', (
   assert.throws(() => h.context.listarFinanceiro(), /permissão/);
 });
 
+test('lancamentos Pendente nao entram nos totais nem no saldo', () => {
+  const h = harness([
+    row('pend-1', '10/10/2026', 'Liga A', 'Pendente', 500),
+    row('ent-1',  '09/10/2026', 'Liga A', 'Entrada',  200),
+    row('sai-1',  '08/10/2026', 'Liga A', 'Saída',     50)
+  ]);
+  const res = h.context.listarFinanceiro();
+  assert.equal(res.totalEntradas, 200);
+  assert.equal(res.totalSaidas,    50);
+  assert.equal(res.saldoAtual,    150);
+  // O lancamento Pendente aparece na lista (para a tela filtrar), mas não computa
+  assert.equal(res.lancamentos.length, 3);
+});
+
 test('renderizacao com filtros preserva ordem cronologica retornada pelo backend', () => {
   const h = harness([row('ANTIGO_A', '05/10/2026'), row('NOVO_B', '09/10/2026', 'Liga B'),
     row('NOVO_A', '08/10/2026'), row('RETROATIVO_A', '01/09/2026')]);
