@@ -11505,6 +11505,11 @@ function consolidarAtletasBanco_(elenco, dadosSolicitacoes, dadosPunicoes, dados
         tipo: pessoa.tipo,
         equipe: solicitacao.equipe,
         competicao: solicitacao.competicao
+      }, {
+        // 'ordem' é o carimbo epoch (ms) do envio do formulário: data real e
+        // confiável. Fonte oficial (inscrição/portabilidade) desempata em cima.
+        recencia: Number(solicitacao.ordem || 0),
+        prioridadeFonte: PRIORIDADE_NOME_SOLICITACAO
       });
 
       adicionarEquipeAoAtleta_(atleta, solicitacao.equipe);
@@ -11548,6 +11553,12 @@ function consolidarAtletasBanco_(elenco, dadosSolicitacoes, dadosPunicoes, dados
         cpf: vinculo.cpf,
         nascimento: dataIsoParaBrAtleta_(vinculo.dataNascimento),
         tipo: 'Atleta'
+      }, {
+        // Data de entrada no histórico (não necessariamente a inscrição real):
+        // usa a mais recente entre atualizadoEm e registradoEm. Prioridade de
+        // fonte menor que a solicitação, pois esta data é menos confiável.
+        recencia: recenciaIso_(vinculo.atualizadoEm) || recenciaIso_(vinculo.registradoEm),
+        prioridadeFonte: PRIORIDADE_NOME_ELENCO
       });
       adicionarEquipeAoAtleta_(atleta, vinculo.equipeNome);
       adicionarCompeticaoAoAtleta_(atleta, vinculo.campeonatoNome);
@@ -11587,6 +11598,11 @@ function consolidarAtletasBanco_(elenco, dadosSolicitacoes, dadosPunicoes, dados
       tipo: registro.tipo,
       equipe: registro.equipe,
       competicao: registro.competicao
+    }, {
+      // Punições não têm data de cadastro do atleta; só definem o nome quando
+      // nenhuma fonte com data o definiu ainda (prioridade mínima).
+      recencia: 0,
+      prioridadeFonte: PRIORIDADE_NOME_PUNICAO
     });
 
     adicionarEquipeAoAtleta_(atleta, registro.equipe);
@@ -11640,6 +11656,10 @@ function consolidarAtletasBanco_(elenco, dadosSolicitacoes, dadosPunicoes, dados
         nome: envolvido.nome,
         tipo: envolvido.tipo,
         equipe: envolvido.equipe
+      }, {
+        // Súmulas também não têm data de cadastro; prioridade mínima.
+        recencia: 0,
+        prioridadeFonte: PRIORIDADE_NOME_SUMULA
       });
 
       adicionarEquipeAoAtleta_(atleta, envolvido.equipe);
@@ -12065,7 +12085,7 @@ function criarAtletaConsolidado_(chave, dados) {
   return atleta;
 }
 
-function atualizarBaseAtleta_(atleta, dados) {
+function atualizarBaseAtleta_(atleta, dados, procedencia) {
   const nome = limparCampo_(dados.nome || '', 150);
   const cpf = somenteDigitos_(dados.cpf);
   const nascimento = limparCampo_(dados.nascimento || '', 20);
@@ -12073,8 +12093,38 @@ function atualizarBaseAtleta_(atleta, dados) {
   const equipe = limparCampo_(dados.equipe || '', 120);
   const competicao = limparCampo_(dados.competicao || '', 120);
 
-  if (nome && (atleta.nome === 'Atleta não identificado' || atleta.nome.length < nome.length)) {
-    atleta.nome = nome;
+  // O nome correto é o do registro MAIS RECENTE, de qualquer fonte (inscrição,
+  // portabilidade ou cadastro via campeonato). Cada chamada informa uma recência
+  // comparável (epoch em ms) e uma prioridade de fonte para desempate — assim um
+  // rótulo/registro de teste no histórico de elenco não prevalece sobre o nome
+  // oficial, e vice-versa, sempre ganhando o mais recente.
+  // procedencia (opcional): { recencia: <ms>, prioridadeFonte: <n> }
+  if (nome) {
+    const atualRecencia = Number(atleta._nomeRecencia || 0);
+    const atualPrioridade = Number(atleta._nomePrioridade || 0);
+    const novaRecencia = Number(procedencia && procedencia.recencia || 0);
+    const novaPrioridade = Number(procedencia && procedencia.prioridadeFonte || 0);
+
+    let substituir;
+    if (atleta.nome === 'Atleta não identificado' || !atleta._nomeDefinido) {
+      substituir = true;
+    } else if (novaRecencia > atualRecencia) {
+      substituir = true;
+    } else if (novaRecencia === atualRecencia) {
+      // Mesma data (ou ambas sem data): decide pela fonte mais confiável; em
+      // último caso, mantém o nome mais completo (mais longo).
+      substituir = novaPrioridade > atualPrioridade
+        || (novaPrioridade === atualPrioridade && atleta.nome.length < nome.length);
+    } else {
+      substituir = false;
+    }
+
+    if (substituir) {
+      atleta.nome = nome;
+      atleta._nomeDefinido = true;
+      atleta._nomeRecencia = novaRecencia;
+      atleta._nomePrioridade = novaPrioridade;
+    }
   }
 
   if (!atleta.cpf && cpf.length === 11) {
@@ -12201,6 +12251,28 @@ function ordemDataBr_(valor) {
   }
 
   return Number(achado[3] + achado[2] + achado[1] + (achado[4] || '00') + (achado[5] || '00'));
+}
+
+// Prioridade da fonte para decidir o NOME do atleta quando duas fontes têm a
+// mesma recência (ou nenhuma data). Maior vence. A inscrição/portabilidade é a
+// fonte oficial; o histórico de elenco pode conter rótulos/registros de teste;
+// punição e súmula só preenchem o nome na falta das demais.
+const PRIORIDADE_NOME_SOLICITACAO = 3;
+const PRIORIDADE_NOME_ELENCO = 2;
+const PRIORIDADE_NOME_SUMULA = 1;
+const PRIORIDADE_NOME_PUNICAO = 1;
+
+/**
+ * Converte uma data ISO 8601 (ex.: "2026-10-14T18:03:00.000Z") em epoch (ms),
+ * na mesma escala do carimbo 'ordem' das solicitações, para comparar recência
+ * entre fontes. Retorna 0 quando a data é vazia/inválida.
+ * @param {string} iso
+ * @return {number}
+ */
+function recenciaIso_(iso) {
+  const ms = Date.parse(String(iso || '').trim());
+
+  return Number.isFinite(ms) ? ms : 0;
 }
 
 function situacaoCadastroAtleta_(ultimaMovimentacao, ultimaProcessada) {
