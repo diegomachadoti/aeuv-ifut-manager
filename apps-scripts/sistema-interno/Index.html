@@ -8583,6 +8583,20 @@
 
       status.outerHTML = '<div id="statusSolicitacoes">'
         + estadoCarga
+        + '<details class="info-punicoes">'
+        + '<summary>Como as solicitações são processadas</summary>'
+        + '<div class="info-punicoes-corpo">'
+        + '<p>As inscrições, remoções e portabilidades <strong>não</strong> são aplicadas automaticamente. O responsável de cada equipe envia o pedido pelo formulário público; depois, um responsável da associação roda a automação (back-end em Python) <strong>manualmente</strong>, que faz login no iFut e executa cada registro. Esta tela apenas <strong>consulta</strong> os pedidos e a situação de cada um.</p>'
+        + '<ol>'
+        + '<li><strong>Envio pelo formulário:</strong> o responsável da equipe preenche o formulário de inscrição/remoção/portabilidade. Cada envio gera um arquivo (TXT) com um protocolo, que fica na pasta do Drive com situação <em>Aguardando</em>.</li>'
+        + '<li><strong>Processamento manual no iFut:</strong> a automação baixa os pedidos, faz login no iFut e, para cada pessoa, executa a ação — <em>Inclusão</em> (cadastra o atleta/comissão), <em>Remoção</em> (tira do elenco) ou <em>Portabilidade</em> (transfere de outra competição). Comando típico:'
+        + '<div class="info-punicoes-cmd">python main.py  <span class="info-punicoes-coment"># baixa, processa no iFut, move e publica os resultados</span><br>python main.py --process-local-only  <span class="info-punicoes-coment"># processa os já baixados, sem novo download</span></div></li>'
+        + '<li><strong>Resultado:</strong> ao terminar, o pedido passa a <em>Processada</em> (sucesso) ou <em>Com falha</em> (algo impediu, ex.: atleta duplicado ou nome não encontrado na portabilidade). A automação publica um comprovante (TXT e PDF) com o resultado de cada registro, acessível aqui pelo botão <strong>Ver resultado</strong>.</li>'
+        + '<li><strong>Consulta nesta tela:</strong> os cards mostram quantos pedidos estão <em>Aguardando</em>, <em>Processados</em> e <em>Com falha</em>; use os filtros e a busca para localizar um protocolo, equipe ou atleta.</li>'
+        + '</ol>'
+        + '<p class="info-punicoes-nota">Enquanto um pedido estiver <strong>Aguardando</strong>, ele ainda não foi aplicado no iFut. A situação muda somente depois que a automação é executada.</p>'
+        + '</div>'
+        + '</details>'
         + (registros.length ? '<div class="resumo" id="resumoSolicitacoes"></div>' : '')
         + (registros.length ? '<div class="filtros">'
           + '<input type="search" id="buscaSolicitacoes" placeholder="Buscar por protocolo, equipe, respons&aacute;vel ou atleta">'

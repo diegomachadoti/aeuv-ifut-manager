@@ -237,6 +237,14 @@ const MODULOS = [
     perfis: ['admin', 'diretoria', 'arbitragem', 'associado']
   },
   {
+    id: 'regulamentos',
+    nome: 'Central de Documentos',
+    icone: '📚',
+    tipo: 'regulamentos',
+    descricao: 'Consulte os documentos oficiais da AEUV e das competições.',
+    perfis: ['admin', 'diretoria', 'arbitragem', 'associado']
+  },
+  {
     id: 'sumula',
     nome: 'Súmula digital',
     icone: '📋',
@@ -273,27 +281,19 @@ const MODULOS = [
     perfis: ['admin', 'diretoria']
   },
   {
-    id: 'notas',
-    nome: 'Notas oficiais',
-    icone: '📄',
-    tipo: 'notas',
-    descricao: 'Consulta às notas oficiais disciplinares geradas a partir das súmulas.',
-    perfis: ['admin', 'diretoria']
-  },
-  {
-    id: 'regulamentos',
-    nome: 'Central de Documentos',
-    icone: '📚',
-    tipo: 'regulamentos',
-    descricao: 'Consulte os documentos oficiais da AEUV e das competições.',
-    perfis: ['admin', 'diretoria', 'arbitragem', 'associado']
-  },
-  {
     id: 'punicoes',
     nome: 'Controle de punições',
     icone: '⚖️',
     tipo: 'punicoes',
     descricao: 'Acompanhamento das punições aplicadas e do cumprimento por atleta.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'notas',
+    nome: 'Notas oficiais',
+    icone: '📄',
+    tipo: 'notas',
+    descricao: 'Consulta às notas oficiais disciplinares geradas a partir das súmulas.',
     perfis: ['admin', 'diretoria']
   },
   {
