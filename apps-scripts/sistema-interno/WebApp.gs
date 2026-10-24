@@ -25,6 +25,12 @@ const CONFIG = {
   // links do Drive (thumbnail?id=...) nao funcionam aqui.
   faviconUrl: 'https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png',
 
+  // Logo do cabecalho servido por URL publica (mesma imagem do favicon), em vez
+  // de ler o arquivo do Drive no carregamento. Evita que o doGet quebre para
+  // perfis sem acesso ao arquivo (app USER_ACCESSING). Deixe vazio para voltar
+  // a ler o logo do Drive.
+  logoUrlPublica: 'https://raw.githubusercontent.com/diegomachadoti/aeuv-ifut-manager/master/assets/logo-aeuv.png',
+
   // Chave da propriedade de script que guarda a lista de autorizados.
   chaveUsuarios: 'USUARIOS_AUTORIZADOS',
 
@@ -547,6 +553,117 @@ const TABELA_CRITERIO_OPCOES = [
  ******************************************************/
 
 /**
+ * Diagnóstico de acesso. Rode esta função pelo editor do Apps Script
+ * (selecione "diagnosticarAcesso" e clique em Executar) e veja o resultado
+ * em Execuções/Logs. Ela refaz, passo a passo, o que o doGet faz ao abrir a
+ * página, capturando qualquer erro — útil para descobrir por que um perfil
+ * (ex.: associado) não consegue entrar.
+ *
+ * Observação: ao rodar no editor, você está executando COMO VOCÊ (sua conta),
+ * não como o associado. Serve para achar erros de código/escopo que valem para
+ * todos. Para testar a identidade de um associado específico, use
+ * diagnosticarAcessoComoEmail('email-do-associado@gmail.com').
+ * @return {Object} relatório também gravado no log.
+ */
+function diagnosticarAcesso() {
+  return diagnosticarAcessoComoEmail('');
+}
+
+function diagnosticarAcessoComoEmail(emailSimulado) {
+  const passos = [];
+  const registrar = function (passo, ok, detalhe) {
+    passos.push({ passo: passo, ok: ok, detalhe: String(detalhe == null ? '' : detalhe) });
+  };
+
+  // 1. E-mail da conta que está executando.
+  let emailReal = '';
+  try {
+    emailReal = normalizarEmail_(obterEmailAtivo_());
+    registrar('email_conta_executando', !!emailReal, emailReal || '(vazio — sem permissão de identificar e-mail)');
+  } catch (e) {
+    registrar('email_conta_executando', false, e.message);
+  }
+
+  // 2. Identificação/autorização (usa o e-mail simulado se informado).
+  const alvo = normalizarEmail_(emailSimulado) || emailReal;
+  let usuario = null;
+  try {
+    const encontrado = obterUsuarios_().filter(function (u) {
+      return normalizarEmail_(u.email) === alvo;
+    })[0];
+    if (!encontrado) {
+      registrar('usuario_autorizado', false, alvo
+        ? 'E-mail "' + alvo + '" NÃO está na lista de autorizados (veria a tela de acesso negado).'
+        : 'Sem e-mail para checar.');
+    } else {
+      const perfil = PERFIS[encontrado.perfil] ? encontrado.perfil : PERFIL_PADRAO;
+      usuario = { email: alvo, perfil: perfil, perfilNome: PERFIS[perfil] };
+      registrar('usuario_autorizado', true, 'perfil=' + perfil + ' (' + PERFIS[perfil] + ')');
+    }
+  } catch (e) {
+    registrar('usuario_autorizado', false, e.message);
+  }
+
+  // 3. Logo (deve ser a URL pública; nunca deve lançar).
+  try {
+    const logo = obterLogo_();
+    registrar('obter_logo', true, logo ? logo.slice(0, 60) : '(vazio)');
+  } catch (e) {
+    registrar('obter_logo', false, e.message);
+  }
+
+  // 4. Módulos permitidos para o perfil.
+  if (usuario) {
+    try {
+      const mods = modulosPermitidos_(usuario.perfil).map(function (m) { return m.id; });
+      registrar('modulos_permitidos', true, mods.join(', ') || '(nenhum)');
+    } catch (e) {
+      registrar('modulos_permitidos', false, e.message);
+    }
+  }
+
+  // 5. URL da pasta de regulamentos (só o associado usa no doGet).
+  if (usuario && usuario.perfil === 'associado') {
+    try {
+      const url = urlPastaRegulamentos_();
+      registrar('url_regulamentos_associado', true, url || '(vazio — pasta ainda não registrada)');
+    } catch (e) {
+      registrar('url_regulamentos_associado', false, e.message);
+    }
+  }
+
+  // 6. Template Index renderiza? (reproduz o evaluate do doGet).
+  if (usuario) {
+    try {
+      const template = HtmlService.createTemplateFromFile('Index');
+      template.config = {
+        associacao: ASSOCIACAO_NOME,
+        logoUrl: obterLogo_(),
+        emailSuporte: CONFIG.emailSuporte,
+        usuario: { email: usuario.email, nome: usuario.email.split('@')[0], perfil: usuario.perfil, perfilNome: usuario.perfilNome, equipe: '' },
+        email: usuario.email,
+        motivo: '',
+        modulos: modulosPermitidos_(usuario.perfil),
+        regulamentosPastaUrl: usuario.perfil === 'associado' ? urlPastaRegulamentos_() : '',
+        grupos: GRUPOS,
+        embutido: false,
+        elenco: { campeonatoId: '', equipeId: '' },
+        urlPortal: CONFIG.urlPortal,
+        urlSistema: CONFIG.urlPortal
+      };
+      const html = template.evaluate().getContent();
+      registrar('template_index_evaluate', html.length > 0, 'HTML gerado com ' + html.length + ' caracteres.');
+    } catch (e) {
+      registrar('template_index_evaluate', false, e.message + (e.stack ? ' | ' + e.stack.split('\n')[0] : ''));
+    }
+  }
+
+  const resumo = { alvo: alvo, passos: passos };
+  Logger.log(JSON.stringify(resumo, null, 2));
+  return resumo;
+}
+
+/**
  * Abre o sistema interno. Usuarios nao identificados ou fora da
  * lista recebem a tela de acesso negado.
  *
@@ -589,7 +706,18 @@ function doGet(e) {
 
     // Só oferece a volta ao portal em acesso direto. Quando o proprio portal
     // desistiu de embutir (origem=direto), voltar criaria um vaivem sem fim.
-    urlPortal: origem === '' ? CONFIG.urlPortal : ''
+    urlPortal: origem === '' ? CONFIG.urlPortal : '',
+
+    // Endereço público oficial do sistema, sempre preenchido (independente da
+    // origem). Usado no passo a passo de acesso da tela Usuários do sistema.
+    urlSistema: CONFIG.urlPortal,
+
+    // URL direta do app (/exec). No PRIMEIRO acesso de um usuário novo, a tela
+    // de autorização do Google não funciona dentro do iframe do portal; por
+    // isso o passo a passo pede para abrir esta URL direta na primeira vez.
+    urlAppDireto: (function () {
+      try { return ScriptApp.getService().getUrl(); } catch (e) { return ''; }
+    })()
   };
 
   return template
@@ -614,8 +742,23 @@ function include_(nome) {
  * @return {string}
  */
 function obterLogo_() {
+   // O logo é servido por uma URL pública (a mesma imagem do favicon, no
+   // repositório), e NÃO lido do Drive no carregamento. Antes, num app
+   // USER_ACCESSING, ler o arquivo do logo do Drive falhava para perfis sem
+   // acesso a ele (ex.: associado) e derrubava o doGet (página de erro do
+   // Drive). Com a URL pública, não há acesso ao Drive na abertura e o logo
+   // aparece para todos os perfis.
+   if (CONFIG.logoUrlPublica) {
+     return CONFIG.logoUrlPublica;
+   }
+   // Retrocompatibilidade: se não houver URL pública configurada, tenta o Drive
+   // (protegido), degradando para "sem logo" em caso de falta de acesso.
    const otimizadoId = PropertiesService.getScriptProperties().getProperty(LOGO_SISTEMA_CHAVE);
-   if (otimizadoId) return lerImagemLogo_(otimizadoId);
+   try {
+     if (otimizadoId) return lerImagemLogo_(otimizadoId);
+   } catch (e) {
+     // Logo otimizado inacessível para este usuário: cai para o logo padrão.
+   }
    try {
      return lerImagemLogo_(CONFIG.logoFileId);
    } catch (e) {

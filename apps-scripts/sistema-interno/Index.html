@@ -571,6 +571,8 @@
     .info-punicoes-corpo ol { margin: 0 0 8px; padding-left: 20px; }
     .info-punicoes-corpo li { margin-bottom: 6px; }
     .info-punicoes-nota { margin: 8px 0 0; color: var(--apoio); font-size: 12px; }
+    .info-punicoes-sub { margin: 6px 0 2px; padding-left: 18px; list-style: lower-alpha; }
+    .info-punicoes-sub li { margin-bottom: 4px; }
     .info-punicoes-cmd {
       margin: 6px 0 2px;
       padding: 8px 10px;
@@ -3510,7 +3512,34 @@
 
       const sucesso = recado ? '<div class="sucesso">' + escapar(recado) + '</div>' : '';
 
+      const linkPortal = CONFIG.urlSistema || CONFIG.urlPortal || (window.location.origin + window.location.pathname);
+      const linkDireto = CONFIG.urlAppDireto || linkPortal;
+      const comoLogar = '<details class="info-punicoes">'
+        + '<summary>Como o usuário acessa o sistema (passo a passo para compartilhar)</summary>'
+        + '<div class="info-punicoes-corpo">'
+        + '<p>O acesso é pela <strong>conta Google</strong> da pessoa. O e-mail cadastrado aqui precisa ser exatamente o mesmo da conta Google com que ela vai entrar.</p>'
+        + '<ol>'
+        + '<li><strong>Peça o e-mail Google</strong> da pessoa (Gmail ou conta Google corporativa) e cadastre-o aqui em <em>Conceder acesso</em>, escolhendo o perfil (Diretoria, Arbitragem ou Associado).</li>'
+        + '<li><strong>No PRIMEIRO acesso, use o link direto</strong> abaixo (não o do portal). A autorização do Google não funciona com o sistema embutido no portal, por isso a primeira vez precisa ser por este link, aberto numa aba comum do navegador:'
+        + '<div class="info-punicoes-cmd" style="white-space:normal;">' + escapar(linkDireto) + '</div>'
+        + 'Dica: se a pessoa tiver várias contas Google logadas, o ideal é abrir numa <strong>janela anônima</strong> e entrar só com a conta cadastrada, para o Google não abrir na conta errada.</li>'
+        + '<li><strong>Autorize o acesso do app (só na primeira vez).</strong> O Google mostra algumas telas — siga nesta ordem:'
+        + '<ol class="info-punicoes-sub">'
+        + '<li>Escolha a <strong>conta Google</strong> cujo e-mail foi cadastrado aqui.</li>'
+        + '<li>Vai aparecer o aviso <em>"O Google não verificou este app"</em>. Clique em <strong>Avançado</strong> (ou "Configurações avançadas") e depois em <strong>Acessar [nome do app] (não seguro)</strong>. É seguro: o app é da própria associação; esse aviso só existe porque o app é interno e não passou pela verificação pública do Google.</li>'
+        + '<li>Na tela de permissões, <strong>marque todas as caixas</strong> de acesso solicitadas (precisam estar todas marcadas para o sistema funcionar).</li>'
+        + '<li>Clique em <strong>Continuar</strong> / <strong>Permitir</strong>.</li>'
+        + '</ol></li>'
+        + '<li><strong>Depois de autorizar uma vez</strong>, a pessoa já usa o link normal do dia a dia, inclusive salvando nos favoritos:'
+        + '<div class="info-punicoes-cmd" style="white-space:normal;">' + escapar(linkPortal) + '</div></li>'
+        + '<li><strong>Pronto:</strong> o sistema abre com as telas do perfil dela. Se aparecer "acesso negado", confira se o e-mail cadastrado é idêntico ao da conta Google usada. Se aparecer erro do Google Drive ou "não foi possível abrir", quase sempre é a conta errada do navegador (multi-login) ou a autorização que faltou — abra em janela anônima com a conta certa e repita o passo do link direto.</li>'
+        + '</ol>'
+        + '<p class="info-punicoes-nota">As permissões de tela por perfil são ajustadas em <em>Editar permissões</em>, nesta mesma tela, e valem na hora.</p>'
+        + '</div>'
+        + '</details>';
+
       document.getElementById('areaUsuarios').innerHTML = sucesso
+        + comoLogar
         + '<div class="barra-acoes">'
         + '<button type="button" class="botao-principal" id="novoUsuario">Conceder acesso</button>'
         + '</div>'
