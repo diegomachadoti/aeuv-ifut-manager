@@ -3344,13 +3344,55 @@
     ];
 
     /**
-     * Tela "Comandos do Sistema": espelha o COMANDOS.md para admin/diretoria.
-     * Cada comando tem um botão Copiar. Um campo de busca filtra por texto.
+     * Funções executáveis DIRETO no editor do Apps Script (manutenção/socorro).
+     * Espelha COMANDOS-APPSCRIPT.md. Cada item tem o nome da função e o que faz.
      */
-    function renderizarComandos_() {
-      const secoes = COMANDOS_SECOES.map(function (secao, s) {
+    const COMANDOS_APPSCRIPT = [
+      { titulo: 'Acesso e diagnóstico', itens: [
+        { cmd: 'diagnosticarAcesso', desc: 'Refaz, passo a passo, o que a abertura do sistema faz (identificação, logo, módulos, template) e loga onde falha. Útil para descobrir por que um perfil não entra.' },
+        { cmd: 'diagnosticarAcessoComoEmail', desc: 'Mesmo diagnóstico simulando um e-mail. Crie uma função curta no editor que chama diagnosticarAcessoComoEmail("email@gmail.com") e execute-a.' }
+      ] },
+      { titulo: 'Usuários e permissões (socorro)', itens: [
+        { cmd: 'definirUsuariosAutorizados', desc: 'Regrava a lista padrão de autorizados (do código) por cima da propriedade. Recupera o acesso quando a lista salva ficou inválida.' },
+        { cmd: 'restaurarUsuariosPadrao', desc: 'Remove a lista personalizada e volta a valer a lista padrão do código.' },
+        { cmd: 'restaurarPermissoesPadrao', desc: 'Remove a matriz de permissões por perfil personalizada e volta ao padrão de MODULOS.' }
+      ] },
+      { titulo: 'Banco de Atletas', itens: [
+        { cmd: 'recalcularBancoAtletas', desc: 'Gera um novo snapshot do Banco de Atletas (relê elenco, solicitações, punições e súmulas). Equivale ao botão "Recalcular agora".' },
+        { cmd: 'obterStatusBancoAtletas', desc: 'Mostra o estado do snapshot: data da última geração, se está recalculando, se há agendamento.' },
+        { cmd: 'configurarAgendamentoBancoAtletas', desc: 'Liga o gatilho periódico que recalcula o banco automaticamente.' },
+        { cmd: 'desativarAgendamentoBancoAtletas', desc: 'Desliga o gatilho periódico do recálculo do banco.' }
+      ] },
+      { titulo: 'Histórico de elencos', itens: [
+        { cmd: 'processarHistoricoElencoAgora', desc: 'Processa a fila pendente de consolidação do histórico de inscrições dos elencos.' },
+        { cmd: 'obterStatusFilaHistoricoElenco', desc: 'Mostra o estado da fila: última execução e pendências.' },
+        { cmd: 'simularLimpezaHistoricoElencosTeste', desc: 'NÃO altera nada; mostra o que uma limpeza de histórico de teste removeria. Só numa base sem campeonatos.' },
+        { cmd: 'executarLimpezaHistoricoElencosTeste', desc: 'Executa a limpeza do histórico de teste (faz backup antes). Só numa base sem campeonatos; preserva solicitações, punições e súmulas.' }
+      ] },
+      { titulo: 'Solicitações e índices', itens: [
+        { cmd: 'recalcularSnapshotSolicitacoes', desc: 'Regera a pré-carga (snapshot) das solicitações processadas que acelera a tela. Exige pasta/dono configurados.' },
+        { cmd: 'reconciliarIndicesValidacaoAgora', desc: 'Reconcilia os índices de validação usados nas operações de elenco.' }
+      ] },
+      { titulo: 'Equipes, associados e manutenção', itens: [
+        { cmd: 'publicarEquipesAgora', desc: 'Republica o equipes.json no Drive (lido pelos formulários de inscrição e de súmula).' },
+        { cmd: 'prepararAssociados', desc: 'Cria (ou reaproveita) a planilha e a pasta de documentos dos associados. Execute UMA VEZ, com a conta dona da pasta raiz.' },
+        { cmd: 'publicarCadastrosAssociados', desc: 'Republica no Drive os cadastros de associados (útil após editar a planilha manualmente).' }
+      ] }
+    ];
+
+    const COMANDOS_APPSCRIPT_AVISOS = [
+      'Rodar no editor executa COM A SUA CONTA (admin dono do projeto); funções administrativas só funcionam para admin.',
+      'Operações que alteram dados (limpeza, recálculo, publicação) agem sobre o Drive/planilha reais — confira o log depois.',
+      'Prefira fazer pela tela quando houver opção equivalente (Recalcular agora, Configurar agendamento). O editor é para manutenção e socorro.',
+      'Funções listar... são usadas pela interface e só retornam dados para inspeção; não servem para operar.'
+    ];
+
+    // Monta as seções de comandos a partir de um catálogo. 'prefixo' garante ids
+    // únicos entre os dois blocos (Python x Apps Script).
+    function montarSecoesComandos_(catalogo, avisos, prefixo) {
+      const secoes = catalogo.map(function (secao, s) {
         const itens = secao.itens.map(function (item, i) {
-          const id = 'cmd_' + s + '_' + i;
+          const id = prefixo + '_' + s + '_' + i;
           return '<div class="cmd-item" data-busca="' + escapar((item.cmd + ' ' + item.desc).toLowerCase()) + '">'
             + '<div class="cmd-linha">'
             + '<code id="' + id + '">' + escapar(item.cmd) + '</code>'
@@ -3362,20 +3404,45 @@
         return '<section class="cmd-secao"><h3>' + escapar(secao.titulo) + '</h3>' + itens + '</section>';
       }).join('');
 
-      const avisos = '<section class="cmd-secao cmd-avisos"><h3>⚠️ Atenção</h3><ul>'
-        + COMANDOS_AVISOS.map(function (a) { return '<li>' + escapar(a) + '</li>'; }).join('')
-        + '</ul></section>';
+      const blocoAvisos = (avisos && avisos.length)
+        ? '<section class="cmd-secao cmd-avisos"><h3>⚠️ Atenção</h3><ul>'
+          + avisos.map(function (a) { return '<li>' + escapar(a) + '</li>'; }).join('')
+          + '</ul></section>'
+        : '';
+
+      return secoes + blocoAvisos;
+    }
+
+    /**
+     * Tela "Comandos do Sistema": dois blocos expansíveis — comandos do back-end
+     * Python (COMANDOS.md) e funções executáveis no editor do Apps Script
+     * (COMANDOS-APPSCRIPT.md). Cada item tem botão Copiar; a busca filtra os dois.
+     */
+    function renderizarComandos_() {
+      const blocoPython = montarSecoesComandos_(COMANDOS_SECOES, COMANDOS_AVISOS, 'cmdpy');
+      const blocoGas = montarSecoesComandos_(COMANDOS_APPSCRIPT, COMANDOS_APPSCRIPT_AVISOS, 'cmdgs');
 
       // Liga os eventos após inserir no DOM.
       setTimeout(conectarComandos_, 0);
 
       return '<div class="cmd-intro apoio">'
-        + 'Comandos da automação (back-end em Python), executados <strong>manualmente</strong> na raiz do projeto. '
-        + 'No Windows, troque <code>python</code> por <code>.\\.venv\\Scripts\\python.exe</code> quando a venv não estiver ativa. '
-        + 'Substitua os caminhos entre aspas pelos seus.'
+        + 'Referência de comandos para operar o sistema. Use a busca para localizar rapidamente.'
         + '</div>'
-        + '<div class="filtros"><input type="search" id="buscaComandos" placeholder="Buscar comando ou descrição"></div>'
-        + '<div id="listaComandos">' + secoes + avisos + '</div>';
+        + '<div class="filtros"><input type="search" id="buscaComandos" placeholder="Buscar comando, função ou descrição"></div>'
+        + '<div id="listaComandos">'
+        + '<details class="info-punicoes" open>'
+        + '<summary>Comandos da automação (back-end Python)</summary>'
+        + '<div class="info-punicoes-corpo">'
+        + '<p class="apoio" style="margin-top:0;">Executados <strong>manualmente</strong> na raiz do projeto. No Windows, troque <code>python</code> por <code>.\\.venv\\Scripts\\python.exe</code> quando a venv não estiver ativa. Substitua os caminhos entre aspas pelos seus.</p>'
+        + blocoPython
+        + '</div></details>'
+        + '<details class="info-punicoes">'
+        + '<summary>Funções do editor do Apps Script (manutenção e socorro)</summary>'
+        + '<div class="info-punicoes-corpo">'
+        + '<p class="apoio" style="margin-top:0;">Abra o projeto no Apps Script, selecione a função no topo do editor (ao lado de Executar) e clique em <strong>Executar</strong>. O resultado aparece em Registro de execução.</p>'
+        + blocoGas
+        + '</div></details>'
+        + '</div>';
     }
 
     function conectarComandos_() {
@@ -3394,6 +3461,10 @@
               return i.style.display !== 'none';
             });
             secao.style.display = algum ? '' : 'none';
+          });
+          // Com busca ativa, abre os dois blocos para os resultados ficarem visíveis.
+          document.querySelectorAll('#listaComandos > details').forEach(function (d) {
+            if (termo) d.setAttribute('open', '');
           });
         });
       }

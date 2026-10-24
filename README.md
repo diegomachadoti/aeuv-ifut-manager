@@ -1272,3 +1272,74 @@ Drive: o conteúdo é livre e a conferência cabe ao emissor. O mesmo comando
 `--gerar-pdf-documento` pode gerar outros documentos no padrão AEUV.
 Veja o [guia de documentos de filiação](filiacao/README.md) para editar campos,
 texto e taxas e para os cuidados de emissão de certificados e recibos.
+
+## Manutenção: o que precisa ser atualizado manualmente
+
+Alguns conteúdos ficam **duplicados em mais de um lugar** por limitação de
+ambiente (o Apps Script não lê os arquivos do repositório). Ao mudar um deles,
+atualize também os pontos relacionados abaixo, senão a tela mostra informação
+desatualizada.
+
+### Guias de comandos (`.md`) × tela "Comandos do Sistema"
+
+A tela **Comandos do Sistema** (sistema interno, só admin/diretoria) tem o
+conteúdo dos comandos **embutido no código** — ela não lê os `.md`. São duas
+fontes de verdade que precisam andar juntas:
+
+| Documentação no repositório | Onde aparece na tela | O que atualizar junto |
+| --- | --- | --- |
+| `COMANDOS.md` (comandos Python do `main.py` e scripts) | Bloco "Comandos da automação (back-end Python)" | Constante `COMANDOS_SECOES` (e `COMANDOS_AVISOS`) em `apps-scripts/sistema-interno/Index.html` |
+| `apps-scripts/sistema-interno/COMANDOS-APPSCRIPT.md` (funções executáveis no editor do Apps Script) | Bloco "Funções do editor do Apps Script" | Constante `COMANDOS_APPSCRIPT` (e `COMANDOS_APPSCRIPT_AVISOS`) em `apps-scripts/sistema-interno/Index.html` |
+
+Fluxo ao criar/alterar um comando ou uma função de manutenção:
+
+1. Se for comando Python novo em `main.py` (nova flag `--...`), documente em
+   `COMANDOS.md` e espelhe em `COMANDOS_SECOES`.
+2. Se for função nova executável no editor do Apps Script (manutenção/socorro),
+   documente em `COMANDOS-APPSCRIPT.md` e espelhe em `COMANDOS_APPSCRIPT`.
+3. Publique o Apps Script (editando a implantação existente → **Nova versão**,
+   para a URL `/exec` não mudar).
+
+### Passo a passo de acesso (tela Usuários) × PDF
+
+O passo a passo "Como o usuário acessa o sistema" existe em dois lugares:
+
+- **Na tela Usuários do sistema** — montado em `montarTelaUsuarios` (bloco
+  `comoLogar`) no `Index.html`.
+- **No PDF** gerado por `gerar_pdf_passo_acesso.py` (arquivo
+  `downloads/Como acessar o Sistema Interno - AEUV.pdf`).
+
+Ao mudar o texto de um, ajuste o outro. Para regerar o PDF:
+
+```bash
+./.venv/bin/python gerar_pdf_passo_acesso.py
+```
+
+### Nome oficial da associação
+
+O nome oficial é **AEUV (Associação Esportiva Uberlandense Varzeana)** e aparece
+em vários pontos. Se mudar, atualize em todos:
+
+- `ASSOCIACAO_NOME` nos três `WebApp.gs` (`sistema-interno`, `sumula-digital`,
+  `inscricao-portabilidade`);
+- `ASSOCIACAO_PADRAO` em `nota_pdf.py` e `[pdf] associacao` no `config.ini`;
+- `ASSOCIACAO` em `gerar_pdf_passo_acesso.py`.
+
+### URL da implantação do sistema interno
+
+- O link do dia a dia é **`https://portal.aeuv.org/sistema/`** (em
+  `CONFIG.urlPortal`, `WebApp.gs` do sistema interno). O portal embute a URL
+  `/exec` da implantação ativa.
+- **Sempre publique editando a implantação existente → Nova versão.** Criar uma
+  "Nova implantação" gera uma URL `/exec` diferente e quebra o portal, que
+  aponta para a URL antiga.
+- O primeiro acesso de cada usuário precisa ser pela URL `/exec` direta (fora do
+  portal), para o Google mostrar a tela de autorização OAuth — o passo a passo
+  da tela Usuários já explica isso.
+
+### Lista de equipes
+
+A lista oficial fica em `apps-scripts/equipes.json` e é publicada no Drive por
+`publicarEquipesAgora` (ou pela tela Banco de Dados de Equipes). Dados que
+referenciam nomes de equipe (ex.: o JSON de punições retroativas) devem usar os
+nomes dessa lista para não divergir nos filtros.
