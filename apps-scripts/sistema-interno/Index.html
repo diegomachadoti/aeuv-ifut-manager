@@ -589,6 +589,39 @@
     body.tema-escuro .info-punicoes[open] > summary { border-color: #33425f; }
     body.tema-escuro .info-punicoes-cmd { background: #0b1020; border: 1px solid #33425f; }
 
+    /* Tela "Comandos do Sistema". */
+    .cmd-intro { margin: 10px 0 14px; line-height: 1.6; }
+    .cmd-intro code { background: var(--fundo); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+    .cmd-secao { margin: 18px 0; }
+    .cmd-secao h3 { margin: 0 0 10px; font-size: 15px; color: var(--azul); }
+    .cmd-item {
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      background: var(--superficie);
+    }
+    .cmd-linha { display: flex; gap: 10px; align-items: flex-start; }
+    .cmd-linha code {
+      flex: 1;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12.5px;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+    .cmd-copiar { flex: 0 0 auto; padding: 6px 12px; font-size: 12px; }
+    .cmd-desc { margin: 8px 0 0; font-size: 13px; color: var(--apoio); line-height: 1.5; }
+    .cmd-avisos ul { margin: 0; padding-left: 20px; }
+    .cmd-avisos li { margin-bottom: 6px; font-size: 13px; color: var(--apoio); line-height: 1.5; }
+
+    body.tema-escuro .cmd-intro code { background: var(--superficie-2); }
+    body.tema-escuro .cmd-item { background: var(--superficie-2); border-color: #33425f; }
+    body.tema-escuro .cmd-linha code { background: #0b1020; border: 1px solid #33425f; }
+
     /* Larguras fixas: a tabela cabe na tela sem empurrar as colunas curtas. */
     .punicoes { table-layout: fixed; font-size: 13px; }
     .punicoes th, .punicoes td { padding: 9px 6px; vertical-align: top; }
@@ -3102,6 +3135,11 @@
         return;
       }
 
+      if (modulo.tipo === 'comandos') {
+        conteudo.innerHTML = cabecalho + renderizarComandos_();
+        return;
+      }
+
       if (modulo.id === 'campeonatos') {
         conteudo.innerHTML = cabecalho
           + '<div id="areaCampeonatos">' + blocoCarregando('statusCampeonatos') + '</div>';
@@ -3228,6 +3266,154 @@
       conteudo.innerHTML = cabecalho
         + '<div class="aviso"><strong>Em desenvolvimento.</strong> Esta funcionalidade j&aacute; est&aacute; '
         + 'prevista no sistema e ser&aacute; liberada em uma pr&oacute;xima vers&atilde;o.</div>';
+    }
+
+    /**
+     * Catálogo de comandos (espelha COMANDOS.md). Só a tela de comandos usa.
+     * Cada seção tem um título e uma lista de { cmd, desc }.
+     */
+    const COMANDOS_SECOES = [
+      { titulo: '1. Preparação e ajuda', itens: [
+        { cmd: 'python -m pip install -r requirements.txt', desc: 'Instala as dependências no ambiente Python atual.' },
+        { cmd: 'python main.py --help', desc: 'Lista as opções do comando principal (-h também funciona).' }
+      ] },
+      { titulo: '2. Inscrições / remoções / portabilidade no iFut', itens: [
+        { cmd: 'python main.py', desc: 'Fluxo completo: baixa os TXT, processa no iFut, move arquivos e publica resultados.' },
+        { cmd: 'python main.py --sync-drive-only', desc: 'Somente baixa os TXT de entrada do Drive; não processa no iFut.' },
+        { cmd: 'python main.py --process-local-only', desc: 'Processa os TXT já baixados, sem novo download.' },
+        { cmd: 'python main.py --login-only', desc: 'Sincroniza o Drive, faz login no iFut e encerra.' },
+        { cmd: 'python main.py --update-all-team-counts', desc: 'Atualiza a contagem de atletas dos times na planilha.' }
+      ] },
+      { titulo: '3. Súmulas / notas oficiais / punições', itens: [
+        { cmd: 'python main.py --analisar-sumulas', desc: 'Baixa e analisa as súmulas por regras; gera notas (TXT/PDF) e atualiza as punições.' },
+        { cmd: 'python main.py --analisar-sumulas --ia', desc: 'Analisa com IA em vez das regras fixas (envia regulamento/relato ao provedor configurado).' },
+        { cmd: 'python main.py --analisar-sumulas --process-local-only', desc: 'Analisa as súmulas já baixadas, sem novo download.' },
+        { cmd: 'python main.py --gerar-pdf-nota 5', desc: 'Regera a nota pelo número; atualiza punições e publica se finalizada.' },
+        { cmd: 'python main.py --gerar-pdf-nota "SUM-PROTOCOLO"', desc: 'Regera a nota pelo protocolo da súmula.' },
+        { cmd: 'python main.py --atualizar-controle-punicoes', desc: 'Reconstrói o TXT/PDF de punições pelas notas e publica o controle no Drive.' }
+      ] },
+      { titulo: '4. Regulamento / forma de disputa / publicação', itens: [
+        { cmd: 'python main.py --gerar-pdf-regulamento "regulamento/regulamento-7-super-liga-união-2026"', desc: 'Gera o PDF assinado do regulamento e publica no Drive.' },
+        { cmd: 'python main.py --gerar-pdf-forma-disputa "formadisputa/forma-disputa-7-super-liga-união-2026-5-rodadasV3"', desc: 'Gera o PDF assinado da forma de disputa/tabela e publica no Drive.' },
+        { cmd: 'python main.py --publicar-drive', desc: 'Publica regulamentos, formas de disputa e notas finalizadas (não ofícios/filiação).' }
+      ] },
+      { titulo: '5. Ofício / requerimento à FUTEL', itens: [
+        { cmd: 'python main.py --criar-modelo-oficio "oficio-requerimento/novo-oficio.txt"', desc: 'Cria uma cópia editável do modelo de ofício, sem sobrescrever.' },
+        { cmd: 'python main.py --gerar-pdf-oficio "oficio-requerimento/oficio-futel-001-2026.txt"', desc: 'Gera o PDF final assinado e o checklist .pendencias.txt (não envia ao Drive).' }
+      ] },
+      { titulo: '6. Filiação / plano de associado / documentos livres', itens: [
+        { cmd: 'python main.py --criar-modelos-filiacao', desc: 'Cria os quatro TXTs padrão em filiacao/; recusa se já existirem.' },
+        { cmd: 'python main.py --gerar-pdf-filiacao', desc: 'Gera os quatro PDFs padrão (equivale a --gerar-pdf-filiacao todos).' },
+        { cmd: 'python main.py --gerar-pdf-filiacao ficha', desc: 'Regera ficha + termo, com espaço para assinatura do representante da equipe.' },
+        { cmd: 'python main.py --gerar-pdf-filiacao certificado', desc: 'Regera o certificado com assinatura do Presidente da AEUV.' },
+        { cmd: 'python main.py --gerar-pdf-filiacao recibo', desc: 'Regera o recibo com assinatura do Presidente da AEUV.' },
+        { cmd: 'python main.py --gerar-pdf-filiacao plano', desc: 'Regera o Plano de Associado público, sem assinatura pessoal.' },
+        { cmd: 'python main.py --gerar-pdf-documento "caminho/documento.txt"', desc: 'Gera qualquer documento livre no padrão AEUV (cabeçalho INI + texto após ---).' }
+      ] },
+      { titulo: '7. Relatórios financeiros', itens: [
+        { cmd: 'python main.py --gerar-pdf-financeiro', desc: 'Gera o relatório geral lendo a planilha financeira do Drive.' },
+        { cmd: 'python main.py --gerar-pdf-financeiro competicao --origem "SUPER LIGA UNIÃO"', desc: 'Gera o relatório da competição/origem informada.' },
+        { cmd: 'python main.py --gerar-pdf-financeiro emenda --emenda "Emenda 042/2026"', desc: 'Gera o relatório da emenda/termo informado.' },
+        { cmd: 'python main.py --gerar-pdf-financeiro --periodo 3m', desc: 'Filtro de período: hoje, mes, 3m, 6m ou anual.' },
+        { cmd: 'python main.py --publicar-relatorio-financeiro "downloads/financeiro/relatorio-....pdf"', desc: 'Repete só o upload de um PDF já gerado, sem alterar o arquivo local.' }
+      ] },
+      { titulo: '8. Configuração opcional', itens: [
+        { cmd: '--config "config.ini"', desc: 'Seleciona a configuração; disponível em todas as CLIs Python do guia.' },
+        { cmd: '--selectors "selectors.ini"', desc: 'Seleciona os seletores Selenium; somente main.py.' }
+      ] },
+      { titulo: '9. Alternativas diretas dos scripts', itens: [
+        { cmd: 'python nota_pdf.py "ALVO"', desc: 'Regera a nota por número, protocolo ou TXT; atualiza punições/publica a final.' },
+        { cmd: 'python sumula_disciplinar.py', desc: 'Executa a mesma análise disciplinar de --analisar-sumulas.' },
+        { cmd: 'python resultado_pdf.py --todos', desc: 'Regera os PDFs de todos os resultados de inscrição locais existentes.' },
+        { cmd: 'python regulamento_pdf.py "ARQUIVO" --titulo "SUBTÍTULO"', desc: 'Gera só o PDF local do regulamento (NÃO publica no Drive).' }
+      ] },
+      { titulo: '10. Testes e diagnósticos', itens: [
+        { cmd: 'python -m unittest discover -s tests -p "test_*.py" -v', desc: 'Executa os testes Python locais.' },
+        { cmd: 'node --test "apps-scripts/sistema-interno/performance/*.test.cjs"', desc: 'Executa os testes locais do sistema interno (requer Node.js).' }
+      ] }
+    ];
+
+    const COMANDOS_AVISOS = [
+      '--process-local-only evita o download inicial, mas NÃO garante ausência de escrita remota.',
+      'dry_run é configurado no INI; não impede remoções, publicação/movimentação no Drive ou planilha. Não existe flag --dry-run.',
+      '--ia envia dados ao provedor configurado e pode gerar cobrança conforme o serviço.',
+      'Certificados/recibos livres não comprovam aprovação/pagamento; confira antes de emitir.',
+      'Não compartilhe credenciais, tokens, config.local.ini/json, HAR ou documentos pessoais.'
+    ];
+
+    /**
+     * Tela "Comandos do Sistema": espelha o COMANDOS.md para admin/diretoria.
+     * Cada comando tem um botão Copiar. Um campo de busca filtra por texto.
+     */
+    function renderizarComandos_() {
+      const secoes = COMANDOS_SECOES.map(function (secao, s) {
+        const itens = secao.itens.map(function (item, i) {
+          const id = 'cmd_' + s + '_' + i;
+          return '<div class="cmd-item" data-busca="' + escapar((item.cmd + ' ' + item.desc).toLowerCase()) + '">'
+            + '<div class="cmd-linha">'
+            + '<code id="' + id + '">' + escapar(item.cmd) + '</code>'
+            + '<button type="button" class="botao-apoio cmd-copiar" data-copiar="' + id + '">Copiar</button>'
+            + '</div>'
+            + '<p class="cmd-desc">' + escapar(item.desc) + '</p>'
+            + '</div>';
+        }).join('');
+        return '<section class="cmd-secao"><h3>' + escapar(secao.titulo) + '</h3>' + itens + '</section>';
+      }).join('');
+
+      const avisos = '<section class="cmd-secao cmd-avisos"><h3>⚠️ Atenção</h3><ul>'
+        + COMANDOS_AVISOS.map(function (a) { return '<li>' + escapar(a) + '</li>'; }).join('')
+        + '</ul></section>';
+
+      // Liga os eventos após inserir no DOM.
+      setTimeout(conectarComandos_, 0);
+
+      return '<div class="cmd-intro apoio">'
+        + 'Comandos da automação (back-end em Python), executados <strong>manualmente</strong> na raiz do projeto. '
+        + 'No Windows, troque <code>python</code> por <code>.\\.venv\\Scripts\\python.exe</code> quando a venv não estiver ativa. '
+        + 'Substitua os caminhos entre aspas pelos seus.'
+        + '</div>'
+        + '<div class="filtros"><input type="search" id="buscaComandos" placeholder="Buscar comando ou descrição"></div>'
+        + '<div id="listaComandos">' + secoes + avisos + '</div>';
+    }
+
+    function conectarComandos_() {
+      const busca = document.getElementById('buscaComandos');
+      if (busca) {
+        busca.addEventListener('input', function () {
+          const termo = simplificar(busca.value.trim());
+          document.querySelectorAll('#listaComandos .cmd-item').forEach(function (item) {
+            const texto = simplificar(item.dataset.busca || '');
+            item.style.display = (!termo || texto.indexOf(termo) !== -1) ? '' : 'none';
+          });
+          // Esconde seções sem itens visíveis.
+          document.querySelectorAll('#listaComandos .cmd-secao').forEach(function (secao) {
+            if (secao.classList.contains('cmd-avisos')) return;
+            const algum = Array.prototype.some.call(secao.querySelectorAll('.cmd-item'), function (i) {
+              return i.style.display !== 'none';
+            });
+            secao.style.display = algum ? '' : 'none';
+          });
+        });
+      }
+      document.querySelectorAll('.cmd-copiar').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          const alvo = document.getElementById(botao.dataset.copiar);
+          const texto = alvo ? alvo.textContent : '';
+          const feito = function () {
+            const antes = botao.textContent;
+            botao.textContent = 'Copiado!';
+            setTimeout(function () { botao.textContent = antes; }, 1500);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(texto).then(feito, feito);
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = texto; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(ta); feito();
+          }
+        });
+      });
     }
 
     /**

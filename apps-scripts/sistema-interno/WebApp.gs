@@ -297,6 +297,14 @@ const MODULOS = [
     perfis: ['admin', 'diretoria']
   },
   {
+    id: 'comandos',
+    nome: 'Comandos do Sistema',
+    icone: '⌨️',
+    tipo: 'comandos',
+    descricao: 'Referência dos comandos da automação (back-end em Python) usados para operar o sistema.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
     id: 'administracao',
     nome: 'Administração',
     icone: '⚙️',
