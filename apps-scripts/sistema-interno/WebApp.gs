@@ -9727,6 +9727,7 @@ function listarSumulas() {
 
 function lerSumulas_(paraAtletas) {
   const metricas = criarMetricasFonteAtleta_(paraAtletas, 'sumulas');
+  let perfil = '';
   return medirFonteAtleta_(metricas, 'leitura', function () {
     medirFonteAtleta_(metricas, 'autorizacao', function () {
       const sessao = identificarUsuario_();
@@ -9734,6 +9735,7 @@ function lerSumulas_(paraAtletas) {
       if (!sessao.autorizado || !moduloLiberado_('sumulas', sessao.usuario.perfil)) {
         throw new Error('Você não tem permissão para consultar as súmulas digitais.');
       }
+      perfil = sessao.usuario.perfil;
     });
 
     const raiz = medirFonteAtleta_(metricas, 'localizar', pastaSumulas_);
@@ -9829,9 +9831,94 @@ function lerSumulas_(paraAtletas) {
       equipes: paraAtletas ? [] : equipesDasSumulas_(registros),
       total: achados.length,
       limite: limite,
-      pastaUrl: raiz.getUrl()
+      pastaUrl: raiz.getUrl(),
+      podeExcluir: perfil === 'admin'
     };
   });
+}
+
+// Subpasta onde as súmulas excluídas pela tela ficam guardadas (fora da
+// listagem e do fluxo da automação, mas sem ir para a lixeira).
+const SUMULAS_PASTA_EXCLUIDOS = 'Excluídos';
+
+/**
+ * Exclui uma súmula enviada: move o TXT para a subpasta "Excluídos" na pasta
+ * de súmulas. Só admin. Localiza o arquivo pelo nome (SUMULA_*.txt) na raiz e
+ * nas subpastas Entrada/Processados/Falhas. Reversível (o arquivo fica retido
+ * em "Excluídos", não na lixeira).
+ * @param {string} arquivoNome  Nome do arquivo da súmula (registro.arquivoNome).
+ * @return {{sucesso: boolean, mensagem: string}}
+ */
+function excluirSumula(arquivoNome) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !moduloLiberado_('sumulas', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar as súmulas digitais.');
+  }
+  if (sessao.usuario.perfil !== 'admin') {
+    throw new Error('Somente o Administrador pode excluir súmulas.');
+  }
+
+  const alvo = String(arquivoNome || '').trim();
+  if (!/^SUMULA_.+\.txt$/i.test(alvo)) {
+    throw new Error('Súmula inválida para exclusão.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const raiz = pastaSumulas_();
+    // Pasta de retenção: a súmula sai da listagem e do fluxo da automação
+    // (que só lê a entrada), mas fica guardada aqui em vez de ir à lixeira.
+    const existentes = raiz.getFoldersByName(SUMULAS_PASTA_EXCLUIDOS);
+    const excluidos = existentes.hasNext() ? existentes.next() : raiz.createFolder(SUMULAS_PASTA_EXCLUIDOS);
+
+    let removido = false;
+    let bloqueadaAnalisada = false;
+
+    function moverParaExcluidos(arquivo) {
+      excluidos.addFile(arquivo);
+      const pais = arquivo.getParents();
+      while (pais.hasNext()) {
+        const pai = pais.next();
+        if (pai.getId() !== excluidos.getId()) pai.removeFile(arquivo);
+      }
+      removido = true;
+    }
+
+    // Procura o arquivo pelo nome nas subpastas de situação e na raiz.
+    // Súmulas "Analisadas" (pasta Processados) já geraram nota/punição: não
+    // podem ser excluídas, para não criar inconsistência com o que foi julgado.
+    SUMULAS_PASTAS.forEach(function (origem) {
+      const pastas = raiz.getFoldersByName(origem.pasta);
+      if (!pastas.hasNext()) return;
+      const arquivos = pastas.next().getFilesByName(alvo);
+      while (arquivos.hasNext()) {
+        const arquivo = arquivos.next();
+        if (origem.situacao === 'Analisada') {
+          bloqueadaAnalisada = true;
+          continue;
+        }
+        moverParaExcluidos(arquivo);
+      }
+    });
+
+    const naRaiz = raiz.getFilesByName(alvo);
+    while (naRaiz.hasNext()) {
+      moverParaExcluidos(naRaiz.next());
+    }
+
+    if (bloqueadaAnalisada && !removido) {
+      throw new Error('Súmulas já analisadas não podem ser excluídas, pois já geraram a nota/punição.');
+    }
+
+    if (!removido) {
+      throw new Error('Súmula não encontrada; talvez já tenha sido removida. Use Atualizar.');
+    }
+
+    return { sucesso: true, mensagem: 'Súmula movida para "' + SUMULAS_PASTA_EXCLUIDOS + '".' };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**

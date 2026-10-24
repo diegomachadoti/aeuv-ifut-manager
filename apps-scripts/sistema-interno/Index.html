@@ -549,9 +549,49 @@
 
     .tabela-rolagem { overflow-x: auto; }
 
+    /* Bloco informativo recolhível explicando o fluxo das punições. */
+    .info-punicoes {
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+      background: var(--fundo);
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .info-punicoes > summary {
+      cursor: pointer;
+      padding: 12px 16px;
+      font-weight: 600;
+      color: var(--azul);
+      list-style: none;
+    }
+    .info-punicoes > summary::before { content: 'ℹ️ '; }
+    .info-punicoes > summary::-webkit-details-marker { display: none; }
+    .info-punicoes[open] > summary { border-bottom: 1px solid var(--borda); }
+    .info-punicoes-corpo { padding: 12px 16px; font-size: 13px; line-height: 1.6; color: var(--texto); }
+    .info-punicoes-corpo ol { margin: 0 0 8px; padding-left: 20px; }
+    .info-punicoes-corpo li { margin-bottom: 6px; }
+    .info-punicoes-nota { margin: 8px 0 0; color: var(--apoio); font-size: 12px; }
+    .info-punicoes-cmd {
+      margin: 6px 0 2px;
+      padding: 8px 10px;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 6px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .info-punicoes-coment { color: #94a3b8; }
+
+    body.tema-escuro .info-punicoes { background: var(--superficie-2); border-color: #33425f; }
+    body.tema-escuro .info-punicoes[open] > summary { border-color: #33425f; }
+    body.tema-escuro .info-punicoes-cmd { background: #0b1020; border: 1px solid #33425f; }
+
     /* Larguras fixas: a tabela cabe na tela sem empurrar as colunas curtas. */
     .punicoes { table-layout: fixed; font-size: 13px; }
-    .punicoes th, .punicoes td { padding: 9px 10px; vertical-align: top; }
+    .punicoes th, .punicoes td { padding: 9px 6px; vertical-align: top; }
 
     /* Todas as células quebram palavras longas para não transbordar nas colunas. */
     .punicoes td { overflow-wrap: anywhere; word-break: break-word; }
@@ -585,58 +625,37 @@
     .punicoes-acoes {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 5px;
       align-items: stretch;
+      min-width: 0;
     }
 
     .punicoes-acoes .botao-principal,
     .punicoes-acoes .botao-apoio {
-      padding: 5px 8px;
-      font-size: 12px;
+      padding: 5px 6px;
+      font-size: 11px;
       line-height: 1.1;
       white-space: nowrap;
       text-align: center;
     }
 
-    .btn-aprovar-punicao {
-      background: #1e8449;
-      color: #fff;
-      border: 1px solid #1a6e3c;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: 600;
+    /* "Editar": azul mais claro que o "Aprovar" (botao-apoio destaque),
+       sobre a base botao-apoio para herdar tamanho/estados. */
+    .botao-apoio.azul-claro {
+      background: #eaf1fc;
+      border-color: #c4d8fa;
+      color: #1b3a6b;
     }
-    .btn-aprovar-punicao:hover { background: #176e3b; }
-    .btn-aprovar-punicao:disabled { background: #cbd5e1; border-color: #cbd5e1; color: #64748b; cursor: not-allowed; }
+    .botao-apoio.azul-claro:hover { background: #dbe8fb; }
 
-    .btn-desfazer-punicao {
-      background: #fff;
-      color: #8a5a00;
-      border: 1px solid #e0b968;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: 600;
+    /* "Aprovar" usa .botao-apoio.destaque (azul escuro padrão do app). O estado
+       desabilitado precisa ficar claramente inativo. */
+    .botao-apoio.destaque:disabled {
+      background: #cbd5e1;
+      border-color: #cbd5e1;
+      color: #64748b;
+      cursor: not-allowed;
     }
-    .btn-desfazer-punicao:hover { background: #fff8ec; }
-
-    .btn-editar-punicao {
-      background: #fff;
-      color: #14213d;
-      border: 1px solid #c4d8fa;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: 600;
-    }
-    .btn-editar-punicao:hover { background: #eef4fd; }
-
-    .btn-excluir-punicao {
-      background: #fff;
-      color: #922b21;
-      border: 1px solid #e6a79f;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    .btn-excluir-punicao:hover { background: #fdecea; }
 
     /* Badge de aprovação em bloco, com a data embaixo. */
     .aprovacao-info { font-size: 11px; color: var(--apoio); margin-top: 3px; white-space: normal; }
@@ -682,6 +701,50 @@
 
     .solicitacoes tbody tr.linha { cursor: pointer; }
     .solicitacoes tbody tr.linha:hover { background: var(--fundo); }
+
+    /* Súmulas enviadas: colunas próprias para caber na tela sem rolagem
+       horizontal. Partida e Árbitro quebram texto em vez de empurrar a tabela. */
+    .sumulas th:nth-child(1) { width: 16%; }   /* Situação */
+    .sumulas th:nth-child(2) { width: 15%; }   /* Protocolo */
+    .sumulas th:nth-child(3) { width: 13%; }   /* Enviada em */
+    .sumulas th:nth-child(4) { width: 22%; }   /* Partida */
+    .sumulas th:nth-child(5) { width: 18%; }   /* Árbitro */
+    .sumulas th:nth-child(6) { width: 16%; }   /* Envolvidos */
+    .sumulas th:nth-child(7) { width: auto; }
+
+    .sumulas.com-acoes th:nth-child(1) { width: 15%; }   /* Situação */
+    .sumulas.com-acoes th:nth-child(2) { width: 14%; }   /* Protocolo */
+    .sumulas.com-acoes th:nth-child(3) { width: 12%; }   /* Enviada em */
+    .sumulas.com-acoes th:nth-child(4) { width: 22%; }   /* Partida */
+    .sumulas.com-acoes th:nth-child(5) { width: 17%; }   /* Árbitro */
+    .sumulas.com-acoes th:nth-child(6) { width: 10%; }   /* Envolvidos */
+    .sumulas.com-acoes th:nth-child(7) { width: 10%; }   /* Ações */
+
+    .sumulas { width: 100%; }
+    .sumulas td { overflow-wrap: anywhere; word-break: break-word; }
+    /* O protocolo é uma string longa sem espaços (monospace): precisa poder
+       quebrar, senão força a coluna a crescer e gera rolagem horizontal. */
+    .sumulas .protocolo { white-space: normal; overflow-wrap: anywhere; word-break: break-all; }
+    /* A pílula de situação fica numa linha só (sem quebrar "🕒 Aguardando").
+       A coluna tem largura suficiente; o espaço extra vem do Protocolo, que
+       quebra sem problema. */
+    .sumulas .pilula { white-space: nowrap; }
+    /* Padding dentro da largura da coluna (border-box): o padding das 7 colunas
+       deixa de somar por fora e estourar o container, eliminando a rolagem. */
+    .sumulas th, .sumulas td { padding: 9px 6px; box-sizing: border-box; }
+
+    /* Botão de ação da súmula: compacto e encolhível, para a coluna Ações não
+       empurrar a tabela. Um único botão (Excluir), sem largura mínima. */
+    .sumulas .acao-excluir-sumula {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      min-width: 0;
+      padding: 5px 6px;
+      font-size: 11px;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
 
     /* ----- Banco de Dados de Atletas ----- */
 
@@ -2022,6 +2085,21 @@
       border-color: #33425f;
     }
 
+    /* "Editar" azul-claro no tema escuro: azul translúcido com texto claro. */
+    body.tema-escuro .botao-apoio.azul-claro {
+      background: #1a2540;
+      border-color: #33518a;
+      color: #9dc1f5;
+    }
+    body.tema-escuro .botao-apoio.azul-claro:hover { background: #22345c; }
+
+    /* "Aprovar" (destaque) desabilitado no tema escuro. */
+    body.tema-escuro .botao-apoio.destaque:disabled {
+      background: #2a3344;
+      border-color: #33425f;
+      color: #6f7c95;
+    }
+
     body.tema-escuro .fin-grupo-data input[type="text"] { background: transparent; }
     body.tema-escuro .fin-campo .fin-input-valor { color: #4ade80; }
     body.tema-escuro .fin-alternar-valores[aria-pressed="true"] {
@@ -2071,6 +2149,7 @@
 
     body.tema-escuro .sucesso { background: #10331f; color: #4ade80; }
     body.tema-escuro .erro { background: #3b1a1d; color: #fca5a5; }
+    body.tema-escuro .botao-apoio.perigo { color: #f87171; border-color: #5b2a2e; }
     body.tema-escuro .botao-apoio.perigo:hover { background: #3b1a1d; }
 
     body.tema-escuro .fin-upload-area,
@@ -7788,6 +7867,23 @@
         : 'Dados lidos do arquivo de controle';
 
       document.getElementById('statusPunicoes').outerHTML = ''
+        + '<details class="info-punicoes">'
+        + '<summary>Como as punições são geradas e processadas</summary>'
+        + '<div class="info-punicoes-corpo">'
+        + '<p>As punições <strong>não</strong> são geradas automaticamente. Depois que a arbitragem envia a súmula digital do jogo, um responsável roda o processamento <strong>manualmente</strong> na automação (back-end em Python), que lê a súmula e aplica o regulamento da competição. Esta tela apenas <strong>consulta</strong> o resultado publicado no Drive.</p>'
+        + '<ol>'
+        + '<li><strong>Envio da súmula:</strong> a arbitragem envia a súmula digital (relato dos fatos + envolvidos), que fica na pasta do Drive aguardando processamento.</li>'
+        + '<li><strong>Processamento manual:</strong> o responsável executa a automação no terminal. Ela baixa as súmulas, enquadra as condutas nos artigos do regulamento e calcula a pena por <em>dosimetria</em> — parte da pena mínima do dispositivo e soma 1 partida por circunstância registrada no relato (reiteração, ameaça, continuidade após expulsão e <em>reincidência</em>), sem passar do máximo. Comandos típicos:'
+        + '<div class="info-punicoes-cmd">python main.py --analisar-sumulas<br>python main.py --analisar-sumulas --ia  <span class="info-punicoes-coment"># usa IA em vez das regras fixas</span></div></li>'
+        + '<li><strong>Nota oficial gerada:</strong> havendo infração, é criada a nota oficial disciplinar numerada (NNN/AAAA), em TXT e PDF. O <em>Status</em> fica <strong>DEFINIDA</strong> quando a pena já está decidida, ou a pena fica <strong>[A DEFINIR]</strong> quando o caso exige decisão da comissão (ex.: reincidência com suspensão por tempo). Súmula sem infração gera apenas uma análise, sem punição.</li>'
+        + '<li><strong>Revisão e publicação:</strong> a comissão revisa a nota, resolve os campos <em>[A DEFINIR]</em> e publica. Só a nota <strong>final</strong> (sem pendências e sem divergências) é enviada ao Drive; rascunhos não aparecem aqui. O controle é publicado/atualizado pela automação:'
+        + '<div class="info-punicoes-cmd">python main.py --gerar-pdf-nota 5  <span class="info-punicoes-coment"># regera a nota após editar</span><br>python main.py --atualizar-controle-punicoes<br>python main.py --publicar-drive</div></li>'
+        + '<li><strong>Aprovação da diretoria (nesta tela):</strong> cada punição precisa ser <em>Aprovada</em> aqui para contar no histórico disciplinar do atleta (suspensões e reincidência). Enquanto não aprovada, aparece como <em>Não aprovada</em> e não suspende ninguém.</li>'
+        + '<li><strong>Cumprimento:</strong> a <em>Situação</em> acompanha o cumprimento — <em>A cumprir</em> enquanto restam jogos de suspensão e <em>Cumprida</em> ao final.</li>'
+        + '</ol>'
+        + '<p class="info-punicoes-nota">Punições marcadas como <strong>Retroativa</strong> vieram de notas oficiais antigas importadas; só as aprovadas contam no histórico. Use <strong>Desaprovar</strong> para reverter uma aprovação e <strong>Excluir</strong> (somente administrador) para remover um registro.</p>'
+        + '</div>'
+        + '</details>'
         + '<div class="resumo" id="resumoPunicoes"></div>'
         + '<div class="filtros">'
         + '<input type="search" id="buscaPunicoes" placeholder="Buscar por atleta, equipe, nota ou artigo">'
@@ -7960,23 +8056,23 @@
           const botoes = [];
           if (punicoes.podeAprovar) {
             if (aprovada) {
-              botoes.push('<button type="button" class="btn-desfazer-punicao acao-reprovar-punicao" '
-                + 'data-idx="' + idxGlobal + '">Desfazer</button>');
+              botoes.push('<button type="button" class="botao-apoio acao-reprovar-punicao" '
+                + 'data-idx="' + idxGlobal + '" title="Desfazer a aprovação desta punição">Desaprovar</button>');
             } else {
               // Só punições DEFINIDA podem ser aprovadas.
               const podeEsta = String(r.status || '').toUpperCase() === 'DEFINIDA';
-              botoes.push('<button type="button" class="btn-aprovar-punicao acao-aprovar-punicao" '
+              botoes.push('<button type="button" class="botao-apoio destaque acao-aprovar-punicao" '
                 + 'data-idx="' + idxGlobal + '"' + (podeEsta ? '' : ' disabled title="Só punições DEFINIDA podem ser aprovadas"')
                 + '>✔ Aprovar</button>');
             }
           }
           // Editar: só punições retroativas (as do JSON) e só para quem aprova (admin/diretoria).
           if (r.retroativa && punicoes.podeAprovar) {
-            botoes.push('<button type="button" class="btn-editar-punicao acao-editar-punicao" '
+            botoes.push('<button type="button" class="botao-apoio azul-claro acao-editar-punicao" '
               + 'data-idx="' + idxGlobal + '" title="Editar punição retroativa">✏️ Editar</button>');
           }
           if (punicoes.podeExcluir) {
-            botoes.push('<button type="button" class="btn-excluir-punicao acao-excluir-punicao" '
+            botoes.push('<button type="button" class="botao-apoio perigo acao-excluir-punicao" '
               + 'data-idx="' + idxGlobal + '" title="Excluir punição">🗑️ Excluir</button>');
           }
           acoesHtml = celula('Ações', '<div class="punicoes-acoes">' + botoes.join('') + '</div>');
@@ -9383,7 +9479,7 @@
      * Estado da tela de sumulas. Mesma ideia das solicitacoes: le do
      * Drive uma vez e filtra sobre essa copia.
      */
-    let sumulas = { registros: [], situacoes: [], equipes: [], total: 0, limite: 0, pastaUrl: '' };
+    let sumulas = { registros: [], situacoes: [], equipes: [], total: 0, limite: 0, pastaUrl: '', podeExcluir: false };
 
     /** Arquivos com o detalhe aberto. */
     let sumulasAbertas = {};
@@ -9447,9 +9543,10 @@
           ? '<a class="botao-apoio" href="' + escapar(sumulas.pastaUrl) + '" target="_blank" rel="noopener">Abrir pasta</a>'
           : '')
         + '</div>'
-        + '<div class="tabela-rolagem"><table class="solicitacoes"><thead><tr>'
+        + '<div class="tabela-rolagem"><table class="solicitacoes sumulas' + (sumulas.podeExcluir ? ' com-acoes' : '') + '"><thead><tr>'
         + '<th>Situa&ccedil;&atilde;o</th><th>Protocolo</th><th>Enviada em</th><th>Partida</th>'
         + '<th>&Aacute;rbitro</th><th>Envolvidos</th>'
+        + (sumulas.podeExcluir ? '<th>A&ccedil;&otilde;es</th>' : '')
         + '</tr></thead><tbody id="linhasSumulas"></tbody></table></div>';
 
       document.getElementById('buscaSumulas').addEventListener('input', filtrarSumulas);
@@ -9577,15 +9674,27 @@
      * relato dos fatos e a lista de envolvidos.
      */
     function desenharLinhasSumulas(registros) {
+      const colunas = sumulas.podeExcluir ? 7 : 6;
+
       if (!registros.length) {
         document.getElementById('linhasSumulas').innerHTML =
-          '<tr><td colspan="6" style="text-align:center;color:var(--apoio);">'
+          '<tr><td colspan="' + colunas + '" style="text-align:center;color:var(--apoio);">'
           + 'Nenhuma s&uacute;mula encontrada com os filtros atuais.</td></tr>';
         return;
       }
 
       document.getElementById('linhasSumulas').innerHTML = registros.map(function (r) {
         const aberta = !!sumulasAbertas[r.arquivoNome];
+
+        // Só é possível excluir súmulas ainda não analisadas (Aguardando/Falha).
+        // Analisadas já geraram a nota/punição, então não têm botão Excluir.
+        const podeExcluirEsta = sumulas.podeExcluir && r.situacao !== 'Analisada';
+        const acoes = sumulas.podeExcluir
+          ? celula('Ações', podeExcluirEsta
+            ? '<button type="button" class="botao-apoio perigo acao-excluir-sumula" '
+              + 'data-arquivo="' + escapar(r.arquivoNome) + '" title="Excluir súmula">🗑️ Excluir</button>'
+            : '<span class="apoio" title="Súmulas analisadas já geraram a nota/punição">—</span>')
+          : '';
 
         const linha = '<tr class="linha" data-arquivo="' + escapar(r.arquivoNome) + '">'
           + celula('Situação', '<span class="' + classeSituacaoSolicitacao(r.situacao) + '">'
@@ -9597,13 +9706,17 @@
             + '<div class="equipe-dado">' + escapar(dataHoraDoJogo(r)) + '</div>')
           + celula('Árbitro', escapar(r.arbitro || '—'))
           + celula('Envolvidos', contagemEnvolvidos(r))
+          + acoes
           + '</tr>';
 
-        return linha + (aberta ? detalheSumula(r) : '');
+        return linha + (aberta ? detalheSumula(r, colunas) : '');
       }).join('');
 
       conteudo.querySelectorAll('#linhasSumulas tr.linha').forEach(function (linha) {
-        linha.addEventListener('click', function () {
+        linha.addEventListener('click', function (evento) {
+          // Cliques nos botões de ação não alternam o detalhe da linha.
+          if (evento.target.closest('.acao-excluir-sumula')) return;
+
           const chave = linha.dataset.arquivo;
 
           if (sumulasAbertas[chave]) {
@@ -9616,10 +9729,56 @@
         });
       });
 
+      conteudo.querySelectorAll('#linhasSumulas .acao-excluir-sumula').forEach(function (botao) {
+        botao.addEventListener('click', function (evento) {
+          evento.stopPropagation();
+          excluirSumulaDaTela_(botao);
+        });
+      });
+
       conteudo.querySelectorAll('#linhasSumulas .atalho-punicoes').forEach(function (botao) {
         botao.addEventListener('click', function () {
           abrirModulo('punicoes', botao.dataset.sumula);
         });
+      });
+    }
+
+    /**
+     * Exclui uma súmula (só admin): confirma no pop-up customizado, chama o
+     * servidor e recarrega a tela. A súmula vai para a pasta "Excluídos".
+     */
+    function excluirSumulaDaTela_(botao) {
+      if (!botao || botao.disabled) return;
+
+      const arquivo = botao.dataset.arquivo;
+
+      confirmarDialogo_({
+        origemFoco: botao,
+        titulo: 'Excluir súmula',
+        mensagem: 'A súmula será movida para a pasta "Excluídos" e sairá desta lista. '
+          + 'Deseja continuar?',
+        confirmar: 'Excluir',
+        cancelar: 'Cancelar',
+        perigo: true
+      }).then(function (ok) {
+        if (!ok || moduloAtual !== 'sumulas') return;
+
+        botao.disabled = true;
+
+        google.script.run
+          .withSuccessHandler(function () {
+            if (moduloAtual !== 'sumulas') return;
+            abrirModulo('sumulas');
+          })
+          .withFailureHandler(function (erro) {
+            if (botao) botao.disabled = false;
+            confirmarDialogo_({
+              titulo: 'Não foi possível excluir',
+              mensagem: erro && erro.message ? erro.message : String(erro),
+              confirmar: 'Fechar', cancelar: 'Fechar', perigo: false
+            });
+          })
+          .excluirSumula(arquivo);
       });
     }
 
@@ -9660,7 +9819,7 @@
     /**
      * Linha extra com o relato da arbitragem e a lista de envolvidos.
      */
-    function detalheSumula(registro) {
+    function detalheSumula(registro, colunas) {
       const dados = [
         ['Partida', dataHoraDoJogo(registro)],
         ['Documento do árbitro', registro.documento],
@@ -9698,7 +9857,7 @@
         + '<a class="botao-apoio" href="' + escapar(registro.arquivoUrl) + '" target="_blank" rel="noopener">Abrir arquivo</a>'
         + '</div>';
 
-      return '<tr class="detalhe"><td colspan="6"><div class="detalhe-caixa">'
+      return '<tr class="detalhe"><td colspan="' + (colunas || 6) + '"><div class="detalhe-caixa">'
         + (dados ? '<div class="detalhe-dados">' + dados + '</div>' : '')
         + fatos
         + tabela
