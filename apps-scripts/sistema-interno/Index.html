@@ -696,6 +696,47 @@
     .aprovacao-info { font-size: 11px; color: var(--apoio); margin-top: 3px; white-space: normal; }
     .pilula.nao-aprovada { background: #f1f3f5; color: #51606e; font-weight: bold; }
 
+    /* Overlay global de processamento: fundo escuro translúcido + blur e caixa
+       central com spinner. Usado em ações (gravar/excluir) para indicar espera. */
+    .overlay-global {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      background: rgba(11, 18, 32, .55);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      animation: overlayGlobalEntrar .15s ease-out;
+    }
+    @keyframes overlayGlobalEntrar { from { opacity: 0; } to { opacity: 1; } }
+    .overlay-global-caixa {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 26px 34px;
+      border-radius: 14px;
+      background: var(--superficie, #fff);
+      border: 1px solid var(--borda, #d6dbe4);
+      box-shadow: 0 20px 45px -10px rgba(10, 18, 35, .45);
+    }
+    .overlay-global .spinner {
+      width: 42px; height: 42px;
+      border: 4px solid var(--borda, #d6dbe4);
+      border-top-color: var(--azul, #14213d);
+      border-radius: 50%;
+      animation: overlay-global-girar .8s linear infinite;
+    }
+    body.tema-escuro .overlay-global .spinner { border-top-color: var(--dourado, #c9a227); }
+    .overlay-global .texto { font-weight: 600; color: var(--azul, #14213d); margin: 0; }
+    body.tema-escuro .overlay-global .texto { color: var(--texto, #e6eaf2); }
+    @keyframes overlay-global-girar { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .overlay-global { animation: none; }
+      .overlay-global .spinner { animation: none; }
+    }
+
     /* Overlay de processamento das ações de punição (aprovar/desfazer/excluir). */
     .punicoes-overlay {
       position: fixed;
@@ -3714,14 +3755,17 @@
       );
 
       botao.disabled = true;
-      aviso.textContent = 'Gravando...';
+      aviso.textContent = '';
+      mostrarOverlayGlobal_('Salvando permissões...');
 
       google.script.run
         .withSuccessHandler(function (dados) {
+          removerOverlayGlobal_();
           usuarios = dados;
           montarTelaUsuarios(dados.recado);
         })
         .withFailureHandler(function (erro) {
+          removerOverlayGlobal_();
           botao.disabled = false;
           aviso.innerHTML = '<span class="alerta">'
             + escapar(erro && erro.message ? erro.message : erro) + '</span>';
@@ -3834,14 +3878,18 @@
       const aviso = document.getElementById('avisoUsuario');
 
       botao.disabled = true;
-      aviso.textContent = 'Gravando...';
+      aviso.textContent = '';
+      // Piloto do overlay global: ação de gravar usuário com fundo escuro + blur.
+      mostrarOverlayGlobal_('Gravando acesso...');
 
       google.script.run
         .withSuccessHandler(function (dados) {
+          removerOverlayGlobal_();
           usuarios = dados;
           montarTelaUsuarios(dados.recado);
         })
         .withFailureHandler(function (erro) {
+          removerOverlayGlobal_();
           botao.disabled = false;
           aviso.innerHTML = '<span class="alerta">'
             + escapar(erro && erro.message ? erro.message : erro) + '</span>';
@@ -4020,7 +4068,8 @@
       const aviso = document.getElementById('avisoEquipe');
 
       botao.disabled = true;
-      aviso.textContent = 'Gravando...';
+      aviso.textContent = '';
+      mostrarOverlayGlobal_('Gravando equipe...');
 
       const payload = {
         nomeOriginal: nomeOriginal, nome: document.getElementById('eNome').value,
@@ -4028,10 +4077,12 @@
       };
       const enviar = function () { google.script.run
         .withSuccessHandler(function (dados) {
+          removerOverlayGlobal_();
           equipes = dados;
           montarTelaEquipes(dados.recado);
         })
         .withFailureHandler(function (erro) {
+          removerOverlayGlobal_();
           botao.disabled = false;
           aviso.innerHTML = '<span class="alerta">'
             + escapar(erro && erro.message ? erro.message : erro) + '</span>';
@@ -4040,6 +4091,7 @@
       const arquivo = document.getElementById('eEscudo').files[0];
       if (!arquivo) return enviar();
       if (!['image/png', 'image/jpeg', 'image/webp'].includes(arquivo.type) || arquivo.size > 1.5 * 1024 * 1024) {
+        removerOverlayGlobal_();
         botao.disabled = false;
         aviso.textContent = 'Envie um escudo PNG, JPEG ou WebP de até 1,5 MB.';
         return;
@@ -4047,6 +4099,7 @@
       otimizarImagemEscudo_(arquivo).then(function (escudo) {
         payload.escudo = escudo; enviar();
       }).catch(function (erro) {
+        removerOverlayGlobal_();
         botao.disabled = false; aviso.textContent = erro.message;
       });
     }
@@ -6319,7 +6372,8 @@
        if (!validarCamposDataHora_(['cInicio', 'cFim'], aviso)) return;
 
        botao.disabled = true;
-       aviso.textContent = 'Gravando...';
+       aviso.textContent = '';
+       mostrarOverlayGlobal_('Gravando campeonato...');
 
        const payload = {
          idOriginal: idOriginal,
@@ -6351,6 +6405,7 @@
          otimizarImagemEscudo_(inputEscudo.files[0]).then(function (escudo) {
            payload.escudo = escudo; enviarPayload();
          }).catch(function (erro) {
+           removerOverlayGlobal_();
            botao.disabled = false;
            aviso.textContent = erro.message;
          });
@@ -6361,10 +6416,12 @@
        function enviarPayload() {
          google.script.run
            .withSuccessHandler(function (dados) {
+             removerOverlayGlobal_();
              campeonatos = dados;
              montarTelaCampeonatos(dados.recado);
            })
            .withFailureHandler(function (erro) {
+             removerOverlayGlobal_();
              botao.disabled = false;
              aviso.innerHTML = '<span class="alerta">'
                + escapar(erro && erro.message ? erro.message : erro) + '</span>';
@@ -8504,6 +8561,33 @@
     }
 
     /** Overlay de "processando" enquanto a ação roda e a tela recarrega. */
+    /**
+     * Overlay global de processamento: fundo escuro translúcido com blur e um
+     * spinner centralizado. Reutilizável em qualquer ação (gravação, exclusão).
+     * Chame mostrarOverlayGlobal_('texto') antes da chamada ao servidor e
+     * removerOverlayGlobal_() no sucesso e na falha.
+     */
+    let overlayGlobalAtual = null;
+    function mostrarOverlayGlobal_(texto) {
+      removerOverlayGlobal_();
+      const overlay = document.createElement('div');
+      overlay.className = 'overlay-global';
+      overlay.setAttribute('role', 'status');
+      overlay.setAttribute('aria-live', 'polite');
+      overlay.innerHTML = '<div class="overlay-global-caixa">'
+        + '<div class="spinner" aria-hidden="true"></div>'
+        + '<p class="texto">' + escapar(texto || 'Processando...') + '</p>'
+        + '</div>';
+      document.body.appendChild(overlay);
+      overlayGlobalAtual = overlay;
+    }
+    function removerOverlayGlobal_() {
+      if (overlayGlobalAtual && overlayGlobalAtual.parentNode) {
+        overlayGlobalAtual.parentNode.removeChild(overlayGlobalAtual);
+      }
+      overlayGlobalAtual = null;
+    }
+
     let punicoesOverlayAtual = null;
     function mostrarOverlayPunicoes_(texto) {
       removerOverlayPunicoes_();
@@ -11151,9 +11235,11 @@
         item.disabled = true;
         return estado;
       });
-      aviso.textContent = 'Excluindo associado...';
+      aviso.textContent = '';
+      mostrarOverlayGlobal_('Excluindo associado...');
       google.script.run
         .withSuccessHandler(function (resposta) {
+          removerOverlayGlobal_();
           if (moduloAtual !== 'associados') return;
           carregarAssociados();
           const anterior = document.getElementById('sucessoAssociado');
@@ -11166,6 +11252,7 @@
           }, 6000);
         })
         .withFailureHandler(function (erro) {
+          removerOverlayGlobal_();
           botoes.forEach(function (estado) { estado.botao.disabled = estado.disabled; });
           aviso.innerHTML = '<span style="color:#922b21;">'
             + escapar(erro && erro.message ? erro.message : erro) + '</span>';
@@ -11352,7 +11439,8 @@
       botao.disabled = true;
       const botaoExcluir = document.getElementById('excluirAssociado');
       if (botaoExcluir) botaoExcluir.disabled = true;
-      aviso.textContent = 'Enviando...';
+      aviso.textContent = '';
+      mostrarOverlayGlobal_('Salvando associado...');
 
       const payload = {
         equipe: document.getElementById('fEquipe').value,
@@ -11393,6 +11481,7 @@
 
         google.script.run
           .withSuccessHandler(function (resposta) {
+            removerOverlayGlobal_();
             carregarAssociados();
 
             document.getElementById('areaAssociados').insertAdjacentHTML('beforebegin',
@@ -11408,6 +11497,7 @@
             }, 6000);
           })
           .withFailureHandler(function (erro) {
+            removerOverlayGlobal_();
             botao.disabled = false;
             if (botaoExcluir) botaoExcluir.disabled = false;
             aviso.innerHTML = '<span style="color:#922b21;">'
@@ -11415,6 +11505,7 @@
           })
           .salvarAssociado(payload);
       }).catch(function (erro) {
+        removerOverlayGlobal_();
         botao.disabled = false;
         if (botaoExcluir) botaoExcluir.disabled = false;
         aviso.innerHTML = '<span style="color:#922b21;">'

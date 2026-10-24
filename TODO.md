@@ -34,10 +34,10 @@
 - [🚀] **TD8 — Pendente — Melhoria:** Ver uma forma de ficar escutando os diretórios para executar os fluxos ou ver uma forma de criar um sheduled de execução do BE.
 
 - [✅] **TD9 — Concluída — Melhoria:** No "Controle de Punições" ter o historico do atleta dentro da associação se ele é reincidente ou nao ate pq em caso de reincidencia conforme regulamento as punições muda.
-  - Reincidência identificada por nome + equipe (sem janela temporal), somando controle oficial (TXT) + punições retroativas (JSON). Conta para qualquer pessoa registrada no campeonato (atleta, comissão técnica, dirigente); só penalidades de equipe ficam de fora. Julgamento Python aplica regras fixas (ART 22 §5º e ART 24 §2º = suspensão até 2 anos; demais = +1 partida) e injeta o histórico no modo IA.nicões (essa pode ser visivael tb para o perfil associado) para ir acompanhando quantos o jogos falta para terminar) 
-- Outro ponto caso de reincidencia de atletas precisamos saber se o mesmo e reincidente ate para o BE python julgar conforme regulamento as punições muda para atletas reincidentes conforme o regulamento. Avaliar melhor forma. 
+  - Reincidência identificada por nome + equipe (sem janela temporal), somando controle oficial (TXT) + punições retroativas (JSON). Conta para qualquer pessoa registrada no campeonato (atleta, comissão técnica, dirigente); só penalidades de equipe ficam de fora. Julgamento Python aplica regras fixas (ART 22 §5º e ART 24 §2º = suspensão até 2 anos; demais = +1 partida) e injeta o histórico no modo IA.
 
-- [🚀] **TD10 — Pendente:** Todos loading do sistema poderia deixar a tela com um preto transparente ou um bluoar com o loadgind carregando para o usuario saber que esta carregando algo a mais na usabilidade se vc achar que fica bom.
+- [✅] **TD10 — Concluída:** Todos loading do sistema poderia deixar a tela com um preto transparente ou um blur com o loading carregando para o usuario saber que esta carregando algo a mais na usabilidade.
+  - Criado overlay global (`mostrarOverlayGlobal_`/`removerOverlayGlobal_`): fundo escuro translúcido + blur + spinner, com suporte a tema escuro e "reduzir movimento". Aplicado nas ações de gravação/exclusão: Usuários (salvar acesso), Permissões de perfil, Equipes (salvar), Campeonatos (salvar), Associados (salvar e excluir). A carga inicial de cada tela mantém o `blocoCarregando` (logomarca + barra), que mostra a estrutura surgindo; Punições já tinha overlay próprio. Fluxos de elenco/tabela ficaram de fora por terem loading próprio.
 
 - [🚀] **TD11 — Pendente:** Criar uma suite de teste para o sistema-interno.
   - apos toda modificação sendo rodar os testes para garantir que nada quebre.
@@ -58,6 +58,14 @@
   - Vencimento do domínio do site Renova em 6 de ago. de 2027): <https://manage.wix.com/dashboard/674f5ab4-5304-4677-8de2-217c92b3f48d/domain-settings?referralInfo=site-details-subscriptions-widget>.
     - Estender: <https://manage.wix.com/wix/api/domainStartRenew?metaSiteId=674f5ab4-5304-4677-8de2-217c92b3f48d&domainName=aeuv.org&referralAdditionalInfo=mydomains__domaininfotab>.
   - Todo mes contador.
+
+- [🆕] **TD21 — Pendente:** Súmulas Enviadas — botão **Editar** (hoje só tem Excluir). Editar só quando a situação for diferente de "Analisada" (analisada já gerou nota/punição). Exige formulário para relato + envolvidos e regravar o TXT no formato que a automação lê. Excluir já está feito (move para a pasta "Excluídos", só admin, não permite Analisada).
+
+- [🆕] **TD22 — Pendente:** Limpeza cirúrgica de vínculos de teste no histórico de elenco de um atleta específico (ex.: caso "Nova Base de Atletas" / COPA QA / TEST). A rotina atual (`executarLimpezaHistoricoElencosTeste`) só funciona em base sem campeonatos e apaga todo o histórico — falta uma opção por CPF/competição, com backup.
+
+- [🆕] **TD23 — Pendente (operacional):** Subir ao Drive e publicar os dados das punições retroativas:
+  - `AEUV - Punicoes Retroativas.json` na pasta raiz do Drive do projeto (o Apps Script lê de lá) e manter a cópia em `downloads/sumulas/` (o Python lê de lá).
+  - Publicar a versão do Apps Script com as mudanças desta rodada e rodar "Recalcular agora" no Banco de Atletas.
 
 ## Evoluções
 
