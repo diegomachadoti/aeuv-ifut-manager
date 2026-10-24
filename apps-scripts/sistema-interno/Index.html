@@ -1313,6 +1313,36 @@
       font-size: 14px;
     }
 
+    /* Caixa de erro amigável (falha de rede/carregamento). */
+    .erro-amigavel {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin-top: 18px;
+      padding: 18px 20px;
+      border: 1px solid #f0c7c2;
+      border-left: 4px solid #c0392b;
+      border-radius: 12px;
+      background: #fff6f5;
+      color: var(--texto);
+    }
+    .erro-amigavel-icone { font-size: 26px; line-height: 1; flex: 0 0 auto; }
+    .erro-amigavel-corpo { flex: 1; min-width: 0; }
+    .erro-amigavel-corpo h3 { margin: 0 0 6px; font-size: 16px; color: #922b21; }
+    .erro-amigavel-corpo p { margin: 0; line-height: 1.55; color: var(--texto); }
+    .erro-amigavel-acoes { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .erro-detalhe { margin-top: 10px; }
+    .erro-detalhe summary { cursor: pointer; font-size: 12px; color: var(--apoio); }
+    .erro-detalhe code {
+      display: block; margin-top: 6px; padding: 8px 10px; border-radius: 6px;
+      background: rgba(0, 0, 0, .05); font-size: 12px; overflow-wrap: anywhere; color: var(--apoio);
+    }
+    body.tema-escuro .erro-amigavel {
+      background: #2a1619; border-color: #5b2a2e;
+    }
+    body.tema-escuro .erro-amigavel-corpo h3 { color: #fca5a5; }
+    body.tema-escuro .erro-detalhe code { background: rgba(255, 255, 255, .06); }
+
     @media (max-width: 900px) {
       .layout { grid-template-columns: 1fr; }
 
@@ -2812,6 +2842,79 @@
         + '</div>';
     }
 
+    /**
+     * Converte o erro cru (ex.: "NetworkError: Falha na conexão devido a HTTP 0")
+     * numa mensagem amigável. Erros de rede/conexão/tempo viram um texto único e
+     * claro; os demais mantêm a mensagem real (útil para regras de negócio).
+     * @param {Error|string} erro
+     * @return {{titulo: string, mensagem: string, rede: boolean}}
+     */
+    function interpretarErro_(erro) {
+      const bruto = String((erro && erro.message) ? erro.message : (erro || '')).trim();
+      const txt = bruto.toLowerCase();
+      const ehRede = !bruto
+        || /networkerror|failed to fetch|http\s*0\b|net::|timeout|timed out|load failed|conex|connection|offline|err_internet|err_network|script\.google\.com|unavailable|503|502|504/i.test(txt);
+
+      if (ehRede) {
+        return {
+          rede: true,
+          titulo: 'Sem conexão no momento',
+          mensagem: 'Não conseguimos falar com o servidor agora. Verifique sua conexão com a internet '
+            + 'e tente de novo. Se você estava logado há um tempo, a sessão do Google pode ter expirado — '
+            + 'recarregar a página costuma resolver.'
+        };
+      }
+      return {
+        rede: false,
+        titulo: 'Não foi possível carregar',
+        mensagem: bruto || 'Ocorreu um erro inesperado. Tente novamente.'
+      };
+    }
+
+    /**
+     * Texto curto para linhas de status (ex.: telas de administração) que usam
+     * textContent: em falha de rede devolve uma frase amigável; nos demais casos
+     * devolve a mensagem real do erro.
+     * @param {Error|string} erro
+     * @param {string} [textoRede] frase amigável a usar quando for falha de rede
+     * @return {string}
+     */
+    function textoStatusErro_(erro, textoRede) {
+      return interpretarErro_(erro).rede
+        ? (textoRede || 'Sem conexão no momento. Verifique a internet e tente de novo.')
+        : (erro && erro.message ? erro.message : String(erro));
+    }
+
+    /**
+     * Caixa de erro amigável, com ícone, título, mensagem e um botão de ação
+     * (por padrão "Tentar de novo"). Use no lugar de '<div class="erro">'+msg.
+     * @param {Error|string} erro
+     * @param {{acaoId?: string, acaoTexto?: string, detalhe?: boolean}} [opcoes]
+     * @return {string} HTML
+     */
+    function blocoErro_(erro, opcoes) {
+      opcoes = opcoes || {};
+      const info = interpretarErro_(erro);
+      const bruto = String((erro && erro.message) ? erro.message : (erro || '')).trim();
+      const acaoTexto = opcoes.acaoTexto || 'Tentar de novo';
+      const acaoId = opcoes.acaoId || '';
+      const botao = acaoId
+        ? '<button type="button" class="botao-apoio" id="' + escapar(acaoId) + '">' + escapar(acaoTexto) + '</button>'
+        : '';
+      // Em erro de rede, oferece o detalhe técnico recolhido (para suporte), sem poluir.
+      const detalhe = (info.rede && bruto && opcoes.detalhe !== false)
+        ? '<details class="erro-detalhe"><summary>Detalhes técnicos</summary><code>' + escapar(bruto) + '</code></details>'
+        : '';
+      return '<div class="erro-amigavel" role="alert">'
+        + '<div class="erro-amigavel-icone" aria-hidden="true">' + (info.rede ? '📡' : '⚠️') + '</div>'
+        + '<div class="erro-amigavel-corpo">'
+        + '<h3>' + escapar(info.titulo) + '</h3>'
+        + '<p>' + escapar(info.mensagem) + '</p>'
+        + detalhe
+        + (botao ? '<div class="erro-amigavel-acoes">' + botao + '</div>' : '')
+        + '</div></div>';
+    }
+
     function focarAvisoOuFormulario_(elemento) {
       if (!elemento) return;
       elemento.setAttribute('tabindex', '-1');
@@ -3591,7 +3694,9 @@
           }
 
           document.getElementById('statusUsuarios').outerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+            '<div id="statusUsuarios">' + blocoErro_(erro, { acaoId: 'tentarUsuarios' }) + '</div>';
+          const b = document.getElementById('tentarUsuarios');
+          if (b) b.addEventListener('click', function () { abrirModulo('usuarios'); });
         })
         .listarUsuarios();
     }
@@ -3954,7 +4059,9 @@
           }
 
           document.getElementById('statusEquipes').outerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+            '<div id="statusEquipes">' + blocoErro_(erro, { acaoId: 'tentarEquipes' }) + '</div>';
+          const b = document.getElementById('tentarEquipes');
+          if (b) b.addEventListener('click', function () { abrirModulo('equipes'); });
         })
         .listarEquipes();
     }
@@ -4214,7 +4321,9 @@
       }).withFailureHandler(function (erro) {
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_
             || statusRequisicao !== administracaoStatusRequisicao_) return;
-        document.getElementById('statusSnapshotAdmin').textContent = erro.message || String(erro);
+        document.getElementById('statusSnapshotAdmin').textContent = interpretarErro_(erro).rede
+          ? 'Sem conexão para ler o status agora. Recarregue a tela quando a internet voltar.'
+          : (erro.message || String(erro));
       }).obterStatusBancoAtletas();
       const executorStatusSolicitacoes = google.script.run.withSuccessHandler(function (estado) {
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_
@@ -4224,7 +4333,9 @@
       }).withFailureHandler(function (erro) {
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_
             || statusRequisicao !== administracaoStatusRequisicao_) return;
-        document.getElementById('statusSolicitacoesSnapshotAdmin').textContent = erro.message || String(erro);
+        document.getElementById('statusSolicitacoesSnapshotAdmin').textContent = interpretarErro_(erro).rede
+          ? 'Sem conexão para ler o status agora. Recarregue a tela quando a internet voltar.'
+          : (erro.message || String(erro));
       });
       if (typeof executorStatusSolicitacoes.obterStatusSnapshotSolicitacoes === 'function') {
         executorStatusSolicitacoes.obterStatusSnapshotSolicitacoes();
@@ -4254,8 +4365,15 @@
         document.getElementById('otimizarLogoSistema').addEventListener('click', otimizarLogoSistema_);
       }).withFailureHandler(function (erro) {
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
-        document.getElementById('adminImagens').innerHTML = '<p class="alerta">'
-          + escapar(erro.message || String(erro)) + '</p>';
+        const infoAdmin = interpretarErro_(erro);
+        if (infoAdmin.rede) {
+          document.getElementById('adminImagens').innerHTML = blocoErro_(erro, { acaoId: 'tentarAdminImagens' });
+          const btnAdmin = document.getElementById('tentarAdminImagens');
+          if (btnAdmin) btnAdmin.addEventListener('click', function () { abrirModulo('administracao'); });
+        } else {
+          document.getElementById('adminImagens').innerHTML = '<p class="alerta">'
+            + escapar(erro.message || String(erro)) + '</p>';
+        }
       }).listarFontesOtimizacaoImagens();
     }
 
@@ -4290,7 +4408,8 @@
           if (item.isConnected) item.disabled = anteriores[indice];
         });
         document.getElementById('statusSolicitacoesSnapshotAdmin').textContent = erro
-          ? (erro.message || String(erro)) : textoStatusSnapshotSolicitacoes_(estado);
+          ? textoStatusErro_(erro, 'Sem conexão para concluir a ação agora. Verifique a internet e tente de novo.')
+          : textoStatusSnapshotSolicitacoes_(estado);
       };
       const executor = google.script.run.withSuccessHandler(function (estado) { concluir(estado); })
         .withFailureHandler(function (erro) { concluir(null, erro); });
@@ -4316,7 +4435,8 @@
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
         controles.forEach(function (item, indice) { if (item.isConnected) item.disabled = anteriores[indice]; });
         document.getElementById('statusSnapshotAdmin').textContent = erro
-          ? (erro.message || String(erro)) : textoStatusSnapshot_(estado);
+          ? textoStatusErro_(erro, 'Sem conexão para concluir a ação agora. Verifique a internet e tente de novo.')
+          : textoStatusSnapshot_(estado);
         if (!erro) {
           const statusSolicitacoes = document.getElementById('statusSolicitacoesSnapshotAdmin');
           statusSolicitacoes.textContent = estado.agendado
@@ -4405,7 +4525,9 @@
             if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
             botoes.forEach(function (item, indice) { item.disabled = anteriores[indice]; });
             seletor.disabled = seletorAnterior;
-            if (erro) status.textContent = erro.message || String(erro);
+            if (erro) status.textContent = interpretarErro_(erro).rede
+              ? 'Sem conexão para concluir a ação agora. Verifique a internet e tente de novo.'
+              : (erro.message || String(erro));
             else if (metodo === 'diagnosticarRecuperacaoElencosParticionados') {
               document.getElementById('statusRecuperacaoElencosAdmin').textContent =
                 textoDiagnosticoRecuperacaoElencos_(estado);
@@ -4429,14 +4551,18 @@
       }).withFailureHandler(function (erro) {
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
         seletor.innerHTML = '<option value="">Não foi possível carregar os campeonatos</option>';
-        status.textContent = erro.message || String(erro);
+        status.textContent = interpretarErro_(erro).rede
+          ? 'Sem conexão para ler a fila agora. Recarregue a tela quando a internet voltar.'
+          : (erro.message || String(erro));
       }).listarCampeonatosFilaHistoricoElenco();
       google.script.run.withSuccessHandler(function (estado) {
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
         status.textContent = textoStatusFilaHistoricoElenco_(estado);
       }).withFailureHandler(function (erro) {
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
-        status.textContent = erro.message || String(erro);
+        status.textContent = interpretarErro_(erro).rede
+          ? 'Sem conexão para ler a fila agora. Recarregue a tela quando a internet voltar.'
+          : (erro.message || String(erro));
       }).obterStatusFilaHistoricoElenco();
     }
 
@@ -4447,7 +4573,8 @@
       google.script.run.withSuccessHandler(function (estado) {
         if (atual() && versao === consulta) document.getElementById('adminStatusIndice').textContent = textoStatusIndiceValidacao_(estado);
       }).withFailureHandler(function (erro) {
-        if (atual() && versao === consulta) document.getElementById('adminStatusIndice').textContent = erro.message || String(erro);
+        if (atual() && versao === consulta) document.getElementById('adminStatusIndice').textContent =
+          textoStatusErro_(erro, 'Sem conexão para ler o status agora. Recarregue a tela quando a internet voltar.');
       }).obterStatusIndicesValidacao();
       document.querySelectorAll('[data-indice-validacao]').forEach(function (botao) {
         botao.onclick = function () {
@@ -4463,7 +4590,8 @@
             if (!atual()) return;
             controles.forEach(function (item, i) { if (item.isConnected) item.disabled = anteriores[i]; });
             document.getElementById('adminStatusIndice').textContent = erro
-              ? (erro.message || String(erro)) : textoStatusIndiceValidacao_(estado);
+              ? textoStatusErro_(erro, 'Sem conexão para concluir a ação agora. Verifique a internet e tente de novo.')
+              : textoStatusIndiceValidacao_(estado);
           };
           google.script.run.withSuccessHandler(function (estado) { concluir(estado); })
             .withFailureHandler(function (erro) { concluir(null, erro); })[botao.dataset.indiceValidacao]();
@@ -4514,7 +4642,8 @@
                 categoria.campeonatos.forEach(function (item) { Object.assign(item.estado, estado); });
               }
               document.getElementById('adminStatus-' + tipo).textContent = erro
-                ? (erro.message || String(erro)) : textoStatusSnapshot_(selecionado ? selecionado.estado : estado);
+                ? textoStatusErro_(erro, 'Sem conexão para concluir a ação agora. Verifique a internet e tente de novo.')
+                : textoStatusSnapshot_(selecionado ? selecionado.estado : estado);
             };
             google.script.run.withSuccessHandler(function (estado) { concluir(estado); })
               .withFailureHandler(function (erro) { concluir(null, erro); })[metodo](id);
@@ -4528,7 +4657,8 @@
         });
       }).withFailureHandler(function (erro) {
         if (moduloAtual !== 'administracao' || requisicao !== administracaoRequisicao_) return;
-        document.getElementById('adminSnapshotsEsportivos').textContent = erro.message || String(erro);
+        document.getElementById('adminSnapshotsEsportivos').textContent =
+          textoStatusErro_(erro, 'Sem conexão para ler as agendas agora. Recarregue a tela quando a internet voltar.');
       }).obterStatusSnapshotsEsportivos();
     }
 
@@ -4868,11 +4998,19 @@
       const area = document.getElementById('tabelaMensagem');
       if (area) {
         const listaSumulas = moduloAtual === 'sumula-campeonato' && !tabelaEstado.resultado;
-        area.innerHTML = '<div class="erro" role="alert">' + escapar(erro && erro.message ? erro.message : erro)
-          + (listaSumulas ? '<p>A lista pode estar desatualizada. Atualize antes de consultar ou editar novamente.</p>'
-            : '<p>Suas alterações não foram descartadas. Se os dados estiverem desatualizados, use Atualizar e confirme o descarte antes de tentar novamente.</p>')
-          + '<button type="button" class="botao-apoio" id="tabelaRecarregarLista">'
-          + (tabelaEstado.resultado ? 'Recarregar resultado' : (listaSumulas ? 'Recarregar lista de súmulas' : 'Recarregar lista de campeonatos')) + '</button></div>';
+        const info = interpretarErro_(erro);
+        const botaoTexto = tabelaEstado.resultado ? 'Recarregar resultado'
+          : (listaSumulas ? 'Recarregar lista de súmulas' : 'Recarregar lista de campeonatos');
+        // Em falha de rede, a mensagem amigável já explica tudo; dispensa o aviso
+        // sobre descarte de alterações (que só confunde quando a causa é conexão).
+        if (info.rede) {
+          area.innerHTML = blocoErro_(erro, { acaoId: 'tabelaRecarregarLista', acaoTexto: botaoTexto });
+        } else {
+          area.innerHTML = '<div class="erro" role="alert">' + escapar(erro && erro.message ? erro.message : erro)
+            + (listaSumulas ? '<p>A lista pode estar desatualizada. Atualize antes de consultar ou editar novamente.</p>'
+              : '<p>Suas alterações não foram descartadas. Se os dados estiverem desatualizados, use Atualizar e confirme o descarte antes de tentar novamente.</p>')
+            + '<button type="button" class="botao-apoio" id="tabelaRecarregarLista">' + botaoTexto + '</button></div>';
+        }
         document.getElementById('tabelaRecarregarLista').onclick = function () {
           const resultadoId = tabelaEstado.resultado && tabelaEstado.resultado.jogo.id;
           tabelaNavegar_(function () {
@@ -6030,7 +6168,9 @@
           }
 
           document.getElementById('statusCampeonatos').outerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+            '<div id="statusCampeonatos">' + blocoErro_(erro, { acaoId: 'tentarCampeonatos' }) + '</div>';
+          const b = document.getElementById('tentarCampeonatos');
+          if (b) b.addEventListener('click', function () { abrirModulo('campeonatos'); });
         })
         .listarCampeonatos();
     }
@@ -6533,11 +6673,16 @@
             carregarParticipantesSemCopia_(campeonatoId, erro, requisicao);
             return;
           }
+          const infoTimes = interpretarErro_(erro);
+          const corpoErroTimes = infoTimes.rede
+            ? blocoErro_(erro)
+            : '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
           document.getElementById('areaTimesCampeonato').innerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>'
-            + '<button type="button" class="botao-apoio" id="epAtualizar">Atualizar</button>'
+            corpoErroTimes
+            + '<div class="barra-acoes"><button type="button" class="botao-apoio" id="epAtualizar">Atualizar</button>'
             + (CONFIG.usuario.perfil === 'admin' || CONFIG.usuario.perfil === 'diretoria'
-              ? '<button type="button" class="botao-apoio" id="epRecalcular">Recalcular agora</button>' : '');
+              ? '<button type="button" class="botao-apoio" id="epRecalcular">Recalcular agora</button>' : '')
+            + '</div>';
           document.getElementById('epAtualizar').onclick = carregarTimesCampeonato;
           const recalcular = document.getElementById('epRecalcular');
           if (recalcular) recalcular.onclick = recalcularParticipantesAgora_;
@@ -6569,9 +6714,13 @@
         }));
       }).withFailureHandler(function (erroLista) {
         if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual) return;
+        const infoLista = interpretarErro_(erroLista);
+        const corpoErroLista = infoLista.rede
+          ? blocoErro_(erroLista)
+          : '<div class="erro" role="alert">' + escapar(erroLista && erroLista.message ? erroLista.message : erroLista) + '</div>';
         document.getElementById('areaTimesCampeonato').innerHTML =
-          '<div class="erro" role="alert">' + escapar(erroLista && erroLista.message ? erroLista.message : erroLista) + '</div>'
-          + '<button type="button" class="botao-apoio" id="epAtualizar">Tentar novamente</button>';
+          corpoErroLista
+          + '<div class="barra-acoes"><button type="button" class="botao-apoio" id="epAtualizar">Tentar novamente</button></div>';
         document.getElementById('epAtualizar').onclick = carregarTimesCampeonato;
       }).listarCampeonatos();
     }
@@ -6811,9 +6960,14 @@
         montarElenco();
       }).withFailureHandler(function (erro) {
         if (elencoAtual !== contexto || moduloAtual !== 'times-campeonato') return;
-        document.getElementById('areaTimesCampeonato').innerHTML = '<div class="erro">' + escapar(erro.message || erro) + '</div><button type="button" class="botao-apoio" id="elencoErroVoltar">Voltar às equipes</button>';
+        const infoElenco = interpretarErro_(erro);
+        const corpoErroElenco = infoElenco.rede
+          ? blocoErro_(erro)
+          : '<div class="erro">' + escapar(erro.message || erro) + '</div>';
+        document.getElementById('areaTimesCampeonato').innerHTML = corpoErroElenco
+          + '<div class="barra-acoes"><button type="button" class="botao-apoio" id="elencoErroVoltar">Voltar às equipes</button></div>';
         document.getElementById('elencoErroVoltar').addEventListener('click', function () { elencoAtual = null; carregarTimesCampeonato(); });
-        focarAvisoOuFormulario_(document.getElementById('areaTimesCampeonato').querySelector('.erro'));
+        focarAvisoOuFormulario_(document.getElementById('areaTimesCampeonato').querySelector('.erro, .erro-amigavel'));
       }).listarElenco(campeonatoId, equipeId);
     }
 
@@ -7577,7 +7731,11 @@
            }
 
            document.getElementById('statusCadastroPessoasCampeonato').outerHTML =
-             '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+             '<div id="statusCadastroPessoasCampeonato">' + blocoErro_(erro, { acaoId: 'tentarCadastroPessoas' }) + '</div>';
+           const btnTentarPessoas = document.getElementById('tentarCadastroPessoas');
+           if (btnTentarPessoas) btnTentarPessoas.addEventListener('click', function () {
+             abrirModulo(abaCadastroPessoasAtiva === 'comissao' ? 'comissao-campeonato' : 'atletas-campeonato');
+           });
          })
          .listarCadastroPessoasCampeonato();
      }
@@ -8187,7 +8345,9 @@
           }
 
           document.getElementById('statusPunicoes').outerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+            '<div id="statusPunicoes">' + blocoErro_(erro, { acaoId: 'tentarPunicoes' }) + '</div>';
+          const b = document.getElementById('tentarPunicoes');
+          if (b) b.addEventListener('click', function () { abrirModulo('punicoes'); });
         })
         .listarPunicoes();
     }
@@ -8651,7 +8811,11 @@
           removerOverlayPunicoes_();
           if (moduloAtual !== 'punicoes') return;
           const el = document.getElementById('statusPunicoes') || document.getElementById('resumoPunicoes');
-          if (el) el.outerHTML = '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+          if (el) {
+            el.outerHTML = '<div id="statusPunicoes">' + blocoErro_(erro, { acaoId: 'tentarPunicoes' }) + '</div>';
+            const btnTentarPunicoes = document.getElementById('tentarPunicoes');
+            if (btnTentarPunicoes) btnTentarPunicoes.addEventListener('click', function () { abrirModulo('punicoes'); });
+          }
         })
         .listarPunicoes();
     }
@@ -8883,6 +9047,16 @@
     function statusCargaSolicitacoes_(texto, classe) {
       const status = document.getElementById('statusSolicitacoes');
       if (!status) return;
+      // Falha de carregamento: mostra a caixa de erro amigável com "Tentar de novo".
+      if (classe === 'erro') {
+        status.className = '';
+        status.removeAttribute('role');
+        status.removeAttribute('aria-live');
+        status.innerHTML = blocoErro_(texto, { acaoId: 'tentarSolicitacoes', acaoTexto: 'Tentar de novo' });
+        const botao = document.getElementById('tentarSolicitacoes');
+        if (botao) botao.addEventListener('click', function () { abrirModulo('solicitacoes'); });
+        return;
+      }
       status.className = classe || 'carregando';
       status.setAttribute('role', 'status');
       status.setAttribute('aria-live', 'polite');
@@ -9398,9 +9572,11 @@
           const status = document.getElementById('statusAtletas');
           if (status) {
             atletasBd = { dados: null, abertos: {}, filtrados: [], pagina: 0, porPagina: 25 };
-            status.outerHTML = cabecalhoSnapshotAtletas_(null) + '<div class="erro">'
-              + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+            status.outerHTML = cabecalhoSnapshotAtletas_(null)
+              + blocoErro_(erro, { acaoId: 'tentarAtletas' });
             conectarAcoesSnapshotAtletas_();
+            const btnTentarAtletas = document.getElementById('tentarAtletas');
+            if (btnTentarAtletas) btnTentarAtletas.addEventListener('click', function () { abrirModulo('atletas'); });
           }
         })
         .listarAtletas();
@@ -9888,7 +10064,9 @@
           }
 
           document.getElementById('statusSumulas').outerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+            '<div id="statusSumulas">' + blocoErro_(erro, { acaoId: 'tentarSumulas' }) + '</div>';
+          const b = document.getElementById('tentarSumulas');
+          if (b) b.addEventListener('click', function () { abrirModulo('sumulas'); });
         })
         .listarSumulas();
     }
@@ -10341,7 +10519,9 @@
           }
 
           document.getElementById('statusNotas').outerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+            '<div id="statusNotas">' + blocoErro_(erro, { acaoId: 'tentarNotas' }) + '</div>';
+          const b = document.getElementById('tentarNotas');
+          if (b) b.addEventListener('click', function () { abrirModulo('notas'); });
         })
         .listarNotas();
     }
@@ -10730,10 +10910,16 @@
           }
 
           const mensagem = erro && erro.message ? erro.message : String(erro);
-          document.getElementById('statusRegulamentos').outerHTML =
-            '<div class="erro">' + escapar(mensagem) + '</div>'
-            + (/Não foi possível abrir a pasta "Regulamentos"/.test(mensagem)
-              ? botaoSolicitarAcessoAssociado('regulamentos') : '');
+          if (/Não foi possível abrir a pasta "Regulamentos"/.test(mensagem)) {
+            document.getElementById('statusRegulamentos').outerHTML =
+              '<div class="erro">' + escapar(mensagem) + '</div>'
+              + botaoSolicitarAcessoAssociado('regulamentos');
+          } else {
+            document.getElementById('statusRegulamentos').outerHTML =
+              '<div id="statusRegulamentos">' + blocoErro_(erro, { acaoId: 'tentarRegulamentos' }) + '</div>';
+            const btnTentarReg = document.getElementById('tentarRegulamentos');
+            if (btnTentarReg) btnTentarReg.addEventListener('click', function () { abrirModulo('regulamentos'); });
+          }
         })
         .listarRegulamentos();
     }
@@ -10819,10 +11005,16 @@
           }
 
           const mensagem = erro && erro.message ? erro.message : String(erro);
-          document.getElementById('areaAssociados').innerHTML =
-            '<div class="erro">' + escapar(mensagem) + '</div>'
-            + (/O cadastro da sua equipe ainda não foi publicado/.test(mensagem)
-              ? botaoSolicitarAcessoAssociado('Associados') : '');
+          if (/O cadastro da sua equipe ainda não foi publicado/.test(mensagem)) {
+            document.getElementById('areaAssociados').innerHTML =
+              '<div class="erro">' + escapar(mensagem) + '</div>'
+              + botaoSolicitarAcessoAssociado('Associados');
+          } else {
+            document.getElementById('areaAssociados').innerHTML =
+              blocoErro_(erro, { acaoId: 'tentarAssociados' });
+            const btnTentarAssoc = document.getElementById('tentarAssociados');
+            if (btnTentarAssoc) btnTentarAssoc.addEventListener('click', function () { abrirModulo('associados'); });
+          }
         })
         .listarAssociados();
     }
@@ -11635,7 +11827,9 @@
         .withFailureHandler(function (erro) {
           if (moduloAtual !== 'atas') return;
           document.getElementById('areaAtas').innerHTML =
-            '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+            blocoErro_(erro, { acaoId: 'tentarAtas' });
+          const btnTentarAtas = document.getElementById('tentarAtas');
+          if (btnTentarAtas) btnTentarAtas.addEventListener('click', function () { carregarAtas(); });
         })
         .listarAtas();
     }
@@ -11984,7 +12178,11 @@
         .withFailureHandler(function (erro) {
           if (moduloAtual !== 'financeiro') return;
           var el = document.getElementById('areaFinanceiro') || document.getElementById('statusFinanceiro');
-          if (el) el.innerHTML = '<div class="erro">' + escapar(erro && erro.message ? erro.message : erro) + '</div>';
+          if (el) {
+            el.innerHTML = blocoErro_(erro, { acaoId: 'tentarFinanceiro' });
+            var btnTentarFin = document.getElementById('tentarFinanceiro');
+            if (btnTentarFin) btnTentarFin.addEventListener('click', function () { abrirModulo('financeiro'); });
+          }
         })
         .listarFinanceiro();
     }
