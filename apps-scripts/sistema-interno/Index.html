@@ -670,7 +670,10 @@
       padding: 5px 6px;
       font-size: 11px;
       line-height: 1.1;
-      white-space: nowrap;
+      /* Quebra o rótulo em vez de estourar a coluna (evita corte e rolagem
+         horizontal no desktop quando o texto do botão é mais longo). */
+      white-space: normal;
+      overflow-wrap: anywhere;
       text-align: center;
     }
 
@@ -3422,7 +3425,8 @@
       }
 
       if (modulo.tipo === 'punicoes') {
-        conteudo.innerHTML = cabecalho + blocoCarregando('statusPunicoes');
+        conteudo.innerHTML = cabecalho
+          + '<div id="areaPunicoes">' + blocoCarregando('statusPunicoes') + '</div>';
         carregarPunicoes();
         return;
       }
@@ -8420,10 +8424,12 @@
             return;
           }
 
-          document.getElementById('statusPunicoes').outerHTML =
-            '<div id="statusPunicoes">' + blocoErro_(erro, { acaoId: 'tentarPunicoes' }) + '</div>';
-          const b = document.getElementById('tentarPunicoes');
-          if (b) b.addEventListener('click', function () { abrirModulo('punicoes'); });
+          const area = document.getElementById('areaPunicoes');
+          if (area) {
+            area.innerHTML = blocoErro_(erro, { acaoId: 'tentarPunicoes' });
+            const b = document.getElementById('tentarPunicoes');
+            if (b) b.addEventListener('click', function () { abrirModulo('punicoes'); });
+          }
         })
         .listarPunicoes();
     }
@@ -8435,8 +8441,11 @@
       const registros = punicoes.registros || [];
       const termo = consumirBusca();
 
+      const area = document.getElementById('areaPunicoes');
+      if (!area) return;
+
       if (!registros.length) {
-        document.getElementById('statusPunicoes').outerHTML =
+        area.innerHTML =
           '<div class="vazio">Nenhuma puni&ccedil;&atilde;o registrada at&eacute; o momento.</div>';
         return;
       }
@@ -8445,7 +8454,7 @@
         ? 'Atualizado em ' + escapar(punicoes.atualizadoEm)
         : 'Dados lidos do arquivo de controle';
 
-      document.getElementById('statusPunicoes').outerHTML = ''
+      area.innerHTML = ''
         + '<details class="info-punicoes">'
         + '<summary>Como as punições são geradas e processadas</summary>'
         + '<div class="info-punicoes-corpo">'
@@ -8645,6 +8654,18 @@
                 + '>✔ Aprovar</button>');
             }
           }
+          // Marcar cumprida / reverter: espelha o fluxo de aprovação. Só quem
+          // aprova (admin/diretoria) e conforme a situação atual do registro.
+          if (punicoes.podeAprovar) {
+            const situacaoNorm = String(r.situacao || '').toUpperCase();
+            if (situacaoNorm.indexOf('A CUMPRIR') === 0) {
+              botoes.push('<button type="button" class="botao-apoio acao-cumprir-punicao" '
+                + 'data-idx="' + idxGlobal + '" title="Marcar esta punição como cumprida">✔ Cumprida</button>');
+            } else if (situacaoNorm.indexOf('CUMPRIDA') === 0) {
+              botoes.push('<button type="button" class="botao-apoio acao-reverter-cumprida-punicao" '
+                + 'data-idx="' + idxGlobal + '" title="Voltar esta punição para A cumprir">↩ Reverter</button>');
+            }
+          }
           // Editar: só punições retroativas (as do JSON) e só para quem aprova (admin/diretoria).
           if (r.retroativa && punicoes.podeAprovar) {
             botoes.push('<button type="button" class="botao-apoio azul-claro acao-editar-punicao" '
@@ -8691,6 +8712,16 @@
       conteudo.querySelectorAll('#linhasPunicoes .acao-reprovar-punicao').forEach(function (botao) {
         botao.addEventListener('click', function () {
           acaoReprovarPunicao(Number(botao.dataset.idx), botao);
+        });
+      });
+      conteudo.querySelectorAll('#linhasPunicoes .acao-cumprir-punicao').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          acaoMarcarCumpridaPunicao(Number(botao.dataset.idx), botao);
+        });
+      });
+      conteudo.querySelectorAll('#linhasPunicoes .acao-reverter-cumprida-punicao').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+          acaoReverterCumpridaPunicao(Number(botao.dataset.idx), botao);
         });
       });
       conteudo.querySelectorAll('#linhasPunicoes .acao-excluir-punicao').forEach(function (botao) {
@@ -8886,9 +8917,9 @@
         .withFailureHandler(function (erro) {
           removerOverlayPunicoes_();
           if (moduloAtual !== 'punicoes') return;
-          const el = document.getElementById('statusPunicoes') || document.getElementById('resumoPunicoes');
-          if (el) {
-            el.outerHTML = '<div id="statusPunicoes">' + blocoErro_(erro, { acaoId: 'tentarPunicoes' }) + '</div>';
+          const area = document.getElementById('areaPunicoes');
+          if (area) {
+            area.innerHTML = blocoErro_(erro, { acaoId: 'tentarPunicoes' });
             const btnTentarPunicoes = document.getElementById('tentarPunicoes');
             if (btnTentarPunicoes) btnTentarPunicoes.addEventListener('click', function () { abrirModulo('punicoes'); });
           }
@@ -8937,6 +8968,55 @@
           confirmar: 'Desfazer aprovação'
         },
         aoSucesso: function (reg) { reg.aprovada = false; }
+      });
+    }
+
+    function acaoMarcarCumpridaPunicao(idx, botao) {
+      const r = (punicoes.registros || [])[idx];
+      if (!r) return;
+      if (String(r.situacao || '').toUpperCase().indexOf('A CUMPRIR') !== 0) {
+        confirmarDialogo_({
+          titulo: 'Não é possível marcar',
+          mensagem: 'Só é possível marcar como cumprida uma punição que esteja com a situação "A CUMPRIR".',
+          confirmar: 'Entendi', cancelar: 'Fechar', perigo: false, origemFoco: botao
+        });
+        return;
+      }
+      executarAcaoPunicao_({
+        idx: idx, botao: botao, metodo: 'marcarPunicaoCumprida',
+        textoLoading: 'Marcando como cumprida...',
+        confirmacao: {
+          titulo: 'Marcar como cumprida',
+          mensagem: 'Marcar a punição da nota ' + r.nota + ' para ' + r.punido
+            + ' como CUMPRIDA? Isso atualiza a situação no controle e é mantido nos próximos recálculos. '
+            + 'Não altera a aprovação nem o histórico disciplinar.',
+          confirmar: 'Marcar cumprida', perigo: false
+        },
+        aoSucesso: function (reg) { reg.situacao = 'CUMPRIDA'; }
+      });
+    }
+
+    function acaoReverterCumpridaPunicao(idx, botao) {
+      const r = (punicoes.registros || [])[idx];
+      if (!r) return;
+      if (String(r.situacao || '').toUpperCase().indexOf('CUMPRIDA') !== 0) {
+        confirmarDialogo_({
+          titulo: 'Não é possível reverter',
+          mensagem: 'Só é possível reverter uma punição que esteja com a situação "CUMPRIDA".',
+          confirmar: 'Entendi', cancelar: 'Fechar', perigo: false, origemFoco: botao
+        });
+        return;
+      }
+      executarAcaoPunicao_({
+        idx: idx, botao: botao, metodo: 'reverterPunicaoACumprir',
+        textoLoading: 'Revertendo situação...',
+        confirmacao: {
+          titulo: 'Reverter para A cumprir',
+          mensagem: 'Voltar a punição da nota ' + r.nota + ' para ' + r.punido
+            + ' para a situação "A CUMPRIR"?',
+          confirmar: 'Reverter', perigo: false
+        },
+        aoSucesso: function (reg) { reg.situacao = 'A CUMPRIR'; }
       });
     }
 

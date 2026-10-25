@@ -4171,7 +4171,9 @@ function lerPunicoesRetroativas_() {
         decisao: String(p.decisao || ''),
         cartaoVermelho: '-',
         status: 'DEFINIDA',
-        situacao: 'A CUMPRIR',
+        // Situação pode ter sido marcada manualmente (ex.: CUMPRIDA); o padrão
+        // de uma retroativa sem o campo é "A CUMPRIR".
+        situacao: String(p.situacao || 'A CUMPRIR'),
         sumula: '-',
         modo: 'Retroativa',
         retroativa: true
@@ -4365,6 +4367,154 @@ function reprovarPunicao(registro) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * Marca manualmente uma punição como CUMPRIDA. Só admin e diretoria e só quando
+ * a situação atual for "A CUMPRIR". Escreve a nova SITUAÇÃO no mesmo lugar que a
+ * automação Python lê (coluna SITUAÇÃO do TXT, ou o JSON das retroativas), para
+ * que a marcação sobreviva aos recálculos (o Python preserva a SITUAÇÃO por
+ * nota+punido+artigo). Não mexe em aprovação nem no histórico disciplinar.
+ * @param {Object} registro
+ * @return {{sucesso: boolean, mensagem: string}}
+ */
+function marcarPunicaoCumprida(registro) {
+  return definirSituacaoPunicao_(registro, 'CUMPRIDA', 'A CUMPRIR');
+}
+
+/**
+ * Desfaz a marcação de cumprida, voltando a punição para "A CUMPRIR".
+ * Só admin e diretoria e só quando a situação atual for "CUMPRIDA".
+ * @param {Object} registro
+ * @return {{sucesso: boolean, mensagem: string}}
+ */
+function reverterPunicaoACumprir(registro) {
+  return definirSituacaoPunicao_(registro, 'A CUMPRIR', 'CUMPRIDA');
+}
+
+/**
+ * Troca a SITUAÇÃO de uma punição, validando a situação de origem esperada.
+ * Suporta tanto o controle do Python (TXT) quanto as punições retroativas (JSON).
+ * @param {Object} registro        Punição alvo (nota, punido, artigo, retroativa).
+ * @param {string} novaSituacao    Valor a gravar (ex.: 'CUMPRIDA' | 'A CUMPRIR').
+ * @param {string} situacaoEsperada Situação atual exigida (ex.: 'A CUMPRIR').
+ * @return {{sucesso: boolean, mensagem: string}}
+ */
+function definirSituacaoPunicao_(registro, novaSituacao, situacaoEsperada) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || (sessao.usuario.perfil !== 'admin' && sessao.usuario.perfil !== 'diretoria')) {
+    throw new Error('Você não tem permissão para alterar a situação de punições.');
+  }
+
+  const alvo = registro || {};
+  const chaveAlvo = chavePunicao_(alvo);
+  if (!chaveAlvo || chaveAlvo === '||') {
+    throw new Error('Punição inválida: nota, punido ou artigo ausente.');
+  }
+
+  const esperadoNorm = normalizarSituacaoPunicao_(situacaoEsperada);
+  const novoNorm = normalizarSituacaoPunicao_(novaSituacao);
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    // Punição retroativa (JSON): grava a situação no próprio registro do JSON.
+    if (alvo.retroativa) {
+      const arquivo = arquivoRetroativasPunicoes_();
+      if (!arquivo) throw new Error('Arquivo de punições retroativas não encontrado no Drive.');
+      const dados = JSON.parse(arquivo.getBlob().getDataAsString('UTF-8') || '{}');
+      const lista = Array.isArray(dados.punicoes) ? dados.punicoes : [];
+      let indice = -1;
+      for (let i = 0; i < lista.length; i++) {
+        const p = lista[i];
+        if (chavePunicao_({ nota: p.nota, punido: p.atleta, artigo: p.artigo }) === chaveAlvo) {
+          indice = i;
+          break;
+        }
+      }
+      if (indice === -1) {
+        throw new Error('Punição retroativa não encontrada. Recarregue a página.');
+      }
+      // Situação ausente no JSON legado equivale a "A CUMPRIR" (padrão de leitura).
+      const atualNorm = normalizarSituacaoPunicao_(lista[indice].situacao || 'A CUMPRIR');
+      if (atualNorm !== esperadoNorm) {
+        throw new Error('A situação mudou desde a última atualização. Recarregue a página.');
+      }
+      lista[indice].situacao = novaSituacao;
+      dados.punicoes = lista;
+      arquivo.setContent(JSON.stringify(dados));
+      return {
+        sucesso: true,
+        mensagem: 'Situação atualizada para "' + novaSituacao + '".'
+      };
+    }
+
+    // Controle do Python (TXT): altera a célula SITUAÇÃO da linha correspondente.
+    // O TXT é uma tabela alinhada (" | " entre colunas, cada coluna com largura
+    // fixa). Para não quebrar o alinhamento, troca-se a célula preservando a
+    // largura do segmento original (a automação Python realinha tudo no próximo
+    // recálculo de qualquer forma).
+    const arquivo = arquivoPunicoes_();
+    const conteudo = arquivo.getBlob().getDataAsString('UTF-8');
+    const linhas = conteudo.split(/\r?\n/);
+    const iSituacao = PUNICOES_COLUNAS.indexOf('situacao');
+
+    let alterou = false;
+    const novasLinhas = linhas.map(function (linha) {
+      const brutos = linha.split('|');
+      const celulas = brutos.map(function (c) { return c.trim(); });
+      const ehDado = celulas.length === PUNICOES_COLUNAS.length && celulas[0] && celulas[0].indexOf('NOTA') !== 0;
+      if (!ehDado) return linha;
+
+      const reg = {};
+      PUNICOES_COLUNAS.forEach(function (campo, i) { reg[campo] = celulas[i]; });
+      if (chavePunicao_(reg) !== chaveAlvo) return linha;
+
+      const atualNorm = normalizarSituacaoPunicao_(celulas[iSituacao]);
+      if (atualNorm !== esperadoNorm) {
+        throw new Error('A situação mudou desde a última atualização. Recarregue a página.');
+      }
+
+      // Preserva o espaçamento do segmento original (largura da coluna).
+      const segmentoOriginal = brutos[iSituacao];
+      const larguraAlvo = segmentoOriginal.replace(/^ /, '').replace(/ $/, '').length;
+      let novoSegmento = novaSituacao;
+      while (novoSegmento.length < larguraAlvo) novoSegmento += ' ';
+      // Recompõe o segmento mantendo o espaço de abertura/fechamento do original.
+      const temEspacoInicio = /^ /.test(segmentoOriginal);
+      const temEspacoFim = / $/.test(segmentoOriginal);
+      brutos[iSituacao] = (temEspacoInicio ? ' ' : '') + novoSegmento + (temEspacoFim ? ' ' : '');
+      alterou = true;
+      // Mantém o rstrip que a automação aplica (sem espaços sobrando no fim).
+      return brutos.join('|').replace(/\s+$/, '');
+    });
+
+    if (!alterou) {
+      throw new Error('Punição não encontrada no arquivo de controle (nota "' + String(alvo.nota || '') + '").');
+    }
+
+    arquivo.setContent(novasLinhas.join('\n'));
+    return {
+      sucesso: true,
+      mensagem: 'Situação atualizada para "' + novaSituacao + '".'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Normaliza uma situação para comparação tolerante (sem acento, caixa alta,
+ * espaços colapsados). Ex.: "a  cumprir" e "A CUMPRIR" viram o mesmo valor.
+ * @param {string} valor
+ * @return {string}
+ */
+function normalizarSituacaoPunicao_(valor) {
+  return String(valor === null || valor === undefined ? '' : valor)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
 }
 
 /**
