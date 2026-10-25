@@ -1301,6 +1301,82 @@
         color: var(--apoio);
         flex: 0 0 38%;
       }
+
+      /* Financeiro / prestacao de contas: cada lancamento vira uma ficha,
+         com o nome da coluna a esquerda e o valor a direita (igual as demais
+         tabelas). Sem isso, as celulas empilhavam sem rotulo e empurravam o
+         valor e os botoes para a direita. So vale no mobile. */
+      .tabela-financeiro { min-width: 0; table-layout: auto; font-size: 14px; }
+
+      .tabela-financeiro tbody tr {
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        margin-bottom: 12px;
+        padding: 2px 4px;
+        background: #fff;
+        overflow: hidden;
+      }
+
+      .tabela-financeiro td {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        border-bottom: 1px dashed var(--borda);
+        padding: 7px 10px;
+      }
+
+      /* Rotulo da coluna, enxuto e colado a esquerda; ocupa so a largura do
+         texto para o conteudo vir logo em seguida, sem vao no meio. */
+      .tabela-financeiro td::before {
+        content: attr(data-rotulo);
+        flex: 0 0 auto;
+        white-space: nowrap;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        color: var(--apoio);
+        text-align: left;
+      }
+
+      /* Conteudo: vem logo apos o rotulo, alinhado a esquerda, quebrando quando
+         longo. O min-width:0 e o que impede o estouro/rolagem lateral. */
+      .tabela-financeiro td .fin-td-conteudo {
+        flex: 1 1 auto;
+        min-width: 0;
+        text-align: left;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .tabela-financeiro td .fin-td-conteudo .fin-desc-id { text-align: left; }
+
+      .tabela-financeiro tr td:last-child { border-bottom: 0; }
+
+      /* No mobile, celulas sem conteudo (Favorecido/Doc ou Anexo vazios) somem
+         para o cartao nao ficar com linhas "—" ocupando espaco a toa. */
+      .tabela-financeiro td.fin-td-vazio { display: none; }
+
+      /* Linha de "nenhuma movimentacao" ocupa a largura toda e fica centralizada. */
+      .tabela-financeiro td[colspan] {
+        display: block;
+        text-align: center;
+        border-bottom: 0;
+      }
+      .tabela-financeiro td[colspan]::before { content: none; }
+
+      /* A linha de acoes (editar/excluir) fica lado a lado, logo apos o rotulo. */
+      .tabela-financeiro td.fin-col-acoes { align-items: center; }
+      .tabela-financeiro td.fin-col-acoes .fin-acoes-linha {
+        display: inline-flex;
+        flex-direction: row;
+        gap: 8px;
+        justify-content: flex-start;
+      }
+
+      body.tema-escuro .tabela-financeiro tbody tr {
+        background: var(--superficie-2, #1b2940);
+      }
     }
 
     .erro {
@@ -12696,21 +12772,21 @@
           : '<span style="color:#aaa;">—</span>';
 
         var btnExcluirHtml = podeExcluir
-          ? '<td class="fin-col-acoes"><div class="fin-acoes-linha">'
+          ? '<td class="fin-col-acoes" data-rotulo="Ações"><span class="fin-td-conteudo"><span class="fin-acoes-linha">'
             + '<button type="button" class="btn-acao-editar" title="Editar Lançamento" data-id="' + escapar(item.idLancamento) + '">✏️</button>'
             + '<button type="button" class="btn-acao-excluir" title="Excluir Lançamento" data-id="' + escapar(item.idLancamento) + '" data-desc="' + escapar(item.descricao) + '" data-valor="' + formatarMoedaJs(item.valor) + '">🗑️</button>'
-            + '</div></td>'
+            + '</span></span></td>'
           : '';
 
         return '<tr>'
-          + '<td style="white-space:nowrap;font-weight:600;">' + escapar(formatarDataBr(item.dataMovimentacao)) + '</td>'
-          + '<td><span style="background:' + bgTipo + ';color:' + corTipo + ';font-weight:bold;padding:3px 7px;border-radius:4px;font-size:11px;">' + escapar(item.tipo) + '</span></td>'
-          + '<td title="' + escapar(item.origem || 'Geral') + '">' + escapar(item.origem || 'Geral') + '</td>'
-          + '<td title="' + escapar(item.categoria) + '">' + escapar(item.categoria) + '</td>'
-          + '<td><span class="fin-desc-texto">' + escapar(item.descricao) + '</span><small class="fin-desc-id">' + escapar(item.idLancamento) + '</small></td>'
-          + '<td>' + (docInfo.join('<br>') || '—') + '</td>'
-          + '<td style="text-align:center;">' + compLink + '</td>'
-          + '<td data-valor-financeiro data-valor-original="' + escapar(valorExibido) + '" style="text-align:right;white-space:nowrap;font-weight:bold;color:' + corTipo + ';">' + valorExibido + '</td>'
+          + '<td data-rotulo="Data"><span class="fin-td-conteudo" style="white-space:nowrap;font-weight:600;">' + escapar(formatarDataBr(item.dataMovimentacao)) + '</span></td>'
+          + '<td data-rotulo="Tipo"><span class="fin-td-conteudo"><span style="background:' + bgTipo + ';color:' + corTipo + ';font-weight:bold;padding:3px 7px;border-radius:4px;font-size:11px;">' + escapar(item.tipo) + '</span></span></td>'
+          + '<td data-rotulo="Origem" title="' + escapar(item.origem || 'Geral') + '"><span class="fin-td-conteudo">' + escapar(item.origem || 'Geral') + '</span></td>'
+          + '<td data-rotulo="Categoria" title="' + escapar(item.categoria) + '"><span class="fin-td-conteudo">' + escapar(item.categoria) + '</span></td>'
+          + '<td data-rotulo="Descrição"><span class="fin-td-conteudo"><span class="fin-desc-texto">' + escapar(item.descricao) + '</span><small class="fin-desc-id">' + escapar(item.idLancamento) + '</small></span></td>'
+          + '<td data-rotulo="Favorecido / Doc"' + (docInfo.length ? '' : ' class="fin-td-vazio"') + '><span class="fin-td-conteudo">' + (docInfo.join('<br>') || '—') + '</span></td>'
+          + '<td data-rotulo="Anexo" style="text-align:center;"' + (item.comprovanteUrl ? '' : ' class="fin-td-vazio"') + '><span class="fin-td-conteudo">' + compLink + '</span></td>'
+          + '<td data-rotulo="Valor (R$)" style="text-align:right;white-space:nowrap;font-weight:bold;color:' + corTipo + ';"><span class="fin-td-conteudo" data-valor-financeiro data-valor-original="' + escapar(valorExibido) + '">' + valorExibido + '</span></td>'
           + btnExcluirHtml
           + '</tr>';
       }).join('');
