@@ -10133,7 +10133,10 @@ function lerSumulas_(paraAtletas) {
       total: achados.length,
       limite: limite,
       pastaUrl: raiz.getUrl(),
-      podeExcluir: perfil === 'admin'
+      podeExcluir: perfil === 'admin',
+      // Marcar como analisada: admin e diretoria (não precisa ser só admin,
+      // como a exclusão, porque não apaga nada — só move para "Processados").
+      podeAnalisar: perfil === 'admin' || perfil === 'diretoria'
     };
   });
 }
@@ -10220,6 +10223,152 @@ function excluirSumula(arquivoNome) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// Subpasta onde a automação Python deposita as súmulas já analisadas. É a
+// mesma pasta que define a situação "Analisada" na leitura (SUMULAS_PASTAS).
+const SUMULAS_PASTA_ANALISADAS = 'Processados';
+
+/**
+ * Marca manualmente uma súmula como ANALISADA, sem rodar a automação Python.
+ * Uso típico: súmulas que não geram punição/nota (nada a enquadrar), que só
+ * precisam sair da fila de "Aguardando".
+ *
+ * Como a situação é derivada da pasta no Drive, "analisar" aqui significa
+ * mover o TXT para a subpasta "Processados" — o mesmo destino que o Python
+ * usaria. A justificativa é gravada na descrição do próprio arquivo (fica
+ * junto da súmula, não atrapalha a listagem) e também num log lateral.
+ *
+ * Só admin e diretoria. Não gera nota, não cria análise e não mexe no
+ * controle de punições — é apenas uma mudança de situação.
+ * @param {string} arquivoNome   Nome do arquivo da súmula (SUMULA_*.txt).
+ * @param {string} justificativa Motivo (obrigatório; ex.: "sem conduta a punir").
+ * @return {{sucesso: boolean, mensagem: string}}
+ */
+function marcarSumulaAnalisada(arquivoNome, justificativa) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !moduloLiberado_('sumulas', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar as súmulas digitais.');
+  }
+  if (sessao.usuario.perfil !== 'admin' && sessao.usuario.perfil !== 'diretoria') {
+    throw new Error('Somente Administrador e Diretoria podem marcar súmulas como analisadas.');
+  }
+
+  const alvo = String(arquivoNome || '').trim();
+  if (!/^SUMULA_.+\.txt$/i.test(alvo)) {
+    throw new Error('Súmula inválida.');
+  }
+
+  const motivo = String(justificativa || '').trim();
+  if (!motivo) {
+    throw new Error('Informe a justificativa para marcar a súmula como analisada.');
+  }
+  if (motivo.length > 500) {
+    throw new Error('A justificativa deve ter no máximo 500 caracteres.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const raiz = pastaSumulas_();
+    // Destino: a mesma pasta "Processados" que a automação usa. Cria se faltar.
+    const existentes = raiz.getFoldersByName(SUMULAS_PASTA_ANALISADAS);
+    const analisadas = existentes.hasNext() ? existentes.next() : raiz.createFolder(SUMULAS_PASTA_ANALISADAS);
+
+    let movido = false;
+    let jaAnalisada = false;
+
+    function moverParaAnalisadas(arquivo) {
+      analisadas.addFile(arquivo);
+      const pais = arquivo.getParents();
+      while (pais.hasNext()) {
+        const pai = pais.next();
+        if (pai.getId() !== analisadas.getId()) pai.removeFile(arquivo);
+      }
+      // Justificativa fica na descrição do arquivo, junto da súmula.
+      try {
+        arquivo.setDescription('Analisada manualmente por ' + sessao.email
+          + ' em ' + formatarDataHora_(new Date()) + ': ' + motivo);
+      } catch (e) {
+        // A descrição é um extra; não impede a mudança de situação.
+      }
+      movido = true;
+    }
+
+    // Procura o alvo nas subpastas de situação (menos a própria Processados,
+    // que já é "Analisada") e na raiz.
+    SUMULAS_PASTAS.forEach(function (origem) {
+      if (origem.situacao === 'Analisada') return; // já está analisada
+      const pastas = raiz.getFoldersByName(origem.pasta);
+      if (!pastas.hasNext()) return;
+      const arquivos = pastas.next().getFilesByName(alvo);
+      while (arquivos.hasNext()) {
+        moverParaAnalisadas(arquivos.next());
+      }
+    });
+
+    const naRaiz = raiz.getFilesByName(alvo);
+    while (naRaiz.hasNext()) {
+      moverParaAnalisadas(naRaiz.next());
+    }
+
+    if (!movido) {
+      // Pode já estar em Processados (analisada) — confirma para dar uma
+      // mensagem clara em vez de "não encontrada".
+      const jaNaPasta = analisadas.getFilesByName(alvo);
+      if (jaNaPasta.hasNext()) jaAnalisada = true;
+    }
+
+    if (jaAnalisada) {
+      throw new Error('Esta súmula já está marcada como analisada.');
+    }
+    if (!movido) {
+      throw new Error('Súmula não encontrada; talvez já tenha sido movida. Use Atualizar.');
+    }
+
+    // Log lateral opcional: registra quem/quando/por quê, para auditoria.
+    try {
+      registrarLogSumulaAnalisada_(alvo, sessao.email, motivo);
+    } catch (e) {
+      // Falha no log não invalida a operação (a súmula já foi movida).
+    }
+
+    return { sucesso: true, mensagem: 'Súmula marcada como analisada.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Anexa uma linha ao log de súmulas marcadas manualmente como analisadas,
+ * num JSON na raiz do projeto. Serve para auditoria (quem/quando/justificativa).
+ * @param {string} arquivoNome
+ * @param {string} email
+ * @param {string} motivo
+ */
+function registrarLogSumulaAnalisada_(arquivoNome, email, motivo) {
+  const raiz = pastaRaizProjeto_();
+  const nomeLog = 'AEUV - Sumulas Analisadas Manualmente.json';
+  const existentes = raiz.getFilesByName(nomeLog);
+  const arquivo = existentes.hasNext()
+    ? existentes.next()
+    : raiz.createFile(Utilities.newBlob('{"registros":[]}', 'application/json', nomeLog));
+
+  let dados;
+  try {
+    dados = JSON.parse(arquivo.getBlob().getDataAsString('UTF-8') || '{}');
+  } catch (e) {
+    dados = {};
+  }
+  const lista = Array.isArray(dados.registros) ? dados.registros : [];
+  lista.push({
+    arquivo: arquivoNome,
+    por: email,
+    em: formatarDataHora_(new Date()),
+    justificativa: motivo
+  });
+  dados.registros = lista;
+  arquivo.setContent(JSON.stringify(dados));
 }
 
 /**

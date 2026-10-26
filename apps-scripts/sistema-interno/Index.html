@@ -812,9 +812,18 @@
        deixa de somar por fora e estourar o container, eliminando a rolagem. */
     .sumulas th, .sumulas td { padding: 9px 6px; box-sizing: border-box; }
 
-    /* Botão de ação da súmula: compacto e encolhível, para a coluna Ações não
-       empurrar a tabela. Um único botão (Excluir), sem largura mínima. */
-    .sumulas .acao-excluir-sumula {
+    /* Ações da súmula: botões empilhados, compactos e encolhíveis, para a
+       coluna Ações não empurrar a tabela. */
+    .sumulas-acoes {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      align-items: stretch;
+      min-width: 0;
+    }
+
+    .sumulas .acao-excluir-sumula,
+    .sumulas .acao-analisar-sumula {
       display: block;
       width: 100%;
       box-sizing: border-box;
@@ -822,7 +831,10 @@
       padding: 5px 6px;
       font-size: 11px;
       line-height: 1.1;
-      white-space: nowrap;
+      /* Quebra o rótulo em vez de estourar a coluna estreita. */
+      white-space: normal;
+      overflow-wrap: anywhere;
+      text-align: center;
     }
 
     /* ----- Banco de Dados de Atletas ----- */
@@ -10195,7 +10207,7 @@
      * Estado da tela de sumulas. Mesma ideia das solicitacoes: le do
      * Drive uma vez e filtra sobre essa copia.
      */
-    let sumulas = { registros: [], situacoes: [], equipes: [], total: 0, limite: 0, pastaUrl: '', podeExcluir: false };
+    let sumulas = { registros: [], situacoes: [], equipes: [], total: 0, limite: 0, pastaUrl: '', podeExcluir: false, podeAnalisar: false };
 
     /** Arquivos com o detalhe aberto. */
     let sumulasAbertas = {};
@@ -10261,10 +10273,10 @@
           ? '<a class="botao-apoio" href="' + escapar(sumulas.pastaUrl) + '" target="_blank" rel="noopener">Abrir pasta</a>'
           : '')
         + '</div>'
-        + '<div class="tabela-rolagem"><table class="solicitacoes sumulas' + (sumulas.podeExcluir ? ' com-acoes' : '') + '"><thead><tr>'
+        + '<div class="tabela-rolagem"><table class="solicitacoes sumulas' + (sumulas.podeExcluir || sumulas.podeAnalisar ? ' com-acoes' : '') + '"><thead><tr>'
         + '<th>Situa&ccedil;&atilde;o</th><th>Protocolo</th><th>Enviada em</th><th>Partida</th>'
         + '<th>&Aacute;rbitro</th><th>Envolvidos</th>'
-        + (sumulas.podeExcluir ? '<th>A&ccedil;&otilde;es</th>' : '')
+        + (sumulas.podeExcluir || sumulas.podeAnalisar ? '<th>A&ccedil;&otilde;es</th>' : '')
         + '</tr></thead><tbody id="linhasSumulas"></tbody></table></div>';
 
       document.getElementById('buscaSumulas').addEventListener('input', filtrarSumulas);
@@ -10392,7 +10404,7 @@
      * relato dos fatos e a lista de envolvidos.
      */
     function desenharLinhasSumulas(registros) {
-      const colunas = sumulas.podeExcluir ? 7 : 6;
+      const colunas = (sumulas.podeExcluir || sumulas.podeAnalisar) ? 7 : 6;
 
       if (!registros.length) {
         document.getElementById('linhasSumulas').innerHTML =
@@ -10404,15 +10416,27 @@
       document.getElementById('linhasSumulas').innerHTML = registros.map(function (r) {
         const aberta = !!sumulasAbertas[r.arquivoNome];
 
-        // Só é possível excluir súmulas ainda não analisadas (Aguardando/Falha).
-        // Analisadas já geraram a nota/punição, então não têm botão Excluir.
-        const podeExcluirEsta = sumulas.podeExcluir && r.situacao !== 'Analisada';
-        const acoes = sumulas.podeExcluir
-          ? celula('Ações', podeExcluirEsta
-            ? '<button type="button" class="botao-apoio perigo acao-excluir-sumula" '
-              + 'data-arquivo="' + escapar(r.arquivoNome) + '" title="Excluir súmula">🗑️ Excluir</button>'
-            : '<span class="apoio" title="Súmulas analisadas já geraram a nota/punição">—</span>')
-          : '';
+        // Só é possível excluir/analisar súmulas ainda não analisadas
+        // (Aguardando/Falha). Analisadas já saíram da fila.
+        const naoAnalisada = r.situacao !== 'Analisada';
+        const podeExcluirEsta = sumulas.podeExcluir && naoAnalisada;
+        const podeAnalisarEsta = sumulas.podeAnalisar && naoAnalisada;
+        let acoes = '';
+        if (sumulas.podeExcluir || sumulas.podeAnalisar) {
+          const botoesSumula = [];
+          if (podeAnalisarEsta) {
+            botoesSumula.push('<button type="button" class="botao-apoio destaque acao-analisar-sumula" '
+              + 'data-arquivo="' + escapar(r.arquivoNome) + '" '
+              + 'title="Marcar como analisada sem rodar a automação (ex.: súmula sem punição)">✔ Marcar analisada</button>');
+          }
+          if (podeExcluirEsta) {
+            botoesSumula.push('<button type="button" class="botao-apoio perigo acao-excluir-sumula" '
+              + 'data-arquivo="' + escapar(r.arquivoNome) + '" title="Excluir súmula">🗑️ Excluir</button>');
+          }
+          acoes = celula('Ações', botoesSumula.length
+            ? '<div class="sumulas-acoes">' + botoesSumula.join('') + '</div>'
+            : '<span class="apoio" title="Súmula já analisada">—</span>');
+        }
 
         const linha = '<tr class="linha" data-arquivo="' + escapar(r.arquivoNome) + '">'
           + celula('Situação', '<span class="' + classeSituacaoSolicitacao(r.situacao) + '">'
@@ -10434,6 +10458,7 @@
         linha.addEventListener('click', function (evento) {
           // Cliques nos botões de ação não alternam o detalhe da linha.
           if (evento.target.closest('.acao-excluir-sumula')) return;
+          if (evento.target.closest('.acao-analisar-sumula')) return;
 
           const chave = linha.dataset.arquivo;
 
@@ -10451,6 +10476,13 @@
         botao.addEventListener('click', function (evento) {
           evento.stopPropagation();
           excluirSumulaDaTela_(botao);
+        });
+      });
+
+      conteudo.querySelectorAll('#linhasSumulas .acao-analisar-sumula').forEach(function (botao) {
+        botao.addEventListener('click', function (evento) {
+          evento.stopPropagation();
+          marcarAnalisadaDaTela_(botao);
         });
       });
 
@@ -10497,6 +10529,72 @@
             });
           })
           .excluirSumula(arquivo);
+      });
+    }
+
+    /**
+     * Marca uma súmula como analisada (admin/diretoria): abre um modal pedindo
+     * a justificativa, chama o servidor (move a súmula para "Processados") e
+     * recarrega a tela. Não gera nota — uso típico: súmula sem punição.
+     */
+    function marcarAnalisadaDaTela_(botao) {
+      if (!botao || botao.disabled) return;
+      const arquivo = botao.dataset.arquivo;
+
+      const modal = document.createElement('div');
+      modal.className = 'modal-fin-overlay';
+      modal.innerHTML = '<div class="modal-fin-caixa">'
+        + '<div class="modal-fin-cabecalho"><h3><span style="font-size:22px;">✔</span> Marcar súmula como analisada</h3>'
+        + '<button type="button" class="modal-fin-fechar" id="btnFecharAnaliseSumula" title="Fechar">&times;</button></div>'
+        + '<div class="fin-grupo-campos">'
+        + '<p class="apoio">A súmula sairá da fila de "Aguardando" e irá para as analisadas, '
+        + '<strong>sem gerar nota nem punição</strong> e sem rodar a automação. Use quando não há conduta a punir. '
+        + 'A justificativa fica registrada junto da súmula.</p>'
+        + '<div class="fin-campo"><label for="justificativaAnaliseSumula">Justificativa *</label>'
+        + '<textarea id="justificativaAnaliseSumula" rows="3" maxlength="500" '
+        + 'placeholder="Ex.: relato sem conduta antidesportiva; nada a enquadrar no regulamento."></textarea></div>'
+        + '<div class="acoes-formulario">'
+        + '<button type="button" class="botao-principal" id="btnConfirmarAnaliseSumula">Marcar como analisada</button>'
+        + '<button type="button" class="botao-apoio" id="btnCancelarAnaliseSumula">Cancelar</button>'
+        + '<span class="espaco"></span><span class="apoio" id="avisoAnaliseSumula"></span>'
+        + '</div></div></div>';
+
+      document.body.appendChild(modal);
+      const campo = document.getElementById('justificativaAnaliseSumula');
+      if (campo) campo.focus();
+
+      function fechar() {
+        modal.remove();
+        if (botao && botao.isConnected) botao.focus();
+      }
+      document.getElementById('btnFecharAnaliseSumula').addEventListener('click', fechar);
+      document.getElementById('btnCancelarAnaliseSumula').addEventListener('click', fechar);
+      modal.addEventListener('click', function (e) { if (e.target === modal) fechar(); });
+
+      document.getElementById('btnConfirmarAnaliseSumula').addEventListener('click', function () {
+        const confirmar = document.getElementById('btnConfirmarAnaliseSumula');
+        const aviso = document.getElementById('avisoAnaliseSumula');
+        const justificativa = (campo && campo.value ? campo.value : '').trim();
+
+        if (!justificativa) {
+          if (aviso) aviso.textContent = 'Informe a justificativa.';
+          if (campo) campo.focus();
+          return;
+        }
+
+        confirmar.disabled = true;
+        if (aviso) aviso.textContent = 'Marcando...';
+
+        google.script.run
+          .withSuccessHandler(function () {
+            fechar();
+            if (moduloAtual === 'sumulas') abrirModulo('sumulas');
+          })
+          .withFailureHandler(function (erro) {
+            confirmar.disabled = false;
+            if (aviso) aviso.textContent = erro && erro.message ? erro.message : String(erro);
+          })
+          .marcarSumulaAnalisada(arquivo, justificativa);
       });
     }
 
