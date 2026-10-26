@@ -297,11 +297,15 @@ function gerarPdf_(payload, id, data, pastaAnexosUrl) {
     .setForegroundColor('#14213d')
     .setFontSize(12)
     .setBold(true);
-  corpo.appendParagraph(
+  const geradaEm = corpo.appendParagraph(
     'Gerada em ' + Utilities.formatDate(data, 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm')
-  ).setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  );
+  geradaEm.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  geradaEm.editAsText().setForegroundColor('#475467').setFontSize(9).setBold(false);
 
-  corpo.appendParagraph('');
+  // Linha fina fechando o cabeçalho, para separar do corpo do documento.
+  adicionarLinhaDivisoriaPdf_(corpo);
+
   adicionarTituloSecaoPdf_(corpo, 'DADOS DA PARTIDA');
 
   const partida = corpo.appendTable([
@@ -315,9 +319,7 @@ function gerarPdf_(payload, id, data, pastaAnexosUrl) {
 
   corpo.appendParagraph('');
   adicionarTituloSecaoPdf_(corpo, 'RELATO DA ARBITRAGEM');
-  String(payload.fatos || '').split(/\r?\n/).forEach(function (linha) {
-    corpo.appendParagraph(linha || ' ').setSpacingAfter(4);
-  });
+  adicionarRelatoPdf_(corpo, payload.fatos);
 
   corpo.appendParagraph('');
   adicionarTituloSecaoPdf_(corpo, 'ENVOLVIDOS');
@@ -345,31 +347,44 @@ function gerarPdf_(payload, id, data, pastaAnexosUrl) {
   corpo.appendParagraph('');
   adicionarTituloSecaoPdf_(corpo, 'ANEXOS E EVIDÊNCIAS');
   const anexos = payload.anexos || [];
-  corpo.appendParagraph(
+  const resumoAnexos = corpo.appendParagraph(
     anexos.length
       ? 'Arquivos anexados: ' + anexos.length
       : 'Nenhum arquivo anexado.'
   );
+  resumoAnexos.editAsText().setForegroundColor('#172033').setFontSize(10);
   anexos.forEach(function (anexo) {
-    corpo.appendListItem(anexo.nome);
+    corpo.appendListItem(anexo.nome).editAsText().setForegroundColor('#172033').setFontSize(10);
   });
   if (anexos.length && pastaAnexosUrl) {
     const linkPasta = corpo.appendParagraph('Abrir pasta de evidências no Google Drive');
     linkPasta.editAsText()
       .setLinkUrl(0, linkPasta.getText().length - 1, pastaAnexosUrl)
       .setForegroundColor('#1155cc')
+      .setFontSize(10)
       .setUnderline(true);
   }
 
   corpo.appendParagraph('');
   adicionarTituloSecaoPdf_(corpo, 'DECLARAÇÃO DO ÁRBITRO');
 
-  corpo.appendParagraph(
+  const declaracao = corpo.appendParagraph(
     'Declaro, para os devidos fins, que todas as informações registradas nesta súmula correspondem aos acontecimentos observados durante a partida, assumindo responsabilidade pela veracidade dos dados informados.'
   );
+  declaracao.setSpacingAfter(6);
+  declaracao.setLineSpacing(1.3);
+  try {
+    declaracao.setAlignment(DocumentApp.HorizontalAlignment.JUSTIFY);
+  } catch (e) {
+    // JUSTIFY pode não ser aceito em alguns ambientes; mantém o padrão.
+  }
+  declaracao.editAsText().setForegroundColor('#172033').setFontSize(10);
 
   corpo.appendParagraph('');
   adicionarTituloSecaoPdf_(corpo, 'ASSINATURA DO ÁRBITRO');
+
+  // Espaço antes da linha de assinatura, para o bloco respirar.
+  corpo.appendParagraph('').setSpacingAfter(2);
 
   if (payload.assinatura) {
     const base64Assinatura = payload.assinatura.split(',')[1];
@@ -381,22 +396,38 @@ function gerarPdf_(payload, id, data, pastaAnexosUrl) {
 
     const paragrafoAssinatura = corpo.appendParagraph('');
     paragrafoAssinatura.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+    paragrafoAssinatura.setSpacingAfter(0);
 
     const imagemAssinatura = paragrafoAssinatura.appendInlineImage(blobAssinatura);
     imagemAssinatura.setWidth(220);
     imagemAssinatura.setHeight(60);
-
-    const nomeAssinatura = corpo.appendParagraph(payload.arbitro);
-    nomeAssinatura.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
-
-    const identificacaoAssinatura = corpo.appendParagraph('Árbitro responsável pela súmula');
-    identificacaoAssinatura.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
   }
 
+  // Linha de assinatura (traço), sob a imagem ou no lugar dela.
+  const linhaAssinatura = corpo.appendParagraph('______________________________');
+  linhaAssinatura.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  linhaAssinatura.setSpacingBefore(0).setSpacingAfter(2);
+  linhaAssinatura.editAsText().setForegroundColor('#98a2b3').setFontSize(11);
+
+  const nomeAssinatura = corpo.appendParagraph(payload.arbitro);
+  nomeAssinatura.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  nomeAssinatura.setSpacingAfter(0);
+  nomeAssinatura.editAsText().setForegroundColor('#14213d').setFontSize(11).setBold(true);
+
+  const docArbitro = corpo.appendParagraph(
+    'Árbitro responsável pela súmula' + (payload.documento ? '  ·  Doc.: ' + payload.documento : '')
+  );
+  docArbitro.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  docArbitro.editAsText().setForegroundColor('#475467').setFontSize(9).setBold(false);
+
+  // Rodapé: linha fina acima e texto discreto.
+  corpo.appendParagraph('');
+  adicionarLinhaDivisoriaPdf_(corpo);
   const rodape = corpo.appendParagraph(
-    'Documento gerado eletronicamente pelo Sistema de Súmula Digital AEUV\nProtocolo: ' + id
+    'Documento gerado eletronicamente pelo Sistema de Súmula Digital AEUV  ·  Protocolo: ' + id
   );
   rodape.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  rodape.editAsText().setForegroundColor('#98a2b3').setFontSize(8).setBold(false);
 
   doc.saveAndClose();
 
@@ -436,12 +467,18 @@ function testarGeracaoPdf() {
     dataJogo: '2026-09-25',
     horaJogo: '13:13',
     fatos: [
-      'A súmula digital substitui o uso do papel e das planilhas manuais na gestão de campeonatos.',
-      'O sistema registra os dados da partida e atualiza as informações em tempo real.',
+      'RELATÓRIO DE EXPULSÃO',
+      'Data: 25 de outubro de 2026',
+      'Local: CEJOR – Uberlândia/MG',
+      'Competição: Liga União 2026',
+      'Atleta expulso: Romão Pereira da Silva, número 22',
       '',
-      'Aos 12 minutos do primeiro tempo, o atleta camisa 10 recebeu cartão amarelo por reclamação.',
-      'Aos 30 minutos do segundo tempo, houve substituição na equipe visitante.',
-      'Partida encerrada sem outras ocorrências disciplinares.'
+      'Descrição da Ocorrência:',
+      'Aos 42 minutos do segundo tempo da partida realizada no CEJOR, válida pela competição Liga União 2026, o atleta Romão Pereira da Silva, da equipe Pequis FC, foi expulso de campo de forma direta.',
+      'A expulsão ocorreu em razão de jogo brusco grave fora da disputa da bola. O atleta atingiu o adversário com uso de força excessiva, em lance sem possibilidade de disputa da bola, colocando em risco a integridade física do oponente.',
+      '',
+      'Observações:',
+      'Nada mais digno de nota após a expulsão. O presente relatório é lavrado para os devidos fins disciplinares junto à organização da Liga União 2026.'
     ].join('\n'),
     envolvidos: [
       { equipe: 'FUT ART', tipo: 'Atleta', nome: 'Atleta Exemplo 1', camisa: '10' },
@@ -467,14 +504,117 @@ function testarGeracaoPdf() {
 }
 
 function adicionarTituloSecaoPdf_(corpo, texto) {
-  const titulo = corpo.appendParagraph(texto);
-  titulo.setHeading(DocumentApp.ParagraphHeading.HEADING2);
-  titulo.setSpacingBefore(10);
-  titulo.setSpacingAfter(5);
-  titulo.editAsText()
+  // Faixa de seção: uma tabela de 1 célula com fundo azul claro e uma barra
+  // azul à esquerda (borda), para cada seção virar um bloco bem visível.
+  const faixa = corpo.appendTable([[texto]]);
+  faixa.setBorderWidth(0);
+
+  const celula = faixa.getCell(0, 0);
+  celula.setBackgroundColor('#eef2f9');
+  celula.setPaddingTop(5);
+  celula.setPaddingBottom(5);
+  celula.setPaddingLeft(9);
+  celula.setPaddingRight(9);
+  celula.editAsText()
     .setForegroundColor('#14213d')
-    .setFontSize(12)
+    .setFontSize(11)
     .setBold(true);
+
+  // A faixa (tabela) herda a borda padrão de tabela do Docs; deixa a borda
+  // da cor do fundo da faixa para não aparecer o contorno de tabela.
+  faixa.setBorderColor('#eef2f9');
+
+  // Espaço interno do parágrafo da faixa.
+  const paragrafoFaixa = celula.getChild(0).asParagraph();
+  paragrafoFaixa.setSpacingBefore(0).setSpacingAfter(0);
+
+  // Pequeno respiro após a faixa, antes do conteúdo da seção.
+  corpo.appendParagraph('').setSpacingAfter(4);
+}
+
+/**
+ * Linha horizontal fina (divisória) entre blocos do documento.
+ * @param {GoogleAppsScript.Document.Body} corpo
+ */
+function adicionarLinhaDivisoriaPdf_(corpo) {
+  const paragrafo = corpo.appendParagraph('');
+  paragrafo.setSpacingBefore(6).setSpacingAfter(6);
+  paragrafo.appendHorizontalRule();
+}
+
+/**
+ * Renderiza o relato da arbitragem (texto livre do árbitro) de forma legível.
+ *
+ * O relato antigo quebrava cada linha num parágrafo próprio com espaçamento,
+ * deixando o texto picado, com buracos (linhas em branco viravam parágrafos
+ * vazios) e cortes feios entre páginas. Aqui o texto é tratado como blocos:
+ *  - linhas consecutivas viram UM parágrafo (quebra de parágrafo só em linha
+ *    em branco), com texto justificado e espaçamento confortável;
+ *  - uma linha curta isolada que termine em ":" vira subtítulo (ex.: cabeçalhos
+ *    que o árbitro escreve, como "Descrição da Ocorrência:");
+ *  - uma linha no formato "Rótulo: valor" (rótulo curto) destaca o rótulo em
+ *    negrito, deixando os dados (Data, Local, Competição, etc.) mais claros.
+ * @param {GoogleAppsScript.Document.Body} corpo
+ * @param {string} texto  Conteúdo do campo "fatos".
+ */
+function adicionarRelatoPdf_(corpo, texto) {
+  const linhas = String(texto || '').replace(/\r\n/g, '\n').split('\n');
+
+  // Agrupa linhas em blocos (parágrafos), separados por linha(s) em branco.
+  const blocos = [];
+  let atual = [];
+  linhas.forEach(function (linha) {
+    if (String(linha).trim() === '') {
+      if (atual.length) { blocos.push(atual); atual = []; }
+    } else {
+      atual.push(String(linha).trim());
+    }
+  });
+  if (atual.length) blocos.push(atual);
+
+  if (!blocos.length) {
+    corpo.appendParagraph('Nenhum relato informado.').editAsText().setFontSize(10);
+    return;
+  }
+
+  // Rótulos curtos no formato "Rótulo: valor" (ex.: Data: 25/10/2026).
+  const RE_ROTULO = /^([A-Za-zÀ-ÿ][\wÀ-ÿ .º°]{1,28}?):\s+(.+)$/;
+
+  blocos.forEach(function (bloco) {
+    // Bloco de uma linha só: pode ser subtítulo ("Algo:") ou "Rótulo: valor".
+    if (bloco.length === 1) {
+      const linha = bloco[0];
+
+      // Subtítulo: linha curta terminada em ":" e sem valor depois.
+      if (/:\s*$/.test(linha) && linha.length <= 60) {
+        const sub = corpo.appendParagraph(linha.replace(/:\s*$/, ''));
+        sub.setSpacingBefore(8).setSpacingAfter(3);
+        sub.editAsText().setForegroundColor('#14213d').setFontSize(10.5).setBold(true);
+        return;
+      }
+
+      const campo = linha.match(RE_ROTULO);
+      if (campo) {
+        const paragrafo = corpo.appendParagraph('');
+        paragrafo.setSpacingAfter(3);
+        const t = paragrafo.editAsText();
+        t.appendText(campo[1] + ': ').setBold(true).setForegroundColor('#344054').setFontSize(10);
+        t.appendText(campo[2]).setBold(false).setForegroundColor('#172033').setFontSize(10);
+        return;
+      }
+    }
+
+    // Demais blocos: texto corrido, justificado, com as linhas unidas.
+    const paragrafo = corpo.appendParagraph(bloco.join(' '));
+    paragrafo.setSpacingAfter(8);
+    paragrafo.setLineSpacing(1.3);
+    try {
+      paragrafo.setAlignment(DocumentApp.HorizontalAlignment.JUSTIFY);
+    } catch (e) {
+      // Alguns ambientes não aceitam JUSTIFY; mantém o alinhamento padrão.
+    }
+    paragrafo.editAsText().setForegroundColor('#172033').setFontSize(10);
+  });
 }
 
 function estilizarTabelaPdf_(tabela, temCabecalho) {
@@ -485,13 +625,22 @@ function estilizarTabelaPdf_(tabela, temCabecalho) {
     const cabecalho = temCabecalho && linha === 0;
     const linhaTabela = tabela.getRow(linha);
 
+    // Zebra: nas tabelas com cabeçalho (ex.: Envolvidos), as linhas de dados
+    // alternam branco/cinza-claro para facilitar a leitura entre colunas.
+    let fundo = '#ffffff';
+    if (cabecalho) {
+      fundo = '#14213d';
+    } else if (temCabecalho && (linha % 2 === 0)) {
+      fundo = '#f4f6fb';
+    }
+
     for (let coluna = 0; coluna < linhaTabela.getNumCells(); coluna++) {
       const celula = linhaTabela.getCell(coluna);
       celula.setPaddingTop(6);
       celula.setPaddingBottom(6);
       celula.setPaddingLeft(7);
       celula.setPaddingRight(7);
-      celula.setBackgroundColor(cabecalho ? '#14213d' : '#ffffff');
+      celula.setBackgroundColor(fundo);
       celula.editAsText()
         .setForegroundColor(cabecalho ? '#ffffff' : (coluna === 0 ? '#344054' : '#172033'))
         .setFontSize(9)
