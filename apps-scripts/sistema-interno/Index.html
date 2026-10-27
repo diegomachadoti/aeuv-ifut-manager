@@ -10289,6 +10289,8 @@
     function carregarSumulas() {
       google.script.run
         .withSuccessHandler(function (dados) {
+          // Remove o overlay de ação (excluir/analisar), se houver.
+          removerOverlayPunicoes_();
           if (moduloAtual !== 'sumulas') {
             return;
           }
@@ -10298,6 +10300,7 @@
           montarTelaSumulas();
         })
         .withFailureHandler(function (erro) {
+          removerOverlayPunicoes_();
           if (moduloAtual !== 'sumulas') {
             return;
           }
@@ -10585,13 +10588,16 @@
         if (!ok || moduloAtual !== 'sumulas') return;
 
         botao.disabled = true;
+        mostrarOverlayPunicoes_('Excluindo súmula...');
 
         google.script.run
           .withSuccessHandler(function () {
-            if (moduloAtual !== 'sumulas') return;
+            if (moduloAtual !== 'sumulas') { removerOverlayPunicoes_(); return; }
+            // O overlay sai quando a tela recarregada termina de montar.
             abrirModulo('sumulas');
           })
           .withFailureHandler(function (erro) {
+            removerOverlayPunicoes_();
             if (botao) botao.disabled = false;
             confirmarDialogo_({
               titulo: 'Não foi possível excluir',
@@ -10715,15 +10721,22 @@
 
         confirmar.disabled = true;
         if (aviso) aviso.textContent = 'Marcando...';
+        fechar();
+        mostrarOverlayPunicoes_('Marcando como analisada...');
 
         google.script.run
           .withSuccessHandler(function () {
-            fechar();
-            if (moduloAtual === 'sumulas') abrirModulo('sumulas');
+            if (moduloAtual !== 'sumulas') { removerOverlayPunicoes_(); return; }
+            // O overlay sai quando a tela recarregada termina de montar.
+            abrirModulo('sumulas');
           })
           .withFailureHandler(function (erro) {
-            confirmar.disabled = false;
-            if (aviso) aviso.textContent = erro && erro.message ? erro.message : String(erro);
+            removerOverlayPunicoes_();
+            confirmarDialogo_({
+              titulo: 'Não foi possível concluir',
+              mensagem: erro && erro.message ? erro.message : String(erro),
+              confirmar: 'Fechar', cancelar: 'Fechar', perigo: false
+            });
           })
           .marcarSumulaAnalisada(arquivo, justificativa);
       });
