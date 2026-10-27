@@ -10115,6 +10115,8 @@ function lerSumulas_(paraAtletas) {
     // Notas/punidos enriquecem a tela de súmulas, mas o banco já usa listarPunicoes.
     if (!paraAtletas) {
       const notas = indiceNotas_();
+      // Motivo informado quando a súmula foi marcada como analisada à mão.
+      const analisesManuais = indiceAnalisesManuais_();
 
       registros.forEach(function (registro) {
         const achado = notas[chaveProtocolo_(registro.protocolo)];
@@ -10122,6 +10124,9 @@ function lerSumulas_(paraAtletas) {
         registro.notas = achado ? achado.notas : [];
         registro.dataNota = achado ? achado.dataNota : '';
         registro.punidos = achado ? achado.punidos : [];
+
+        const analise = analisesManuais[registro.arquivoNome];
+        registro.analiseManual = analise || null;
       });
     }
 
@@ -10369,6 +10374,36 @@ function registrarLogSumulaAnalisada_(arquivoNome, email, motivo) {
   });
   dados.registros = lista;
   arquivo.setContent(JSON.stringify(dados));
+}
+
+/**
+ * Índice arquivoNome -> última análise manual registrada { justificativa, por, em }.
+ * Lê o log de súmulas marcadas manualmente como analisadas. Se o arquivo não
+ * existir ou estiver corrompido, devolve um mapa vazio (não quebra a tela).
+ * @return {Object<string, {justificativa: string, por: string, em: string}>}
+ */
+function indiceAnalisesManuais_() {
+  const indice = {};
+  try {
+    const raiz = pastaRaizProjeto_();
+    const existentes = raiz.getFilesByName('AEUV - Sumulas Analisadas Manualmente.json');
+    if (!existentes.hasNext()) return indice;
+    const dados = JSON.parse(existentes.next().getBlob().getDataAsString('UTF-8') || '{}');
+    const lista = Array.isArray(dados.registros) ? dados.registros : [];
+    // A última marcação de cada arquivo prevalece (a lista é só append).
+    lista.forEach(function (r) {
+      if (r && r.arquivo) {
+        indice[r.arquivo] = {
+          justificativa: String(r.justificativa || ''),
+          por: String(r.por || ''),
+          em: String(r.em || '')
+        };
+      }
+    });
+  } catch (e) {
+    // Log ausente/ilegível não deve derrubar a listagem de súmulas.
+  }
+  return indice;
 }
 
 /**

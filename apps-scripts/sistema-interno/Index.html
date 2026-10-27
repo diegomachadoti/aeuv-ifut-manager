@@ -812,6 +812,77 @@
        deixa de somar por fora e estourar o container, eliminando a rolagem. */
     .sumulas th, .sumulas td { padding: 9px 6px; box-sizing: border-box; }
 
+    /* Caixa do motivo quando a súmula foi marcada como analisada manualmente. */
+    .analise-manual {
+      border: 1px solid #bbf2c2;
+      border-left: 4px solid #1e7b34;
+      background: #eefbf0;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .analise-manual-titulo { font-weight: bold; color: #1e7b34; font-size: 13px; }
+    .analise-manual-motivo { margin-top: 4px; font-size: 13px; color: var(--texto); line-height: 1.4; }
+    body.tema-escuro .analise-manual { background: #16251b; border-color: #2f5a39; }
+    body.tema-escuro .analise-manual-titulo { color: #4ade80; }
+
+    /* Lista de motivos (radio) do modal "Marcar súmula como analisada". */
+    .motivos-sumula {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .opcao-motivo-sumula {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 7px 9px;
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+    .opcao-motivo-sumula:hover { background: var(--azul-claro, #eef4fd); }
+    /* Reseta o estilo que o formulário financeiro aplica a .fin-campo input
+       (width:100%, padding, borda) — senão o radio vira uma caixa enorme. */
+    .opcao-motivo-sumula input[type="radio"] {
+      width: auto;
+      min-width: 0;
+      margin: 2px 0 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      background: none;
+      flex: 0 0 auto;
+      transition: none;
+    }
+    .opcao-motivo-sumula span { flex: 1 1 auto; min-width: 0; }
+    body.tema-escuro .opcao-motivo-sumula:hover { background: rgba(255, 255, 255, .05); }
+
+    /* Campo "Outros": aparece abaixo dos motivos, com respiro, só quando
+       "Outros (descrever)" é selecionado. */
+    .campo-outros-sumula { margin-top: 6px; }
+    .campo-outros-sumula textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--texto);
+      background: #ffffff;
+      resize: vertical;
+      min-height: 90px;
+    }
+    .campo-outros-sumula textarea:focus {
+      border-color: var(--azul);
+      box-shadow: 0 0 0 3px rgba(20, 33, 61, 0.12);
+      outline: none;
+    }
+
     /* Ações da súmula: botões empilhados, compactos e encolhíveis, para a
        coluna Ações não empurrar a tabela. */
     .sumulas-acoes {
@@ -10537,9 +10608,30 @@
      * a justificativa, chama o servidor (move a súmula para "Processados") e
      * recarrega a tela. Não gera nota — uso típico: súmula sem punição.
      */
+    // Motivos pré-definidos para marcar uma súmula como analisada sem gerar
+    // nota/punição. Cobrem os cenários que o árbitro costuma relatar e que não
+    // exigem decisão disciplinar. "Outros" libera o texto livre.
+    var MOTIVOS_ANALISE_SUMULA = [
+      'Sem conduta disciplinar adicional a punir',
+      'Apenas cartões amarelos e/ou vermelhos (sem punição adicional)',
+      'Relato meramente informativo, sem ocorrência',
+      'Partida não realizada / W.O.',
+      'Súmula duplicada ou reenviada',
+      'Analisada pela comissão fora do sistema',
+      'Outros (descrever)'
+    ];
+
     function marcarAnalisadaDaTela_(botao) {
       if (!botao || botao.disabled) return;
       const arquivo = botao.dataset.arquivo;
+
+      const opcoesHtml = MOTIVOS_ANALISE_SUMULA.map(function (motivo, i) {
+        const ehOutros = i === MOTIVOS_ANALISE_SUMULA.length - 1;
+        return '<label class="opcao-motivo-sumula">'
+          + '<input type="radio" name="motivoAnaliseSumula" value="' + escapar(motivo) + '"'
+          + (ehOutros ? ' data-outros="1"' : '') + '> '
+          + '<span>' + escapar(motivo) + '</span></label>';
+      }).join('');
 
       const modal = document.createElement('div');
       modal.className = 'modal-fin-overlay';
@@ -10549,10 +10641,13 @@
         + '<div class="fin-grupo-campos">'
         + '<p class="apoio">A súmula sairá da fila de "Aguardando" e irá para as analisadas, '
         + '<strong>sem gerar nota nem punição</strong> e sem rodar a automação. Use quando não há conduta a punir. '
-        + 'A justificativa fica registrada junto da súmula.</p>'
-        + '<div class="fin-campo"><label for="justificativaAnaliseSumula">Justificativa *</label>'
-        + '<textarea id="justificativaAnaliseSumula" rows="3" maxlength="500" '
-        + 'placeholder="Ex.: relato sem conduta antidesportiva; nada a enquadrar no regulamento."></textarea></div>'
+        + 'O motivo fica registrado junto da súmula.</p>'
+        + '<div class="fin-campo"><label>Motivo *</label>'
+        + '<div class="motivos-sumula">' + opcoesHtml + '</div></div>'
+        + '<div class="fin-campo campo-outros-sumula" id="campoComplementoSumula" style="display:none;">'
+        + '<label for="complementoAnaliseSumula">Descreva o motivo *</label>'
+        + '<textarea id="complementoAnaliseSumula" rows="4" maxlength="500" '
+        + 'placeholder="Descreva o motivo da análise manual desta súmula."></textarea></div>'
         + '<div class="acoes-formulario">'
         + '<button type="button" class="botao-principal" id="btnConfirmarAnaliseSumula">Marcar como analisada</button>'
         + '<button type="button" class="botao-apoio" id="btnCancelarAnaliseSumula">Cancelar</button>'
@@ -10560,8 +10655,30 @@
         + '</div></div></div>';
 
       document.body.appendChild(modal);
-      const campo = document.getElementById('justificativaAnaliseSumula');
-      if (campo) campo.focus();
+
+      const campoComplemento = document.getElementById('campoComplementoSumula');
+      const textoComplemento = document.getElementById('complementoAnaliseSumula');
+      const aviso = document.getElementById('avisoAnaliseSumula');
+
+      function motivoSelecionado() {
+        return modal.querySelector('input[name="motivoAnaliseSumula"]:checked');
+      }
+
+      // O campo de texto só aparece quando "Outros" é selecionado; nas opções
+      // fixas ele some (e é limpo), pois a justificativa é o próprio rótulo.
+      modal.querySelectorAll('input[name="motivoAnaliseSumula"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+          if (aviso) aviso.textContent = '';
+          const ehOutros = radio.dataset.outros === '1';
+          if (ehOutros) {
+            campoComplemento.style.display = 'block';
+            textoComplemento.focus();
+          } else {
+            campoComplemento.style.display = 'none';
+            textoComplemento.value = '';
+          }
+        });
+      });
 
       function fechar() {
         modal.remove();
@@ -10573,13 +10690,27 @@
 
       document.getElementById('btnConfirmarAnaliseSumula').addEventListener('click', function () {
         const confirmar = document.getElementById('btnConfirmarAnaliseSumula');
-        const aviso = document.getElementById('avisoAnaliseSumula');
-        const justificativa = (campo && campo.value ? campo.value : '').trim();
+        const escolhido = motivoSelecionado();
 
-        if (!justificativa) {
-          if (aviso) aviso.textContent = 'Informe a justificativa.';
-          if (campo) campo.focus();
+        if (!escolhido) {
+          if (aviso) aviso.textContent = 'Selecione o motivo.';
           return;
+        }
+
+        const ehOutros = escolhido.dataset.outros === '1';
+
+        let justificativa;
+        if (ehOutros) {
+          const descricao = (textoComplemento && textoComplemento.value ? textoComplemento.value : '').trim();
+          if (!descricao) {
+            if (aviso) aviso.textContent = 'Descreva o motivo.';
+            if (textoComplemento) textoComplemento.focus();
+            return;
+          }
+          justificativa = descricao;
+        } else {
+          // Opção fixa: a justificativa é o próprio rótulo escolhido.
+          justificativa = escolhido.value;
         }
 
         confirmar.disabled = true;
@@ -10709,6 +10840,19 @@
       const punidos = registro.punidos || [];
 
       if (!notas.length) {
+        // Quando foi marcada manualmente como analisada, mostra o motivo
+        // informado (quem/quando no título do box), em destaque.
+        const analise = registro.analiseManual;
+        if (registro.situacao === 'Analisada' && analise && analise.justificativa) {
+          const detalhe = [analise.por, analise.em].filter(Boolean).join(' · ');
+          return '<div class="analise-manual" style="margin-top:12px;">'
+            + '<div class="analise-manual-titulo">✔ Analisada manualmente'
+            + (detalhe ? ' <span class="equipe-dado">· ' + escapar(detalhe) + '</span>' : '')
+            + '</div>'
+            + '<div class="analise-manual-motivo"><strong>Motivo:</strong> ' + escapar(analise.justificativa) + '</div>'
+            + '</div>';
+        }
+
         const aviso = registro.situacao === 'Analisada'
           ? 'S&uacute;mula analisada sem puni&ccedil;&atilde;o registrada no controle.'
           : 'A an&aacute;lise disciplinar desta s&uacute;mula ainda n&atilde;o foi feita.';
