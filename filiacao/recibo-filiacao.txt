@@ -12,41 +12,41 @@ assunto = Recebimento de taxa anual de filiação de equipe
 
 [assinatura]
 tipo = presidente
-data = {{cidade}}, {{data_documento}}.
+data = Uberlândia, 27/10/2026.
 
 [dados]
-numero = __________/__________
-equipe = ________________________________________
-pagador = ________________________________________
-cpf_cnpj_pagador = ____________________
-representante = ________________________________________
-exercicio = __________
+numero = 0000/1
+equipe = BOCA JUNIORS UBERLANDIA
+pagador = MIRELY MARTINS DE FREITAS
+cpf_cnpj_pagador = 052.936.376-30
+representante = MIRELY MARTINS DE FREITAS
+exercicio = 2027
 tipo_filiacao = Filiação inicial
 valor = 150,00
 valor_extenso = cento e cinquenta reais
-data_pagamento = ____/____/________
-forma_pagamento = ________________________________________
-identificador_pagamento = ________________________________________
-data_documento = ____ de ____________________ de ________
+data_pagamento = 27/10/2026
+forma_pagamento = PIX
+identificador_pagamento = E003603052026102716567fe4b7871dO
+data_documento = 27 de outubro de 2026
 cidade = Uberlândia/MG
 
 ---
-**Recibo nº:** {{numero}}
+**Recibo nº:** 0000/1
 
 * IDENTIFICAÇÃO DO RECEBIMENTO
 **Recebedora:** AEUV (Associação Esportiva Uberlandense Varzeana)
 **CNPJ da AEUV:** 67.645.389/0001-01
-**Equipe:** {{equipe}}
-**Pagador:** {{pagador}}
-**CPF / CNPJ do pagador:** {{cpf_cnpj_pagador}}
-**Presidente / representante legal da equipe:** {{representante}}
+**Equipe:** BOCA JUNIORS UBERLANDIA
+**Pagador:** MIRELY MARTINS DE FREITAS
+**CPF / CNPJ do pagador:** 052.936.376-30
+**Presidente / representante legal da equipe:** MIRELY MARTINS DE FREITAS
 
-> VALOR RECEBIDO: R$ {{valor}}
-Recebemos do pagador acima identificado a importância de **R$ {{valor}} ({{valor_extenso}})**, referente à taxa anual de **{{tipo_filiacao}}** da equipe **{{equipe}}** à AEUV, correspondente ao exercício **{{exercicio}}**.
+> VALOR RECEBIDO: R$ 150,00
+Recebemos do pagador acima identificado a importância de **R$ 150,00 (cento e cinquenta reais)**, referente à taxa anual de **Filiação inicial** da equipe **BOCA JUNIORS UBERLANDIA** à AEUV, correspondente ao exercício **2027**.
 
 * DADOS DO PAGAMENTO
-**Data do pagamento:** {{data_pagamento}}
-**Forma de pagamento:** {{forma_pagamento}}
+**Data do pagamento:** 27/10/2026
+**Forma de pagamento:** PIX
 **Identificador / referência do comprovante:** {{identificador_pagamento}}
 
 Damos quitação exclusivamente ao valor e à obrigação descritos neste recibo.

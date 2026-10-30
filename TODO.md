@@ -59,11 +59,7 @@
     - Estender: <https://manage.wix.com/wix/api/domainStartRenew?metaSiteId=674f5ab4-5304-4677-8de2-217c92b3f48d&domainName=aeuv.org&referralAdditionalInfo=mydomains__domaininfotab>.
   - Todo mes contador.
 
-- [🆕] **TD21 — Pendente:** Súmulas Enviadas — botão **Editar** (hoje só tem Excluir). Editar só quando a situação for diferente de "Analisada" (analisada já gerou nota/punição). Exige formulário para relato + envolvidos e regravar o TXT no formato que a automação lê. Excluir já está feito (move para a pasta "Excluídos", só admin, não permite Analisada).
-
-- [🆕] **TD22 — Pendente:** Limpeza cirúrgica de vínculos de teste no histórico de elenco de um atleta específico (ex.: caso "Nova Base de Atletas" / COPA QA / TEST). A rotina atual (`executarLimpezaHistoricoElencosTeste`) só funciona em base sem campeonatos e apaga todo o histórico — falta uma opção por CPF/competição, com backup.
-
-- [🆕] **TD23 — Pendente (operacional):** Subir ao Drive e publicar os dados das punições retroativas:
+- [✅] **TD23 — Concluída (operacional):** Subir ao Drive e publicar os dados das punições retroativas:
   - `AEUV - Punicoes Retroativas.json` na pasta raiz do Drive do projeto (o Apps Script lê de lá) e manter a cópia em `downloads/sumulas/` (o Python lê de lá).
   - Publicar a versão do Apps Script com as mudanças desta rodada e rodar "Recalcular agora" no Banco de Atletas.
 
