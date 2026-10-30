@@ -62,6 +62,13 @@ const CONFIG = {
     chaveArquivoRetroativas: 'PUNICOES_RETROATIVAS_ARQUIVO_ID'
   },
 
+  // Projeção de gastos: simulação editável de saídas futuras confrontadas com o
+  // saldo em caixa. Persiste num JSON na pasta raiz do projeto (só admin/diretoria).
+  projecaoGastos: {
+    arquivo: 'AEUV - Projecao de Gastos.json',
+    chaveArquivo: 'PROJECAO_GASTOS_ARQUIVO_ID'
+  },
+
   // Contato exibido para quem tenta entrar sem autorizacao.
   emailSuporte: 'associacaoaeuv@gmail.com',
 
@@ -385,6 +392,14 @@ const MODULOS = [
     icone: '💰',
     tipo: 'financeiro',
     descricao: 'Controle de entradas, saídas, anexos de comprovantes e geração de relatórios oficiais para assembleias e emendas impositivas.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
+    id: 'projecao-gastos',
+    nome: 'Projeção de Gastos',
+    icone: '📊',
+    tipo: 'projecao-gastos',
+    descricao: 'Simule saídas futuras a partir do saldo em caixa e veja quanto sobraria. Visível só para administração e diretoria.',
     perfis: ['admin', 'diretoria']
   },
   {
@@ -4117,6 +4132,311 @@ function lerAprovacoesPunicoes_() {
 function gravarAprovacoesPunicoes_(aprovacoes) {
   const arquivo = arquivoAprovacoesPunicoes_();
   arquivo.setContent(JSON.stringify(aprovacoes || {}));
+}
+
+/******************************************************
+ * PROJEÇÃO DE GASTOS (simulação editável, só admin/diretoria)
+ ******************************************************/
+
+// Itens fixos de saída oferecidos na projeção (modelo de premiação/custos).
+// "Outros" é livre: o usuário adiciona linhas com descrição própria.
+const PROJECAO_GASTOS_ITENS_FIXOS = [
+  'Premiação Zanoello',
+  'Premiação Metal Medalhas',
+  'App iFut',
+  'Premiação 1',
+  'Premiação 2',
+  'Premiação 3',
+  'Premiação 4',
+  'Artilheiro',
+  'Goleiro',
+  'Técnico Campeão',
+  'Craque da Final',
+  'Craque Terceiro Lugar',
+  'Divulgação / Marketing',
+  'Imposto CNPJ',
+  'Despesas gerais',
+  'Gol Click',
+  'Despesas adicionais',
+  'Transmissões',
+  'Segurança',
+  'Compras Extras'
+];
+
+function exigirProjecaoGastos_() {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !moduloLiberado_('projecao-gastos', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para acessar a projeção de gastos.');
+  }
+  return sessao;
+}
+
+function arquivoProjecaoGastos_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const guardado = propriedades.getProperty(CONFIG.projecaoGastos.chaveArquivo);
+  if (guardado) {
+    try {
+      const arquivo = DriveApp.getFileById(guardado);
+      if (!arquivo.isTrashed()) return arquivo;
+    } catch (e) {
+      // Arquivo removido ou sem acesso: recria.
+    }
+  }
+  const raiz = pastaRaizProjeto_();
+  const existentes = raiz.getFilesByName(CONFIG.projecaoGastos.arquivo);
+  const arquivo = existentes.hasNext()
+    ? existentes.next()
+    : raiz.createFile(Utilities.newBlob('{}', 'application/json', CONFIG.projecaoGastos.arquivo));
+  propriedades.setProperty(CONFIG.projecaoGastos.chaveArquivo, arquivo.getId());
+  return arquivo;
+}
+
+function lerProjecaoGastosDoc_() {
+  try {
+    const dados = JSON.parse(arquivoProjecaoGastos_().getBlob().getDataAsString('UTF-8') || '{}');
+    return dados && typeof dados === 'object' && !Array.isArray(dados) ? dados : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+/**
+ * Normaliza a lista de saídas da projeção: cada item vira { descricao, valor }.
+ * valor é número >= 0; descrição é string obrigatória (até 120 caracteres).
+ * @param {Array} itens
+ * @return {Array<{descricao: string, valor: number}>}
+ */
+function normalizarItensProjecao_(itens) {
+  if (!Array.isArray(itens)) return [];
+  return itens.map(function (item) {
+    const descricao = String((item && item.descricao) || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    let valor = Number(item && item.valor);
+    if (!isFinite(valor) || valor < 0) valor = 0;
+    // Duas casas, evitando lixo de ponto flutuante.
+    valor = Math.round(valor * 100) / 100;
+    return { descricao: descricao, valor: valor };
+  }).filter(function (item) {
+    return item.descricao || item.valor > 0;
+  }).slice(0, 100);
+}
+
+/**
+ * Devolve a projeção salva + o saldo em caixa atual (sempre recalculado).
+ * @return {{saldoAtual, totalEntradas, totalSaidas, saldoInicial, usarSaldoCaixa,
+ *           itens, itensFixos, atualizadoEm, atualizadoPor, podeEditar}}
+ */
+function listarProjecaoGastos() {
+  const sessao = exigirProjecaoGastos_();
+  const doc = lerProjecaoGastosDoc_();
+  const financeiro = calcularSaldoFinanceiro_();
+  const usarSaldoCaixa = doc.usarSaldoCaixa === false ? false : true;
+  let saldoInicial = Number(doc.saldoInicial);
+  if (!isFinite(saldoInicial)) saldoInicial = 0;
+  return {
+    saldoAtual: financeiro.saldoAtual,
+    totalEntradas: financeiro.totalEntradas,
+    totalSaidas: financeiro.totalSaidas,
+    // Quando usarSaldoCaixa, a base é o saldo real; senão, o valor manual salvo.
+    usarSaldoCaixa: usarSaldoCaixa,
+    saldoInicial: usarSaldoCaixa ? financeiro.saldoAtual : saldoInicial,
+    itens: normalizarItensProjecao_(doc.itens),
+    itensFixos: PROJECAO_GASTOS_ITENS_FIXOS,
+    atualizadoEm: String(doc.atualizadoEm || ''),
+    atualizadoPor: String(doc.atualizadoPor || ''),
+    podeEditar: sessao.usuario.perfil === 'admin' || sessao.usuario.perfil === 'diretoria'
+  };
+}
+
+/**
+ * Salva a projeção (base e lista de saídas). Só admin/diretoria.
+ * @param {{usarSaldoCaixa: boolean, saldoInicial: number, itens: Array}} payload
+ * @return {Object} a projeção recarregada (mesmo formato de listarProjecaoGastos)
+ */
+function salvarProjecaoGastos(payload) {
+  exigirProjecaoGastos_();
+  const dados = payload || {};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const doc = lerProjecaoGastosDoc_();
+    doc.usarSaldoCaixa = dados.usarSaldoCaixa === false ? false : true;
+    let saldoInicial = Number(dados.saldoInicial);
+    if (!isFinite(saldoInicial) || saldoInicial < 0) saldoInicial = 0;
+    doc.saldoInicial = Math.round(saldoInicial * 100) / 100;
+    doc.itens = normalizarItensProjecao_(dados.itens);
+    doc.atualizadoEm = formatarDataHora_(new Date());
+    doc.atualizadoPor = exigirProjecaoGastos_().email;
+    arquivoProjecaoGastos_().setContent(JSON.stringify(doc));
+    return listarProjecaoGastos();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Gera o PDF da projeção de gastos no padrão institucional (logo, título,
+ * descritivo informado, tabela de saídas, totais e saldo projetado).
+ * Usa os valores enviados pela tela (não exige salvar antes). Só admin/diretoria.
+ * @param {{descritivo: string, usarSaldoCaixa: boolean, saldoInicial: number, itens: Array}} payload
+ * @return {{nome: string, mimeType: string, base64: string}}
+ */
+function gerarPdfProjecaoGastos(payload) {
+  exigirProjecaoGastos_();
+  const dados = payload || {};
+  const financeiro = calcularSaldoFinanceiro_();
+  const usarSaldoCaixa = dados.usarSaldoCaixa === false ? false : true;
+  let saldoInicial = Number(dados.saldoInicial);
+  if (!isFinite(saldoInicial) || saldoInicial < 0) saldoInicial = 0;
+  const base = usarSaldoCaixa ? financeiro.saldoAtual : saldoInicial;
+  const itens = normalizarItensProjecao_(dados.itens);
+  const descritivo = String(dados.descritivo || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+
+  const totalSaidas = itens.reduce(function (s, it) { return s + (Number(it.valor) || 0); }, 0);
+  const resto = base - totalSaidas;
+
+  const fuso = 'America/Sao_Paulo';
+  const emitidoEm = Utilities.formatDate(new Date(), fuso, 'dd/MM/yyyy HH:mm');
+  const logoBlob = DriveApp.getFileById(CONFIG.logoFileId).getBlob();
+  const logo = 'data:' + logoBlob.getContentType() + ';base64,' + Utilities.base64Encode(logoBlob.getBytes());
+
+  function e(txt) {
+    return String(txt === null || txt === undefined ? '' : txt)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function moeda(n) {
+    const v = Number(n) || 0;
+    return 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const linhasHtml = itens.length
+    ? itens.map(function (it) {
+      return '<tr><td>' + e(it.descricao || '—') + '</td><td class="v">' + e(moeda(it.valor)) + '</td></tr>';
+    }).join('')
+    : '<tr><td colspan="2" class="vazio">Nenhuma saída prevista informada.</td></tr>';
+
+  const corResto = resto >= 0 ? '#1e7b34' : '#b3261e';
+
+  const html = '<!doctype html><html><head><meta charset="UTF-8"><style>'
+    + '@page{size:A4 portrait;margin:14mm 14mm}'
+    + 'body{margin:0;font:10.5pt Arial,sans-serif;color:#172033}'
+    + '.topo{display:flex;align-items:center;gap:14px;border-bottom:2px solid #14213d;padding-bottom:10px;margin-bottom:6px}'
+    + '.topo img{width:64px;height:64px;object-fit:contain}'
+    + '.topo h1{margin:0;font-size:15pt;color:#14213d}'
+    + '.topo .sub{color:#475467;font-size:10pt;font-weight:bold}'
+    + '.meta{color:#475467;font-size:9pt;margin:2px 0 14px}'
+    + '.descritivo{background:#eef2f9;border-left:4px solid #14213d;padding:8px 12px;border-radius:6px;margin:0 0 14px;font-size:10.5pt}'
+    + '.cards{display:flex;gap:10px;margin:0 0 14px}'
+    + '.card{flex:1;border:1px solid #d8deea;border-radius:8px;padding:10px 12px}'
+    + '.card .rot{font-size:8.5pt;text-transform:uppercase;font-weight:bold;color:#475467}'
+    + '.card .val{font-size:13pt;font-weight:bold;margin-top:3px}'
+    + 'table{width:100%;border-collapse:collapse;margin-top:4px}'
+    + 'th,td{border:1px solid #d8deea;padding:7px 9px;font-size:10pt;text-align:left}'
+    + 'th{background:#14213d;color:#fff}'
+    + 'td.v,th.v{text-align:right;white-space:nowrap}'
+    + 'tr:nth-child(even) td{background:#f4f6fb}'
+    + 'td.vazio{text-align:center;color:#667085}'
+    + 'tfoot td{font-weight:bold;background:#eef2f9}'
+    + '.rodape{margin-top:16px;color:#98a2b3;font-size:8pt;border-top:1px solid #d8deea;padding-top:6px}'
+    + '</style></head><body>'
+    + '<div class="topo"><img src="' + e(logo) + '" alt="">'
+    + '<div><div class="sub">' + e(ASSOCIACAO_NOME) + '</div>'
+    + '<h1>Projeção de Gastos</h1></div></div>'
+    + '<div class="meta">Emitida em ' + e(emitidoEm) + '</div>'
+    + (descritivo ? '<div class="descritivo"><strong>Referência:</strong> ' + e(descritivo) + '</div>' : '')
+    + '<div class="cards">'
+    + '<div class="card"><div class="rot">' + (usarSaldoCaixa ? 'Saldo em caixa (base)' : 'Saldo inicial (base)') + '</div><div class="val" style="color:#14213d">' + e(moeda(base)) + '</div></div>'
+    + '<div class="card"><div class="rot">Total de saídas previstas</div><div class="val" style="color:#b3261e">' + e(moeda(totalSaidas)) + '</div></div>'
+    + '<div class="card"><div class="rot">Saldo projetado (resto)</div><div class="val" style="color:' + corResto + '">' + e(moeda(resto)) + '</div></div>'
+    + '</div>'
+    + '<table><thead><tr><th>Saída prevista</th><th class="v">Valor</th></tr></thead>'
+    + '<tbody>' + linhasHtml + '</tbody>'
+    + '<tfoot><tr><td>Total de saídas</td><td class="v">' + e(moeda(totalSaidas)) + '</td></tr>'
+    + '<tr><td>Saldo projetado (resto)</td><td class="v" style="color:' + corResto + '">' + e(moeda(resto)) + '</td></tr></tfoot>'
+    + '</table>'
+    + '<p class="rodape">Documento de planejamento interno da ' + e(ASSOCIACAO_NOME) + '. '
+    + 'Simulação de gastos futuros a partir do saldo em caixa; não constitui prestação de contas oficial.</p>'
+    + '</body></html>';
+
+  const nome = 'Projecao de Gastos'
+    + (descritivo ? ' - ' + descritivo : '')
+    + ' - ' + Utilities.formatDate(new Date(), fuso, 'yyyy-MM-dd HH-mm');
+  const nomeArquivo = nome.replace(/[\\/:*?"<>|]/g, '-').slice(0, 160) + '.pdf';
+  const pdf = Utilities.newBlob(html, 'text/html', 'projecao.html').getAs('application/pdf').setName(nomeArquivo);
+
+  // Guarda o PDF na subpasta do Drive para o histórico (expansor na tela).
+  try {
+    const pasta = pastaProjecaoGastos_();
+    const arquivo = pasta.createFile(pdf);
+    if (descritivo) arquivo.setDescription(descritivo);
+  } catch (e) {
+    // Falha ao salvar no Drive não impede o download imediato do PDF.
+  }
+
+  return { nome: nomeArquivo, mimeType: 'application/pdf', base64: Utilities.base64Encode(pdf.getBytes()) };
+}
+
+/**
+ * Subpasta no Drive onde ficam os PDFs de projeção já gerados. Criada na
+ * primeira geração; o id fica em cache nas Script Properties.
+ * @return {DriveApp.Folder}
+ */
+function pastaProjecaoGastos_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const guardado = propriedades.getProperty('PROJECAO_GASTOS_PASTA_ID');
+  if (guardado) {
+    try {
+      const pasta = DriveApp.getFolderById(guardado);
+      if (!pasta.isTrashed()) return pasta;
+    } catch (e) {
+      // Pasta removida ou sem acesso: recria.
+    }
+  }
+  const raiz = pastaRaizProjeto_();
+  const existentes = raiz.getFoldersByName('Projeções de Gastos');
+  const pasta = existentes.hasNext() ? existentes.next() : raiz.createFolder('Projeções de Gastos');
+  propriedades.setProperty('PROJECAO_GASTOS_PASTA_ID', pasta.getId());
+  return pasta;
+}
+
+/**
+ * Lista os PDFs de projeção já gerados, do mais recente para o mais antigo.
+ * Devolve até 'limite' itens (padrão 20) com nome, descrição, data e link.
+ * @return {{relatorios: Array<{nome, descricao, geradoEm, url}>, total: number, limite: number}}
+ */
+function listarRelatoriosProjecaoGastos() {
+  exigirProjecaoGastos_();
+  const limite = 20;
+  let pasta;
+  try {
+    pasta = pastaProjecaoGastos_();
+  } catch (e) {
+    return { relatorios: [], total: 0, limite: limite };
+  }
+  const achados = [];
+  const iterador = pasta.getFilesByType(MimeType.PDF);
+  while (iterador.hasNext()) {
+    const arquivo = iterador.next();
+    achados.push({
+      nome: arquivo.getName(),
+      descricao: arquivo.getDescription() || '',
+      geradoEm: arquivo.getDateCreated(),
+      url: arquivo.getUrl()
+    });
+  }
+  achados.sort(function (a, b) { return b.geradoEm.getTime() - a.geradoEm.getTime(); });
+  const fuso = 'America/Sao_Paulo';
+  return {
+    total: achados.length,
+    limite: limite,
+    relatorios: achados.slice(0, limite).map(function (item) {
+      return {
+        nome: item.nome,
+        descricao: item.descricao,
+        geradoEm: Utilities.formatDate(item.geradoEm, fuso, 'dd/MM/yyyy HH:mm'),
+        url: item.url
+      };
+    })
+  };
 }
 
 /**
@@ -14082,6 +14402,27 @@ function listarRelatoriosFinanceiros() {
  * Retorna dados para abrir o modulo financeiro:
  * lista de lancamentos, totais calculados, categorias e lista de competicoes.
  */
+/**
+ * Calcula o saldo em caixa (entradas - saídas) direto da planilha, ignorando
+ * lançamentos "Pendente". Não checa permissão de módulo — é um helper interno
+ * reaproveitado pelo Financeiro e pela Projeção de Gastos.
+ * @return {{totalEntradas: number, totalSaidas: number, saldoAtual: number}}
+ */
+function calcularSaldoFinanceiro_() {
+  const aba = abaFinanceiro_();
+  const valores = aba.getDataRange().getValues();
+  let totalEntradas = 0;
+  let totalSaidas = 0;
+  valores.slice(1).forEach(function (linha) {
+    const valNum = parseFloat(String(linha[6] || 0).replace(',', '.')) || 0;
+    const tipoLinha = String(linha[2] || '').trim().toLowerCase();
+    if (tipoLinha === 'pendente') return; // não entra nos totais
+    if (tipoLinha === 'entrada') totalEntradas += valNum;
+    else totalSaidas += valNum;
+  });
+  return { totalEntradas: totalEntradas, totalSaidas: totalSaidas, saldoAtual: totalEntradas - totalSaidas };
+}
+
 function listarFinanceiro() {
   const sessao = identificarUsuario_();
   if (!sessao.autorizado || !moduloLiberado_('financeiro', sessao.usuario.perfil)) {

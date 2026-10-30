@@ -6,12 +6,14 @@
 
 - [✅] **TD1 — Pendente — Financeiro e Prestação de Contas:** adicionar um status "Pendente" (esse status nao sai nos reports), ou seja, vai ser usado para controle na tela para filtrar ate pessoal regularizar o pagamento.
 
-- [🆕] **TD2 — Pendente — Implementar item ja existente no Menu "Atletas"** (banco de dados de todos os atletas inscritos em nossas competições).
+- [✅] **TD2 — Concluída — Implementar item ja existente no Menu "Atletas"** (banco de dados de todos os atletas inscritos em nossas competições).
   - Carga Inicial (Segue Planilhas exportadas no ifut para fazer uma carga inicial):
     - Avaliar um arquivo antes e analisar quais campos fazem sentido ter no cadastro de atleta.
     - Executar cadastrado na base de dados da associação para esses arquivos exportados dos ultimos campeonatos: <https://drive.google.com/drive/folders/1ByAsDKYFTpT0U5PXk6cnA5DkqscSboCY>.
       - Validar: Se o atleta ja existe atualizar. Se nao existir incluir um novo. A ideia no final e ter as informacoes atualizadas finais do atleta "historico de participação nas competições da associação e qual equipe atual ele se encontra cadastrado" (na planilha tem a data de inclusão no ifut entao sabemos qual foi a ordem).
       - Na planilha tem 2 colunas de documentos o RG e CPF porem pode ter competições que o RG foi usado com o valor do CPF do atleta nesse casos avaliar a coluna "RG" qual informação se aplica a CPF e na hora de inserir inserir como CPF.
+
+      Todos registros do SUPER LIGA Uniao ja estoa na base.
 
 - [🆕] **TD3 — Pendente — Em "Disciplina":**
   - Vai ter o filtro do campeonato ao seleciona e retornado a lista em abas de Pendurados, suspensos. Podendo fazer 2 ações zerar suspensos zera pendurados (isso influencia se o atleta vai estar disponível para jogo na súmula) poderia ter gráficos de cartão, média para o camepaonto e por time. Poderia ter um botão para gerar atletas suspensos e pendurados naquele momento um PDF com as informações no layout da súmula por exemplo para seguir um padrão.
@@ -23,11 +25,9 @@
   - Ranking de Artilheiro goleiro menos vazado, cartões amarelhos cartões vermelhos.
   - Ranking De equipes com mais vitorias.
 
-## Bugs
-
-- [⛔] **TD5 — Pendente:** "Equipes participantes" nao tem loading ao clicar em desvincular uma equipe.
-- [⛔] **TD6 — Pendente:** Ao tentar desvincular uma equipe se tiver atleta nao deixar essa regra nao precisa: `Error: Não é possível remover este time porque ele possui 2 atleta(s) e 0 membro(s) da comissão vinculados.`
-- [⛔] **TD7 — Pendente:** "Tabela e Classificação" ao clicar em adiconar jogo, nao esta carregando os times para escolher para lançar jogos.
+- [✅] **TD5 — Concluído:** "Equipes participantes" agora mostra o loading padrão (overlay com spinner, o mesmo do Controle de punições) ao desvincular uma equipe; o overlay cobre a ação e a recarga da tela.
+- [⁉️] **TD6 — Pendente:** Ao tentar desvincular uma equipe se tiver atleta nao deixar essa regra nao precisa: `Error: Não é possível remover este time porque ele possui 2 atleta(s) e 0 membro(s) da comissão vinculados.`
+- [✅] **TD7 — Concluído (não era bug):** No "Novo jogo" os selects Mandante/Visitante só listam os times do grupo escolhido. O caso era falta de distribuir os times no grupo (aba "Grupos e fases" → "Distribuir times nos grupos"); após distribuir, os times aparecem normalmente. Melhorias aplicadas no front: ao abrir o Novo jogo, pré-seleciona automaticamente o primeiro grupo com 2+ times e popula os selects; a mensagem de apoio passou a distinguir "escolha um grupo" x "nenhum grupo tem 2 times (distribua na aba Grupos e fases)" x "este grupo tem menos de dois times". Possível melhoria futura: auto-atribuir as equipes ao grupo quando o campeonato tem um único grupo, eliminando o passo manual.
 
 ## Melhorias
 

@@ -1796,6 +1796,26 @@
     .tabela-financeiro th:nth-child(9) { width: 46px; }   /* Ações (Editar / Excluir empilhados) */
     .tabela-financeiro td.fin-col-acoes { padding-left: 4px; padding-right: 4px; }
 
+    /* Projeção de gastos: checkbox de base (saldo em caixa) e linhas de saída. */
+    .proj-check { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--texto); cursor: pointer; }
+    .proj-check input { flex: 0 0 auto; width: auto; margin: 0; }
+    .proj-linhas { display: flex; flex-direction: column; gap: 8px; }
+    .proj-linha { display: flex; align-items: center; gap: 10px; }
+    .proj-linha .proj-linha-nome { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+    .proj-linha .proj-linha-desc { flex: 1 1 auto; min-width: 0; border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px; font-family: inherit; font-size: 14px; color: var(--texto); background: #fff; }
+    .proj-linha .proj-linha-valor { flex: 0 0 auto; width: 150px; border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px; font-family: inherit; font-size: 14px; color: var(--texto); background: #fff; text-align: right; }
+    .proj-linha .proj-linha-remover { flex: 0 0 auto; padding: 6px 9px; }
+    body.tema-escuro .proj-linha .proj-linha-desc, body.tema-escuro .proj-linha .proj-linha-valor { background: var(--superficie-2, #1b2940); }
+    @media (max-width: 600px) {
+      /* No celular: nome ocupa a 1ª linha inteira; valor + lixeira dividem a 2ª,
+         com o valor crescendo e a lixeira compacta ao lado (sem linha solta). */
+      .proj-linha { flex-wrap: wrap; column-gap: 8px; row-gap: 6px; padding-bottom: 10px; border-bottom: 1px dashed var(--borda); }
+      .proj-linha .proj-linha-nome,
+      .proj-linha .proj-linha-desc { flex: 1 1 100%; width: 100%; }
+      .proj-linha .proj-linha-valor { flex: 1 1 auto; width: auto; }
+      .proj-linha .proj-linha-remover { flex: 0 0 auto; }
+    }
+
     .fin-desc-texto { font-weight: 600; color: var(--texto); }
     .fin-desc-id { display: block; color: #888; font-size: 11px; margin-top: 2px; }
 
@@ -2240,13 +2260,39 @@
     .tabela-classificacao th:nth-child(2), .tabela-classificacao td:nth-child(2) { text-align: left; min-width: 180px; white-space: normal; }
     .tabela-classificacao caption { text-align: left; padding: 12px; font-weight: bold; }
     .tabela-escudo { width: 26px; height: 26px; object-fit: contain; vertical-align: middle; margin-right: 8px; }
+    /* Lista de times do grupo (aba Grupos e fases) com escudo, igual à classificação. */
+    .grupo-times { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .grupo-time { display: flex; align-items: center; gap: 8px; }
+    .grupo-time-nome { overflow-wrap: anywhere; }
+    .grupo-time-sem-escudo {
+      display: inline-grid; place-items: center; width: 26px; height: 26px; flex: 0 0 auto;
+      border: 1px solid var(--borda); border-radius: 50%; font-size: 11px; color: var(--apoio); margin-right: 8px;
+    }
+    /* Escudo + nome alinhados no rótulo do formulário "Distribuir times nos grupos". */
+    .tabela-grupo-equipe .tabela-grupo-nome { display: flex; align-items: center; }
+    .tabela-grupo-equipe .tabela-grupo-nome .grupo-time-sem-escudo { margin-right: 8px; }
     .tabela-form { margin-top: 18px; }
     .tabela-form .campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 14px; }
     .tabela-form .campo { width: auto; min-width: 0; grid-column: auto; }
     .tabela-form .campo.cheio { grid-column: 1 / -1; }
     .tabela-form input, .tabela-form select, .tabela-barra select { width: 100%; box-sizing: border-box; }
-    .tabela-grupo-equipe { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 1fr); gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--borda); }
-    .tabela-grupo-equipe label { overflow-wrap: anywhere; }
+    .tabela-grupos-lista { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+    /* Cada time vira uma linha-cartão: nome à esquerda ocupando o espaço e o
+       seletor de grupo logo à direita, com largura controlada (sem vão). */
+    .tabela-grupo-equipe {
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      padding: 10px 12px; border: 1px solid var(--borda); border-radius: 8px; background: #fff;
+    }
+    body.tema-escuro .tabela-grupo-equipe { background: var(--superficie-2, #1b2940); }
+    .tabela-grupo-equipe .tabela-grupo-nome { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+    .tabela-grupo-equipe select {
+      flex: 0 0 auto; width: auto; min-width: 160px; max-width: 260px;
+      border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px;
+      font-family: inherit; font-size: 14px; color: var(--texto); background: #fff;
+    }
+    body.tema-escuro .tabela-grupo-equipe select { background: var(--superficie, #0f1b30); color: var(--texto); }
+    /* Linha do painel de critérios reaproveita a classe; mantém em coluna. */
+    .tabela-grupo-equipe[data-tcr-linha] { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 1fr); }
     .tabela-fases-checks { display: flex; flex-wrap: wrap; gap: 14px; }
     .tabela-fases-checks label { display: flex; gap: 8px; align-items: center; }
     .resultado-placar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 14px; align-items: center; text-align: center; }
@@ -2280,7 +2326,10 @@
       .resultado-time img { width: 48px; height: 48px; }
       .resultado-time input { font-size: 1.4rem; }
       .tabela-barra > button { flex: 1 1 120px; }
-      .tabela-grupo-equipe { grid-template-columns: 1fr; gap: 6px; }
+      /* Em telas estreitas, nome em cima e seletor embaixo, ocupando a largura. */
+      .tabela-grupo-equipe { flex-direction: column; align-items: stretch; gap: 8px; }
+      .tabela-grupo-equipe select { width: 100%; max-width: none; }
+      .tabela-grupo-equipe[data-tcr-linha] { grid-template-columns: 1fr; gap: 6px; }
     }
   </style>
   <style>
@@ -3549,6 +3598,13 @@
         conteudo.innerHTML = cabecalho
           + '<div id="areaFinanceiro">' + blocoCarregando('statusFinanceiro') + '</div>';
         carregarFinanceiro();
+        return;
+      }
+
+      if (modulo.tipo === 'projecao-gastos') {
+        conteudo.innerHTML = cabecalho
+          + '<div id="areaProjecaoGastos">' + blocoCarregando('statusProjecaoGastos') + '</div>';
+        carregarProjecaoGastos();
         return;
       }
 
@@ -5328,7 +5384,10 @@
       const campeonatoId = tabelaEstado.campeonatoId, modulo = moduloAtual;
       document.getElementById('tabelaMensagem').innerHTML = '';
       tabelaOcupada_(true);
+      // Loading padrão (overlay com spinner) enquanto salva/gera.
+      mostrarOverlayGlobal_(pdf ? 'Gerando súmula PDF...' : 'Salvando...');
       google.script.run.withSuccessHandler(function (dados) {
+        removerOverlayGlobal_();
         if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
         tabelaOcupada_(false);
         if (pdf) {
@@ -5358,6 +5417,7 @@
         if (modulo === 'sumula-campeonato') carregarSumulasCampeonato_(dados.recado || 'Alterações salvas.');
         else montarTabelaCampeonato_(dados.recado || 'Alterações salvas.');
       }).withFailureHandler(function (erro) {
+        removerOverlayGlobal_();
         if (requisicao !== tabelaEstado.requisicao || campeonatoId !== tabelaEstado.campeonatoId || moduloAtual !== modulo || !tabelaModuloAtivo_()) return;
         tabelaOcupada_(false);
         tabelaErro_(erro);
@@ -5545,8 +5605,16 @@
       return '<div class="tabela-painel"><h3>Grupos e fases configurados</h3><p class="apoio">A estrutura é configurada no cadastro do campeonato. Sorteios, cruzamentos e participantes das eliminatórias são mantidos manualmente; não há avanço automático.</p>'
         + (dados.fases.length ? '<ul>' + dados.fases.map(function (fase) { return '<li>' + escapar(fase.nome) + ' · ' + (fase.tipo === 'eliminatoria' ? 'Eliminatória' : 'Classificação') + ' · ' + fase.rodadas + ' rodada(s)</li>'; }).join('') + '</ul>' : '<div class="vazio">Nenhuma fase configurada.</div>')
         + (dados.grupos.length ? '<div class="tabela-grade">' + dados.grupos.map(function (grupo) {
-          const nomes = dados.equipes.filter(function (equipe) { return grupo.equipeIds.indexOf(equipe.id) >= 0; }).map(function (equipe) { return escapar(equipe.nome); });
-          return '<section class="tabela-jogo"><h4>' + escapar(grupo.nome) + '</h4>' + (nomes.length ? '<ul><li>' + nomes.join('</li><li>') + '</li></ul>' : '<p class="apoio">Nenhum time atribuído.</p>') + '</section>';
+          const times = dados.equipes.filter(function (equipe) { return grupo.equipeIds.indexOf(equipe.id) >= 0; });
+          const itens = times.map(function (equipe) {
+            const iniciais = equipe.nome.trim().split(/\s+/).slice(0, 2).map(function (parte) { return parte.charAt(0); }).join('').toUpperCase();
+            const marca = equipe.escudo
+              ? '<img class="tabela-escudo" src="' + escapar(equipe.escudo) + '" alt="" loading="lazy">'
+              : '<span class="grupo-time-sem-escudo" aria-hidden="true">' + escapar(iniciais) + '</span>';
+            return '<li class="grupo-time">' + marca + '<span class="grupo-time-nome">' + escapar(equipe.nome) + '</span></li>';
+          }).join('');
+          return '<section class="tabela-jogo"><h4>' + escapar(grupo.nome) + '</h4>'
+            + (times.length ? '<ul class="grupo-times">' + itens + '</ul>' : '<p class="apoio">Nenhum time atribuído.</p>') + '</section>';
         }).join('') + '</div>' : '<p class="apoio">Este campeonato não utiliza grupos de classificação.</p>')
         + (dados.grupos.length ? '<p class="apoio">Sem grupo: ' + escapar(dados.equipes.filter(function (equipe) {
           return !dados.grupos.some(function (grupo) { return grupo.equipeIds.indexOf(equipe.id) >= 0; });
@@ -5761,6 +5829,18 @@
         selectGrupo.parentElement.hidden = !usaGrupo;
         selectGrupo.disabled = !usaGrupo;
         selectGrupo.required = usaGrupo;
+
+        // Em "Novo jogo" com grupos, se ainda não há um grupo válido escolhido,
+        // pré-seleciona o primeiro grupo que tenha pelo menos dois times, para
+        // os selects de Mandante/Visitante já virem preenchidos.
+        if (usaGrupo && jogo.status !== 'encerrado') {
+          const grupoAtual = dados.grupos.find(function (item) { return item.id === selectGrupo.value; });
+          if (!grupoAtual || grupoAtual.equipeIds.length < 2) {
+            const grupoComTimes = dados.grupos.find(function (item) { return item.equipeIds.length >= 2; });
+            if (grupoComTimes) selectGrupo.value = grupoComTimes.id;
+          }
+        }
+
         const grupo = dados.grupos.find(function (item) { return item.id === selectGrupo.value; });
         const equipes = jogo.status === 'encerrado' ? dados.equipes.slice()
           : (usaGrupo ? dados.equipes.filter(function (equipe) { return grupo && grupo.equipeIds.indexOf(equipe.id) >= 0; }) : dados.equipes);
@@ -5773,8 +5853,21 @@
           select.innerHTML = opcoesSelect(equipes, atual, 'Selecione');
           select.required = true;
         });
-        document.getElementById('tjAjudaTimes').textContent = usaGrupo && equipes.length < 2
-          ? 'Selecione um grupo com pelo menos dois times. Distribua os times na aba Grupos e fases antes de cadastrar este confronto.' : '';
+
+        // Mensagem de apoio: distingue "nenhum grupo escolhido" de "grupo sem
+        // times suficientes" e do caso em que nenhum grupo tem 2+ times.
+        let ajuda = '';
+        if (usaGrupo && equipes.length < 2) {
+          const algumGrupoCompleto = dados.grupos.some(function (item) { return item.equipeIds.length >= 2; });
+          if (!grupo) {
+            ajuda = 'Escolha um grupo para carregar os times do confronto.';
+          } else if (!algumGrupoCompleto) {
+            ajuda = 'Nenhum grupo tem dois times ainda. Distribua os times na aba Grupos e fases antes de cadastrar este confronto.';
+          } else {
+            ajuda = 'Este grupo tem menos de dois times. Escolha outro grupo ou distribua mais times na aba Grupos e fases.';
+          }
+        }
+        document.getElementById('tjAjudaTimes').textContent = ajuda;
       }
       function atualizarFase() {
         const fase = dados.fases.find(function (item) { return item.id === valor('tjFase'); });
@@ -6137,10 +6230,19 @@
       if (atualizado !== true) return tabelaContextoAtual_(function () { abrirTabelaGrupos_(true); });
       const dados = tabelaEstado.dados;
       tabelaMontarFormulario_('Distribuir times nos grupos', '<p class="apoio">Cada time pode pertencer a um único grupo ou ficar sem grupo. Alterações incompatíveis com jogos existentes serão recusadas: edite ou remova os confrontos antes de mover seus times.</p>'
+        + '<div class="tabela-grupos-lista">'
         + dados.equipes.map(function (equipe, i) {
           const grupo = dados.grupos.find(function (item) { return item.equipeIds.indexOf(equipe.id) >= 0; });
-          return '<div class="tabela-grupo-equipe"><label for="tgEquipe' + i + '">' + escapar(equipe.nome) + '</label><select id="tgEquipe' + i + '" data-tabela-equipe="' + escapar(equipe.id) + '">' + opcoesSelect(dados.grupos, grupo ? grupo.id : '', 'Sem grupo') + '</select></div>';
-        }).join(''), function () {
+          const iniciais = equipe.nome.trim().split(/\s+/).slice(0, 2).map(function (parte) { return parte.charAt(0); }).join('').toUpperCase();
+          const marca = equipe.escudo
+            ? '<img class="tabela-escudo" src="' + escapar(equipe.escudo) + '" alt="" loading="lazy">'
+            : '<span class="grupo-time-sem-escudo" aria-hidden="true">' + escapar(iniciais) + '</span>';
+          return '<div class="tabela-grupo-equipe">'
+            + '<label for="tgEquipe' + i + '" class="tabela-grupo-nome">' + marca + '<span>' + escapar(equipe.nome) + '</span></label>'
+            + '<select id="tgEquipe' + i + '" data-tabela-equipe="' + escapar(equipe.id) + '">'
+            + opcoesSelect(dados.grupos, grupo ? grupo.id : '', 'Sem grupo') + '</select></div>';
+        }).join('')
+        + '</div>', function () {
           const grupos = dados.grupos.map(function (grupo) { return { id: grupo.id, equipeIds: [] }; });
           document.querySelectorAll('[data-tabela-equipe]').forEach(function (select) {
             const grupo = grupos.find(function (item) { return item.id === select.value; });
@@ -6817,6 +6919,8 @@
       area.innerHTML = blocoCarregando('statusTimesCampeonato');
       google.script.run
         .withSuccessHandler(function (dados) {
+          // Remove o overlay de ação (ex.: desvincular equipe), se houver.
+          removerOverlayPunicoes_();
           if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual) {
             return;
           }
@@ -6826,6 +6930,7 @@
           montarTelaTimesCampeonato();
         })
         .withFailureHandler(function (erro) {
+          removerOverlayPunicoes_();
           if (requisicao !== participantesRequisicao || moduloAtual !== 'times-campeonato' || elencoAtual) {
             return;
           }
@@ -6997,11 +7102,14 @@
           }).then(function (confirmado) {
             if (!confirmado || !naTela()) return;
             botao.disabled = true;
+            mostrarOverlayPunicoes_('Desvinculando equipe...');
             google.script.run.withSuccessHandler(function () {
-              if (moduloAtual !== 'times-campeonato' || elencoAtual) return;
+              if (moduloAtual !== 'times-campeonato' || elencoAtual) { removerOverlayPunicoes_(); return; }
+              // O overlay sai quando a tela recarregada termina de montar.
               carregarTimesCampeonato(true);
             })
               .withFailureHandler(function (erro) {
+                removerOverlayPunicoes_();
                 botao.disabled = false;
                 if (!area.isConnected || moduloAtual !== 'times-campeonato' || elencoAtual) return;
                 area.insertAdjacentHTML('afterbegin', '<div class="erro">' + escapar(erro.message || erro) + '</div>');
@@ -12596,6 +12704,379 @@
           }
         })
         .listarFinanceiro();
+    }
+
+    /* ===== Projeção de Gastos (simulação editável) ===== */
+    var projecaoGastos = { itens: [], itensFixos: [], saldoAtual: 0, saldoInicial: 0, usarSaldoCaixa: true, podeEditar: false, atualizadoEm: '', atualizadoPor: '' };
+
+    function moedaParaNumeroFin_(texto) {
+      var limpo = String(texto || '').replace(/[^\d]/g, '');
+      return limpo ? parseInt(limpo, 10) / 100 : 0;
+    }
+
+    function carregarProjecaoGastos() {
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'projecao-gastos') return;
+          projecaoGastos = dados;
+          montarTelaProjecaoGastos();
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'projecao-gastos') return;
+          var el = document.getElementById('areaProjecaoGastos');
+          if (el) {
+            el.innerHTML = blocoErro_(erro, { acaoId: 'tentarProjecao' });
+            var b = document.getElementById('tentarProjecao');
+            if (b) b.addEventListener('click', function () { abrirModulo('projecao-gastos'); });
+          }
+        })
+        .listarProjecaoGastos();
+    }
+
+    function montarTelaProjecaoGastos() {
+      var area = document.getElementById('areaProjecaoGastos');
+      if (!area) return;
+      var d = projecaoGastos;
+      var pode = d.podeEditar;
+
+      var atualizacao = d.atualizadoEm
+        ? 'Última atualização: ' + escapar(d.atualizadoEm) + (d.atualizadoPor ? ' por ' + escapar(d.atualizadoPor) : '')
+        : 'Nenhuma projeção salva ainda.';
+
+      area.innerHTML = ''
+        + '<div class="resumo" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;">'
+        + '  <div class="cartao" style="background:#eef4fd;border-color:#c4d8fa;">'
+        + '    <div style="font-size:12px;color:#14213d;font-weight:bold;text-transform:uppercase;">Saldo em caixa (atual)</div>'
+        + '    <div id="projSaldoCaixa" style="font-size:20px;font-weight:bold;color:#14213d;margin-top:4px;">' + formatarMoedaJs(d.saldoAtual) + '</div>'
+        + '  </div>'
+        + '  <div class="cartao" style="background:#fdf2f2;border-color:#f8c8c8;">'
+        + '    <div style="font-size:12px;color:#b3261e;font-weight:bold;text-transform:uppercase;">Total de saídas previstas</div>'
+        + '    <div id="projTotalSaidas" style="font-size:20px;font-weight:bold;color:#b3261e;margin-top:4px;">R$ 0,00</div>'
+        + '  </div>'
+        + '  <div class="cartao" id="projCartaoResto" style="background:#eefbf0;border-color:#bbf2c2;">'
+        + '    <div style="font-size:12px;color:#1e7b34;font-weight:bold;text-transform:uppercase;">Saldo projetado (resto)</div>'
+        + '    <div id="projResto" style="font-size:20px;font-weight:bold;color:#1e7b34;margin-top:4px;">R$ 0,00</div>'
+        + '  </div>'
+        + '</div>'
+        + '<div class="aviso" role="note">Simulação de planejamento. Não altera o Financeiro nem a prestação de contas. A base é o saldo em caixa atual; lance as saídas possíveis para ver quanto sobraria.</div>'
+        + '<div class="proj-base" style="max-width:460px;margin:12px 0;">'
+        + '<label class="proj-check"><input type="checkbox" id="projUsarSaldo"' + (d.usarSaldoCaixa ? ' checked' : '') + (pode ? '' : ' disabled') + '> <span>Usar o saldo em caixa atual como base</span></label>'
+        + '<div class="fin-campo" id="projBaseManualCampo" style="margin-top:8px;' + (d.usarSaldoCaixa ? 'display:none;' : '') + '">'
+        + '<label for="projBaseManual">Saldo inicial (simulação)</label>'
+        + '<input type="text" id="projBaseManual" class="fin-input-valor" inputmode="numeric" placeholder="R$ 0,00" value="' + (d.usarSaldoCaixa ? '' : escapar(formatarMoedaJs(d.saldoInicial))) + '"' + (pode ? '' : ' disabled') + '>'
+        + '</div></div>'
+        + '<h3 style="margin:16px 0 8px;">Saídas previstas</h3>'
+        + '<div id="projLinhas" class="proj-linhas"></div>'
+        + '<div class="barra-acoes" style="margin-top:12px;">'
+          + (pode ? '<button type="button" class="botao-apoio" id="projAddFixo">Adicionar item do modelo</button>'
+            + '<button type="button" class="botao-apoio" id="projAddOutro">Adicionar "Outros"</button>'
+            + '<button type="button" class="botao-apoio" id="projPreencherModelo">Preencher modelo completo</button>' : '')
+          + '<button type="button" class="botao-apoio" id="projGerarPdf">📄 Gerar PDF</button>'
+          + '<span class="espaco"></span>'
+          + (pode ? '<button type="button" class="botao-principal" id="projSalvar">Salvar projeção</button>' : '')
+          + '</div>'
+        + '<p class="apoio" id="projStatus" role="status" aria-live="polite" style="margin-top:8px;">' + atualizacao + '</p>'
+        + '<section id="areaRelatoriosProjecao" class="fin-relatorios" style="margin-top:16px;" role="status" aria-live="polite"></section>';
+
+      // Estado de trabalho (cópia editável das linhas).
+      projGastosLinhas = (d.itens || []).map(function (item) { return { descricao: item.descricao, valor: item.valor, fixo: d.itensFixos.indexOf(item.descricao) >= 0 }; });
+      if (!projGastosLinhas.length && pode) {
+        // Começa com um item "Outros" em branco para orientar.
+        projGastosLinhas = [{ descricao: '', valor: 0, fixo: false }];
+      }
+
+      desenharLinhasProjecao_();
+      recalcularProjecao_();
+
+      var chkUsar = document.getElementById('projUsarSaldo');
+      if (chkUsar) chkUsar.addEventListener('change', function () {
+        document.getElementById('projBaseManualCampo').style.display = chkUsar.checked ? 'none' : 'block';
+        recalcularProjecao_();
+      });
+      if (!pode && chkUsar) chkUsar.disabled = true;
+
+      var baseManual = document.getElementById('projBaseManual');
+      if (baseManual) {
+        baseManual.addEventListener('input', function () {
+          var num = moedaParaNumeroFin_(baseManual.value);
+          baseManual.value = num ? formatarMoedaJs(num) : '';
+          recalcularProjecao_();
+        });
+      }
+
+      if (pode) {
+        document.getElementById('projAddFixo').addEventListener('click', function () { abrirSeletorItemFixoProjecao_(); });
+        document.getElementById('projAddOutro').addEventListener('click', function () {
+          projGastosLinhas.push({ descricao: '', valor: 0, fixo: false });
+          desenharLinhasProjecao_(); recalcularProjecao_();
+        });
+        document.getElementById('projPreencherModelo').addEventListener('click', function () {
+          preencherModeloProjecao_();
+        });
+        document.getElementById('projSalvar').addEventListener('click', salvarProjecaoGastosDaTela_);
+      }
+      document.getElementById('projGerarPdf').addEventListener('click', abrirModalPdfProjecao_);
+
+      carregarRelatoriosProjecao_();
+    }
+
+    var projRelatoriosToken = 0;
+    function carregarRelatoriosProjecao_() {
+      var area = document.getElementById('areaRelatoriosProjecao');
+      if (!area) return;
+      var token = ++projRelatoriosToken;
+      area.innerHTML = '<p class="fin-relatorios-status">Carregando relatórios gerados...</p>';
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (moduloAtual !== 'projecao-gastos' || token !== projRelatoriosToken) return;
+          renderizarRelatoriosProjecao_(dados);
+        })
+        .withFailureHandler(function (erro) {
+          if (moduloAtual !== 'projecao-gastos' || token !== projRelatoriosToken) return;
+          var el = document.getElementById('areaRelatoriosProjecao');
+          if (el) {
+            el.innerHTML = '<p class="fin-relatorios-status">Não foi possível carregar os relatórios gerados. '
+              + '<button type="button" class="botao-apoio" id="projRelTentar">Tentar de novo</button></p>';
+            var b = document.getElementById('projRelTentar');
+            if (b) b.addEventListener('click', carregarRelatoriosProjecao_);
+          }
+        })
+        .listarRelatoriosProjecaoGastos();
+    }
+
+    function renderizarRelatoriosProjecao_(dados) {
+      var area = document.getElementById('areaRelatoriosProjecao');
+      if (!area) return;
+      var lista = (dados && dados.relatorios) || [];
+      if (!lista.length) {
+        area.innerHTML = '<p class="fin-relatorios-status">Nenhum PDF de projeção gerado ainda.</p>';
+        return;
+      }
+      var ultimo = lista[0];
+      var html = '<div class="fin-relatorio-destaque"><div><h3>Último relatório gerado</h3>'
+        + '<div>' + escapar(ultimo.nome) + '</div><div class="fin-relatorio-meta">'
+        + (ultimo.descricao ? escapar(ultimo.descricao) + ' · ' : '') + escapar(ultimo.geradoEm) + '</div></div>'
+        + '<a class="botao-apoio destaque" href="' + escapar(ultimo.url) + '" target="_blank" rel="noopener">Abrir relatório</a></div>';
+      if (lista.length > 1) {
+        html += '<details><summary>Relatórios anteriores</summary><div class="fin-relatorios-lista">'
+          + lista.slice(1).map(function (item) {
+            return '<div class="fin-relatorio-item"><div><div>' + escapar(item.nome) + '</div>'
+              + '<div class="fin-relatorio-meta">' + (item.descricao ? escapar(item.descricao) + ' · ' : '') + escapar(item.geradoEm) + '</div></div>'
+              + '<a class="botao-apoio" href="' + escapar(item.url) + '" target="_blank" rel="noopener">Abrir relatório</a></div>';
+          }).join('')
+          + '</div></details>';
+      }
+      area.innerHTML = html;
+    }
+
+    function abrirModalPdfProjecao_() {
+      var modal = document.createElement('div');
+      modal.className = 'modal-fin-overlay';
+      modal.innerHTML = '<div class="modal-fin-caixa">'
+        + '<div class="modal-fin-cabecalho"><h3><span style="font-size:22px;">📄</span> Gerar PDF da projeção</h3>'
+        + '<button type="button" class="modal-fin-fechar" id="projPdfFechar" title="Fechar">&times;</button></div>'
+        + '<div class="fin-grupo-campos">'
+        + '<p class="apoio">Informe um descritivo para o relatório (aparece no topo do PDF). Ex.: a competição ou o período.</p>'
+        + '<div class="fin-campo"><label for="projPdfDescritivo">Descritivo do relatório</label>'
+        + '<input type="text" id="projPdfDescritivo" maxlength="200" placeholder="Ex.: COPA PERFORMANCE 2026 — projeção de premiação">'
+        + '</div>'
+        + '<div class="acoes-formulario">'
+        + '<button type="button" class="botao-principal" id="projPdfGerar">Gerar PDF</button>'
+        + '<button type="button" class="botao-apoio" id="projPdfCancelar">Cancelar</button>'
+        + '<span class="espaco"></span><span class="apoio" id="projPdfAviso"></span>'
+        + '</div></div></div>';
+      document.body.appendChild(modal);
+      var campo = document.getElementById('projPdfDescritivo');
+      if (campo) campo.focus();
+
+      function fechar() { modal.remove(); }
+      document.getElementById('projPdfFechar').addEventListener('click', fechar);
+      document.getElementById('projPdfCancelar').addEventListener('click', fechar);
+      modal.addEventListener('click', function (e) { if (e.target === modal) fechar(); });
+
+      document.getElementById('projPdfGerar').addEventListener('click', function () {
+        var botao = document.getElementById('projPdfGerar');
+        var aviso = document.getElementById('projPdfAviso');
+        var chk = document.getElementById('projUsarSaldo');
+        var usarSaldo = chk ? chk.checked : true;
+        var itens = projGastosLinhas.map(function (l) { return { descricao: String(l.descricao || '').trim(), valor: Number(l.valor) || 0 }; })
+          .filter(function (l) { return l.descricao || l.valor > 0; });
+        var payload = {
+          descritivo: campo ? campo.value : '',
+          usarSaldoCaixa: usarSaldo,
+          saldoInicial: usarSaldo ? 0 : baseProjecao_(),
+          itens: itens
+        };
+        botao.disabled = true;
+        if (aviso) aviso.textContent = 'Gerando...';
+        google.script.run
+          .withSuccessHandler(function (dados) {
+            try {
+              if (!dados || dados.mimeType !== 'application/pdf' || !dados.base64) throw new Error('O PDF não foi retornado. Tente novamente.');
+              var binario = atob(dados.base64);
+              var bytes = new Uint8Array(binario.length);
+              for (var i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+              var url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+              var link = document.createElement('a');
+              link.href = url; link.download = dados.nome || 'projecao.pdf';
+              document.body.appendChild(link); link.click(); link.remove();
+              window.setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+              fechar();
+              // Atualiza o histórico de relatórios para incluir o recém-gerado.
+              if (moduloAtual === 'projecao-gastos') carregarRelatoriosProjecao_();
+            } catch (erro) {
+              botao.disabled = false;
+              if (aviso) aviso.textContent = erro && erro.message ? erro.message : String(erro);
+            }
+          })
+          .withFailureHandler(function (erro) {
+            botao.disabled = false;
+            if (aviso) aviso.textContent = erro && erro.message ? erro.message : String(erro);
+          })
+          .gerarPdfProjecaoGastos(payload);
+      });
+    }
+
+    var projGastosLinhas = [];
+
+    function desenharLinhasProjecao_() {
+      var area = document.getElementById('projLinhas');
+      if (!area) return;
+      var pode = projecaoGastos.podeEditar;
+      if (!projGastosLinhas.length) {
+        area.innerHTML = '<p class="apoio">Nenhuma saída prevista. ' + (pode ? 'Adicione itens do modelo ou "Outros".' : '') + '</p>';
+        return;
+      }
+      area.innerHTML = projGastosLinhas.map(function (linha, i) {
+        var nome = linha.fixo
+          ? '<span class="proj-linha-nome">' + escapar(linha.descricao) + '</span>'
+          : '<input type="text" class="proj-linha-desc" data-proj-desc="' + i + '" placeholder="Descrição da saída" value="' + escapar(linha.descricao) + '"' + (pode ? '' : ' disabled') + '>';
+        return '<div class="proj-linha">'
+          + nome
+          + '<input type="text" class="fin-input-valor proj-linha-valor" data-proj-valor="' + i + '" inputmode="numeric" placeholder="R$ 0,00" value="' + (linha.valor ? escapar(formatarMoedaJs(linha.valor)) : '') + '"' + (pode ? '' : ' disabled') + '>'
+          + (pode ? '<button type="button" class="botao-apoio perigo proj-linha-remover" data-proj-remover="' + i + '" title="Remover">🗑️</button>' : '')
+          + '</div>';
+      }).join('');
+
+      if (!pode) return;
+      area.querySelectorAll('[data-proj-desc]').forEach(function (inp) {
+        inp.addEventListener('input', function () { projGastosLinhas[Number(inp.dataset.projDesc)].descricao = inp.value; });
+      });
+      area.querySelectorAll('[data-proj-valor]').forEach(function (inp) {
+        inp.addEventListener('input', function () {
+          var num = moedaParaNumeroFin_(inp.value);
+          inp.value = num ? formatarMoedaJs(num) : '';
+          projGastosLinhas[Number(inp.dataset.projValor)].valor = num;
+          recalcularProjecao_();
+        });
+      });
+      area.querySelectorAll('[data-proj-remover]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          projGastosLinhas.splice(Number(btn.dataset.projRemover), 1);
+          desenharLinhasProjecao_(); recalcularProjecao_();
+        });
+      });
+    }
+
+    function baseProjecao_() {
+      var chk = document.getElementById('projUsarSaldo');
+      if (chk && !chk.checked) {
+        var baseManual = document.getElementById('projBaseManual');
+        return moedaParaNumeroFin_(baseManual ? baseManual.value : '');
+      }
+      return Number(projecaoGastos.saldoAtual) || 0;
+    }
+
+    function recalcularProjecao_() {
+      var totalSaidas = projGastosLinhas.reduce(function (soma, linha) { return soma + (Number(linha.valor) || 0); }, 0);
+      var base = baseProjecao_();
+      var resto = base - totalSaidas;
+      var elSaidas = document.getElementById('projTotalSaidas');
+      var elResto = document.getElementById('projResto');
+      var elCartao = document.getElementById('projCartaoResto');
+      var elCaixa = document.getElementById('projSaldoCaixa');
+      if (elCaixa) elCaixa.textContent = formatarMoedaJs(projecaoGastos.saldoAtual);
+      if (elSaidas) elSaidas.textContent = formatarMoedaJs(totalSaidas);
+      if (elResto) elResto.textContent = formatarMoedaJs(resto);
+      if (elCartao) {
+        var positivo = resto >= 0;
+        elCartao.style.background = positivo ? '#eefbf0' : '#fdf2f2';
+        elCartao.style.borderColor = positivo ? '#bbf2c2' : '#f8c8c8';
+        if (elResto) elResto.style.color = positivo ? '#1e7b34' : '#b3261e';
+        var rotulo = elCartao.querySelector('div');
+        if (rotulo) rotulo.style.color = positivo ? '#1e7b34' : '#b3261e';
+      }
+    }
+
+    function abrirSeletorItemFixoProjecao_() {
+      var usados = {};
+      projGastosLinhas.forEach(function (l) { if (l.fixo) usados[l.descricao] = true; });
+      var disponiveis = (projecaoGastos.itensFixos || []).filter(function (nome) { return !usados[nome]; });
+      if (!disponiveis.length) {
+        confirmarDialogo_({ titulo: 'Modelo completo', mensagem: 'Todos os itens do modelo já foram adicionados.', confirmar: 'Entendi', cancelar: 'Fechar', perigo: false });
+        return;
+      }
+      var modal = document.createElement('div');
+      modal.className = 'modal-fin-overlay';
+      modal.innerHTML = '<div class="modal-fin-caixa">'
+        + '<div class="modal-fin-cabecalho"><h3>Adicionar item do modelo</h3>'
+        + '<button type="button" class="modal-fin-fechar" id="projFecharSel" title="Fechar">&times;</button></div>'
+        + '<div class="fin-grupo-campos"><div class="motivos-sumula">'
+        + disponiveis.map(function (nome) {
+          return '<label class="opcao-motivo-sumula"><input type="checkbox" value="' + escapar(nome) + '"> <span>' + escapar(nome) + '</span></label>';
+        }).join('')
+        + '</div><div class="acoes-formulario">'
+        + '<button type="button" class="botao-principal" id="projAddSelecionados">Adicionar</button>'
+        + '<button type="button" class="botao-apoio" id="projCancelarSel">Cancelar</button>'
+        + '</div></div></div>';
+      document.body.appendChild(modal);
+      function fechar() { modal.remove(); }
+      document.getElementById('projFecharSel').addEventListener('click', fechar);
+      document.getElementById('projCancelarSel').addEventListener('click', fechar);
+      modal.addEventListener('click', function (e) { if (e.target === modal) fechar(); });
+      document.getElementById('projAddSelecionados').addEventListener('click', function () {
+        modal.querySelectorAll('input[type="checkbox"]:checked').forEach(function (chk) {
+          projGastosLinhas.push({ descricao: chk.value, valor: 0, fixo: true });
+        });
+        fechar();
+        desenharLinhasProjecao_(); recalcularProjecao_();
+      });
+    }
+
+    function preencherModeloProjecao_() {
+      var existentes = {};
+      projGastosLinhas.forEach(function (l) { if (l.fixo) existentes[l.descricao] = true; });
+      (projecaoGastos.itensFixos || []).forEach(function (nome) {
+        if (!existentes[nome]) projGastosLinhas.push({ descricao: nome, valor: 0, fixo: true });
+      });
+      desenharLinhasProjecao_(); recalcularProjecao_();
+    }
+
+    function salvarProjecaoGastosDaTela_() {
+      var chk = document.getElementById('projUsarSaldo');
+      var usarSaldo = chk ? chk.checked : true;
+      var itens = projGastosLinhas.map(function (l) { return { descricao: String(l.descricao || '').trim(), valor: Number(l.valor) || 0 }; })
+        .filter(function (l) { return l.descricao || l.valor > 0; });
+      var payload = { usarSaldoCaixa: usarSaldo, saldoInicial: usarSaldo ? 0 : baseProjecao_(), itens: itens };
+
+      var botao = document.getElementById('projSalvar');
+      if (botao) botao.disabled = true;
+      mostrarOverlayGlobal_('Salvando projeção...');
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          removerOverlayGlobal_();
+          if (moduloAtual !== 'projecao-gastos') return;
+          projecaoGastos = dados;
+          montarTelaProjecaoGastos();
+          var status = document.getElementById('projStatus');
+          if (status) status.textContent = 'Projeção salva. Última atualização: ' + escapar(dados.atualizadoEm) + (dados.atualizadoPor ? ' por ' + escapar(dados.atualizadoPor) : '');
+        })
+        .withFailureHandler(function (erro) {
+          removerOverlayGlobal_();
+          if (botao) botao.disabled = false;
+          confirmarDialogo_({ titulo: 'Não foi possível salvar', mensagem: erro && erro.message ? erro.message : String(erro), confirmar: 'Fechar', cancelar: 'Fechar', perigo: false });
+        })
+        .salvarProjecaoGastos(payload);
     }
 
     function carregarRelatoriosFinanceiros() {
