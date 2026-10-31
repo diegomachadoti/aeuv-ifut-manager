@@ -15,7 +15,7 @@
  ******************************************************/
 
 // Nome oficial da associacao, exibido no cabecalho.
-const ASSOCIACAO_NOME = 'AEUV (Associação Esportiva Uberlandense Varzeana)';
+const ASSOCIACAO_NOME = 'AEUV | Associação Esportiva Uberlandense Varzeana';
 
 const CONFIG = {
   // Arquivo do logo exibido no cabecalho.
@@ -4154,13 +4154,13 @@ function gravarAprovacoesPunicoes_(aprovacoes) {
 // Itens fixos de saída oferecidos na projeção (modelo de premiação/custos).
 // "Outros" é livre: o usuário adiciona linhas com descrição própria.
 const PROJECAO_GASTOS_ITENS_FIXOS = [
-  'Premiação Zanoello',
-  'Premiação Metal Medalhas',
+  'Premiação Troféus',
+  'Premiação Medalhas',
   'App iFut',
-  'Premiação 1',
-  'Premiação 2',
-  'Premiação 3',
-  'Premiação 4',
+  'Premiação 1 | Campeão',
+  'Premiação 2 | Vice',
+  'Premiação 3 | Terceiro ',
+  'Premiação 4 | Quarto',
   'Artilheiro',
   'Goleiro',
   'Técnico Campeão',

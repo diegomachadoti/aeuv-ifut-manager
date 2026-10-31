@@ -58,6 +58,34 @@
 
     /* ---------- Estrutura menu + conteudo ---------- */
 
+    body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+    body > .topo { flex-shrink: 0; }
+    body > main.container { width: 100%; flex: 1 0 auto; }
+    .rodape-sistema {
+      flex-shrink: 0;
+      border-top: 2px solid var(--dourado);
+      background: #fff;
+      color: var(--apoio);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .rodape-conteudo {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 18px 32px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 16px;
+    }
+    .rodape-identidade { color: var(--texto); }
+    .rodape-direitos { text-align: right; }
+    body.tema-escuro .rodape-sistema { background: var(--superficie, #101626); }
+    @media (max-width: 900px) {
+      .rodape-conteudo { grid-template-columns: 1fr; gap: 4px; padding: 16px 20px; text-align: center; }
+      .rodape-direitos { text-align: center; }
+    }
+
     .layout {
       display: grid;
       grid-template-columns: 258px 1fr;
@@ -1803,6 +1831,45 @@
     /* Projeção de gastos: checkbox de base (saldo em caixa) e linhas de saída. */
     .proj-check { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--texto); cursor: pointer; }
     .proj-check input { flex: 0 0 auto; width: auto; margin: 0; }
+    .proj-grupos { display: grid; gap: 16px; }
+    .proj-grupo { border: 1px solid var(--borda); border-radius: 12px; overflow: hidden; background: #fff; }
+    .proj-grupo-cabecalho { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--fundo); flex-wrap: wrap; }
+    .proj-grupo-icone { font-size: 22px; color: var(--dourado); display: inline-flex; }
+    .proj-grupo-titulo { flex: 1; min-width: 150px; }
+    .proj-grupo-titulo h4 { margin: 0; font-size: 14px; }
+    .proj-grupo-titulo p { margin: 3px 0 0; font-size: 12px; color: var(--apoio); }
+    .proj-subtotal { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .proj-tabela { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .proj-tabela th, .proj-tabela td { padding: 10px 16px; border-bottom: 1px solid var(--borda); text-align: left; }
+    .proj-tabela th { color: var(--apoio); font-size: 11px; text-transform: uppercase; font-weight: 600; background: var(--fundo); }
+    .proj-tabela tbody tr:last-child td { border-bottom: 0; }
+    .proj-tabela tbody tr:hover { background: var(--fundo); }
+    .proj-tabela .proj-col-valor { width: 180px; text-align: right; }
+    .proj-tabela .proj-col-acao { width: 68px; text-align: center; }
+    .proj-tabela .proj-linha-nome { font-weight: 600; overflow-wrap: anywhere; }
+    .proj-tabela input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--borda); border-radius: 7px; background: #fff; color: var(--texto); font: inherit; }
+    .proj-tabela .proj-linha-valor { text-align: right; font-variant-numeric: tabular-nums; }
+    .proj-tabela .proj-linha-remover { min-width: 36px; min-height: 36px; padding: 8px; display: inline-flex; justify-content: center; align-items: center; }
+    .proj-tabela .proj-linha-remover svg { width: 17px; height: 17px; }
+    .proj-tabela .proj-vazio { text-align: center; color: var(--apoio); font-size: 13px; padding: 20px; }
+    .proj-acoes { border-top: 1px solid var(--borda); padding-top: 16px; gap: 10px; }
+    body.tema-escuro .proj-grupo { background: var(--superficie, #101626); }
+    body.tema-escuro .proj-tabela input { background: var(--superficie-2, #1b2940); }
+    @media (max-width: 600px) {
+      .proj-grupo-cabecalho { padding: 12px; gap: 8px; }
+      .proj-grupo-cabecalho button { min-height: 44px; }
+      .proj-subtotal { margin-left: 30px; }
+      .proj-tabela, .proj-tabela tbody { display: block; width: 100%; }
+      .proj-tabela thead { display: none; }
+      .proj-tabela tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) 52px; padding: 12px; gap: 8px; border-bottom: 1px solid var(--borda); }
+      .proj-tabela tbody tr:last-child { border-bottom: 0; }
+      .proj-tabela td { display: block; padding: 0; border: 0; }
+      .proj-tabela .proj-col-descricao { grid-column: 1 / -1; }
+      .proj-tabela .proj-col-valor, .proj-tabela .proj-col-acao { width: auto; }
+      .proj-tabela input, .proj-tabela .proj-linha-remover { min-height: 44px; }
+      .proj-tabela .proj-vazio { grid-column: 1 / -1; }
+      .proj-acoes button { min-height: 44px; flex: 1 1 auto; }
+    }
     .proj-linhas { display: flex; flex-direction: column; gap: 8px; }
     .proj-linha { display: flex; align-items: center; gap: 10px; }
     .proj-linha .proj-linha-nome { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
@@ -3005,6 +3072,14 @@
       </section>
     </div>
   </main>
+
+  <footer class="rodape-sistema" aria-label="Informações institucionais">
+    <div class="rodape-conteudo">
+      <div class="rodape-identidade"><strong>AEUV</strong> — Associação Esportiva Uberlandense Varzeana</div>
+      <div>Sistema interno de gestão esportiva</div>
+      <div class="rodape-direitos">&copy; <?= new Date().getFullYear() ?> AEUV</div>
+    </div>
+  </footer>
 
   <script>
     const CONFIG = <?!= JSON.stringify(config).replace(/</g, '\\u003c') ?>;
@@ -8638,6 +8713,46 @@
      * trabalham sobre essa copia, sem novas idas ao servidor.
      */
     let punicoes = { registros: [], atualizadoEm: '', arquivoUrl: '', podeAprovar: false, podeExcluir: false };
+    const punicoesPaginacao = { pagina: 0, porPagina: 25, registros: [] };
+
+    function normalizarTamanhoPagina_(valor) {
+      return [10, 25, 50].indexOf(Number(valor)) !== -1 ? Number(valor) : 25;
+    }
+
+    function controlesPaginacaoConsulta_(id, rotulo) {
+      return '<nav class="atletas-bd-paginacao" aria-label="Paginação de ' + rotulo + '">'
+        + '<label for="porPagina' + id + '">' + rotulo + ' por página</label>'
+        + '<select id="porPagina' + id + '"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select>'
+        + '<button type="button" class="botao-apoio" id="anterior' + id + '" aria-controls="linhas' + id + '">Anterior</button>'
+        + '<span id="pagina' + id + '" role="status" aria-live="polite" aria-atomic="true"></span>'
+        + '<button type="button" class="botao-apoio" id="proxima' + id + '" aria-controls="linhas' + id + '">Próxima</button></nav>';
+    }
+
+    function desenharPaginaConsulta_(id, estado, desenhar, rotulo) {
+      estado.porPagina = normalizarTamanhoPagina_(estado.porPagina);
+      const paginas = Math.max(1, Math.ceil(estado.registros.length / estado.porPagina));
+      estado.pagina = Math.max(0, Math.min(estado.pagina, paginas - 1));
+      const inicio = estado.pagina * estado.porPagina;
+      const fim = Math.min(inicio + estado.porPagina, estado.registros.length);
+      desenhar(estado.registros.slice(inicio, fim));
+      document.getElementById('pagina' + id).textContent = 'Página ' + (estado.pagina + 1) + ' de ' + paginas
+        + ' · ' + (estado.registros.length ? inicio + 1 : 0) + '–' + fim + ' de ' + estado.registros.length + ' ' + rotulo;
+      document.getElementById('anterior' + id).disabled = estado.pagina === 0;
+      document.getElementById('proxima' + id).disabled = estado.pagina === paginas - 1;
+    }
+
+    function conectarPaginacaoConsulta_(id, estado, desenhar, rotulo) {
+      const atualizar = function () { desenharPaginaConsulta_(id, estado, desenhar, rotulo); };
+      const seletor = document.getElementById('porPagina' + id);
+      seletor.value = String(estado.porPagina);
+      seletor.addEventListener('change', function () {
+        estado.porPagina = normalizarTamanhoPagina_(this.value);
+        estado.pagina = 0;
+        atualizar();
+      });
+      document.getElementById('anterior' + id).addEventListener('click', function () { estado.pagina--; atualizar(); });
+      document.getElementById('proxima' + id).addEventListener('click', function () { estado.pagina++; atualizar(); });
+    }
 
     /**
      * Busca no servidor o controle de punicoes publicado no Drive.
@@ -8727,7 +8842,10 @@
         + '<th>Suspens&atilde;o</th><th>Status</th><th>Situa&ccedil;&atilde;o</th>'
         + '<th>Aprova&ccedil;&atilde;o</th>'
         + (punicoes.podeAprovar || punicoes.podeExcluir ? '<th>A&ccedil;&otilde;es</th>' : '')
-        + '</tr></thead><tbody id="linhasPunicoes"></tbody></table></div>';
+        + '</tr></thead><tbody id="linhasPunicoes"></tbody></table></div>'
+        + controlesPaginacaoConsulta_('Punicoes', 'Punições');
+
+      conectarPaginacaoConsulta_('Punicoes', punicoesPaginacao, desenharLinhas, 'punição(ões)');
 
       document.getElementById('buscaPunicoes').addEventListener('input', filtrarPunicoes);
       document.getElementById('recarregarPunicoes').addEventListener('click', function () {
@@ -8804,7 +8922,9 @@
       });
 
       desenharResumo(filtrados);
-      desenharLinhas(filtrados);
+      punicoesPaginacao.registros = filtrados;
+      punicoesPaginacao.pagina = 0;
+      desenharPaginaConsulta_('Punicoes', punicoesPaginacao, desenharLinhas, 'punição(ões)');
     }
 
     /**
@@ -9356,7 +9476,7 @@
           ? estado.filtros[campo] : '';
       });
       base.pagina = Number.isSafeInteger(estado.pagina) && estado.pagina >= 0 ? estado.pagina : 0;
-      base.porPagina = estado.porPagina === 50 ? 50 : 25;
+      base.porPagina = normalizarTamanhoPagina_(estado.porPagina);
       if (estado.abertas && typeof estado.abertas === 'object' && !Array.isArray(estado.abertas)) {
         Object.keys(estado.abertas).forEach(function (chave) {
           if (estado.abertas[chave]) base.abertas[chave] = true;
@@ -9553,7 +9673,7 @@
           + '</tr></thead><tbody id="linhasSolicitacoes"></tbody></table></div>'
           + '<nav class="atletas-bd-paginacao" aria-label="Paginação de solicitações">'
           + '<label for="porPaginaSolicitacoes">Solicitações por página</label>'
-          + '<select id="porPaginaSolicitacoes"><option value="25">25</option><option value="50">50</option></select>'
+          + '<select id="porPaginaSolicitacoes"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select>'
           + '<button type="button" class="botao-apoio" id="anteriorSolicitacoes" aria-controls="linhasSolicitacoes">Anterior</button>'
           + '<span id="paginaSolicitacoes" role="status" aria-live="polite" aria-atomic="true"></span>'
           + '<button type="button" class="botao-apoio" id="proximaSolicitacoes" aria-controls="linhasSolicitacoes">Próxima</button>'
@@ -9584,7 +9704,7 @@
       solicitacoesPagina = estadoVisual.pagina;
       document.getElementById('porPaginaSolicitacoes').value = String(solicitacoesPorPagina);
       document.getElementById('porPaginaSolicitacoes').addEventListener('change', function () {
-        solicitacoesPorPagina = this.value === '50' ? 50 : 25;
+        solicitacoesPorPagina = normalizarTamanhoPagina_(this.value);
         solicitacoesPagina = 0;
         desenharPaginaSolicitacoes_();
       });
@@ -10053,7 +10173,7 @@
         + '</tr></thead><tbody id="linhasAtletas"></tbody></table></div>'
         + '<nav class="atletas-bd-paginacao" aria-label="Paginação de atletas">'
         + '<label for="porPaginaAtletas">Atletas por página</label>'
-        + '<select id="porPaginaAtletas"><option value="25">25</option><option value="50">50</option></select>'
+        + '<select id="porPaginaAtletas"><option value="10">10</option><option value="25" selected>25</option><option value="50">50</option></select>'
         + '<button type="button" class="botao-apoio" id="anteriorAtletas" aria-controls="linhasAtletas">Anterior</button>'
         + '<span id="paginaAtletas" role="status" aria-live="polite" aria-atomic="true"></span>'
         + '<button type="button" class="botao-apoio" id="proximaAtletas" aria-controls="linhasAtletas">Próxima</button>'
@@ -10074,7 +10194,7 @@
         desenharPaginaAtletas_();
       });
       document.getElementById('porPaginaAtletas').addEventListener('change', function () {
-        atletasBd.porPagina = this.value === '50' ? 50 : 25;
+        atletasBd.porPagina = normalizarTamanhoPagina_(this.value);
         atletasBd.pagina = 0;
         desenharPaginaAtletas_();
       });
@@ -10433,6 +10553,7 @@
     /** Arquivos com o detalhe aberto. */
     let sumulasAbertas = {};
     let sumulasCarga = { token: 0 };
+    const sumulasPaginacao = { pagina: 0, porPagina: 25, registros: [] };
 
     function capturarEstadoVisualSumulas_() {
       const busca = document.getElementById('buscaSumulas');
@@ -10442,7 +10563,8 @@
         filtros[campo.dataset.filtro] = campo.value;
       });
       return { busca: busca ? busca.value : '', equipe: equipe ? equipe.value : '',
-        filtros: filtros, abertas: Object.assign({}, sumulasAbertas) };
+        filtros: filtros, abertas: Object.assign({}, sumulasAbertas),
+        pagina: sumulasPaginacao.pagina, porPagina: sumulasPaginacao.porPagina };
     }
 
     function cargaSumulasAtual_(token) {
@@ -10558,6 +10680,8 @@
       const registros = sumulas.registros || [];
       visual = visual || { busca: '', equipe: '', filtros: {}, abertas: {} };
       sumulasAbertas = Object.assign({}, visual.abertas);
+      sumulasPaginacao.pagina = Number.isSafeInteger(visual.pagina) && visual.pagina >= 0 ? visual.pagina : 0;
+      sumulasPaginacao.porPagina = normalizarTamanhoPagina_(visual.porPagina);
 
       const recorte = sumulas.total > registros.length
         ? escapar(registros.length + ' mais recentes de ' + sumulas.total)
@@ -10597,10 +10721,12 @@
         + '<th>&Aacute;rbitro</th><th>Envolvidos</th>'
         + (sumulas.podeExcluir || sumulas.podeAnalisar ? '<th>A&ccedil;&otilde;es</th>' : '')
         + '</tr></thead><tbody id="linhasSumulas"></tbody></table></div>'
+        + controlesPaginacaoConsulta_('Sumulas', 'Súmulas')
         + (!registros.length ? '<p class="vazio">Nenhuma súmula enviada até o momento.</p>' : '')
         + '</div>';
 
-      document.getElementById('buscaSumulas').addEventListener('input', filtrarSumulas);
+      conectarPaginacaoConsulta_('Sumulas', sumulasPaginacao, desenharLinhasSumulas, 'súmula(s)');
+      document.getElementById('buscaSumulas').addEventListener('input', function () { filtrarSumulas(false); });
       document.getElementById('recarregarSumulas').addEventListener('click', function () {
         carregarSumulas();
       });
@@ -10611,12 +10737,12 @@
         const valor = campo.id === 'filtroEquipeSumulas' ? visual.equipe : visual.filtros[campo.dataset.filtro];
         campo.value = valor || '';
         if (campo.selectedIndex === -1) campo.value = '';
-        campo.addEventListener('change', filtrarSumulas);
+        campo.addEventListener('change', function () { filtrarSumulas(false); });
       });
 
       document.getElementById('buscaSumulas').value = visual.busca;
 
-      filtrarSumulas();
+      filtrarSumulas(true);
     }
 
     /**
@@ -10635,7 +10761,7 @@
     /**
      * Aplica a busca e os seletores e redesenha a tabela.
      */
-    function filtrarSumulas() {
+    function filtrarSumulas(preservarPagina) {
       const busca = simplificar(document.getElementById('buscaSumulas').value.trim());
       const equipe = document.getElementById('filtroEquipeSumulas').value;
       const selecionados = {};
@@ -10665,7 +10791,9 @@
       });
 
       desenharResumoSumulas(filtrados);
-      desenharLinhasSumulas(filtrados);
+      sumulasPaginacao.registros = filtrados;
+      if (preservarPagina !== true) sumulasPaginacao.pagina = 0;
+      desenharPaginaConsulta_('Sumulas', sumulasPaginacao, desenharLinhasSumulas, 'súmula(s)');
     }
 
     /**
@@ -10792,7 +10920,7 @@
             sumulasAbertas[chave] = true;
           }
 
-          filtrarSumulas();
+          filtrarSumulas(true);
         });
       });
 
@@ -12950,12 +13078,13 @@
         + '<input type="text" id="projBaseManual" class="fin-input-valor" inputmode="numeric" placeholder="R$ 0,00" value="' + (d.usarSaldoCaixa ? '' : escapar(formatarMoedaJs(d.saldoInicial))) + '"' + (pode ? '' : ' disabled') + '>'
         + '</div></div>'
         + '<h3 style="margin:16px 0 8px;">Saídas previstas</h3>'
-        + '<div id="projLinhas" class="proj-linhas"></div>'
-        + '<div class="barra-acoes" style="margin-top:12px;">'
+        + '<p class="apoio">Organize as despesas por finalidade. Os subtotais são atualizados ao editar os valores.</p>'
+        + '<div id="projLinhas" class="proj-grupos"></div>'
+        + '<div class="barra-acoes proj-acoes" style="margin-top:16px;">'
           + (pode ? '<button type="button" class="botao-apoio" id="projAddFixo">Adicionar item do modelo</button>'
             + '<button type="button" class="botao-apoio" id="projAddOutro">Adicionar "Outros"</button>'
             + '<button type="button" class="botao-apoio" id="projPreencherModelo">Preencher modelo completo</button>' : '')
-          + '<button type="button" class="botao-apoio" id="projGerarPdf">📄 Gerar PDF</button>'
+          + '<button type="button" class="botao-apoio" id="projGerarPdf">' + iconeSistema_('file') + ' Gerar PDF</button>'
           + '<span class="espaco"></span>'
           + (pode ? '<button type="button" class="botao-principal" id="projSalvar">Salvar projeção</button>' : '')
           + '</div>'
@@ -13123,26 +13252,64 @@
 
     var projGastosLinhas = [];
 
+    const PROJ_GRUPOS = [
+      { id: 'premiacoes', nome: 'Premiações', icone: 'trophy', descricao: 'Troféus, medalhas e premiações dos times.' },
+      { id: 'operacao', nome: 'Equipe e operação', icone: 'users', descricao: 'Destaques individuais e custos operacionais da competição.' },
+      { id: 'outros', nome: 'Outras despesas', icone: 'file', descricao: 'Serviços, compras extras e despesas personalizadas.' }
+    ];
+
+    function grupoItemProjecao_(linha) {
+      if (!linha.fixo) return 'outros';
+      const nome = simplificar(linha.descricao).trim();
+      if (/^premiacao\b/.test(nome)) return 'premiacoes';
+      if (/^(artilheiro|goleiro|tecnico campeao|craque|app ifut)/.test(nome)) return 'operacao';
+      return 'outros';
+    }
+
+    function tabelaGrupoProjecao_(grupo, pode) {
+      const itens = projGastosLinhas.map(function (linha, indice) { return { linha: linha, indice: indice }; })
+        .filter(function (item) { return grupoItemProjecao_(item.linha) === grupo.id; });
+      const linhas = itens.map(function (item) {
+        const linha = item.linha, i = item.indice;
+        const nome = linha.fixo
+          ? '<span class="proj-linha-nome">' + escapar(linha.descricao) + '</span>'
+          : '<input type="text" class="proj-linha-desc" data-proj-desc="' + i + '" maxlength="120" aria-label="Descrição da despesa ' + (i + 1) + '" placeholder="Descrição da saída" value="' + escapar(linha.descricao) + '"' + (pode ? '' : ' disabled') + '>';
+        return '<tr><td class="proj-col-descricao">' + nome + '</td>'
+          + '<td class="proj-col-valor"><input type="text" class="fin-input-valor proj-linha-valor" data-proj-valor="' + i + '" aria-label="Valor da despesa ' + (i + 1) + ' em reais" inputmode="numeric" placeholder="R$ 0,00" value="' + (linha.valor ? escapar(formatarMoedaJs(linha.valor)) : '') + '"' + (pode ? '' : ' disabled') + '></td>'
+          + (pode ? '<td class="proj-col-acao"><button type="button" class="botao-apoio perigo proj-linha-remover" data-proj-remover="' + i + '" aria-label="Remover despesa ' + escapar(linha.descricao || String(i + 1)) + '" title="Remover despesa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button></td>' : '')
+          + '</tr>';
+      }).join('');
+      return '<section class="proj-grupo" aria-labelledby="projTitulo-' + grupo.id + '">'
+        + '<div class="proj-grupo-cabecalho"><span class="proj-grupo-icone">' + iconeSistema_(grupo.icone) + '</span>'
+        + '<div class="proj-grupo-titulo"><h4 id="projTitulo-' + grupo.id + '">' + grupo.nome + '</h4><p>' + grupo.descricao + '</p></div>'
+        + '<span class="proj-subtotal" data-proj-subtotal="' + grupo.id + '" aria-label="Subtotal de ' + grupo.nome + '"></span>'
+        + (pode ? '<button type="button" class="botao-apoio" data-proj-adicionar="' + grupo.id + '">+ Adicionar despesa</button>' : '') + '</div>'
+        + '<table class="proj-tabela" aria-label="Despesas de ' + grupo.nome + '"><thead><tr><th>Descrição</th><th class="proj-col-valor">Valor previsto</th>'
+        + (pode ? '<th class="proj-col-acao">Ações</th>' : '') + '</tr></thead><tbody>'
+        + (linhas || '<tr><td class="proj-vazio" colspan="' + (pode ? 3 : 2) + '">Nenhuma despesa neste grupo.</td></tr>')
+        + '</tbody></table></section>';
+    }
+
     function desenharLinhasProjecao_() {
       var area = document.getElementById('projLinhas');
       if (!area) return;
       var pode = projecaoGastos.podeEditar;
-      if (!projGastosLinhas.length) {
-        area.innerHTML = '<p class="apoio">Nenhuma saída prevista. ' + (pode ? 'Adicione itens do modelo ou "Outros".' : '') + '</p>';
-        return;
-      }
-      area.innerHTML = projGastosLinhas.map(function (linha, i) {
-        var nome = linha.fixo
-          ? '<span class="proj-linha-nome">' + escapar(linha.descricao) + '</span>'
-          : '<input type="text" class="proj-linha-desc" data-proj-desc="' + i + '" placeholder="Descrição da saída" value="' + escapar(linha.descricao) + '"' + (pode ? '' : ' disabled') + '>';
-        return '<div class="proj-linha">'
-          + nome
-          + '<input type="text" class="fin-input-valor proj-linha-valor" data-proj-valor="' + i + '" inputmode="numeric" placeholder="R$ 0,00" value="' + (linha.valor ? escapar(formatarMoedaJs(linha.valor)) : '') + '"' + (pode ? '' : ' disabled') + '>'
-          + (pode ? '<button type="button" class="botao-apoio perigo proj-linha-remover" data-proj-remover="' + i + '" title="Remover">🗑️</button>' : '')
-          + '</div>';
+      area.innerHTML = PROJ_GRUPOS.map(function (grupo) {
+        return tabelaGrupoProjecao_(grupo, pode);
       }).join('');
+      atualizarSubtotaisProjecao_();
 
       if (!pode) return;
+      area.querySelectorAll('[data-proj-adicionar]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          if (btn.dataset.projAdicionar === 'outros') {
+            projGastosLinhas.push({ descricao: '', valor: 0, fixo: false });
+            desenharLinhasProjecao_(); recalcularProjecao_();
+            const campos = area.querySelectorAll('[data-proj-desc]');
+            if (campos.length) campos[campos.length - 1].focus();
+          } else abrirSeletorItemFixoProjecao_(btn.dataset.projAdicionar);
+        });
+      });
       area.querySelectorAll('[data-proj-desc]').forEach(function (inp) {
         inp.addEventListener('input', function () { projGastosLinhas[Number(inp.dataset.projDesc)].descricao = inp.value; });
       });
@@ -13172,6 +13339,7 @@
     }
 
     function recalcularProjecao_() {
+      atualizarSubtotaisProjecao_();
       var totalSaidas = projGastosLinhas.reduce(function (soma, linha) { return soma + (Number(linha.valor) || 0); }, 0);
       var base = baseProjecao_();
       var resto = base - totalSaidas;
@@ -13192,12 +13360,23 @@
       }
     }
 
-    function abrirSeletorItemFixoProjecao_() {
+    function atualizarSubtotaisProjecao_() {
+      PROJ_GRUPOS.forEach(function (grupo) {
+        const el = document.querySelector('[data-proj-subtotal="' + grupo.id + '"]');
+        if (el) el.textContent = formatarMoedaJs(projGastosLinhas.reduce(function (soma, linha) {
+          return soma + (grupoItemProjecao_(linha) === grupo.id ? Number(linha.valor) || 0 : 0);
+        }, 0));
+      });
+    }
+
+    function abrirSeletorItemFixoProjecao_(grupoId) {
       var usados = {};
       projGastosLinhas.forEach(function (l) { if (l.fixo) usados[l.descricao] = true; });
-      var disponiveis = (projecaoGastos.itensFixos || []).filter(function (nome) { return !usados[nome]; });
+      var disponiveis = (projecaoGastos.itensFixos || []).filter(function (nome) {
+        return !usados[nome] && (!grupoId || grupoItemProjecao_({ descricao: nome, fixo: true }) === grupoId);
+      });
       if (!disponiveis.length) {
-        confirmarDialogo_({ titulo: 'Modelo completo', mensagem: 'Todos os itens do modelo já foram adicionados.', confirmar: 'Entendi', cancelar: 'Fechar', perigo: false });
+        confirmarDialogo_({ titulo: 'Modelo completo', mensagem: 'Todos os itens do modelo' + (grupoId ? ' deste grupo' : '') + ' já foram adicionados. Use Adicionar "Outros" para uma despesa personalizada.', confirmar: 'Entendi', cancelar: 'Fechar', perigo: false });
         return;
       }
       var modal = document.createElement('div');

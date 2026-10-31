@@ -47,6 +47,9 @@ function browser() {
       };
     } } }
   });
+  const inicioTamanhoPagina = html.indexOf('    function normalizarTamanhoPagina_(');
+  vm.runInContext(html.slice(inicioTamanhoPagina,
+    html.indexOf('    function controlesPaginacaoConsulta_(', inicioTamanhoPagina)), c);
   vm.runInContext(frontend, c);
   const state = () => vm.runInContext('atletasBd', c);
   const indices = () => [...elements.linhasAtletas.innerHTML.matchAll(/data-atleta-indice="(\d+)"/g)].map(m => Number(m[1]));
