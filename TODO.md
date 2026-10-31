@@ -72,11 +72,6 @@
   - Subir na "Aple Store" e "Google Store".
     - Qual o custo para fazer isso com que ja tenho configurado no projeto.
 
-- [⚠️] **TD19 — Pendente:** Adicionar um "step a mais no fluxo de inclusao e portabilidade". (avaliar como esta estruturado hoje a funcionalidade de Atletas)
-  - Apos registrar no ifut, gerar os resultados (TXT e CPF) e Atualizar planilha de controle que ja faz hoje o que o step faria:
-    - Inserir os atletas no banco de dados da associação funcionalidade "Atletas" (para termos syncado todo atleta registrado nos campeonatos da associação).
-    - Se o Atleta ja existir registrado atualizar.
-
 ## Avaliar Performance
 
 - [🚀] **TD20 — Pendente — Prioridade: Performance** A performance esta muito ruim para consultas as informações e retornar e pensa que estamos com uma base de teste com poucos registros. Avaliar o que pode ser feito.

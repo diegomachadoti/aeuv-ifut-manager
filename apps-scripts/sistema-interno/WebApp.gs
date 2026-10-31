@@ -97,6 +97,11 @@ const CONFIG = {
   sumulas: {
     pastaRaizId: '1OfcX-AFyeGEznieKfyqgQRiEjBDJockP',
 
+    // Pasta My Drive dedicada, compartilhada somente com leitores das súmulas.
+    // Não reutilizar a pasta das inscrições (o relato disciplinar é restrito).
+    snapshotPastaId: '1X0rgizui-QQx_28oM9FIL8wNfCyC3PpO',
+    snapshotOwnerEmail: 'deejaydiego@gmail.com',
+
     // Mesmo motivo do teto das solicitacoes: a listagem le todos os
     // nomes, mas so abre os mais recentes.
     maxLeitura: 200
@@ -218,7 +223,9 @@ const PERFIS_DA_EQUIPE = ['associado'];
  */
 const GRUPOS = [
   { id: 'formularios', nome: 'Formulários', icone: '📨' },
-  { id: 'campeonato', nome: 'Gestão do campeonato', icone: '🏆' }
+  { id: 'campeonato', nome: 'Gestão do campeonato', icone: '🏆' },
+  { id: 'financeiro', nome: 'Financeiro', icone: '💰' },
+  { id: 'cadastros-administracao', nome: 'Cadastros e administração', icone: '⚙️' }
 ];
 
 /**
@@ -310,38 +317,6 @@ const MODULOS = [
     perfis: ['admin', 'diretoria']
   },
   {
-    id: 'comandos',
-    nome: 'Comandos do Sistema',
-    icone: '⌨️',
-    tipo: 'comandos',
-    descricao: 'Referência dos comandos da automação (back-end em Python) usados para operar o sistema.',
-    perfis: ['admin', 'diretoria']
-  },
-  {
-    id: 'administracao',
-    nome: 'Administração',
-    icone: '⚙️',
-    tipo: 'administracao',
-    descricao: 'Ferramentas administrativas e manutenção da base de dados.',
-    perfis: ['admin']
-  },
-  {
-    id: 'equipes',
-    nome: 'Banco de Dados de Equipes',
-    icone: '📟',
-    tipo: 'equipes',
-    descricao: 'Equipes participantes. A lista alimenta o cadastro, os acessos e os dois formulários.',
-    perfis: ['admin', 'diretoria']
-  },
-  {
-    id: 'associados',
-    nome: 'Associados',
-    icone: '🤝',
-    tipo: 'associados',
-    descricao: 'Cadastro das equipes associadas, com representante legal, documentacao e situacao.',
-    perfis: ['admin', 'diretoria', 'associado']
-  },
-  {
     id: 'campeonatos',
     nome: 'Campeonatos',
     icone: '🏆',
@@ -391,6 +366,7 @@ const MODULOS = [
     nome: 'Financeiro e Prestação de Contas',
     icone: '💰',
     tipo: 'financeiro',
+    grupo: 'financeiro',
     descricao: 'Controle de entradas, saídas, anexos de comprovantes e geração de relatórios oficiais para assembleias e emendas impositivas.',
     perfis: ['admin', 'diretoria']
   },
@@ -399,6 +375,7 @@ const MODULOS = [
     nome: 'Projeção de Gastos',
     icone: '📊',
     tipo: 'projecao-gastos',
+    grupo: 'financeiro',
     descricao: 'Simule saídas futuras a partir do saldo em caixa e veja quanto sobraria. Visível só para administração e diretoria.',
     perfis: ['admin', 'diretoria']
   },
@@ -411,6 +388,14 @@ const MODULOS = [
     perfis: ['admin', 'diretoria']
   },
   {
+    id: 'equipes',
+    nome: 'Banco de Dados de Equipes',
+    icone: '📟',
+    tipo: 'equipes',
+    descricao: 'Equipes participantes. A lista alimenta o cadastro, os acessos e os dois formulários.',
+    perfis: ['admin', 'diretoria']
+  },
+  {
     id: 'atletas',
     nome: 'Banco de Dados de Atletas',
     icone: '📟',
@@ -419,12 +404,40 @@ const MODULOS = [
     perfis: ['admin', 'diretoria']
   },
   {
+    id: 'associados',
+    nome: 'Associados',
+    icone: '🤝',
+    tipo: 'associados',
+    grupo: 'cadastros-administracao',
+    descricao: 'Cadastro das equipes associadas, com representante legal, documentacao e situacao.',
+    perfis: ['admin', 'diretoria', 'associado']
+  },
+  {
     id: 'usuarios',
     nome: 'Usuários do sistema',
     icone: '🔐',
     tipo: 'usuarios',
+    grupo: 'cadastros-administracao',
     descricao: 'Quem tem acesso à área interna e com qual perfil.',
     perfis: ['admin']
+  },
+  {
+    id: 'administracao',
+    nome: 'Administração',
+    icone: '⚙️',
+    tipo: 'administracao',
+    grupo: 'cadastros-administracao',
+    descricao: 'Ferramentas administrativas e manutenção da base de dados.',
+    perfis: ['admin']
+  },
+  {
+    id: 'comandos',
+    nome: 'Comandos do Sistema',
+    icone: '⌨️',
+    tipo: 'comandos',
+    grupo: 'cadastros-administracao',
+    descricao: 'Referência dos comandos da automação (back-end em Python) usados para operar o sistema.',
+    perfis: ['admin', 'diretoria']
   }
 ];
 
@@ -10346,7 +10359,276 @@ function listarSumulas() {
   return lerSumulas_(false);
 }
 
-function lerSumulas_(paraAtletas) {
+const SUMULAS_SNAPSHOT_ESTADO = 'AEUV_SUMULAS_SNAPSHOT_V1';
+const SUMULAS_SNAPSHOT_DIRTY = 'AEUV_SUMULAS_SNAPSHOT_DIRTY';
+const SUMULAS_SNAPSHOT_VALIDADE_MS = 24 * 60 * 60 * 1000;
+const SUMULAS_SNAPSHOT_MAX_BYTES = 8 * 1024 * 1024;
+
+function exigirLeituraSnapshotSumulas_() {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !moduloLiberado_('sumulas', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar as súmulas digitais.');
+  }
+  // A pré-carga não substitui a permissão atual na fonte.
+  pastaSumulas_();
+  return sessao;
+}
+
+function exigirDonoSnapshotSumulas_(sessao) {
+  const email = normalizarEmail_(CONFIG.sumulas.snapshotOwnerEmail);
+  if (!email || email !== normalizarEmail_(Session.getEffectiveUser().getEmail())
+      || !sessao || sessao.email !== email || sessao.usuario.perfil !== 'admin') {
+    throw new Error('Somente o administrador proprietário configurado pode gerar a pré-carga de súmulas.');
+  }
+}
+
+function pastaSnapshotSumulas_(publicar) {
+  const id = CONFIG.sumulas.snapshotPastaId;
+  if (!id || id === CONFIG.solicitacoes.snapshotPastaId || id === CONFIG.sumulas.pastaRaizId) {
+    throw new Error('Configure uma pasta dedicada e restrita para a pré-carga de súmulas.');
+  }
+  if (publicar) exigirDonoSnapshotSumulas_(exigirAdministracao_());
+  const meta = Drive.Files.get(id, { fields: 'id,mimeType,trashed,driveId', supportsAllDrives: true });
+  if (!meta || meta.id !== id || meta.trashed !== false
+      || meta.mimeType !== 'application/vnd.google-apps.folder' || meta.driveId) {
+    throw new Error('Pasta de pré-carga de súmulas inválida; use uma pasta My Drive dedicada.');
+  }
+  return { id: id, pasta: DriveApp.getFolderById(id) };
+}
+
+function lerEstadoSnapshotSumulas_() {
+  const texto = PropertiesService.getScriptProperties().getProperty(SUMULAS_SNAPSHOT_ESTADO);
+  if (!texto) return {};
+  const estado = JSON.parse(texto);
+  if (!objetoSolicitacoes_(estado)) throw new Error('Estado da pré-carga de súmulas inválido.');
+  return estado;
+}
+
+function gravarEstadoSnapshotSumulas_(estado) {
+  PropertiesService.getScriptProperties().setProperty(SUMULAS_SNAPSHOT_ESTADO, JSON.stringify(estado));
+}
+
+function fingerprintSumula_(achado) {
+  const id = achado.arquivo.getId();
+  // Não cachear este metadado: no build a segunda leitura detecta alterações
+  // ocorridas entre a primeira conferência e a leitura do conteúdo.
+  const meta = Drive.Files.get(id, {
+    fields: 'id,name,parents,modifiedTime,createdTime,size,trashed', supportsAllDrives: true
+  });
+  const tamanho = meta && numeroDriveSolicitacoes_(meta.size);
+  const modifiedAt = meta && Date.parse(meta.modifiedTime);
+  const ordem = meta && Date.parse(meta.createdTime);
+  if (!meta || meta.id !== id || meta.trashed !== false || meta.name !== achado.nome
+      || !Array.isArray(meta.parents) || !meta.parents.length || tamanho === null
+      || !Number.isSafeInteger(modifiedAt) || !Number.isSafeInteger(ordem) || ordem !== achado.ordem) {
+    throw new Error('Metadados atuais da súmula inválidos ou alterados.');
+  }
+  return {
+    id: id, nome: meta.name, pais: meta.parents.slice().sort(),
+    modifiedAt: modifiedAt, size: tamanho, ordem: ordem, situacao: achado.situacao
+  };
+}
+
+function validarSnapshotSumulas_(dados) {
+  if (!objetoSolicitacoes_(dados) || dados.schema !== 1 || dados.tipo !== 'sumulas-analisadas'
+      || dados.sourceId !== CONFIG.sumulas.pastaRaizId
+      || !dataIsoSolicitacoes_(dados.generatedAt) || !dataIsoSolicitacoes_(dados.expiresAt)
+      || Date.parse(dados.expiresAt) !== Date.parse(dados.generatedAt) + SUMULAS_SNAPSHOT_VALIDADE_MS
+      || !Number.isSafeInteger(dados.total) || dados.total < 0
+      || dados.limite !== CONFIG.sumulas.maxLeitura || !Array.isArray(dados.registros)
+      || dados.registros.length > dados.limite || dados.total < dados.registros.length
+      || !stringLimitadaSolicitacoes_(dados.pastaUrl, 2048, false)) {
+    throw new Error('Pré-carga de súmulas inválida.');
+  }
+  const ids = new Set();
+  dados.registros.forEach(function (item) {
+    const f = item && item.fingerprint;
+    const r = item && item.dados;
+    if (!objetoSolicitacoes_(f) || !objetoSolicitacoes_(r)
+        || !stringLimitadaSolicitacoes_(f.id, 256, false) || ids.has(f.id)
+        || !/^SUMULA_.+\.txt$/i.test(f.nome) || !Array.isArray(f.pais) || !f.pais.length
+        || !f.pais.every(function (id) { return stringLimitadaSolicitacoes_(id, 256, false); })
+        || !Number.isSafeInteger(f.modifiedAt) || f.modifiedAt < 0
+        || !Number.isSafeInteger(f.size) || f.size < 0
+        || !Number.isSafeInteger(f.ordem) || f.situacao !== 'Analisada'
+        || r.situacao !== 'Analisada' || r.arquivoNome !== f.nome || r.ordem !== f.ordem
+        || !Array.isArray(r.envolvidos) || !Array.isArray(r.equipes)
+        || !Number.isSafeInteger(r.quantidade) || r.quantidade !== r.envolvidos.length
+        || !['protocolo', 'dataEnvio', 'confronto', 'dataJogo', 'pdfUrl', 'arquivoUrl', 'icone',
+          'arbitro', 'documento', 'mandante', 'visitante', 'horaJogo', 'fatos'].every(function (chave) {
+          return typeof r[chave] === 'string';
+        }) || !r.envolvidos.every(function (p) {
+          return objetoSolicitacoes_(p) && ['nome', 'equipe', 'tipo', 'camisa'].every(function (c) {
+            return typeof p[c] === 'string';
+          });
+        }) || !r.equipes.every(function (e) { return typeof e === 'string'; })) {
+      throw new Error('Registro da pré-carga de súmulas inválido.');
+    }
+    ids.add(f.id);
+  });
+  if (bytesUtf8Solicitacoes_(JSON.stringify(dados)) > SUMULAS_SNAPSHOT_MAX_BYTES) {
+    throw new Error('Pré-carga de súmulas acima do limite de 8 MiB.');
+  }
+  return dados;
+}
+
+function lerVersaoSnapshotSumulas_(slot, pasta, provisorio) {
+  if (!slot || !stringLimitadaSolicitacoes_(slot.id, 256, false)
+      || !dataIsoSolicitacoes_(slot.generatedAt) || !dataIsoSolicitacoes_(slot.expiresAt)
+      || (provisorio && Date.now() >= Date.parse(slot.expiresAt))) {
+    throw new Error('Versão da pré-carga de súmulas indisponível.');
+  }
+  const meta = Drive.Files.get(slot.id, {
+    fields: 'id,mimeType,size,trashed,parents', supportsAllDrives: true
+  });
+  if (!meta || meta.id !== slot.id || meta.trashed !== false || meta.mimeType !== 'application/json'
+      || numeroDriveSolicitacoes_(meta.size, SUMULAS_SNAPSHOT_MAX_BYTES) === null
+      || !Array.isArray(meta.parents) || meta.parents.length !== 1 || meta.parents[0] !== pasta.id) {
+    throw new Error('Arquivo da pré-carga de súmulas inválido.');
+  }
+  const texto = DriveApp.getFileById(slot.id).getBlob().getDataAsString('UTF-8');
+  if (bytesUtf8Solicitacoes_(texto) > SUMULAS_SNAPSHOT_MAX_BYTES) throw new Error('Pré-carga muito grande.');
+  const dados = validarSnapshotSumulas_(JSON.parse(texto));
+  if (dados.generatedAt !== slot.generatedAt || dados.expiresAt !== slot.expiresAt) {
+    throw new Error('Versão da pré-carga de súmulas divergente.');
+  }
+  return dados;
+}
+
+function lerSnapshotSumulas_(provisorio) {
+  if (!CONFIG.sumulas.snapshotPastaId || !CONFIG.sumulas.snapshotOwnerEmail) return null;
+  try {
+    const estado = lerEstadoSnapshotSumulas_();
+    const pasta = pastaSnapshotSumulas_(false);
+    const dirty = Number(PropertiesService.getScriptProperties().getProperty(SUMULAS_SNAPSHOT_DIRTY) || 0);
+    for (const campo of ['current', 'previous']) {
+      try {
+        const dados = lerVersaoSnapshotSumulas_(estado[campo], pasta, provisorio);
+        if (provisorio && Date.parse(dados.generatedAt) <= dirty) continue;
+        return dados;
+      } catch (e) { /* Tenta a versão anterior; sem cópia válida, usa a fonte viva. */ }
+    }
+  } catch (e) { /* Ausência, corrupção ou falta de acesso não impede a consulta viva. */ }
+  return null;
+}
+
+function listarSnapshotSumulasAnalisadas() {
+  const sessao = exigirLeituraSnapshotSumulas_();
+  const snapshot = lerSnapshotSumulas_(true);
+  if (!snapshot) throw new Error('Pré-carga de súmulas indisponível; consultando os dados atuais.');
+  const registros = snapshot.registros.map(function (item) { return item.dados; });
+  return {
+    registros: registros, situacoes: SUMULAS_PASTAS, equipes: equipesDasSumulas_(registros),
+    total: snapshot.total, limite: snapshot.limite, pastaUrl: snapshot.pastaUrl,
+    provisorio: true, generatedAt: snapshot.generatedAt, podeExcluir: false, podeAnalisar: false,
+    podeGerarPreCarga: sessao.usuario.perfil === 'admin'
+  };
+}
+
+function obterStatusSnapshotSumulas() {
+  exigirAdministracao_();
+  const estado = lerEstadoSnapshotSumulas_();
+  const snapshot = lerSnapshotSumulas_(true);
+  const agenda = lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA);
+  return {
+    configurado: !!(CONFIG.sumulas.snapshotPastaId && CONFIG.sumulas.snapshotOwnerEmail),
+    disponivel: !!snapshot, generatedAt: snapshot ? snapshot.generatedAt : '',
+    emRecalculo: !!(estado.lease && estado.lease.expiresAt > Date.now()),
+    ultimoErro: estado.lastError || '', agendado: !!agenda.triggerId
+  };
+}
+
+function limparVersaoSnapshotSumulas_(id) {
+  try {
+    comLockSnapshotSolicitacoes_(function () {
+      const estado = lerEstadoSnapshotSumulas_();
+      if ((estado.current && estado.current.id === id) || (estado.previous && estado.previous.id === id)) return;
+      const meta = Drive.Files.get(id, { fields: 'id,parents,trashed', supportsAllDrives: true });
+      if (meta && meta.id === id && meta.trashed === false && Array.isArray(meta.parents)
+          && meta.parents.length === 1 && meta.parents[0] === CONFIG.sumulas.snapshotPastaId) {
+        DriveApp.getFileById(id).setTrashed(true);
+      }
+    });
+  } catch (e) { console.log('Súmulas: cópia obsoleta preservada por falha na limpeza.'); }
+}
+
+function recalcularSnapshotSumulas() {
+  exigirDonoSnapshotSumulas_(exigirAdministracao_());
+  return gerarSnapshotSumulasAnalisadas_();
+}
+
+function gerarSnapshotSumulasAnalisadas_() {
+  exigirLeituraSnapshotSumulas_();
+  const pasta = pastaSnapshotSumulas_(true);
+  const token = Utilities.getUuid();
+  comLockSnapshotSolicitacoes_(function () {
+    const estado = lerEstadoSnapshotSumulas_();
+    if (estado.lease && estado.lease.expiresAt > Date.now()) throw new Error('Pré-carga de súmulas já em recálculo.');
+    estado.lease = { token: token, expiresAt: Date.now() + SOLICITACOES_SNAPSHOT_LEASE_MS };
+    estado.lastAttemptAt = new Date().toISOString();
+    gravarEstadoSnapshotSumulas_(estado);
+  });
+  let arquivo;
+  try {
+    const anterior = lerEstadoSnapshotSumulas_();
+    let slotAnteriorValido = null;
+    ['current', 'previous'].some(function (campo) {
+      try {
+        lerVersaoSnapshotSumulas_(anterior[campo], pasta, false);
+        slotAnteriorValido = anterior[campo];
+        return true;
+      } catch (e) { return false; }
+    });
+    // A data inicial impede apresentar uma cópia se houver uma mutação durante o build.
+    const generatedAt = new Date().toISOString();
+    const leitura = lerSumulas_(false, { gerarSnapshot: true });
+    const dados = validarSnapshotSumulas_({
+      schema: 1, tipo: 'sumulas-analisadas', generatedAt: generatedAt,
+      sourceId: CONFIG.sumulas.pastaRaizId,
+      expiresAt: new Date(Date.parse(generatedAt) + SUMULAS_SNAPSHOT_VALIDADE_MS).toISOString(),
+      total: leitura.total, limite: leitura.limite, pastaUrl: leitura.pastaUrl, registros: leitura.itensSnapshot
+    });
+    const texto = JSON.stringify(dados);
+    arquivo = pasta.pasta.createFile(Utilities.newBlob(texto, 'application/json', 'AEUV - Sumulas Analisadas - ' + token + '.json'));
+    const slot = { id: arquivo.getId(), generatedAt: dados.generatedAt, expiresAt: dados.expiresAt };
+    if (JSON.stringify(lerVersaoSnapshotSumulas_(slot, pasta, false)) !== texto) throw new Error('Falha ao conferir a cópia de súmulas.');
+    const obsoletos = comLockSnapshotSolicitacoes_(function () {
+      const estado = lerEstadoSnapshotSumulas_();
+      if (!estado.lease || estado.lease.token !== token || estado.lease.expiresAt <= Date.now()) {
+        throw new Error('Prazo da pré-carga de súmulas expirou; cópia anterior preservada.');
+      }
+      const antigos = ['current', 'previous'].map(function (campo) {
+        return estado[campo] && estado[campo].id;
+      }).filter(function (id) { return id && (!slotAnteriorValido || id !== slotAnteriorValido.id); });
+      if (slotAnteriorValido) estado.previous = slotAnteriorValido;
+      else delete estado.previous;
+      estado.current = slot;
+      estado.lastError = '';
+      delete estado.lease;
+      gravarEstadoSnapshotSumulas_(estado);
+      return antigos;
+    });
+    obsoletos.forEach(limparVersaoSnapshotSumulas_);
+    return obterStatusSnapshotSumulas();
+  } catch (e) {
+    comLockSnapshotSolicitacoes_(function () {
+      const estado = lerEstadoSnapshotSumulas_();
+      if (estado.lease && estado.lease.token === token) {
+        delete estado.lease;
+        estado.lastError = 'Falha no recálculo das súmulas; cópia anterior preservada.';
+        gravarEstadoSnapshotSumulas_(estado);
+      }
+    });
+    if (arquivo) limparVersaoSnapshotSumulas_(arquivo.getId());
+    throw new Error('Não foi possível gerar a pré-carga de súmulas. Confira a pasta, o proprietário e as permissões.');
+  }
+}
+
+function invalidarSnapshotSumulas_() {
+  PropertiesService.getScriptProperties().setProperty(SUMULAS_SNAPSHOT_DIRTY, String(Date.now()));
+}
+
+function lerSumulas_(paraAtletas, opcoes) {
   const metricas = criarMetricasFonteAtleta_(paraAtletas, 'sumulas');
   let perfil = '';
   return medirFonteAtleta_(metricas, 'leitura', function () {
@@ -10424,16 +10706,46 @@ function lerSumulas_(paraAtletas) {
       });
     });
 
+    const build = !!(opcoes && opcoes.gerarSnapshot);
+    const snapshot = !paraAtletas && !build ? lerSnapshotSumulas_(false) : null;
+    const candidatos = new Map();
+    if (snapshot) snapshot.registros.forEach(function (item) { candidatos.set(item.fingerprint.id, item); });
+    const fontes = build ? achados.filter(function (a) { return a.situacao === 'Analisada'; }) : achados;
+    const itensSnapshot = [];
+    let hits = 0;
     const limite = CONFIG.sumulas.maxLeitura;
-    const registros = achados.slice(0, limite).map(function (achado) {
+    const registros = fontes.slice(0, limite).map(function (achado) {
+      let fingerprint = null;
+      if (!paraAtletas && achado.situacao === 'Analisada' && (snapshot || build)) {
+        try { fingerprint = fingerprintSumula_(achado); }
+        catch (e) { if (build) throw e; }
+      }
+      const candidato = fingerprint && candidatos.get(fingerprint.id);
+      if (candidato && JSON.stringify(candidato.fingerprint) === JSON.stringify(fingerprint)) {
+        hits++;
+        return JSON.parse(JSON.stringify(candidato.dados));
+      }
+      if (build && fingerprint.size > SOLICITACOES_TXT_MAX_BYTES) {
+        throw new Error('TXT de súmula acima do limite da pré-carga.');
+      }
       const conteudo = lerTextoFonteAtleta_(achado.arquivo, metricas);
+      if (build && bytesUtf8Solicitacoes_(conteudo) > SOLICITACOES_TXT_MAX_BYTES) {
+        throw new Error('TXT de súmula acima do limite da pré-carga.');
+      }
       return medirFonteAtleta_(metricas, 'interpretar', function () {
-        return interpretarSumula_(conteudo, achado, paraAtletas, metricas);
+        const registro = interpretarSumula_(conteudo, achado, paraAtletas, metricas);
+        if (build) {
+          if (JSON.stringify(fingerprintSumula_(achado)) !== JSON.stringify(fingerprint)) {
+            throw new Error('Súmula alterada durante a geração; tente novamente.');
+          }
+          itensSnapshot.push({ fingerprint: fingerprint, dados: JSON.parse(JSON.stringify(registro)) });
+        }
+        return registro;
       });
     });
 
     // Notas/punidos enriquecem a tela de súmulas, mas o banco já usa listarPunicoes.
-    if (!paraAtletas) {
+    if (!paraAtletas && !build) {
       const notas = indiceNotas_();
       // Motivo informado quando a súmula foi marcada como analisada à mão.
       const analisesManuais = indiceAnalisesManuais_();
@@ -10451,13 +10763,17 @@ function lerSumulas_(paraAtletas) {
     }
 
     registrarMetricasFonteAtleta_(metricas, achados.length, registros.length);
+    if (build) return { itensSnapshot: itensSnapshot, total: fontes.length, limite: limite, pastaUrl: raiz.getUrl() };
     return {
       registros: registros,
       situacoes: SUMULAS_PASTAS,
       equipes: paraAtletas ? [] : equipesDasSumulas_(registros),
-      total: achados.length,
+      total: fontes.length,
       limite: limite,
       pastaUrl: raiz.getUrl(),
+      provisorio: false,
+      preCargaHits: hits,
+      podeGerarPreCarga: perfil === 'admin',
       podeExcluir: perfil === 'admin',
       // Marcar como analisada: admin e diretoria (não precisa ser só admin,
       // como a exclusão, porque não apaga nada — só move para "Processados").
@@ -10505,6 +10821,7 @@ function excluirSumula(arquivoNome) {
     let bloqueadaAnalisada = false;
 
     function moverParaExcluidos(arquivo) {
+      invalidarSnapshotSumulas_();
       excluidos.addFile(arquivo);
       const pais = arquivo.getParents();
       while (pais.hasNext()) {
@@ -10604,6 +10921,7 @@ function marcarSumulaAnalisada(arquivoNome, justificativa) {
     let jaAnalisada = false;
 
     function moverParaAnalisadas(arquivo) {
+      invalidarSnapshotSumulas_();
       analisadas.addFile(arquivo);
       const pais = arquivo.getParents();
       while (pais.hasNext()) {
@@ -12256,6 +12574,9 @@ function configurarAgendamentoBancoAtletas() {
   if (CONFIG.solicitacoes.snapshotPastaId || CONFIG.solicitacoes.snapshotOwnerEmail) {
     exigirDonoSnapshotSolicitacoes_(sessao);
   }
+  if (CONFIG.sumulas && (CONFIG.sumulas.snapshotPastaId || CONFIG.sumulas.snapshotOwnerEmail)) {
+    exigirDonoSnapshotSumulas_(sessao);
+  }
   return comLockBancoAtletas_(function () {
     const agenda = lerEstadoBancoAtletas_(BANCO_ATLETAS_AGENDA);
     const owner = exigirDonoAgendaBancoAtletas_(sessao, agenda);
@@ -12301,6 +12622,13 @@ function atualizarPreCargasCompartilhadas_() {
     resultados.solicitacoes = gerarSnapshotSolicitacoesProcessadas_({ permitirNaoConfigurado: true });
   } catch (erroSolicitacoes) {
     falhas.push(erroSolicitacoes);
+  }
+  if (CONFIG.sumulas && CONFIG.sumulas.snapshotPastaId && CONFIG.sumulas.snapshotOwnerEmail) {
+    try {
+      resultados.sumulas = gerarSnapshotSumulasAnalisadas_();
+    } catch (erroSumulas) {
+      falhas.push(erroSumulas);
+    }
   }
   if (falhas.length) {
     // Preserva o objeto da primeira falha para compatibilidade das Execucoes,

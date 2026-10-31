@@ -73,6 +73,23 @@ inacessível.
   processadas que acelera a tela. Exige pasta/dono da pré-carga configurados.
 - **`obterStatusSnapshotSolicitacoes`** — estado da pré-carga de solicitações.
 
+### Súmulas já analisadas (pré-carga)
+
+- **`recalcularSnapshotSumulas`** — gera a cópia das Analisadas para acelerar
+  Súmulas Enviadas; equivale ao botão **Gerar pré-carga**. Exige a conta admin de
+  `CONFIG.sumulas.snapshotOwnerEmail` e uma pasta My Drive dedicada em
+  `CONFIG.sumulas.snapshotPastaId`, restrita aos leitores das súmulas. Não usar
+  a pasta das inscrições: relatos disciplinares têm permissões diferentes.
+- **`obterStatusSnapshotSumulas`** — mostra configuração, disponibilidade,
+  data da cópia, recálculo, erro sanitizado e existência da agenda compartilhada.
+- **`configurarAgendamentoBancoAtletas`** — a agenda compartilhada de 15 minutos
+  também renova as súmulas quando configuradas. Usar o mesmo proprietário das
+  outras pré-cargas. Não é necessário criar um gatilho separado.
+
+A prévia contém apenas Analisadas e expira em 24 horas. A tela confirma os dados
+atuais em paralelo; Aguardando/Falha não são congeladas. Sem cópia válida a
+consulta normal continua funcionando.
+
 ## 6. Índices de validação
 
 - **`reconciliarIndicesValidacaoAgora`** — reconcilia os índices de validação usados nas

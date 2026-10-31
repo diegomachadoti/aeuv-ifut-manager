@@ -3576,7 +3576,7 @@
       }
 
       if (modulo.tipo === 'notas') {
-        conteudo.innerHTML = cabecalho + blocoCarregando('statusNotas');
+        conteudo.innerHTML = cabecalho + informativoNotas() + blocoCarregando('statusNotas');
         carregarNotas();
         return;
       }
@@ -10390,55 +10390,149 @@
 
     /** Arquivos com o detalhe aberto. */
     let sumulasAbertas = {};
+    let sumulasCarga = { token: 0 };
+
+    function capturarEstadoVisualSumulas_() {
+      const busca = document.getElementById('buscaSumulas');
+      const equipe = document.getElementById('filtroEquipeSumulas');
+      const filtros = {};
+      conteudo.querySelectorAll('[data-filtro]').forEach(function (campo) {
+        filtros[campo.dataset.filtro] = campo.value;
+      });
+      return { busca: busca ? busca.value : '', equipe: equipe ? equipe.value : '',
+        filtros: filtros, abertas: Object.assign({}, sumulasAbertas) };
+    }
+
+    function cargaSumulasAtual_(token) {
+      return moduloAtual === 'sumulas' && sumulasCarga.token === token;
+    }
+
+    function renderizarCargaSumulas_(token) {
+      if (!cargaSumulasAtual_(token)) return;
+      const carga = sumulasCarga;
+      if (carga.finalRenderizada) return;
+      // Uma resposta final nunca é substituída por uma pré-carga tardia.
+      if (carga.final.dados || (carga.snapshot.dados && carga.snapshot.dados.registros.length)) {
+        if (carga.renderizado) carga.visual = capturarEstadoVisualSumulas_();
+        sumulas = carga.final.dados || carga.snapshot.dados;
+        const aviso = carga.final.dados ? '' : carga.final.erro
+          ? 'Não foi possível conferir os dados atuais. Exibindo somente as súmulas analisadas da pré-carga; tente Atualizar.'
+          : 'Exibindo somente as súmulas analisadas da pré-carga enquanto os dados atuais são conferidos. Aguardando e Falha ainda não estão nesta contagem.';
+        montarTelaSumulas(carga.visual, aviso);
+        carga.renderizado = true;
+        carga.finalRenderizada = !!carga.final.dados;
+        return;
+      }
+      if (carga.final.erro && carga.snapshot.concluido) {
+        document.getElementById('statusSumulas').innerHTML = blocoErro_(carga.final.erro, { acaoId: 'tentarSumulas' });
+        const b = document.getElementById('tentarSumulas');
+        if (b) b.addEventListener('click', function () { abrirModulo('sumulas'); });
+      }
+    }
 
     /**
      * Busca no servidor as sumulas enviadas pela arbitragem.
      */
     function carregarSumulas() {
+      const token = sumulasCarga.token + 1;
+      const visual = capturarEstadoVisualSumulas_();
+      visual.busca = consumirBusca() || visual.busca;
+      sumulasCarga = { token: token, visual: visual, renderizado: false,
+        snapshot: { concluido: false, dados: null }, final: { dados: null, erro: '' } };
       google.script.run
         .withSuccessHandler(function (dados) {
+          if (!cargaSumulasAtual_(token)) return;
+          sumulasCarga.snapshot = { concluido: true, dados: dados };
+          renderizarCargaSumulas_(token);
+        })
+        .withFailureHandler(function () {
+          if (!cargaSumulasAtual_(token)) return;
+          sumulasCarga.snapshot = { concluido: true, dados: null };
+          renderizarCargaSumulas_(token);
+        })
+        .listarSnapshotSumulasAnalisadas();
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          if (!cargaSumulasAtual_(token)) return;
           // Remove o overlay de ação (excluir/analisar), se houver.
           removerOverlayPunicoes_();
-          if (moduloAtual !== 'sumulas') {
-            return;
-          }
-
-          sumulas = dados;
-          sumulasAbertas = {};
-          montarTelaSumulas();
+          sumulasCarga.final = { dados: dados, erro: '' };
+          renderizarCargaSumulas_(token);
         })
         .withFailureHandler(function (erro) {
+          if (!cargaSumulasAtual_(token)) return;
           removerOverlayPunicoes_();
-          if (moduloAtual !== 'sumulas') {
-            return;
-          }
-
-          document.getElementById('statusSumulas').outerHTML =
-            '<div id="statusSumulas">' + blocoErro_(erro, { acaoId: 'tentarSumulas' }) + '</div>';
-          const b = document.getElementById('tentarSumulas');
-          if (b) b.addEventListener('click', function () { abrirModulo('sumulas'); });
+          sumulasCarga.final = { dados: null, erro: erro && erro.message ? erro.message : String(erro) };
+          renderizarCargaSumulas_(token);
         })
         .listarSumulas();
+    }
+
+    function gerarPreCargaSumulasDaTela_() {
+      const botao = document.getElementById('gerarPreCargaSumulas');
+      if (!botao || botao.disabled) return;
+      const token = sumulasCarga.token;
+      botao.disabled = true;
+      botao.textContent = 'Gerando pré-carga...';
+      mostrarOverlayGlobal_('Gerando pré-carga das súmulas analisadas...');
+      const overlay = overlayGlobalAtual;
+      const concluir = function () {
+        // Uma resposta antiga não pode remover o loading de outra operação.
+        if (overlayGlobalAtual === overlay) removerOverlayGlobal_();
+        botao.disabled = false;
+        botao.textContent = 'Gerar pré-carga';
+      };
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          concluir();
+          if (!cargaSumulasAtual_(token)) return;
+          const status = document.getElementById('estadoCargaSumulas');
+          if (status) status.textContent = dados.disponivel
+            ? 'Pré-carga gerada. Ela será usada nas próximas consultas.'
+            : 'Cópia gerada, mas houve alterações durante a leitura. Gere novamente.';
+        })
+        .withFailureHandler(function (erro) {
+          concluir();
+          if (!cargaSumulasAtual_(token)) return;
+          const status = document.getElementById('estadoCargaSumulas');
+          if (status) status.textContent = erro && erro.message ? erro.message : 'Não foi possível gerar a pré-carga.';
+        })
+        .recalcularSnapshotSumulas();
+    }
+
+    function estadoCargaSumulas_(aviso) {
+      const texto = aviso || 'Dados atuais conferidos.';
+      const data = sumulas.provisorio && sumulas.generatedAt
+        ? ' Cópia gerada em ' + dataSnapshot_(sumulas.generatedAt) + '.' : '';
+      return '<div class="' + (sumulas.provisorio ? 'aviso' : 'apoio')
+        + '" id="estadoCargaSumulas" role="status" aria-live="polite">'
+        + escapar(texto + data) + '</div>';
     }
 
     /**
      * Monta os indicadores, os filtros e a tabela das sumulas.
      */
-    function montarTelaSumulas() {
+    function montarTelaSumulas(visual, aviso) {
       const registros = sumulas.registros || [];
-      const termo = consumirBusca();
-
-      if (!registros.length) {
-        document.getElementById('statusSumulas').outerHTML =
-          '<div class="vazio">Nenhuma s&uacute;mula enviada at&eacute; o momento.</div>';
-        return;
-      }
+      visual = visual || { busca: '', equipe: '', filtros: {}, abertas: {} };
+      sumulasAbertas = Object.assign({}, visual.abertas);
 
       const recorte = sumulas.total > registros.length
         ? escapar(registros.length + ' mais recentes de ' + sumulas.total)
         : '';
 
       document.getElementById('statusSumulas').outerHTML = ''
+        + '<div id="statusSumulas">'
+        + estadoCargaSumulas_(aviso)
+        + '<details class="info-punicoes"><summary>Como funciona a pré-carga das súmulas analisadas</summary>'
+        + '<div class="info-punicoes-corpo"><p>A pré-carga mostra rapidamente apenas o histórico <strong>Analisada</strong>. '
+        + 'A consulta atual roda em paralelo e confirma a listagem completa. Aguardando e Falha são sempre lidas da fonte atual. '
+        + 'TXT analisados só são reutilizados quando identidade, pasta, data de alteração e tamanho continuam iguais; notas, punições e justificativas são consultadas novamente.</p>'
+        + '<p>O administrador configura <code>CONFIG.sumulas.snapshotPastaId</code> e <code>snapshotOwnerEmail</code> no Apps Script, '
+        + 'usando uma pasta My Drive dedicada e restrita aos leitores das súmulas. Depois usa <strong>Gerar pré-carga</strong> '
+        + 'ou executa <code>recalcularSnapshotSumulas</code> no editor. A agenda compartilhada do Banco de Atletas também renova essa cópia quando configurada.</p>'
+        + '<p class="info-punicoes-nota">A cópia provisória expira após 24 horas. Sem pré-carga válida, a consulta normal continua funcionando. '
+        + 'As ações ficam disponíveis somente após conferir os dados atuais. O ganho aumenta com o volume de súmulas analisadas.</p></div></details>'
         + '<div class="resumo" id="resumoSumulas"></div>'
         + '<div class="filtros">'
         + '<input type="search" id="buscaSumulas" placeholder="Buscar por protocolo, equipe, &aacute;rbitro, envolvido ou pelo relato">'
@@ -10451,6 +10545,7 @@
         + '<span class="espaco"></span>'
         + (recorte ? '<span>' + recorte + '</span>' : '')
         + '<button type="button" class="botao-apoio" id="recarregarSumulas">Atualizar</button>'
+        + (sumulas.podeGerarPreCarga ? '<button type="button" class="botao-apoio" id="gerarPreCargaSumulas">Gerar pré-carga</button>' : '')
         + (sumulas.pastaUrl
           ? '<a class="botao-apoio" href="' + escapar(sumulas.pastaUrl) + '" target="_blank" rel="noopener">Abrir pasta</a>'
           : '')
@@ -10459,20 +10554,25 @@
         + '<th>Situa&ccedil;&atilde;o</th><th>Protocolo</th><th>Enviada em</th><th>Partida</th>'
         + '<th>&Aacute;rbitro</th><th>Envolvidos</th>'
         + (sumulas.podeExcluir || sumulas.podeAnalisar ? '<th>A&ccedil;&otilde;es</th>' : '')
-        + '</tr></thead><tbody id="linhasSumulas"></tbody></table></div>';
+        + '</tr></thead><tbody id="linhasSumulas"></tbody></table></div>'
+        + (!registros.length ? '<p class="vazio">Nenhuma súmula enviada até o momento.</p>' : '')
+        + '</div>';
 
       document.getElementById('buscaSumulas').addEventListener('input', filtrarSumulas);
       document.getElementById('recarregarSumulas').addEventListener('click', function () {
-        abrirModulo('sumulas');
+        carregarSumulas();
       });
+      const gerar = document.getElementById('gerarPreCargaSumulas');
+      if (gerar) gerar.addEventListener('click', gerarPreCargaSumulasDaTela_);
 
       conteudo.querySelectorAll('[data-filtro], #filtroEquipeSumulas').forEach(function (campo) {
+        const valor = campo.id === 'filtroEquipeSumulas' ? visual.equipe : visual.filtros[campo.dataset.filtro];
+        campo.value = valor || '';
+        if (campo.selectedIndex === -1) campo.value = '';
         campo.addEventListener('change', filtrarSumulas);
       });
 
-      if (termo) {
-        document.getElementById('buscaSumulas').value = termo;
-      }
+      document.getElementById('buscaSumulas').value = visual.busca;
 
       filtrarSumulas();
     }
@@ -10957,6 +11057,9 @@
      * aparecem com o texto correspondente, nunca como erro.
      */
     function blocoNota(registro) {
+      if (sumulas.provisorio) {
+        return '<p class="equipe-dado">Notas, punições e justificativas ainda não foram conferidas na fonte atual.</p>';
+      }
       const notas = registro.notas || [];
       const punidos = registro.punidos || [];
 
@@ -11017,6 +11120,45 @@
 
     /** Notas com o texto aberto. */
     let notasAbertas = {};
+
+    /** Orientação disponível mesmo durante a carga ou sem notas publicadas. */
+    function informativoNotas() {
+      return '<details class="info-punicoes">'
+        + '<summary>Como as Notas Oficiais são geradas e publicadas</summary>'
+        + '<div class="info-punicoes-corpo">'
+        + '<p>A Nota Oficial registra as decisões da <strong>Comissão Disciplinar</strong> sobre os fatos de uma partida. '
+        + 'Ela é gerada a partir de uma <strong>súmula enviada pelo árbitro no formulário de Súmula Digital</strong>, '
+        + 'e não de uma solicitação de inscrição, remoção ou portabilidade. Esta tela apenas consulta as notas publicadas.</p>'
+        + '<ol>'
+        + '<li><strong>Envio da súmula:</strong> o árbitro informa a partida, os envolvidos e o relato das ocorrências. '
+        + 'O formulário gera um protocolo e um arquivo TXT no Drive, consultável em <strong>Súmulas Enviadas</strong>.</li>'
+        + '<li><strong>Geração da nota:</strong> um responsável da associação executa a automação Python manualmente. '
+        + 'Ela baixa as súmulas, analisa o relato conforme o regulamento e gera a nota em TXT e PDF, com decisões sugeridas para revisão.'
+        + '<div class="info-punicoes-cmd">python main.py --analisar-sumulas'
+        + '<br><span class="info-punicoes-coment"># Alternativa: usar somente as súmulas já baixadas</span>'
+        + '<br>python main.py --analisar-sumulas --process-local-only'
+        + '<br><span class="info-punicoes-coment"># Alternativa: analisar com IA, com provedor e chave de API configurados</span>'
+        + '<br>python main.py --analisar-sumulas --ia</div>'
+        + 'Os arquivos ficam em <code>downloads/sumulas/notas-oficiais/</code>.</li>'
+        + '<li><strong>Revisão pela comissão:</strong> a comissão confere os fatos, artigos e decisões sugeridas e ajusta o TXT quando necessário. '
+        + 'Pendências como <code>[A DEFINIR PELA COMISSÃO]</code> precisam ser resolvidas antes da publicação. '
+        + '<strong>Rascunhos com pendências não são publicados no Drive.</strong></li>'
+        + '<li><strong>Finalização e publicação:</strong> depois da revisão, regere o PDF pelo número da nota '
+        + '(no exemplo, 8; substitua pelo número desejado). O comando também atualiza o controle de punições e publica a nota se estiver finalizada.'
+        + '<div class="info-punicoes-cmd">python main.py --gerar-pdf-nota 8'
+        + '<br><span class="info-punicoes-coment"># Alternativa: publicar os documentos finalizados em lote</span>'
+        + '<br>python main.py --publicar-drive</div>'
+        + 'A publicação exige acesso ao Drive configurado na automação; os arquivos finais vão para a subpasta <strong>Notas Oficiais</strong> da pasta das súmulas.</li>'
+        + '<li><strong>Consulta nesta tela:</strong> use a busca e os filtros para localizar a nota e <strong>Ver nota</strong> para consultar os detalhes. '
+        + 'Os punidos e suas situações vêm do <strong>Controle de punições</strong>, vinculados pelo número da nota. '
+        + '<em>Sem punição registrada</em> indica ausência de registros vinculados no controle, não necessariamente ausência de decisão no documento.</li>'
+        + '</ol>'
+        + '<p class="info-punicoes-nota"><strong>Importante:</strong> enviar a súmula não gera nem publica a nota automaticamente. '
+        + 'Execute os comandos no terminal, na pasta do projeto, com o ambiente Python e as configurações preparados. '
+        + 'O botão <strong>Atualizar</strong> apenas recarrega a consulta; ele não analisa súmulas nem gera documentos.</p>'
+        + '</div>'
+        + '</details>';
+    }
 
     /**
      * Busca no servidor as notas oficiais publicadas.

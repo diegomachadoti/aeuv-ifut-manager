@@ -1555,6 +1555,56 @@ dá para ordenar sem abrir nenhum arquivo. Vale o mesmo teto das solicitações,
 `CONFIG.sumulas.maxLeitura` (200 arquivos abertos por consulta), e só arquivos
 no padrão `SUMULA_*.txt` entram — a pasta também recebe PDFs e anexos.
 
+#### Pré-carga das súmulas analisadas
+
+A tela dispara duas consultas em paralelo: `listarSnapshotSumulasAnalisadas`
+apresenta rapidamente **somente Analisadas**, com aviso de consulta provisória,
+enquanto `listarSumulas` confere a listagem atual completa. A resposta atual
+sempre prevalece, mesmo se a pré-carga chegar depois. Busca, filtros e detalhes
+abertos são preservados na troca. Se a consulta atual falhar, o histórico fica
+com aviso para tentar **Atualizar**, sem ser apresentado como dado conferido.
+Os indicadores provisórios não incluem Aguardando/Falha; ações de exclusão e
+análise só ficam disponíveis após a confirmação atual.
+
+Na consulta final, todas as pastas continuam sendo inventariadas. Aguardando
+e Falha têm seus TXT lidos normalmente; uma Analisada só reaproveita o conteúdo
+quando ID, nome, pais, data de alteração, tamanho e ordem de criação coincidem
+com a fonte atual. Notas, punições e justificativas manuais são enriquecidas
+novamente, não congeladas na pré-carga. O Banco de Atletas mantém sua leitura
+viva original, sem usar este snapshot do relato.
+
+**Ativação no Apps Script (administrador proprietário):**
+
+1. Crie uma pasta **My Drive dedicada** para a pré-carga de súmulas, com acesso
+   restrito aos mesmos leitores das súmulas. Não use a pasta de pré-carga das
+   inscrições, não publique na web e não compartilhe com associado/arbitragem.
+2. Preencha `CONFIG.sumulas.snapshotPastaId` e `snapshotOwnerEmail` em
+   `WebApp.gs`. Estes campos vêm vazios: sem eles a consulta normal continua.
+3. Atualize `WebApp.gs` e `Index.html` no projeto Apps Script e publique uma
+   nova versão da implantação.
+4. Com a conta administradora configurada, clique em **Gerar pré-carga** em
+   Súmulas Enviadas ou execute `recalcularSnapshotSumulas` no editor. Consulte
+   `obterStatusSnapshotSumulas` para disponibilidade/data/erro/agendamento.
+5. Para renovação automática, use `configurarAgendamentoBancoAtletas`: a agenda
+   compartilhada de 15 minutos também tenta gerar a pré-carga de súmulas quando
+   configurada, sem criar outro gatilho. O proprietário deve ser o mesmo das
+   outras pré-cargas configuradas; falha de um build não impede tentar os demais.
+
+A cópia apresenta até `maxLeitura` Analisadas mais recentes e expira para
+apresentação provisória após **24 horas**. O build aceita TXT até 256 KiB e JSON
+até 8 MiB, confere a leitura de volta e só publica a versão completa, preservando
+uma versão anterior válida. Ausência, corrupção, expiração ou falta de acesso
+à cópia não bloqueiam a consulta atual. Exclusão/marcação manual invalidam a
+prévia antiga; alterações externas são conferidas na consulta final.
+
+**Vale a pena?** Principalmente com muitas Analisadas: no fixture local de
+80 Analisadas e 2 ativas, a consulta final passa de 82 TXT para **2 TXT + 1 JSON**.
+São contagens de leituras, não segundos nem chamadas HTTP; a enumeração e os
+metadados continuam necessários. Com poucos registros o ganho pode ser pequeno.
+Após ativar, compare nas Execuções do Apps Script e na rede do navegador o tempo
+até o primeiro conteúdo e até a confirmação atual, para o mesmo volume de dados.
+`preCargaHits` na resposta de `listarSumulas` indica quantos TXT foram reutilizados.
+
 #### Permissão
 
 Liberada para **admin e diretoria**. Ficou fora dos perfis `associado` e

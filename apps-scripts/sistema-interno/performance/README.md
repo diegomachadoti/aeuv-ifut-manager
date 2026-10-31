@@ -619,6 +619,28 @@ final do histórico passa a ocorrer no processador da fila. No fixture, elencos
 lidos caem de 8/8/7 para 4 e buscas por nome de 12/12/11 para 5
 (remover atleta/comissão/transferir).
 
+## Pré-carga de súmulas analisadas
+
+`sumulas-snapshot.test.cjs` valida geração só de Analisadas, permissões atuais,
+pasta dedicada/proprietário, integridade/readback, preservação da cópia anterior,
+expiração e invalidação local, edição/substituição/movimentação/remoção externa,
+enriquecimento vivo de notas/punições/justificativas e ausência de snapshot no
+Banco de Atletas. A interface tem testes de prévia/final, respostas atrasadas,
+navegação, erros, final vazio e preservação de busca/filtros/detalhes.
+
+No fixture de 80 Analisadas e 2 ativas (Aguardando/Falha), `listarSumulas`
+passa de **82 leituras de TXT** para **2 TXT + 1 JSON**, com 80 `preCargaHits`.
+As duas RPCs da tela são independentes: a prévia também lê um JSON. São contagens
+de métodos/blobs, não chamadas HTTP nem tempos reais; enumeração e fingerprints
+por metadados continuam ocorrendo na consulta final.
+
+Para medir o ganho real, provisione a pasta restrita conforme o README principal
+de Apps Script, publique `WebApp.gs` e `Index.html` juntos e gere a cópia pela
+conta proprietária. Compare no navegador/Execuções o primeiro conteúdo e a
+confirmação atual com o mesmo volume e filtros, separando consultas frias/quentes.
+Sem configuração válida o caminho vivo continua disponível. Não executar
+análise/exclusão de súmulas reais apenas para medir desempenho.
+
 ## Logs do servidor: tamanho e memória versus Drive
 
 No editor Apps Script → **Execuções**, abra a execução do salvamento,
