@@ -13,7 +13,7 @@
       - Validar: Se o atleta ja existe atualizar. Se nao existir incluir um novo. A ideia no final e ter as informacoes atualizadas finais do atleta "historico de participação nas competições da associação e qual equipe atual ele se encontra cadastrado" (na planilha tem a data de inclusão no ifut entao sabemos qual foi a ordem).
       - Na planilha tem 2 colunas de documentos o RG e CPF porem pode ter competições que o RG foi usado com o valor do CPF do atleta nesse casos avaliar a coluna "RG" qual informação se aplica a CPF e na hora de inserir inserir como CPF.
 
-      Todos registros do SUPER LIGA Uniao ja estoa na base.
+      Todos registros do SUPER LIGA Uniao ja estão na base.
 
 - [🆕] **TD3 — Pendente — Em "Disciplina":**
   - Vai ter o filtro do campeonato ao seleciona e retornado a lista em abas de Pendurados, suspensos. Podendo fazer 2 ações zerar suspensos zera pendurados (isso influencia se o atleta vai estar disponível para jogo na súmula) poderia ter gráficos de cartão, média para o camepaonto e por time. Poderia ter um botão para gerar atletas suspensos e pendurados naquele momento um PDF com as informações no layout da súmula por exemplo para seguir um padrão.

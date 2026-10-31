@@ -13092,7 +13092,7 @@
         + '<section id="areaRelatoriosProjecao" class="fin-relatorios" style="margin-top:16px;" role="status" aria-live="polite"></section>';
 
       // Estado de trabalho (cópia editável das linhas).
-      projGastosLinhas = (d.itens || []).map(function (item) { return { descricao: item.descricao, valor: item.valor, fixo: d.itensFixos.indexOf(item.descricao) >= 0 }; });
+      projGastosLinhas = restaurarItensProjecao_(d.itens, d.itensFixos);
       if (!projGastosLinhas.length && pode) {
         // Começa com um item "Outros" em branco para orientar.
         projGastosLinhas = [{ descricao: '', valor: 0, fixo: false }];
@@ -13252,6 +13252,18 @@
 
     var projGastosLinhas = [];
 
+    function chaveItemProjecao_(descricao) {
+      return String(descricao || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function restaurarItensProjecao_(itens, modelo) {
+      const fixos = new Set((modelo || []).map(chaveItemProjecao_));
+      return (itens || []).map(function (item) {
+        const descricao = chaveItemProjecao_(item.descricao);
+        return { descricao: descricao, valor: item.valor, fixo: fixos.has(descricao) };
+      });
+    }
+
     const PROJ_GRUPOS = [
       { id: 'premiacoes', nome: 'Premiações', icone: 'trophy', descricao: 'Troféus, medalhas e premiações dos times.' },
       { id: 'operacao', nome: 'Equipe e operação', icone: 'users', descricao: 'Destaques individuais e custos operacionais da competição.' },
@@ -13371,9 +13383,9 @@
 
     function abrirSeletorItemFixoProjecao_(grupoId) {
       var usados = {};
-      projGastosLinhas.forEach(function (l) { if (l.fixo) usados[l.descricao] = true; });
+      projGastosLinhas.forEach(function (l) { if (l.fixo) usados[chaveItemProjecao_(l.descricao)] = true; });
       var disponiveis = (projecaoGastos.itensFixos || []).filter(function (nome) {
-        return !usados[nome] && (!grupoId || grupoItemProjecao_({ descricao: nome, fixo: true }) === grupoId);
+        return !usados[chaveItemProjecao_(nome)] && (!grupoId || grupoItemProjecao_({ descricao: nome, fixo: true }) === grupoId);
       });
       if (!disponiveis.length) {
         confirmarDialogo_({ titulo: 'Modelo completo', mensagem: 'Todos os itens do modelo' + (grupoId ? ' deste grupo' : '') + ' já foram adicionados. Use Adicionar "Outros" para uma despesa personalizada.', confirmar: 'Entendi', cancelar: 'Fechar', perigo: false });
@@ -13399,7 +13411,7 @@
       modal.addEventListener('click', function (e) { if (e.target === modal) fechar(); });
       document.getElementById('projAddSelecionados').addEventListener('click', function () {
         modal.querySelectorAll('input[type="checkbox"]:checked').forEach(function (chk) {
-          projGastosLinhas.push({ descricao: chk.value, valor: 0, fixo: true });
+          projGastosLinhas.push({ descricao: chaveItemProjecao_(chk.value), valor: 0, fixo: true });
         });
         fechar();
         desenharLinhasProjecao_(); recalcularProjecao_();
@@ -13408,9 +13420,13 @@
 
     function preencherModeloProjecao_() {
       var existentes = {};
-      projGastosLinhas.forEach(function (l) { if (l.fixo) existentes[l.descricao] = true; });
+      projGastosLinhas.forEach(function (l) { if (l.fixo) existentes[chaveItemProjecao_(l.descricao)] = true; });
       (projecaoGastos.itensFixos || []).forEach(function (nome) {
-        if (!existentes[nome]) projGastosLinhas.push({ descricao: nome, valor: 0, fixo: true });
+        const chave = chaveItemProjecao_(nome);
+        if (!existentes[chave]) {
+          projGastosLinhas.push({ descricao: chave, valor: 0, fixo: true });
+          existentes[chave] = true;
+        }
       });
       desenharLinhasProjecao_(); recalcularProjecao_();
     }

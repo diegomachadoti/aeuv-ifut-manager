@@ -60,3 +60,73 @@ test('CSS adapta tabela para mobile com alvos de toque e tema escuro', () => {
   assert.match(html, /\.proj-tabela input, \.proj-tabela \.proj-linha-remover \{ min-height: 44px/);
   assert.match(html, /body\.tema-escuro \.proj-grupo/);
 });
+
+function persistencia() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'WebApp.gs'), 'utf8');
+  let documento = '{}';
+  const b = vm.createContext({
+    identificarUsuario_: () => ({ autorizado: true, email: 'admin@test.local', usuario: { perfil: 'admin' } }),
+    moduloLiberado_: () => true,
+    calcularSaldoFinanceiro_: () => ({ saldoAtual: 1000, totalEntradas: 1000, totalSaidas: 0 }),
+    formatarDataHora_: () => '31/10/2026',
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) }
+  });
+  vm.runInContext(source.slice(source.indexOf('const PROJECAO_GASTOS_ITENS_FIXOS ='),
+    source.indexOf('function gerarPdfProjecaoGastos(')) + '\nglobalThis.modelo = PROJECAO_GASTOS_ITENS_FIXOS;', b);
+  b.arquivoProjecaoGastos_ = () => ({
+    getBlob: () => ({ getDataAsString: () => documento }),
+    setContent: texto => { documento = texto; }
+  });
+  return { b, documento: () => JSON.parse(documento) };
+}
+
+test('terceiro lugar salvo é reconhecido mesmo com espaços no modelo antigo', () => {
+  const linhas = c.restaurarItensProjecao_([{ descricao: 'Premiação 3 | Terceiro', valor: 2000 }],
+    ['Premiação 3 | Terceiro ']);
+  assert.equal(linhas[0].fixo, true);
+  assert.equal(c.grupoItemProjecao_(linhas[0]), 'premiacoes');
+  assert.equal(linhas[0].valor, 2000);
+});
+
+test('todos os itens do modelo mantêm valor e grupo ao salvar e recarregar; remoção persiste', () => {
+  const h = persistencia();
+  const todos = Array.from(h.b.modelo, (descricao, i) => ({ descricao, valor: (i + 1) * 12.5 }));
+  todos.push({ descricao: 'Serviço personalizado', valor: 123.45 });
+  const esperado = c.restaurarItensProjecao_(todos, h.b.modelo);
+  h.b.salvarProjecaoGastos({ usarSaldoCaixa: false, saldoInicial: 5000, itens: todos });
+  const recarregados = c.restaurarItensProjecao_(h.b.listarProjecaoGastos().itens, h.b.modelo);
+  assert.equal(recarregados.length, todos.length);
+  esperado.forEach((item, i) => {
+    assert.equal(recarregados[i].valor, item.valor);
+    assert.equal(recarregados[i].descricao, item.descricao);
+    assert.equal(c.grupoItemProjecao_(recarregados[i]), c.grupoItemProjecao_(item));
+  });
+  // Remove cada item por vez, como faz o botão da tabela (índice do array original).
+  todos.forEach((alvo, indice) => {
+    const restantes = todos.slice();
+    restantes.splice(indice, 1);
+    h.b.salvarProjecaoGastos({ usarSaldoCaixa: true, itens: restantes });
+    const salvo = h.b.listarProjecaoGastos();
+    assert.equal(salvo.itens.length, todos.length - 1);
+    assert(!salvo.itens.some(item => item.descricao === alvo.descricao));
+    assert.equal(h.documento().itens.length, restantes.length);
+  });
+  h.b.salvarProjecaoGastos({ usarSaldoCaixa: true, itens: [] });
+  assert.equal(h.b.listarProjecaoGastos().itens.length, 0);
+});
+
+test('preencher modelo após recarga não duplica nomes com espaços e mantém valores', () => {
+  const inicio = html.indexOf('    function preencherModeloProjecao_()');
+  const fim = html.indexOf('    function salvarProjecaoGastosDaTela_()', inicio);
+  const h = vm.createContext({
+    projecaoGastos: { itensFixos: ['Premiação 3 | Terceiro ', 'App iFut', 'App iFut '] },
+    projGastosLinhas: [{ descricao: 'Premiação 3 | Terceiro', valor: 2000, fixo: true }],
+    desenharLinhasProjecao_: () => {}, recalcularProjecao_: () => {},
+    chaveItemProjecao_: c.chaveItemProjecao_
+  });
+  vm.runInContext(html.slice(inicio, fim), h);
+  h.preencherModeloProjecao_();
+  h.preencherModeloProjecao_();
+  assert.equal(h.projGastosLinhas.length, 2);
+  assert.equal(h.projGastosLinhas[0].valor, 2000);
+});

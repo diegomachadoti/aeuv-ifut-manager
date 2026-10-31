@@ -4159,7 +4159,7 @@ const PROJECAO_GASTOS_ITENS_FIXOS = [
   'App iFut',
   'Premiação 1 | Campeão',
   'Premiação 2 | Vice',
-  'Premiação 3 | Terceiro ',
+  'Premiação 3 | Terceiro',
   'Premiação 4 | Quarto',
   'Artilheiro',
   'Goleiro',
