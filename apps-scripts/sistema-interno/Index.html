@@ -3046,6 +3046,7 @@
         <h1><?= config.associacao ?></h1>
         <p>Sistema Interno &middot; &Aacute;rea restrita da associa&ccedil;&atilde;o</p>
       </div>
+      <button type="button" class="sino-lembretes" id="sinoLembretes" title="Lembretes internos" aria-label="Abrir lembretes internos" aria-haspopup="dialog" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span class="sino-contagem" id="sinoContagem" hidden></span></button>
       <button type="button" class="alternar-tema" id="alternarTema" title="Ativar modo escuro" aria-label="Alternar tema claro/escuro"></button>
       <div class="usuario">
         <div class="inicial" id="inicial"></div>
@@ -3080,6 +3081,8 @@
       <div class="rodape-direitos">&copy; <?= new Date().getFullYear() ?> AEUV</div>
     </div>
   </footer>
+
+  <?!= include_('Lembretes') ?>
 
   <script>
     const CONFIG = <?!= JSON.stringify(config).replace(/</g, '\\u003c') ?>;

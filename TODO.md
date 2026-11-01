@@ -54,10 +54,12 @@
 - [✅] **TD16 — Concluída:** No projeto python hoje o "Relatorio Financeiro" e gerado local `download/financeiro`, precisamos quando for gerado fazer o upload tambem no drive.
   - Adicionar na funcionalidade "Financeiro e Prestação de Contas" talvez ter um botão na tela para abrir sempre o ultimo relatório gerado ou ter uma tela a parte com os reltorios financeiros gerados ver a a melhor forma.
 
-- [🚀] **TD17 — Pendente:** Adicionar um sininho de cotificacões e um local para cadastrar elas.
+- [✅] **TD17 — Concluída (publicação pendente):** Sino de lembretes no cabeçalho, com cadastro/edição/exclusão e conclusão de ocorrências, compartilhados por admin e diretoria.
+  - Publicar `WebApp.gs`, `Index.html` e o novo arquivo HTML `Lembretes.html` no Apps Script. O JSON `AEUV - Lembretes.json` é criado na pasta raiz do projeto na primeira alteração; leitores precisam de acesso à pasta e editores ao arquivo. Não foi executado no Drive durante a implementação.
+  - Recorrência única, mensal ou anual; antecedência configurável; sino conta próximos/atrasados. A conclusão avança recorrentes para a próxima data futura. Consulta ao entrar/abrir/Atualizar, sem gatilho, e-mail ou push.
   - Vencimento do domínio do site Renova em 6 de ago. de 2027): <https://manage.wix.com/dashboard/674f5ab4-5304-4677-8de2-217c92b3f48d/domain-settings?referralInfo=site-details-subscriptions-widget>.
     - Estender: <https://manage.wix.com/wix/api/domainStartRenew?metaSiteId=674f5ab4-5304-4677-8de2-217c92b3f48d&domainName=aeuv.org&referralAdditionalInfo=mydomains__domaininfotab>.
-  - Todo mes contador.
+  - Contador mensal já oferecido com data a definir: editar pelo sino e informar o próximo vencimento. Domínio anual oferecido em 06/08/2027, com antecedência de 30 dias e ambos os links abaixo.
 
 - [✅] **TD23 — Concluída (operacional):** Subir ao Drive e publicar os dados das punições retroativas:
   - `AEUV - Punicoes Retroativas.json` na pasta raiz do Drive do projeto (o Apps Script lê de lá) e manter a cópia em `downloads/sumulas/` (o Python lê de lá).

@@ -1,0 +1,165 @@
+<style>
+  .sino-lembretes { position: relative; width: 38px; height: 38px; flex: 0 0 38px; border: 1px solid rgba(255,255,255,.3); border-radius: 50%; background: rgba(255,255,255,.08); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+  .sino-lembretes[hidden] { display: none; }
+  .sino-lembretes svg { width: 20px; height: 20px; }
+  .sino-contagem { position: absolute; top: -5px; right: -5px; border-radius: 20px; padding: 1px 5px; background: var(--dourado); color: #14213d; font-size: 10px; font-weight: bold; }
+  .lembretes-dialog { width: min(720px, calc(100vw - 24px)); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow: auto; padding: 0; border: 1px solid var(--borda); border-radius: 14px; background: var(--fundo); color: var(--texto); }
+  .lembretes-dialog::backdrop { background: rgba(7,13,26,.65); backdrop-filter: blur(3px); }
+  .lembretes-topo { display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 2px solid var(--dourado); }
+  .lembretes-topo h2 { flex: 1; margin: 0; font-size: 18px; }
+  .lembretes-corpo { padding: 16px; }
+  .lembretes-lista { display: grid; gap: 12px; margin: 12px 0; }
+  .lembrete-card { border: 1px solid var(--borda); border-left: 4px solid var(--borda); border-radius: 10px; background: var(--superficie, #fff); padding: 14px; }
+  .lembrete-card.atrasado { border-left-color: #dc2626; }
+  .lembrete-card.proximo { border-left-color: var(--dourado); }
+  .lembrete-card h3 { margin: 0 0 6px; font-size: 15px; overflow-wrap: anywhere; }
+  .lembrete-card p { margin: 4px 0; font-size: 13px; }
+  .lembrete-form { margin-top: 16px; border-top: 1px solid var(--borda); padding-top: 16px; }
+  .lembrete-campos { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
+  .lembrete-campos .largo { grid-column: 1 / -1; }
+  .lembretes-dialog button, .lembretes-dialog input, .lembretes-dialog select { min-height: 44px; }
+  @media (max-width: 600px) {
+    .lembrete-campos { grid-template-columns: minmax(0, 1fr); }
+    .lembretes-corpo { padding: 12px; }
+    .lembretes-dialog .barra-acoes { flex-wrap: wrap; }
+    .lembretes-dialog .barra-acoes button { flex: 1 1 auto; }
+  }
+</style>
+<script>
+(function () {
+  let dados = null, dialog = null, carga = 0, salvando = false;
+  const el = id => document.getElementById(id);
+  const textoErro = erro => erro && erro.message ? erro.message : 'Consulta indisponível. Atualize e tente novamente.';
+  function sino() {
+    const n = dados ? dados.totalAvisos : 0;
+    el('sinoContagem').hidden = !n;
+    el('sinoContagem').textContent = n > 99 ? '99+' : String(n);
+    el('sinoLembretes').setAttribute('aria-label', 'Abrir lembretes internos: ' + n + ' próximo(s) ou atrasado(s)');
+  }
+  function consultar() {
+    const token = ++carga;
+    if (el('lembretesStatus')) el('lembretesStatus').textContent = 'Consultando lembretes...';
+    google.script.run.withSuccessHandler(function (r) {
+      if (token !== carga) return;
+      dados = r; sino(); desenhar();
+      if (el('lembretesStatus')) el('lembretesStatus').textContent = 'Compartilhados entre administração e diretoria. Não envia e-mail ou notificações fora do sistema.';
+    }).withFailureHandler(function (erro) {
+      if (token !== carga) return;
+      if (el('lembretesStatus')) el('lembretesStatus').textContent = textoErro(erro);
+      el('sinoLembretes').title = 'Consulta indisponível. Abra para tentar novamente.';
+    }).listarLembretes();
+  }
+  function desenhar() {
+    const area = el('lembretesLista');
+    if (!area || !dados) return;
+    const recorrencias = { unica: 'Uma vez', mensal: 'Mensal', anual: 'Anual' };
+    area.innerHTML = dados.itens.map(function (r) {
+      const data = r.data ? r.data.split('-').reverse().join('/') : 'Definir data';
+      const situacao = r.status === 'concluido' ? 'Concluído' : r.status === 'sem-data' ? 'Data a definir'
+        : r.dias < 0 ? 'Atrasado há ' + Math.abs(r.dias) + ' dia(s)' : r.dias === 0 ? 'Vence hoje' : 'Em ' + r.dias + ' dia(s)';
+      const link = (url, nome) => /^https:\/\/[^\s<>"']+$/i.test(url || '')
+        ? '<a class="botao-apoio" href="' + escapar(url) + '" target="_blank" rel="noopener noreferrer">' + nome + '</a>' : '';
+      return '<article class="lembrete-card ' + (['atrasado', 'proximo'].includes(r.status) ? r.status : '') + '">'
+        + '<h3>' + escapar(r.titulo) + '</h3><p><strong>' + escapar(situacao) + '</strong> · ' + escapar(data) + ' · ' + escapar(recorrencias[r.recorrencia]) + '</p>'
+        + (r.concluidoEm ? '<p class="apoio">Última conclusão: ' + escapar(r.concluidoEm.split('-').reverse().join('/')) + '</p>' : '')
+        + '<div class="barra-acoes">' + link(r.link, 'Abrir link') + link(r.linkExtra, 'Renovar / link adicional')
+        + '<button type="button" class="botao-apoio" data-editar="' + escapar(r.id) + '">Editar</button>'
+        + (r.data && r.status !== 'concluido' ? '<button type="button" class="botao-apoio" data-concluir="' + escapar(r.id) + '">Concluir ocorrência</button>' : '')
+        + '<button type="button" class="botao-apoio perigo" data-excluir="' + escapar(r.id) + '">Excluir</button></div></article>';
+    }).join('') || '<p class="apoio">Nenhum lembrete cadastrado. Use Novo lembrete.</p>';
+    area.querySelectorAll('[data-editar]').forEach(b => { b.onclick = () => { if (!salvando) formulario(b.dataset.editar); }; });
+    ['concluir', 'excluir'].forEach(function (acao) {
+      area.querySelectorAll('[data-' + acao + ']').forEach(function (b) {
+        b.onclick = function () {
+          if (salvando) return;
+          const id = b.getAttribute('data-' + acao);
+          const versao = dados.versao;
+          confirmarDialogo_({ titulo: acao === 'excluir' ? 'Excluir lembrete?' : 'Concluir ocorrência?',
+            mensagem: acao === 'excluir' ? 'Será removido para todos os usuários.' : 'A data dos recorrentes avança para a próxima ocorrência futura.',
+            confirmar: 'Confirmar', cancelar: 'Cancelar', perigo: acao === 'excluir' }).then(function (ok) {
+            if (ok && dialog) gravar({ acao, id, versao });
+          });
+        };
+      });
+    });
+  }
+  function formulario(id) {
+    if (!dados) { el('lembretesStatus').textContent = 'Aguarde a consulta ou clique em Atualizar.'; return; }
+    const versao = dados.versao;
+    const r = dados.itens.find(i => i.id === id) || { titulo: '', data: '', recorrencia: 'unica', antecedencia: 7, link: '', linkExtra: '' };
+    const area = el('lembreteFormulario');
+    function campo(c, rotulo, tipo, largo) {
+      if (tipo === 'date') {
+        return '<div class="fin-campo"><label for="lem-' + c + '">' + rotulo + ' — DD/MM/AAAA</label><input id="lem-' + c + '" '
+          + atributosDataHora_('date', r[c]) + '></div>';
+      }
+      return '<div class="fin-campo' + (largo ? ' largo' : '') + '"><label for="lem-' + c + '">' + rotulo + '</label><input id="lem-' + c + '" type="' + tipo + '" value="' + escapar(String(r[c])) + '"'
+        + (c === 'titulo' ? ' required maxlength="120"' : tipo === 'number' ? ' min="0" max="365" required' : tipo === 'url' ? ' maxlength="2048" placeholder="https://..."' : '') + '></div>';
+    }
+    area.innerHTML = '<form class="lembrete-form"><h3>' + (id ? 'Editar lembrete' : 'Novo lembrete') + '</h3><div class="lembrete-campos">'
+      + campo('titulo', 'Título', 'text', true) + campo('data', 'Próximo vencimento (opcional)', 'date', false)
+      + '<div class="fin-campo"><label for="lem-recorrencia">Recorrência</label><select id="lem-recorrencia">'
+      + [['unica', 'Uma vez'], ['mensal', 'Todo mês'], ['anual', 'Todo ano']].map(op => '<option value="' + op[0] + '"' + (r.recorrencia === op[0] ? ' selected' : '') + '>' + op[1] + '</option>').join('') + '</select></div>'
+      + campo('antecedencia', 'Avisar com antecedência (dias)', 'number', false) + campo('link', 'Link de consulta', 'url', true) + campo('linkExtra', 'Link adicional / renovação', 'url', true)
+      + '</div><p class="apoio">Sem data, fica como “a definir”. Para dia 29/30/31, meses mais curtos usam o último dia e depois retomam o dia original.</p>'
+      + '<div class="barra-acoes"><button type="submit" class="botao-principal">Salvar lembrete</button><button type="button" class="botao-apoio" id="lemCancelar">Cancelar edição</button></div></form>';
+    area.querySelector('form').onsubmit = function (e) {
+      e.preventDefault();
+      const item = {};
+      ['titulo', 'data', 'recorrencia', 'antecedencia', 'link', 'linkExtra'].forEach(c => { item[c] = el('lem-' + c).value; });
+      try {
+        item.data = lerDataFormulario_('lem-data');
+      } catch (erro) {
+        el('lembretesStatus').textContent = textoErro(erro);
+        el('lem-data').focus();
+        return;
+      }
+      gravar({ acao: 'salvar', id: id || '', item, versao });
+    };
+    el('lemCancelar').onclick = () => { area.innerHTML = ''; };
+    el('lem-titulo').focus();
+  }
+  function gravar(payload) {
+    if (salvando) return;
+    salvando = true; ++carga;
+    const origem = dialog;
+    mostrarOverlayGlobal_('Atualizando lembretes...');
+    const overlay = overlayGlobalAtual;
+    if (dialog && overlay) dialog.appendChild(overlay);
+    function concluir() { if (overlayGlobalAtual === overlay) removerOverlayGlobal_(); salvando = false; }
+    google.script.run.withSuccessHandler(function (r) {
+      concluir(); dados = r; sino();
+      if (origem !== dialog) return;
+      el('lembreteFormulario').innerHTML = ''; desenhar();
+      el('lembretesStatus').textContent = 'Lembretes atualizados.';
+    }).withFailureHandler(function (erro) {
+      concluir();
+      if (origem === dialog) el('lembretesStatus').textContent = textoErro(erro);
+    }).alterarLembretes(payload);
+  }
+  function abrir() {
+    if (dialog) return;
+    dialog = document.createElement('dialog');
+    dialog.className = 'lembretes-dialog';
+    dialog.setAttribute('aria-labelledby', 'lembretesTitulo');
+    dialog.innerHTML = '<div class="lembretes-topo"><h2 id="lembretesTitulo">Lembretes internos</h2><button type="button" class="botao-apoio" id="lembretesFechar" aria-label="Fechar lembretes">×</button></div>'
+      + '<div class="lembretes-corpo"><p class="apoio" id="lembretesStatus" role="status" aria-live="polite"></p><div class="barra-acoes"><button type="button" class="botao-principal" id="lembretesNovo">Novo lembrete</button><button type="button" class="botao-apoio" id="lembretesAtualizar">Atualizar</button></div>'
+      + '<div id="lembretesLista" class="lembretes-lista"></div><div id="lembreteFormulario"></div></div>';
+    document.body.appendChild(dialog);
+    dialog.addEventListener('close', function () { dialog.remove(); dialog = null; el('sinoLembretes').focus(); });
+    el('lembretesFechar').onclick = () => { if (!salvando) dialog.close(); };
+    dialog.addEventListener('cancel', e => { if (salvando) e.preventDefault(); });
+    el('lembretesNovo').onclick = () => { if (!salvando) formulario(''); };
+    el('lembretesAtualizar').onclick = () => { if (!salvando) consultar(); };
+    dialog.showModal(); desenhar(); consultar();
+  }
+  window.setTimeout(function () {
+    if (CONFIG.usuario && ['admin', 'diretoria'].includes(CONFIG.usuario.perfil)) {
+      el('sinoLembretes').hidden = false;
+      el('sinoLembretes').addEventListener('click', abrir);
+      consultar();
+    }
+  }, 0);
+})();
+</script>
+

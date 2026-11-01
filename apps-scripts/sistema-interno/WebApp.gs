@@ -14156,6 +14156,140 @@ function abaAtas_() {
   return aba;
 }
 
+/* Lembretes internos compartilhados (não envia e-mail nem notificações push). */
+function exigirLembretes_() {
+  const s = identificarUsuario_();
+  if (!s.autorizado || !s.usuario || ['admin', 'diretoria'].indexOf(s.usuario.perfil) < 0) {
+    throw new Error('Somente administração e diretoria podem acessar os lembretes.');
+  }
+  return s;
+}
+
+function dataLembrete_(texto) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(texto))) throw new Error('Informe uma data válida.');
+  const d = new Date(texto + 'T00:00:00Z');
+  if (!isFinite(d.getTime()) || d.toISOString().slice(0, 10) !== texto) throw new Error('Informe uma data válida.');
+  return d;
+}
+
+function hojeLembretes_() {
+  return Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'yyyy-MM-dd');
+}
+
+function modeloLembretes_() {
+  return { versao: 0, itens: [
+    { id: 'dominio-aeuv', titulo: 'Renovação do domínio aeuv.org', data: '2027-08-06', ancora: '2027-08-06', recorrencia: 'anual', antecedencia: 30,
+      link: 'https://manage.wix.com/dashboard/674f5ab4-5304-4677-8de2-217c92b3f48d/domain-settings?referralInfo=site-details-subscriptions-widget',
+      linkExtra: 'https://manage.wix.com/wix/api/domainStartRenew?metaSiteId=674f5ab4-5304-4677-8de2-217c92b3f48d&domainName=aeuv.org&referralAdditionalInfo=mydomains__domaininfotab', concluidoEm: '' },
+    { id: 'contador-mensal', titulo: 'Contador — pagamento mensal', data: '', ancora: '', recorrencia: 'mensal', antecedencia: 7, link: '', linkExtra: '', concluidoEm: '' }
+  ] };
+}
+
+function arquivoLembretes_() {
+  const arquivos = pastaRaizProjeto_().getFilesByName('AEUV - Lembretes.json');
+  if (!arquivos.hasNext()) return null;
+  const arquivo = arquivos.next();
+  if (arquivos.hasNext()) throw new Error('Existem arquivos de lembretes duplicados. Contate a administração.');
+  return arquivo;
+}
+
+function lerLembretesDoc_() {
+  const arquivo = arquivoLembretes_();
+  if (!arquivo) return modeloLembretes_();
+  const doc = JSON.parse(arquivo.getBlob().getDataAsString('UTF-8'));
+  if (!doc || !Array.isArray(doc.itens) || !Number.isSafeInteger(doc.versao)) throw new Error('Cadastro de lembretes inválido; arquivo preservado.');
+  return doc;
+}
+
+function validarLembrete_(item) {
+  const titulo = String(item.titulo || '').trim();
+  if (!titulo || titulo.length > 120) throw new Error('Informe um título de até 120 caracteres.');
+  if (['unica', 'mensal', 'anual'].indexOf(item.recorrencia) < 0) throw new Error('Recorrência inválida.');
+  const data = String(item.data || '');
+  if (data) dataLembrete_(data);
+  const antecedencia = Number(item.antecedencia);
+  if (!Number.isInteger(antecedencia) || antecedencia < 0 || antecedencia > 365) throw new Error('Antecedência deve ser entre 0 e 365 dias.');
+  function linkSeguro(valor) {
+    const link = String(valor || '').trim();
+    if (link && (link.length > 2048 || !/^https:\/\/[^\s<>"']+$/i.test(link))) throw new Error('Use um link HTTPS válido.');
+    return link;
+  }
+  return { titulo: titulo, data: data, recorrencia: item.recorrencia, antecedencia: antecedencia,
+    link: linkSeguro(item.link), linkExtra: linkSeguro(item.linkExtra) };
+}
+
+function respostaLembretes_(doc) {
+  const hoje = hojeLembretes_();
+  const itens = doc.itens.map(function (item) {
+    const r = Object.assign({}, item);
+    r.dias = item.data ? Math.round((dataLembrete_(item.data) - dataLembrete_(hoje)) / 86400000) : null;
+    r.status = item.recorrencia === 'unica' && item.concluidoEm ? 'concluido'
+      : !item.data ? 'sem-data' : r.dias < 0 ? 'atrasado' : r.dias <= item.antecedencia ? 'proximo' : 'programado';
+    return r;
+  });
+  itens.sort(function (a, b) { return (a.data || '9999').localeCompare(b.data || '9999'); });
+  return { versao: doc.versao, itens: itens, totalAvisos: itens.filter(function (r) { return ['atrasado', 'proximo'].indexOf(r.status) >= 0; }).length };
+}
+
+function listarLembretes() {
+  exigirLembretes_();
+  return respostaLembretes_(lerLembretesDoc_());
+}
+
+function proximaDataLembrete_(item, hoje) {
+  const base = dataLembrete_(item.ancora || item.data);
+  const limite = item.data > hoje ? item.data : hoje;
+  const atual = dataLembrete_(limite);
+  let ano = atual.getUTCFullYear(), mes = item.recorrencia === 'mensal' ? atual.getUTCMonth() : base.getUTCMonth();
+  for (let i = 0; i < 14; i++) {
+    const dia = Math.min(base.getUTCDate(), new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate());
+    const candidato = new Date(Date.UTC(ano, mes, dia)).toISOString().slice(0, 10);
+    if (candidato > limite) return candidato;
+    if (item.recorrencia === 'mensal') { mes++; if (mes > 11) { mes = 0; ano++; } }
+    else ano++;
+  }
+  throw new Error('Não foi possível calcular a próxima ocorrência.');
+}
+
+function alterarLembretes(payload) {
+  const sessao = exigirLembretes_();
+  const p = payload || {};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    exigirLembretes_();
+    const doc = lerLembretesDoc_();
+    if (p.versao !== doc.versao) throw new Error('Os lembretes foram alterados por outra pessoa. Atualize antes de salvar.');
+    const indice = doc.itens.findIndex(function (r) { return r.id === p.id; });
+    if (p.acao === 'salvar') {
+      if (p.id && indice < 0) throw new Error('Lembrete não encontrado. Atualize.');
+      if (indice < 0 && doc.itens.length >= 100) throw new Error('Limite de 100 lembretes atingido.');
+      const anterior = indice >= 0 ? doc.itens[indice] : null;
+      const r = validarLembrete_(p.item || {});
+      r.id = anterior ? anterior.id : Utilities.getUuid();
+      r.ancora = anterior && anterior.data === r.data && anterior.recorrencia === r.recorrencia ? anterior.ancora : r.data;
+      r.concluidoEm = anterior && anterior.data === r.data && anterior.recorrencia === r.recorrencia ? anterior.concluidoEm : '';
+      if (indice >= 0) doc.itens[indice] = r; else doc.itens.push(r);
+    } else if (p.acao === 'concluir') {
+      if (indice < 0) throw new Error('Lembrete não encontrado.');
+      const r = doc.itens[indice];
+      if (!r.data) throw new Error('Defina a data antes de concluir.');
+      r.concluidoEm = hojeLembretes_();
+      if (r.recorrencia !== 'unica') r.data = proximaDataLembrete_(r, r.concluidoEm);
+    } else if (p.acao === 'excluir') {
+      if (indice < 0) throw new Error('Lembrete não encontrado.');
+      doc.itens.splice(indice, 1);
+    } else throw new Error('Ação inválida.');
+    doc.versao++;
+    doc.atualizadoPor = sessao.email;
+    const texto = JSON.stringify(doc);
+    const arquivo = arquivoLembretes_();
+    if (arquivo) arquivo.setContent(texto);
+    else pastaRaizProjeto_().createFile(Utilities.newBlob(texto, 'application/json', 'AEUV - Lembretes.json'));
+    return respostaLembretes_(doc);
+  } finally { lock.releaseLock(); }
+}
+
 function pastaAtas_() {
   const propriedades = PropertiesService.getScriptProperties();
   const id = propriedades.getProperty(CONFIG.atas.chavePasta);
