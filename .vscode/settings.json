@@ -1,0 +1,8 @@
+{
+  // Interpretador Python do projeto: o ambiente virtual .venv (onde estão
+  // instaladas as dependências como "requests"). Com isto, o Kiro/VS Code
+  // ativa o venv automaticamente nos terminais novos, igual ao PyCharm.
+  "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+  "python.terminal.activateEnvironment": true,
+  "python.terminal.activateEnvInCurrentTerminal": true
+}

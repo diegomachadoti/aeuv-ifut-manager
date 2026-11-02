@@ -4245,13 +4245,17 @@ function listarProjecaoGastos() {
   const usarSaldoCaixa = doc.usarSaldoCaixa === false ? false : true;
   let saldoInicial = Number(doc.saldoInicial);
   if (!isFinite(saldoInicial)) saldoInicial = 0;
+  // "Considerar pendentes" (valores a receber) na base da projeção. Padrão: sim.
+  const considerarPendentes = doc.considerarPendentes === false ? false : true;
   return {
     saldoAtual: financeiro.saldoAtual,
     totalEntradas: financeiro.totalEntradas,
     totalSaidas: financeiro.totalSaidas,
+    totalPendente: financeiro.totalPendente,
     // Quando usarSaldoCaixa, a base é o saldo real; senão, o valor manual salvo.
     usarSaldoCaixa: usarSaldoCaixa,
     saldoInicial: usarSaldoCaixa ? financeiro.saldoAtual : saldoInicial,
+    considerarPendentes: considerarPendentes,
     itens: normalizarItensProjecao_(doc.itens),
     itensFixos: PROJECAO_GASTOS_ITENS_FIXOS,
     atualizadoEm: String(doc.atualizadoEm || ''),
@@ -4273,6 +4277,7 @@ function salvarProjecaoGastos(payload) {
   try {
     const doc = lerProjecaoGastosDoc_();
     doc.usarSaldoCaixa = dados.usarSaldoCaixa === false ? false : true;
+    doc.considerarPendentes = dados.considerarPendentes === false ? false : true;
     let saldoInicial = Number(dados.saldoInicial);
     if (!isFinite(saldoInicial) || saldoInicial < 0) saldoInicial = 0;
     doc.saldoInicial = Math.round(saldoInicial * 100) / 100;
@@ -4298,9 +4303,12 @@ function gerarPdfProjecaoGastos(payload) {
   const dados = payload || {};
   const financeiro = calcularSaldoFinanceiro_();
   const usarSaldoCaixa = dados.usarSaldoCaixa === false ? false : true;
+  const considerarPendentes = dados.considerarPendentes === false ? false : true;
   let saldoInicial = Number(dados.saldoInicial);
   if (!isFinite(saldoInicial) || saldoInicial < 0) saldoInicial = 0;
-  const base = usarSaldoCaixa ? financeiro.saldoAtual : saldoInicial;
+  const saldoCaixa = usarSaldoCaixa ? financeiro.saldoAtual : saldoInicial;
+  const pendentes = considerarPendentes ? financeiro.totalPendente : 0;
+  const base = saldoCaixa + pendentes;
   const itens = normalizarItensProjecao_(dados.itens);
   const descritivo = String(dados.descritivo || '').replace(/\s+/g, ' ').trim().slice(0, 200);
 
@@ -4357,10 +4365,13 @@ function gerarPdfProjecaoGastos(payload) {
     + '<div class="meta">Emitida em ' + e(emitidoEm) + '</div>'
     + (descritivo ? '<div class="descritivo"><strong>Referência:</strong> ' + e(descritivo) + '</div>' : '')
     + '<div class="cards">'
-    + '<div class="card"><div class="rot">' + (usarSaldoCaixa ? 'Saldo em caixa (base)' : 'Saldo inicial (base)') + '</div><div class="val" style="color:#14213d">' + e(moeda(base)) + '</div></div>'
+    + '<div class="card"><div class="rot">' + (usarSaldoCaixa ? 'Saldo em caixa' : 'Saldo inicial') + '</div><div class="val" style="color:#14213d">' + e(moeda(saldoCaixa)) + '</div></div>'
+    + (considerarPendentes ? '<div class="card"><div class="rot">Pendentes a receber</div><div class="val" style="color:#7a5200">' + e(moeda(pendentes)) + '</div></div>' : '')
     + '<div class="card"><div class="rot">Total de saídas previstas</div><div class="val" style="color:#b3261e">' + e(moeda(totalSaidas)) + '</div></div>'
     + '<div class="card"><div class="rot">Saldo projetado (resto)</div><div class="val" style="color:' + corResto + '">' + e(moeda(resto)) + '</div></div>'
     + '</div>'
+    + '<p class="meta">Base da projeção: ' + e(moeda(saldoCaixa))
+    + (considerarPendentes ? ' (saldo em caixa) + ' + e(moeda(pendentes)) + ' (pendentes a receber) = ' + e(moeda(base)) : '') + '.</p>'
     + '<table><thead><tr><th>Saída prevista</th><th class="v">Valor</th></tr></thead>'
     + '<tbody>' + linhasHtml + '</tbody>'
     + '<tfoot><tr><td>Total de saídas</td><td class="v">' + e(moeda(totalSaidas)) + '</td></tr>'
@@ -14875,14 +14886,22 @@ function calcularSaldoFinanceiro_() {
   const valores = aba.getDataRange().getValues();
   let totalEntradas = 0;
   let totalSaidas = 0;
+  let totalPendente = 0;
   valores.slice(1).forEach(function (linha) {
     const valNum = parseFloat(String(linha[6] || 0).replace(',', '.')) || 0;
     const tipoLinha = String(linha[2] || '').trim().toLowerCase();
-    if (tipoLinha === 'pendente') return; // não entra nos totais
+    // "Pendente" é controle interno: não entra no saldo, mas é somado à parte
+    // (valores a receber/regularizar), usado no card e na projeção.
+    if (tipoLinha === 'pendente') { totalPendente += valNum; return; }
     if (tipoLinha === 'entrada') totalEntradas += valNum;
     else totalSaidas += valNum;
   });
-  return { totalEntradas: totalEntradas, totalSaidas: totalSaidas, saldoAtual: totalEntradas - totalSaidas };
+  return {
+    totalEntradas: totalEntradas,
+    totalSaidas: totalSaidas,
+    totalPendente: totalPendente,
+    saldoAtual: totalEntradas - totalSaidas
+  };
 }
 
 function listarFinanceiro() {
@@ -14896,6 +14915,7 @@ function listarFinanceiro() {
 
   let totalEntradas = 0;
   let totalSaidas = 0;
+  let totalPendente = 0;
 
   const lancamentos = valores.slice(1).map(function (linha) {
     const valNum = parseFloat(String(linha[6] || 0).replace(',', '.')) || 0;
@@ -14905,12 +14925,12 @@ function listarFinanceiro() {
 
     // Lançamentos "Pendente" não entram nos totais nem nos relatórios;
     // servem apenas como controle interno de pagamentos a regularizar.
-    if (!ehPendente) {
-      if (ehEntrada) {
-        totalEntradas += valNum;
-      } else {
-        totalSaidas += valNum;
-      }
+    if (ehPendente) {
+      totalPendente += valNum;
+    } else if (ehEntrada) {
+      totalEntradas += valNum;
+    } else {
+      totalSaidas += valNum;
     }
 
     return {
@@ -14935,6 +14955,7 @@ function listarFinanceiro() {
     lancamentos: lancamentos,
     totalEntradas: totalEntradas,
     totalSaidas: totalSaidas,
+    totalPendente: totalPendente,
     saldoAtual: totalEntradas - totalSaidas,
     categoriasEntrada: FINANCEIRO_CATEGORIAS_ENTRADA,
     categoriasSaida: FINANCEIRO_CATEGORIAS_SAIDA,
