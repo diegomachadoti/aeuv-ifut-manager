@@ -212,9 +212,24 @@
     .upload-ajuda { display: block; font-weight: 400; color: #647089; }
     .arquivo-nome { display: block; margin-top: 8px; font-weight: 700; color: var(--sucesso); }
 
-    .mensagem { display: none; padding: 14px; border-radius: 9px; margin-top: 14px; font-weight: 700; }
-    .mensagem.sucesso { display: block; background: #dcfae6; color: var(--sucesso); }
-    .mensagem.erro { display: block; background: #fee4e2; color: var(--perigo); }
+    /* Caixa de mensagem (erro/sucesso): ícone à esquerda, barra de destaque e
+       respiro, para o alerta ficar mais claro e legível. */
+    .mensagem {
+      display: none; margin-top: 16px; padding: 14px 16px; border-radius: 10px;
+      font-weight: 600; line-height: 1.5;
+    }
+    .mensagem.sucesso, .mensagem.erro {
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    .mensagem::before { flex: 0 0 auto; font-size: 18px; line-height: 1.4; }
+    .mensagem.sucesso {
+      background: #ecfdf3; color: #065f46; border: 1px solid #a7f3d0; border-left: 4px solid var(--sucesso);
+    }
+    .mensagem.sucesso::before { content: '✅'; }
+    .mensagem.erro {
+      background: #fef3f2; color: #912018; border: 1px solid #fecdca; border-left: 4px solid var(--perigo);
+    }
+    .mensagem.erro::before { content: '⚠️'; }
     .mensagem .botao-txt {
       display: inline-block;
       margin-top: 10px;
@@ -226,6 +241,54 @@
       font-weight: bold;
     }
     .mensagem .botao-txt:hover { background: #0c1631; }
+
+    /* Campo com erro de validação: borda vermelha para apontar o que corrigir. */
+    input.campo-invalido, select.campo-invalido {
+      border-color: var(--perigo);
+      outline: 3px solid rgba(180, 35, 24, .18);
+    }
+
+    /* Modal de confirmação após o envio (centralizado, padronizado com a Súmula Digital). */
+    .modal-sucesso {
+      position: fixed; inset: 0; z-index: 60;
+      background: rgba(20, 33, 61, .55);
+      display: grid; place-items: center; padding: 16px;
+    }
+    .modal-sucesso[hidden] { display: none; }
+    .modal-sucesso-caixa {
+      background: #fff; border-radius: 14px; padding: 28px 28px 24px;
+      width: 100%; max-width: 440px; text-align: center;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, .25);
+    }
+    .modal-sucesso-icone { font-size: 44px; line-height: 1; }
+    .modal-sucesso-caixa h2 { margin: 10px 0 6px; font-size: 20px; color: var(--sucesso); }
+    .modal-sucesso-texto { margin: 0 0 16px; color: #475467; font-size: 14px; line-height: 1.5; }
+    .modal-sucesso-protocolo {
+      background: #f4f6fb; border: 1px solid var(--borda); border-radius: 10px;
+      padding: 10px 14px; margin: 0 0 18px;
+    }
+    .modal-sucesso-protocolo .rot {
+      display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .4px;
+      color: #667085; font-weight: bold; margin-bottom: 4px;
+    }
+    .modal-sucesso-protocolo .linha { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+    .modal-sucesso-protocolo strong { font-size: 16px; color: var(--azul); overflow-wrap: anywhere; }
+    .modal-sucesso-protocolo .copiar {
+      border: 1px solid var(--azul); background: #fff; color: var(--azul);
+      border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: bold; cursor: pointer; min-height: 0;
+    }
+    .modal-sucesso-protocolo .copiar:hover { background: var(--azul); color: #fff; }
+    .modal-sucesso-acoes { display: flex; flex-direction: column; gap: 10px; }
+    .modal-sucesso-acoes .botao-txt {
+      display: block; padding: 12px 18px; border-radius: 8px;
+      background: var(--azul); color: #fff; border: 0; font-weight: bold; cursor: pointer;
+    }
+    .modal-sucesso-acoes .botao-txt:hover { background: #0c1631; }
+    .modal-sucesso-acoes .botao-sec {
+      padding: 10px 16px; border-radius: 8px; border: 1px solid var(--borda);
+      background: #fff; color: var(--azul); font-weight: bold; cursor: pointer; min-height: 0;
+    }
+    .modal-sucesso-acoes .botao-sec:hover { background: var(--azul-claro); }
     .contador { margin-left: auto; align-self: center; font-size: 13px; color: #596579; }
 
     /* Carregando: mesmo padrao visual usado nos demais projetos da AEUV
@@ -336,6 +399,26 @@
       </div>
       <p class="rotulo">Enviando a inscrição</p>
       <div class="barra"><span></span></div>
+    </div>
+  </div>
+
+  <div class="modal-sucesso" id="modalSucesso" role="dialog" aria-modal="true" aria-labelledby="modalSucessoTitulo" hidden>
+    <div class="modal-sucesso-caixa">
+      <div class="modal-sucesso-icone" aria-hidden="true">✅</div>
+      <h2 id="modalSucessoTitulo">Inscrição enviada com sucesso!</h2>
+      <p class="modal-sucesso-texto" id="modalSucessoTexto">Guarde o protocolo. Baixe o arquivo TXT para seus registros.</p>
+      <div class="modal-sucesso-protocolo">
+        <span class="rot">Protocolo</span>
+        <div class="linha">
+          <strong id="modalSucessoProtocolo">—</strong>
+          <button type="button" class="copiar" id="modalSucessoCopiar" title="Copiar protocolo">Copiar</button>
+        </div>
+      </div>
+      <div class="modal-sucesso-acoes">
+        <button type="button" class="botao-txt" id="modalSucessoTxt">📄 Baixar resultado em TXT</button>
+        <button type="button" class="botao-sec" id="modalSucessoNova">Enviar outra inscrição</button>
+        <button type="button" class="botao-sec" id="modalSucessoFechar">Fechar</button>
+      </div>
     </div>
   </div>
 
@@ -624,6 +707,7 @@
 
     formulario.addEventListener('input', evento => {
       evento.target.setCustomValidity('');
+      evento.target.classList.remove('campo-invalido');
       if (evento.target.dataset.campo === 'nascimento') {
         evento.target.value = aplicarMascaraData(evento.target.value);
         validarDataNascimento(evento.target);
@@ -671,6 +755,105 @@
       }
 
       mensagem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    /** Marca um campo como inválido: borda vermelha, foco e rolagem até ele. */
+    function marcarCampoInvalido(campo, texto) {
+      if (campo) {
+        campo.classList.add('campo-invalido');
+        campo.focus({ preventScroll: true });
+        campo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      mostrarMensagem(texto, 'erro');
+    }
+
+    function limparCamposInvalidos() {
+      formulario.querySelectorAll('.campo-invalido').forEach(function (c) { c.classList.remove('campo-invalido'); });
+    }
+
+    /**
+     * Validações do FRONT que o navegador não cobre sozinho (ex.: CPF precisa
+     * de 11 dígitos). Aponta o campo exato em vez de só mostrar uma faixa de
+     * erro genérica. Retorna true quando está tudo certo.
+     */
+    function validarInscricaoAntesDeEnviar() {
+      limparCamposInvalidos();
+      const linhas = [...tbody.querySelectorAll('tr')];
+      for (let i = 0; i < linhas.length; i++) {
+        const numero = i + 1;
+        const linha = linhas[i];
+        const acao = linha.querySelector('[data-campo="acao"]');
+        const cpf = linha.querySelector('[data-campo="cpf"]');
+        const nome = linha.querySelector('[data-campo="nome"]');
+        const ehInclusao = acao && acao.value === 'Inclusao';
+
+        // Nome completo: exige pelo menos nome + sobrenome, cada um com 2+ letras
+        // (evita cadastrar só o primeiro nome). Vale para todas as ações.
+        if (nome) {
+          const partes = String(nome.value || '').trim().split(/\s+/).filter(function (p) {
+            return p.replace(/[^A-Za-zÀ-ÿ]/g, '').length >= 2;
+          });
+          if (partes.length < 2) {
+            marcarCampoInvalido(nome, 'Informe o nome completo (nome e sobrenome) na linha ' + numero + '.');
+            return false;
+          }
+        }
+
+        if (cpf && !cpf.disabled) {
+          const digitos = String(cpf.value || '').replace(/\D/g, '');
+          // Inclusão: CPF obrigatório com 11 dígitos.
+          if (ehInclusao && digitos.length !== 11) {
+            marcarCampoInvalido(cpf, 'Informe um CPF com 11 dígitos na linha ' + numero + '.');
+            return false;
+          }
+          // Remoção/Portabilidade: CPF é opcional, mas se preenchido deve ter 11 dígitos.
+          if (!ehInclusao && digitos.length > 0 && digitos.length !== 11) {
+            marcarCampoInvalido(cpf, 'O CPF informado na linha ' + numero + ' deve ter 11 dígitos (ou deixe em branco).');
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    /**
+     * Confirmação de envio num modal central (mesmo padrão da Súmula Digital):
+     * protocolo em destaque, copiar, baixar TXT e enviar outra inscrição.
+     */
+    function mostrarModalSucessoInscricao(resultado) {
+      const modal = document.getElementById('modalSucesso');
+      if (!modal) {
+        mostrarMensagem('Inscrição enviada com sucesso! Protocolo ' + resultado.protocolo
+          + '. ' + resultado.quantidade + ' pessoa(s).', 'sucesso',
+          { rotulo: 'Baixar resultado em TXT', aoClicar: function () {
+            baixarArquivoTxt(resultado.arquivoTxtNome, resultado.arquivoTxtConteudo); } });
+        return;
+      }
+      document.getElementById('modalSucessoProtocolo').textContent = resultado.protocolo || '—';
+      document.getElementById('modalSucessoTexto').textContent =
+        'Foram registradas ' + resultado.quantidade + ' pessoa(s). Guarde o protocolo e baixe o arquivo TXT para seus registros.';
+      modal.hidden = false;
+
+      const copiar = document.getElementById('modalSucessoCopiar');
+      copiar.textContent = 'Copiar';
+      copiar.onclick = function () {
+        const texto = resultado.protocolo || '';
+        function ok() { copiar.textContent = 'Copiado!'; setTimeout(function () { copiar.textContent = 'Copiar'; }, 2000); }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(texto).then(ok, function () {});
+        } else {
+          const t = document.createElement('textarea');
+          t.value = texto; document.body.appendChild(t); t.select();
+          try { document.execCommand('copy'); ok(); } catch (e) {}
+          t.remove();
+        }
+      };
+
+      document.getElementById('modalSucessoTxt').onclick = function () {
+        baixarArquivoTxt(resultado.arquivoTxtNome, resultado.arquivoTxtConteudo);
+      };
+      document.getElementById('modalSucessoFechar').onclick = function () { modal.hidden = true; };
+      document.getElementById('modalSucessoNova').onclick = function () { window.location.reload(); };
     }
 
     function baixarArquivoTxt(nome, conteudo) {
@@ -793,6 +976,13 @@
     formulario.addEventListener('submit', async evento => {
       evento.preventDefault();
       mensagem.className = 'mensagem';
+
+      // Validações do front que o navegador não cobre (ex.: CPF com 11 dígitos):
+      // apontam o campo exato antes de enviar ao servidor.
+      if (!validarInscricaoAntesDeEnviar()) {
+        return;
+      }
+
       botaoEnviar.disabled = true;
       botaoEnviar.textContent = 'Enviando...';
       alternarCarregando(true);
@@ -811,23 +1001,9 @@
       google.script.run
         .withSuccessHandler(resultado => {
           alternarCarregando(false);
-          mostrarMensagem(
-            'Formulário enviado com sucesso! Guarde o protocolo ' + resultado.protocolo +
-            '. Foram registradas ' + resultado.quantidade + ' pessoa(s). Baixe o arquivo TXT para seus registros.',
-            'sucesso',
-            {
-              rotulo: 'Baixar resultado em TXT',
-              aoClicar: function () {
-                baixarArquivoTxt(resultado.arquivoTxtNome, resultado.arquivoTxtConteudo);
-              }
-            }
-          );
-          formulario.reset();
-          document.getElementById('arquivoNome').textContent = '';
-          tbody.innerHTML = '';
-          adicionarLinha();
           botaoEnviar.disabled = false;
           botaoEnviar.textContent = 'Enviar inscrição';
+          mostrarModalSucessoInscricao(resultado);
         })
         .withFailureHandler(erro => {
           mostrarMensagem(erro.message || 'Não foi possível enviar o formulário. Tente novamente.', 'erro');

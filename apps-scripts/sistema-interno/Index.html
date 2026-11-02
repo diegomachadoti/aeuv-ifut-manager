@@ -9460,6 +9460,11 @@
       finalSinalizado: false
     };
 
+    // Mantém o overlay global aceso durante uma exclusão de solicitação até a
+    // lista recarregar de fato (consulta autoritativa concluída). Sem isto a
+    // tela parece "não fazer nada" após confirmar a exclusão.
+    let solicitacoesOverlayExclusao_ = false;
+
     function estadoVisualSolicitacoesVazio_() {
       return {
         busca: '',
@@ -9593,6 +9598,11 @@
           ? 'Não foi possível conferir os dados atuais. Exibindo somente o histórico processado da pré-carga; tente Atualizar novamente.'
           : 'Exibindo solicitações processadas da pré-carga enquanto os dados atuais são conferidos.';
       } else if (final.estado === 'falha' && snapshot.estado !== 'pendente') {
+        // A recarga falhou: libera o overlay da exclusão para não travar a tela.
+        if (solicitacoesOverlayExclusao_) {
+          solicitacoesOverlayExclusao_ = false;
+          removerOverlayGlobal_();
+        }
         statusCargaSolicitacoes_(final.erro || 'Não foi possível consultar as solicitações.', 'erro');
         return;
       } else {
@@ -9613,6 +9623,11 @@
       if (final.estado === 'sucesso' && !carga.finalSinalizado) {
         carga.finalSinalizado = true;
         sinalizarPerformanceSolicitacoes_('final-autoritativo', token);
+      }
+      // Lista autoritativa já desenhada: pode liberar o overlay da exclusão.
+      if (final.estado === 'sucesso' && solicitacoesOverlayExclusao_) {
+        solicitacoesOverlayExclusao_ = false;
+        removerOverlayGlobal_();
       }
     }
 
@@ -9886,6 +9901,65 @@
           evento.stopPropagation();
         });
       });
+
+      conteudo.querySelectorAll('#linhasSolicitacoes .acao-excluir-solicitacao').forEach(function (botao) {
+        botao.addEventListener('click', function (evento) {
+          evento.stopPropagation();
+          excluirSolicitacaoDaTela_(botao);
+        });
+      });
+    }
+
+    /**
+     * Exclui uma solicitação (só admin): confirma no pop-up, chama o servidor
+     * e recarrega a tela. A solicitação vai para a pasta "Excluídos" do Drive.
+     */
+    function excluirSolicitacaoDaTela_(botao) {
+      if (!botao || botao.disabled) return;
+      const arquivo = botao.dataset.arquivo;
+
+      confirmarDialogo_({
+        origemFoco: botao,
+        titulo: 'Excluir solicitação',
+        mensagem: 'A solicitação será movida para a pasta "Excluídos" e sairá desta lista. '
+          + 'Use apenas para pedidos enviados por engano ou duplicados. Deseja continuar?',
+        confirmar: 'Excluir',
+        cancelar: 'Cancelar',
+        perigo: true
+      }).then(function (ok) {
+        if (!ok || moduloAtual !== 'solicitacoes') return;
+
+        botao.disabled = true;
+        // Loading padrão do sistema; permanece aceso até a lista recarregar.
+        solicitacoesOverlayExclusao_ = true;
+        mostrarOverlayGlobal_('Excluindo solicitação...');
+
+        google.script.run
+          .withSuccessHandler(function () {
+            if (moduloAtual !== 'solicitacoes') {
+              // Saiu da tela: não há lista para recarregar, libera o overlay aqui.
+              if (solicitacoesOverlayExclusao_) {
+                solicitacoesOverlayExclusao_ = false;
+                removerOverlayGlobal_();
+              }
+              return;
+            }
+            // Recarrega a lista; o overlay sai quando a consulta autoritativa
+            // terminar (em renderizarCargaSolicitacoes_).
+            abrirModulo('solicitacoes');
+          })
+          .withFailureHandler(function (erro) {
+            solicitacoesOverlayExclusao_ = false;
+            removerOverlayGlobal_();
+            if (botao) botao.disabled = false;
+            confirmarDialogo_({
+              titulo: 'Não foi possível excluir',
+              mensagem: erro && erro.message ? erro.message : String(erro),
+              confirmar: 'Fechar', cancelar: 'Fechar', perigo: false
+            });
+          })
+          .excluirSolicitacao(arquivo);
+      });
     }
 
     /**
@@ -9968,12 +10042,20 @@
         return '<span>' + escapar(item[0]) + ': <strong>' + escapar(item[1]) + '</strong></span>';
       }).join('');
 
+      // Excluir: só admin e só solicitações ainda não processadas (Aguardando/Falha).
+      const podeExcluirEsta = solicitacoes.podeExcluir && registro.situacao !== 'Processada';
+      const botaoExcluir = podeExcluirEsta
+        ? '<button type="button" class="botao-apoio perigo acao-excluir-solicitacao" data-nao-abre="1" '
+          + 'data-arquivo="' + escapar(registro.arquivoNome) + '" title="Excluir solicitação">🗑️ Excluir</button>'
+        : '';
+
       const links = '<div class="barra-acoes" style="margin-top:12px;">'
         + (registro.comprovanteUrl
           ? '<a class="botao-apoio" href="' + escapar(registro.comprovanteUrl) + '" target="_blank" rel="noopener">Comprovante PIX</a>'
           : '<span class="equipe-dado">Sem comprovante anexado</span>')
         + '<a class="botao-apoio" href="' + escapar(registro.arquivoUrl) + '" target="_blank" rel="noopener">Abrir arquivo</a>'
         + linksResultado(registro)
+        + botaoExcluir
         + '</div>';
 
       const pessoas = (registro.pessoas || []).map(function (p) {

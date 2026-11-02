@@ -303,6 +303,56 @@
       background: #0c1631;
     }
 
+    /* Modal de confirmação após o envio (centralizado, com destaque). */
+    .modal-sucesso {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: rgba(20, 33, 61, .55);
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+    .modal-sucesso[hidden] { display: none; }
+    .modal-sucesso-caixa {
+      background: #fff;
+      border-radius: 14px;
+      padding: 28px 28px 24px;
+      width: 100%;
+      max-width: 440px;
+      text-align: center;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, .25);
+    }
+    .modal-sucesso-icone { font-size: 44px; line-height: 1; }
+    .modal-sucesso-caixa h2 { margin: 10px 0 6px; font-size: 20px; color: var(--verde); }
+    .modal-sucesso-texto { margin: 0 0 16px; color: #475467; font-size: 14px; line-height: 1.5; }
+    .modal-sucesso-protocolo {
+      background: #f4f6fb; border: 1px solid #d8deea; border-radius: 10px;
+      padding: 10px 14px; margin: 0 0 18px;
+    }
+    .modal-sucesso-protocolo .rot {
+      display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .4px;
+      color: #667085; font-weight: bold; margin-bottom: 4px;
+    }
+    .modal-sucesso-protocolo .linha { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+    .modal-sucesso-protocolo strong { font-size: 16px; color: var(--azul); overflow-wrap: anywhere; }
+    .modal-sucesso-protocolo .copiar {
+      border: 1px solid var(--azul); background: #fff; color: var(--azul);
+      border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: bold; cursor: pointer;
+    }
+    .modal-sucesso-protocolo .copiar:hover { background: var(--azul); color: #fff; }
+    .modal-sucesso-acoes { display: flex; flex-direction: column; gap: 10px; }
+    .modal-sucesso-acoes .botao-pdf {
+      display: block; padding: 12px 18px; border-radius: 8px;
+      background: var(--azul); color: #fff; text-decoration: none; font-weight: bold;
+    }
+    .modal-sucesso-acoes .botao-pdf:hover { background: #0c1631; }
+    .modal-sucesso-acoes .botao-sec {
+      padding: 10px 16px; border-radius: 8px; border: 1px solid #d8deea;
+      background: #fff; color: var(--azul); font-weight: bold; cursor: pointer;
+    }
+    .modal-sucesso-acoes .botao-sec:hover { background: #f4f6fb; }
+
     /* Carregando: mesmo padrao visual usado nos demais projetos da AEUV
        (anel dourado girando ao redor da marca + barra animada). */
     .tela-carregando {
@@ -542,6 +592,26 @@
       </div>
       <p class="rotulo">Enviando a súmula</p>
       <div class="barra"><span></span></div>
+    </div>
+  </div>
+
+  <div class="modal-sucesso" id="modalSucesso" role="dialog" aria-modal="true" aria-labelledby="modalSucessoTitulo" hidden>
+    <div class="modal-sucesso-caixa">
+      <div class="modal-sucesso-icone" aria-hidden="true">✅</div>
+      <h2 id="modalSucessoTitulo">Súmula enviada com sucesso!</h2>
+      <p class="modal-sucesso-texto">O arquivo TXT foi baixado automaticamente e o PDF já está arquivado no sistema.</p>
+      <div class="modal-sucesso-protocolo">
+        <span class="rot">Protocolo</span>
+        <div class="linha">
+          <strong id="modalSucessoProtocolo">—</strong>
+          <button type="button" class="copiar" id="modalSucessoCopiar" title="Copiar protocolo">Copiar</button>
+        </div>
+      </div>
+      <div class="modal-sucesso-acoes">
+        <a class="botao-pdf" id="modalSucessoPdf" href="#" target="_blank" rel="noopener">📑 Ver resultado em PDF</a>
+        <button type="button" class="botao-sec" id="modalSucessoNova">Enviar outra súmula</button>
+        <button type="button" class="botao-sec" id="modalSucessoFechar">Fechar</button>
+      </div>
     </div>
   </div>
 
@@ -925,6 +995,51 @@
     }
 
     /**
+     * Confirmação de envio num modal central, com o protocolo em destaque,
+     * botão para ver o PDF, copiar o protocolo e enviar outra súmula.
+     */
+    function mostrarModalSucessoSumula(res) {
+      var modal = document.getElementById('modalSucesso');
+      if (!modal) {
+        // Garantia: se o modal não existir, cai no aviso inline antigo.
+        mostrarMensagem('✅ <strong>Súmula enviada com sucesso!</strong><br>Protocolo: '
+          + res.protocolo + '<br>O TXT foi baixado e o PDF está arquivado.'
+          + '<br><br><a class="botao-pdf" href="' + res.arquivoPdfUrl + '" target="_blank" rel="noopener">📑 Ver resultado em PDF</a>', 'sucesso');
+        return;
+      }
+
+      document.getElementById('modalSucessoProtocolo').textContent = res.protocolo || '—';
+      var pdf = document.getElementById('modalSucessoPdf');
+      if (res.arquivoPdfUrl) {
+        pdf.href = res.arquivoPdfUrl;
+        pdf.hidden = false;
+      } else {
+        pdf.hidden = true;
+      }
+
+      modal.hidden = false;
+
+      var copiar = document.getElementById('modalSucessoCopiar');
+      copiar.textContent = 'Copiar';
+      copiar.onclick = function () {
+        var texto = res.protocolo || '';
+        function ok() { copiar.textContent = 'Copiado!'; setTimeout(function () { copiar.textContent = 'Copiar'; }, 2000); }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(texto).then(ok, function () {});
+        } else {
+          var t = document.createElement('textarea');
+          t.value = texto; document.body.appendChild(t); t.select();
+          try { document.execCommand('copy'); ok(); } catch (e) {}
+          t.remove();
+        }
+      };
+
+      document.getElementById('modalSucessoFechar').onclick = function () { modal.hidden = true; };
+      // "Enviar outra súmula": recarrega a página para um formulário limpo.
+      document.getElementById('modalSucessoNova').onclick = function () { window.location.reload(); };
+    }
+
+    /**
      * Dispara o download local do arquivo TXT gerado.
      */
     function baixarTxt(nome, conteudo) {
@@ -1227,17 +1342,7 @@
           alternarCarregando(false);
 
           baixarTxt(res.arquivoTxtNome, res.arquivoTxtConteudo);
-
-          mostrarMensagem(
-            '✅ <strong>Súmula enviada com sucesso!</strong><br>' +
-            'Protocolo: ' + res.protocolo + '<br>' +
-            'O arquivo TXT foi baixado automaticamente e o PDF já está arquivado no sistema.' +
-            '<br><br>' +
-            '<a class="botao-pdf" href="' + res.arquivoPdfUrl + '" target="_blank" rel="noopener">' +
-            '📑 Ver resultado em PDF' +
-            '</a>',
-            'sucesso'
-          );
+          mostrarModalSucessoSumula(res);
         })
         .withFailureHandler(function (erro) {
           botaoEnviar.disabled = false;

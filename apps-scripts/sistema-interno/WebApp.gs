@@ -9754,6 +9754,17 @@ function respostaSolicitacoes_(dados, provisorio, estado, snapshotStatus) {
       || !stringLimitadaSolicitacoes_(dados.pastaUrl || '', 2048, true)) {
     throw erroSolicitacoes_('RESPOSTA_SOLICITACOES_INVALIDA');
   }
+  // Exclusão só para admin e só na resposta autoritativa (não na prévia do
+  // snapshot), para o botão não "piscar" antes da conferência dos dados atuais.
+  let podeExcluir = false;
+  if (!provisorio) {
+    try {
+      const sessao = identificarUsuario_();
+      podeExcluir = !!(sessao && sessao.autorizado && sessao.usuario && sessao.usuario.perfil === 'admin');
+    } catch (e) {
+      podeExcluir = false;
+    }
+  }
   return {
     registros: registros,
     situacoes: SOLICITACOES_PASTAS.map(function (item) {
@@ -9764,6 +9775,7 @@ function respostaSolicitacoes_(dados, provisorio, estado, snapshotStatus) {
     limite: SOLICITACOES_MAX_REGISTROS,
     pastaUrl: dados.pastaUrl || '',
     provisorio: provisorio,
+    podeExcluir: podeExcluir,
     consultadoEm: new Date().toISOString(),
     snapshotStatusPublico: snapshotStatus || statusPublicoSnapshotSolicitacoes_(estado || {}, null)
   };
@@ -10161,6 +10173,92 @@ function pastaSolicitacoes_() {
     throw new Error('Não foi possível abrir a pasta das inscricoes no Drive (id '
       + CONFIG.solicitacoes.pastaRaizId + '). Verifique se o seu e-mail tem acesso a ela. '
       + 'Detalhe: ' + (e && e.message ? e.message : e));
+  }
+}
+
+// Subpasta onde as solicitações excluídas pela tela ficam guardadas (fora da
+// listagem e do fluxo da automação, mas sem ir para a lixeira).
+const SOLICITACOES_PASTA_EXCLUIDOS = 'Excluídos';
+
+/**
+ * Exclui uma solicitação: move o TXT para a subpasta "Excluídos" na pasta de
+ * inscrições. Só admin. Localiza o arquivo pelo nome (TXT com carimbo de
+ * milissegundos) na raiz e nas subpastas Entrada/Processados/Falhas.
+ *
+ * Solicitações já "Processadas" NÃO podem ser excluídas: a automação pode ter
+ * aplicado o registro no iFut, então removê-las criaria inconsistência (mesma
+ * regra das súmulas analisadas). O arquivo fica retido em "Excluídos" (não vai
+ * para a lixeira), então é reversível.
+ * @param {string} arquivoNome  Nome do arquivo da solicitação (registro.arquivoNome).
+ * @return {{sucesso: boolean, mensagem: string}}
+ */
+function excluirSolicitacao(arquivoNome) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !moduloLiberado_('solicitacoes', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar as solicitações de inscrição.');
+  }
+  if (sessao.usuario.perfil !== 'admin') {
+    throw new Error('Somente o Administrador pode excluir solicitações.');
+  }
+
+  const alvo = String(arquivoNome || '').trim();
+  // O que identifica um TXT de solicitação é terminar com o carimbo de
+  // milissegundos do envio (o mesmo critério usado na leitura).
+  if (!/\.txt$/i.test(alvo) || carimboDoNome_(alvo) === 0) {
+    throw new Error('Solicitação inválida para exclusão.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const raiz = pastaSolicitacoes_();
+    const existentes = raiz.getFoldersByName(SOLICITACOES_PASTA_EXCLUIDOS);
+    const excluidos = existentes.hasNext() ? existentes.next() : raiz.createFolder(SOLICITACOES_PASTA_EXCLUIDOS);
+
+    let removido = false;
+    let bloqueadaProcessada = false;
+
+    function moverParaExcluidos(arquivo) {
+      excluidos.addFile(arquivo);
+      const pais = arquivo.getParents();
+      while (pais.hasNext()) {
+        const pai = pais.next();
+        if (pai.getId() !== excluidos.getId()) pai.removeFile(arquivo);
+      }
+      removido = true;
+    }
+
+    // Procura o arquivo pelo nome nas subpastas de situação e na raiz.
+    SOLICITACOES_PASTAS.forEach(function (origem) {
+      const pastas = raiz.getFoldersByName(origem.pasta);
+      if (!pastas.hasNext()) return;
+      const arquivos = pastas.next().getFilesByName(alvo);
+      while (arquivos.hasNext()) {
+        const arquivo = arquivos.next();
+        if (origem.situacao === 'Processada') {
+          bloqueadaProcessada = true;
+          continue;
+        }
+        moverParaExcluidos(arquivo);
+      }
+    });
+
+    // Arquivos soltos na raiz contam como "Aguardando" e podem ser excluídos.
+    const naRaiz = raiz.getFilesByName(alvo);
+    while (naRaiz.hasNext()) {
+      moverParaExcluidos(naRaiz.next());
+    }
+
+    if (bloqueadaProcessada && !removido) {
+      throw new Error('Solicitações já processadas não podem ser excluídas, pois podem já ter sido aplicadas no iFut.');
+    }
+    if (!removido) {
+      throw new Error('Solicitação não encontrada; talvez já tenha sido removida. Use Atualizar.');
+    }
+
+    return { sucesso: true, mensagem: 'Solicitação movida para "' + SOLICITACOES_PASTA_EXCLUIDOS + '".' };
+  } finally {
+    lock.releaseLock();
   }
 }
 
