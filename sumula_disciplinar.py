@@ -542,7 +542,7 @@ def dosimetria(o: Ocorrencia, ocorrencias: list[Ocorrencia], sumula: Sumula,
 
 def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: int,
                competicao: str, cidade: str, hoje: date, associacao: str = ASSOCIACAO,
-               reincidentes: dict | None = None) -> str:
+               reincidentes: dict | None = None, ajuste: str | None = None) -> str:
     pessoas = [o for o in ocorrencias if isinstance(o.sujeito, Envolvido) and not o.regra.sem_dispositivo]
     equipes = [o for o in ocorrencias if o.regra.sujeito == "equipe" and o.sujeito]
     sem_sujeito = [o for o in ocorrencias if o.sujeito is None]
@@ -562,8 +562,16 @@ def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: 
     doses = {id(o): dosimetria(o, ocorrencias, sumula, reincidentes) for o in enquadraveis}
 
     linhas = [
+        "📝 PRÉVIA EM ANÁLISE – AGUARDANDO APROVAÇÃO DA COMISSÃO. Esta nota ainda NÃO é oficial e a punição "
+        "ainda NÃO foi registrada no controle. Revise e efetive com: python main.py --gerar-pdf-nota "
+        + f"{numero}.",
         "⚠️ NOTA GERADA AUTOMATICAMENTE (regras fixas) – as decisões sugeridas estão entre ** ** "
         f"(vermelho no PDF); revise-as e os campos {MARCADOR_DEFINIR}, se houver, antes de publicar.",
+    ]
+    if (ajuste or "").strip():
+        linhas.append("🗒️ OBSERVAÇÃO DA COMISSÃO (ajuste informado; no modo regras fixas serve como anotação, "
+                      "não altera a pena automaticamente): " + ajuste.strip())
+    linhas += [
         "",
         f"NOTA OFICIAL Nº {numero:03d}/{ano}",
         competicao.upper(),
@@ -808,6 +816,30 @@ def nome_arquivo_nota(numero: int, ano: int, sumula: Sumula, sufixo: str = "") -
     return f"NOTA OFICIAL Nº {numero:03d}-{ano} – COMISSÃO DISCIPLINAR - {confronto}{sufixo}.txt"
 
 
+def nota_existente_da_sumula(notas_dir: Path, sumula: "Sumula") -> tuple[int, Path] | None:
+    """Procura em notas_dir uma nota JÁ gerada para esta súmula (pelo protocolo no conteúdo).
+
+    Permite reutilizar o MESMO número ao reanalisar (ex.: rodar de novo com --ajuste),
+    para a prévia ser substituída em vez de duplicada. Retorna (numero, caminho) ou None.
+    """
+    protocolo = (sumula.protocolo or "").strip().upper()
+    if not protocolo:
+        return None
+    melhor: tuple[int, Path] | None = None
+    for txt in notas_dir.glob("NOTA OFICIAL*.txt"):
+        try:
+            conteudo = txt.read_text(encoding="utf-8-sig", errors="ignore").upper()
+        except OSError:
+            continue
+        if protocolo not in conteudo:
+            continue
+        achado = re.search(r"Nº (\d+)-", txt.name)
+        numero = int(achado.group(1)) if achado else 0
+        if melhor is None or numero > melhor[0]:
+            melhor = (numero, txt)
+    return melhor
+
+
 def _gerar_pdf(nota_txt: Path, config_path: Path, logger: logging.Logger) -> None:
     """Gera o PDF da nota; falhas no PDF nao interrompem a analise (pode ser regerado depois)."""
     try:
@@ -825,8 +857,54 @@ def _registrar_controle(nota_txt: Path, sumula: Sumula, config_path: Path, logge
     controle_punicoes.registrar_nota(nota_txt, sumula, config_path, logger)
 
 
+def _publicar_previa(nota_txt: Path, config_path: Path, logger: logging.Logger) -> None:
+    """Publica a PREVIA da nota no Drive (falhas nao interrompem a analise)."""
+    try:
+        import publicacao_drive
+
+        publicacao_drive.publicar_previa_nota(nota_txt, config_path, logger)
+    except Exception as exc:
+        logger.warning("[SUMULAS] Nao foi possivel publicar a previa de %s no Drive: %s", nota_txt.name, exc)
+
+
+def _remover_nota_antiga(nota_txt: Path, nome_novo: str, config_path: Path, logger: logging.Logger) -> None:
+    """Remove a prévia anterior (TXT+PDF) local e, se o nome mudou, também do Drive.
+
+    Na reanálise reutilizamos o mesmo número; se o arquivo novo tiver nome igual
+    ao antigo, a publicação apenas sobrescreve no Drive. Mas se o nome mudou (ex.:
+    alternar entre regras fixas e IA, que adiciona " (IA)"), a prévia antiga ficaria
+    duplicada no Drive — então a removemos de lá pelo nome.
+    """
+    for caminho in (nota_txt, nota_txt.with_suffix(".pdf")):
+        try:
+            if caminho.exists():
+                caminho.unlink()
+        except OSError as exc:
+            logger.warning("[SUMULAS] Nao foi possivel remover a nota antiga %s: %s", caminho.name, exc)
+    if nome_novo and nota_txt.name != nome_novo:
+        try:
+            import publicacao_drive
+
+            publicacao_drive.despublicar_nota_por_nome(nota_txt.name, config_path, logger)
+        except Exception as exc:
+            logger.warning("[SUMULAS] Nao foi possivel remover a previa antiga do Drive (%s): %s",
+                           nota_txt.name, exc)
+
+
 def processar_sumulas(config_path: Path = DEFAULT_CONFIG_PATH, local_only: bool = False,
-                      logger: logging.Logger | None = None, usar_ia: bool = False) -> list[Path]:
+                      logger: logging.Logger | None = None, usar_ia: bool = False,
+                      alvo: str | None = None, ajuste: str | None = None) -> list[Path]:
+    """Gera a PRÉVIA (rascunho) das notas disciplinares a partir das súmulas.
+
+    A análise agora é só PROPOSTA: gera o TXT/PDF rascunho mas NÃO grava no
+    controle de punições nem move a súmula para "Processados". A efetivação
+    (gravar no controle, publicar a nota oficial) acontece só no
+    --gerar-pdf-nota, após a comissão revisar.
+
+    - alvo: protocolo/nome de uma súmula específica (ex.: SUM-XXXX). Sem alvo, roda todas.
+    - ajuste: instrução de interpretação/peso. Plena no modo IA (entra no prompt);
+      no modo regras fixas, fica como observação no topo da nota.
+    """
     config = ConfigSumulas.carregar(config_path)
     logger = logger or configure_logging(config.log_path)
     regulamento = Regulamento(config.regulamento)
@@ -876,31 +954,57 @@ def processar_sumulas(config_path: Path = DEFAULT_CONFIG_PATH, local_only: bool 
                 achados[e.nome] = anteriores
         return achados
 
+    alvo_norm = normalize_text(alvo) if alvo else ""
+    ajuste_texto = (ajuste or "").strip()
+    if ajuste_texto and not usar_ia:
+        logger.info("[SUMULAS] Ajuste informado no modo regras fixas: será incluído como observação na nota "
+                    "(não altera a pena automaticamente; use --ia para reinterpretação).")
+
     gerados: list[Path] = []
     for arquivo in iter_txt_files(config.download_dir):
         if not arquivo.name.upper().startswith("SUMULA_"):
             continue
+        # Alvo opcional: processa só a súmula cujo nome/protocolo casa com o alvo.
+        if alvo_norm and alvo_norm not in normalize_text(arquivo.name):
+            continue
         try:
             sumula = ler_sumula(arquivo)
+            if alvo_norm and alvo_norm not in normalize_text(arquivo.name) \
+                    and alvo_norm not in normalize_text(sumula.protocolo):
+                continue
             reincidentes = reincidentes_da_sumula(sumula)
+            # Reanálise: se já existe uma prévia desta súmula, reutiliza o MESMO
+            # número (e remove o arquivo antigo), para substituir em vez de duplicar.
+            existente = nota_existente_da_sumula(config.notas_dir, sumula)
             if usar_ia:
                 resultado = sumula_ia.gerar_nota_ia(
                     sumula, regulamento, config_ia, config.competicao, config.cidade, hoje, chave_ia,
-                    config.associacao, reincidentes,
+                    config.associacao, reincidentes, ajuste_texto,
                 )
                 if resultado.ha_infracao and resultado.nota:
-                    numero += 1
-                    destino = config.notas_dir / nome_arquivo_nota(numero, ano, sumula, " (IA)")
+                    if existente:
+                        numero_nota = existente[0]
+                    else:
+                        numero += 1
+                        numero_nota = numero
+                    destino = config.notas_dir / nome_arquivo_nota(numero_nota, ano, sumula, " (IA)")
+                    if existente:
+                        _remover_nota_antiga(existente[1], destino.name, config.path, logger)
                     destino.write_text(
-                        sumula_ia.finalizar_nota_ia(resultado, numero, ano, config_ia.modelo, sumula, config.cidade),
+                        sumula_ia.finalizar_nota_ia(resultado, numero_nota, ano, config_ia.modelo, sumula, config.cidade),
                         encoding="utf-8",
                     )
-                    atualizar_valor_ini(config.path, "notas", "ultimo_numero", str(numero))
+                    if not existente:
+                        atualizar_valor_ini(config.path, "notas", "ultimo_numero", str(numero))
                     for alerta in resultado.alertas:
                         logger.warning("[SUMULAS][IA] %s: %s", sumula.protocolo, alerta)
-                    logger.info("[SUMULAS][IA] %s: nota gerada em %s", sumula.protocolo, destino)
+                    logger.info("[SUMULAS][IA] %s: PREVIA da nota gerada em %s (aguardando revisao; nao efetivada)",
+                                sumula.protocolo, destino)
                     _gerar_pdf(destino, config.path, logger)
-                    _registrar_controle(destino, sumula, config.path, logger)
+                    # Publica a PREVIA no Drive (aparece em "Notas oficiais" como
+                    # Em analise). NAO registra no controle nem move a sumula:
+                    # isso so acontece ao efetivar com --gerar-pdf-nota.
+                    _publicar_previa(destino, config.path, logger)
                 else:
                     destino = config.notas_dir / f"ANALISE_{sumula.protocolo}_sem-enquadramento (IA).txt"
                     destino.write_text(
@@ -909,38 +1013,44 @@ def processar_sumulas(config_path: Path = DEFAULT_CONFIG_PATH, local_only: bool 
                     )
                     logger.info("[SUMULAS][IA] %s: sem infracao; analise salva em %s", sumula.protocolo, destino)
                 gerados.append(destino)
-                move_file(arquivo, config.processed_dir)
-                downloader.move_remote_file(arquivo.name, "processed", logger)
                 continue
             ocorrencias = analisar(sumula, regulamento, logger)
             if ocorrencias:
-                numero += 1
-                destino = config.notas_dir / nome_arquivo_nota(numero, ano, sumula)
+                if existente:
+                    numero_nota = existente[0]
+                else:
+                    numero += 1
+                    numero_nota = numero
+                destino = config.notas_dir / nome_arquivo_nota(numero_nota, ano, sumula)
+                if existente:
+                    _remover_nota_antiga(existente[1], destino.name, config.path, logger)
                 destino.write_text(
-                    gerar_nota(sumula, ocorrencias, numero, ano, config.competicao, config.cidade, hoje,
-                               config.associacao, reincidentes),
+                    gerar_nota(sumula, ocorrencias, numero_nota, ano, config.competicao, config.cidade, hoje,
+                               config.associacao, reincidentes, ajuste_texto),
                     encoding="utf-8",
                 )
-                atualizar_valor_ini(config.path, "notas", "ultimo_numero", str(numero))
-                logger.info("[SUMULAS] %s: %s ocorrencia(s); nota gerada em %s",
+                if not existente:
+                    atualizar_valor_ini(config.path, "notas", "ultimo_numero", str(numero))
+                logger.info("[SUMULAS] %s: %s ocorrencia(s); PREVIA da nota gerada em %s "
+                            "(aguardando revisao; nao efetivada)",
                             sumula.protocolo, len(ocorrencias), destino)
                 _gerar_pdf(destino, config.path, logger)
-                _registrar_controle(destino, sumula, config.path, logger)
+                # Publica a PREVIA no Drive (aparece em "Notas oficiais" como
+                # Em analise). NAO registra no controle nem move a sumula.
+                _publicar_previa(destino, config.path, logger)
             else:
                 destino = config.notas_dir / f"ANALISE_{sumula.protocolo}_sem-enquadramento.txt"
                 destino.write_text(gerar_analise_sem_enquadramento(sumula), encoding="utf-8")
                 logger.info("[SUMULAS] %s: nenhuma conduta enquadrada; analise salva em %s",
                             sumula.protocolo, destino)
             gerados.append(destino)
-            move_file(arquivo, config.processed_dir)
-            downloader.move_remote_file(arquivo.name, "processed", logger)
         except Exception as exc:
             if usar_ia and isinstance(exc, sumula_ia.ErroIA):
                 logger.error("[SUMULAS][IA] %s mantida para nova tentativa: %s", arquivo.name, exc)
                 continue
-            logger.exception("[SUMULAS] Falha ao analisar %s: %s", arquivo.name, exc)
-            move_file(arquivo, config.failed_dir)
-            downloader.move_remote_file(arquivo.name, "failed", logger)
+            # A analise agora e so proposta: nao movemos a sumula (nem em falha),
+            # para ela continuar na fila ate a revisao/efetivacao. So registramos.
+            logger.exception("[SUMULAS] Falha ao analisar %s (sumula mantida na fila): %s", arquivo.name, exc)
     return gerados
 
 

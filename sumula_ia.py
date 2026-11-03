@@ -118,7 +118,7 @@ def obter_chave(config: ConfigIA | None = None) -> str:
 
 def montar_mensagens(sumula: Sumula, texto_sumula: str, regulamento_texto: str, modelo_nota: str,
                      competicao: str, cidade: str, hoje: date, associacao: str = ASSOCIACAO,
-                     reincidentes: dict | None = None) -> list[dict]:
+                     reincidentes: dict | None = None, ajuste: str | None = None) -> list[dict]:
     envolvidos = "\n".join(
         f"- {e.nome} | {e.tipo} | equipe {e.equipe}" + (f" | camisa {e.camisa}" if e.camisa else "")
         for e in sumula.envolvidos
@@ -154,12 +154,27 @@ ENVOLVIDOS INFORMADOS PELO ÁRBITRO
             "Nenhum dos envolvidos possui punição disciplinar anterior registrada (não são reincidentes)."
         )
 
-    return [
+    mensagens = [
         {"role": "system", "content": INSTRUCOES},
         {"role": "user", "content": f"=== REGULAMENTO (documento máximo) ===\n{regulamento_texto}"},
         {"role": "user", "content": f"=== MODELO DE NOTA (apenas formato) ===\n{modelo_nota}"},
         {"role": "user", "content": f"{dados}\n\n=== {historico} ===\n\n=== SÚMULA (relatório do árbitro) ===\n{texto_sumula}"},
     ]
+    # Ajuste/instrução da comissão: orienta a interpretação/peso desta análise,
+    # SEM violar as regras obrigatórias (regulamento é o limite). Entra por último
+    # para ter prioridade na reinterpretação pedida.
+    if (ajuste or "").strip():
+        mensagens.append({
+            "role": "user",
+            "content": (
+                "=== AJUSTE SOLICITADO PELA COMISSÃO (orientação para ESTA análise) ===\n"
+                "Reavalie a interpretação e a dosimetria conforme a orientação abaixo, mas sem violar as "
+                "REGRAS OBRIGATÓRIAS: continue usando apenas dispositivos e faixas que existem no regulamento "
+                "e não invente fatos.\n"
+                + ajuste.strip()
+            ),
+        })
+    return mensagens
 
 
 class ErroIA(RuntimeError):
@@ -250,12 +265,13 @@ def validar_resposta(dados: dict, regulamento: Regulamento) -> list[str]:
 
 
 def gerar_nota_ia(sumula: Sumula, regulamento: Regulamento, config: ConfigIA, competicao: str, cidade: str,
-                  hoje: date, chave: str, associacao: str = ASSOCIACAO, reincidentes: dict | None = None) -> ResultadoIA:
+                  hoje: date, chave: str, associacao: str = ASSOCIACAO, reincidentes: dict | None = None,
+                  ajuste: str | None = None) -> ResultadoIA:
     texto_sumula = sumula.arquivo.read_text(encoding="utf-8-sig", errors="ignore")
     regulamento_texto = regulamento.path.read_text(encoding="utf-8-sig")
     modelo_nota = config.modelo_nota.read_text(encoding="utf-8-sig") if config.modelo_nota.exists() else ""
     mensagens = montar_mensagens(sumula, texto_sumula, regulamento_texto, modelo_nota, competicao, cidade, hoje,
-                                 associacao, reincidentes)
+                                 associacao, reincidentes, ajuste)
     dados = chamar_openai(mensagens, config, chave)
     return ResultadoIA(
         ha_infracao=bool(dados.get("ha_infracao")),

@@ -990,6 +990,10 @@
     .notas .contagem { flex-direction: column; gap: 2px; }
     .notas .contagem span { white-space: normal; }
 
+    /* Nota ainda em análise (prévia, não efetivada): leve destaque âmbar. */
+    .notas tr.nota-em-analise { background: #fff8ec; }
+    body.tema-escuro .notas tr.nota-em-analise { background: rgba(245, 158, 11, .08); }
+
     /* ----- Regulamentos ----- */
 
     .regulamentos {
@@ -3822,14 +3826,16 @@
         { cmd: 'python main.py --sync-drive-only', desc: 'Somente baixa os TXT de entrada do Drive; não processa no iFut.' },
         { cmd: 'python main.py --process-local-only', desc: 'Processa os TXT já baixados, sem novo download.' },
         { cmd: 'python main.py --login-only', desc: 'Sincroniza o Drive, faz login no iFut e encerra.' },
+        { cmd: 'python main.py --apenas-login', desc: 'Só faz login no iFut (sem sincronizar o Drive) e mantém o Chrome aberto para inspecionar o layout; fecha ao pressionar Enter.' },
         { cmd: 'python main.py --update-all-team-counts', desc: 'Atualiza a contagem de atletas dos times na planilha.' }
       ] },
       { titulo: '3. Súmulas / notas oficiais / punições', itens: [
-        { cmd: 'python main.py --analisar-sumulas', desc: 'Baixa e analisa as súmulas por regras; gera notas (TXT/PDF) e atualiza as punições.' },
-        { cmd: 'python main.py --analisar-sumulas --ia', desc: 'Analisa com IA em vez das regras fixas (envia regulamento/relato ao provedor configurado).' },
+        { cmd: 'python main.py --analisar-sumulas', desc: 'Gera a PRÉVIA das notas (TXT/PDF) e publica como "Em análise". NÃO grava no controle nem muda o status da súmula.' },
+        { cmd: 'python main.py --analisar-sumulas --sumula SUM-XXXX', desc: 'Analisa somente a súmula indicada (pelo protocolo/nome).' },
+        { cmd: 'python main.py --analisar-sumulas --ia --ajuste "..."', desc: 'Analisa com IA; --ajuste reinterpreta a pena/enquadramento conforme a orientação (respeitando o regulamento).' },
         { cmd: 'python main.py --analisar-sumulas --process-local-only', desc: 'Analisa as súmulas já baixadas, sem novo download.' },
-        { cmd: 'python main.py --gerar-pdf-nota 5', desc: 'Regera a nota pelo número; atualiza punições e publica se finalizada.' },
-        { cmd: 'python main.py --gerar-pdf-nota "SUM-PROTOCOLO"', desc: 'Regera a nota pelo protocolo da súmula.' },
+        { cmd: 'python main.py --gerar-pdf-nota 5', desc: 'EFETIVA a nota pelo número: grava a punição no controle e publica a nota oficial (substitui a prévia).' },
+        { cmd: 'python main.py --gerar-pdf-nota "SUM-PROTOCOLO"', desc: 'Efetiva a nota pelo protocolo da súmula.' },
         { cmd: 'python main.py --atualizar-controle-punicoes', desc: 'Reconstrói o TXT/PDF de punições pelas notas e publica o controle no Drive.' }
       ] },
       { titulo: '4. Regulamento / forma de disputa / publicação', itens: [
@@ -3874,6 +3880,8 @@
     ];
 
     const COMANDOS_AVISOS = [
+      '--analisar-sumulas gera só a PRÉVIA (aparece como "Em análise") e não grava punição no controle. A punição só entra no controle ao efetivar com --gerar-pdf-nota; e só conta no histórico do atleta após ser Aprovada no Controle de punições.',
+      '--ajuste reinterpreta a pena apenas no modo --ia; no modo regras fixas ele entra como observação na nota (não altera a pena).',
       '--process-local-only evita o download inicial, mas NÃO garante ausência de escrita remota.',
       'dry_run é configurado no INI; não impede remoções, publicação/movimentação no Drive ou planilha. Não existe flag --dry-run.',
       '--ia envia dados ao provedor configurado e pode gerar cobrança conforme o serviço.',
@@ -8868,10 +8876,10 @@
         + '<ol>'
         + '<li><strong>Envio da súmula:</strong> a arbitragem envia a súmula digital (relato dos fatos + envolvidos), que fica na pasta do Drive aguardando processamento.</li>'
         + '<li><strong>Processamento manual:</strong> o responsável executa a automação no terminal. Ela baixa as súmulas, enquadra as condutas nos artigos do regulamento e calcula a pena por <em>dosimetria</em> — parte da pena mínima do dispositivo e soma 1 partida por circunstância registrada no relato (reiteração, ameaça, continuidade após expulsão e <em>reincidência</em>), sem passar do máximo. Comandos típicos:'
-        + '<div class="info-punicoes-cmd">python main.py --analisar-sumulas<br>python main.py --analisar-sumulas --ia  <span class="info-punicoes-coment"># usa IA em vez das regras fixas</span></div></li>'
-        + '<li><strong>Nota oficial gerada:</strong> havendo infração, é criada a nota oficial disciplinar numerada (NNN/AAAA), em TXT e PDF. O <em>Status</em> fica <strong>DEFINIDA</strong> quando a pena já está decidida, ou a pena fica <strong>[A DEFINIR]</strong> quando o caso exige decisão da comissão (ex.: reincidência com suspensão por tempo). Súmula sem infração gera apenas uma análise, sem punição.</li>'
-        + '<li><strong>Revisão e publicação:</strong> a comissão revisa a nota, resolve os campos <em>[A DEFINIR]</em> e publica. Só a nota <strong>final</strong> (sem pendências e sem divergências) é enviada ao Drive; rascunhos não aparecem aqui. O controle é publicado/atualizado pela automação:'
-        + '<div class="info-punicoes-cmd">python main.py --gerar-pdf-nota 5  <span class="info-punicoes-coment"># regera a nota após editar</span><br>python main.py --atualizar-controle-punicoes<br>python main.py --publicar-drive</div></li>'
+        + '<div class="info-punicoes-cmd">python main.py --analisar-sumulas<br>python main.py --analisar-sumulas --sumula SUM-XXXX  <span class="info-punicoes-coment"># só uma súmula</span><br>python main.py --analisar-sumulas --ia --ajuste "..."  <span class="info-punicoes-coment"># IA reinterpreta a pena</span></div><br><span class="info-punicoes-coment">A análise gera apenas uma PRÉVIA; nada entra neste controle ainda.</span></li>'
+        + '<li><strong>Nota em análise:</strong> havendo infração, a prévia da nota disciplinar numerada (NNN/AAAA) aparece em <strong>Notas oficiais</strong> com o selo <em>📝 Em análise</em>. O <em>Status</em> da pena será <strong>DEFINIDA</strong> quando já decidida, ou <strong>[A DEFINIR]</strong> quando exigir decisão da comissão (ex.: reincidência com suspensão por tempo). Súmula sem infração gera apenas uma análise, sem punição.</li>'
+        + '<li><strong>Efetivação (só aqui entra no controle):</strong> a comissão revisa, resolve os campos <em>[A DEFINIR]</em> e efetiva pelo número da nota. Só então a punição é gravada neste controle e a prévia vira nota oficial no Drive (mesmo número).'
+        + '<div class="info-punicoes-cmd">python main.py --gerar-pdf-nota 5  <span class="info-punicoes-coment"># efetiva a nota nº 5</span><br>python main.py --atualizar-controle-punicoes<br>python main.py --publicar-drive</div></li>'
         + '<li><strong>Aprovação da diretoria (nesta tela):</strong> cada punição precisa ser <em>Aprovada</em> aqui para contar no histórico disciplinar do atleta (suspensões e reincidência). Enquanto não aprovada, aparece como <em>Não aprovada</em> e não suspende ninguém.</li>'
         + '<li><strong>Cumprimento:</strong> a <em>Situação</em> acompanha o cumprimento — <em>A cumprir</em> enquanto restam jogos de suspensão e <em>Cumprida</em> ao final.</li>'
         + '</ol>'
@@ -11442,23 +11450,26 @@
         + '<ol>'
         + '<li><strong>Envio da súmula:</strong> o árbitro informa a partida, os envolvidos e o relato das ocorrências. '
         + 'O formulário gera um protocolo e um arquivo TXT no Drive, consultável em <strong>Súmulas Enviadas</strong>.</li>'
-        + '<li><strong>Geração da nota:</strong> um responsável da associação executa a automação Python manualmente. '
-        + 'Ela baixa as súmulas, analisa o relato conforme o regulamento e gera a nota em TXT e PDF, com decisões sugeridas para revisão.'
+        + '<li><strong>Análise (prévia):</strong> um responsável executa a automação Python manualmente. '
+        + 'Ela analisa o relato conforme o regulamento e gera uma <strong>prévia</strong> da nota (TXT e PDF), que aparece nesta tela com o selo '
+        + '<strong>📝 Em análise</strong>. A prévia <strong>não</strong> grava punição no Controle nem altera a situação da súmula.'
         + '<div class="info-punicoes-cmd">python main.py --analisar-sumulas'
-        + '<br><span class="info-punicoes-coment"># Alternativa: usar somente as súmulas já baixadas</span>'
-        + '<br>python main.py --analisar-sumulas --process-local-only'
-        + '<br><span class="info-punicoes-coment"># Alternativa: analisar com IA, com provedor e chave de API configurados</span>'
-        + '<br>python main.py --analisar-sumulas --ia</div>'
+        + '<br><span class="info-punicoes-coment"># Analisar somente uma súmula (pelo protocolo)</span>'
+        + '<br>python main.py --analisar-sumulas --sumula SUM-XXXX'
+        + '<br><span class="info-punicoes-coment"># Analisar com IA; --ajuste reinterpreta a pena conforme a orientação</span>'
+        + '<br>python main.py --analisar-sumulas --ia --ajuste "seja mais brando no art. 22"'
+        + '<br><span class="info-punicoes-coment"># Usar somente as súmulas já baixadas</span>'
+        + '<br>python main.py --analisar-sumulas --process-local-only</div>'
         + 'Os arquivos ficam em <code>downloads/sumulas/notas-oficiais/</code>.</li>'
-        + '<li><strong>Revisão pela comissão:</strong> a comissão confere os fatos, artigos e decisões sugeridas e ajusta o TXT quando necessário. '
-        + 'Pendências como <code>[A DEFINIR PELA COMISSÃO]</code> precisam ser resolvidas antes da publicação. '
-        + '<strong>Rascunhos com pendências não são publicados no Drive.</strong></li>'
-        + '<li><strong>Finalização e publicação:</strong> depois da revisão, regere o PDF pelo número da nota '
-        + '(no exemplo, 8; substitua pelo número desejado). O comando também atualiza o controle de punições e publica a nota se estiver finalizada.'
+        + '<li><strong>Revisão pela comissão:</strong> confira os fatos, artigos e decisões sugeridas. '
+        + 'Reanalisar a mesma súmula (ex.: com <code>--ajuste</code> ou editando o TXT) <strong>substitui</strong> a prévia, mantendo o mesmo número. '
+        + 'Pendências como <code>[A DEFINIR PELA COMISSÃO]</code> devem ser resolvidas antes de efetivar.</li>'
+        + '<li><strong>Efetivação:</strong> ao fechar a decisão, efetive pelo número da nota '
+        + '(no exemplo, 8; substitua pelo desejado). Só aqui a punição entra no <strong>Controle de punições</strong> e a nota passa de prévia a oficial.'
         + '<div class="info-punicoes-cmd">python main.py --gerar-pdf-nota 8'
-        + '<br><span class="info-punicoes-coment"># Alternativa: publicar os documentos finalizados em lote</span>'
+        + '<br><span class="info-punicoes-coment"># Alternativa: reenviar os documentos ao Drive em lote</span>'
         + '<br>python main.py --publicar-drive</div>'
-        + 'A publicação exige acesso ao Drive configurado na automação; os arquivos finais vão para a subpasta <strong>Notas Oficiais</strong> da pasta das súmulas.</li>'
+        + 'A publicação exige acesso ao Drive configurado na automação; os arquivos vão para a subpasta <strong>Notas Oficiais</strong> da pasta das súmulas.</li>'
         + '<li><strong>Consulta nesta tela:</strong> use a busca e os filtros para localizar a nota e <strong>Ver nota</strong> para consultar os detalhes. '
         + 'Os punidos e suas situações vêm do <strong>Controle de punições</strong>, vinculados pelo número da nota. '
         + '<em>Sem punição registrada</em> indica ausência de registros vinculados no controle, não necessariamente ausência de decisão no documento.</li>'
@@ -11669,8 +11680,9 @@
       document.getElementById('linhasNotas').innerHTML = registros.map(function (r) {
         const aberta = !!notasAbertas[r.arquivoNome];
 
-        const linha = '<tr class="linha" data-arquivo="' + escapar(r.arquivoNome) + '">'
+        const linha = '<tr class="linha' + (r.emAnalise ? ' nota-em-analise' : '') + '" data-arquivo="' + escapar(r.arquivoNome) + '">'
           + celula('Nota', '<span class="protocolo">' + escapar(r.numero || '—') + '</span>'
+            + (r.emAnalise ? '<div><span class="pilula pendente">📝 Em análise</span></div>' : '')
             + (r.pendente ? '<div class="equipe-dado">⚠️ com campos a definir</div>' : ''))
           + celula('Publicada em', escapar(r.dataNota || '—'))
           + celula('Partida', '<span class="equipe-nome">' + escapar(r.confronto || '—') + '</span>'

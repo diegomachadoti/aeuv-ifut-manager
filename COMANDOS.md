@@ -60,6 +60,12 @@ python main.py --login-only --process-local-only
 Testa somente o login no iFut, sem sincronizar o Drive.
 
 ```bash
+python main.py --apenas-login
+```
+
+Só faz login no iFut (sem sincronizar o Drive) e mantém o Chrome aberto para inspecionar o layout; fecha ao pressionar Enter.
+
+```bash
 python main.py --update-all-team-counts
 ```
 
@@ -73,23 +79,37 @@ Atualiza a mesma contagem sem o download inicial dos TXT.
 
 ## 3. Súmulas / notas oficiais / punições
 
+> **Fluxo:** a análise gera só uma PRÉVIA (nota TXT/PDF publicada como "Em análise" em Notas oficiais). Ela NÃO grava punição no controle nem muda o status da súmula. A punição só entra no controle ao EFETIVAR com `--gerar-pdf-nota`, e só conta no histórico do atleta após ser Aprovada no Controle de punições.
+
 ```bash
 python main.py --analisar-sumulas
 ```
 
-Baixa e analisa súmulas por regras; gera notas TXT/PDF e atualiza punições.
+Gera a prévia das notas por regras fixas; publica como "Em análise" (não grava no controle).
+
+```bash
+python main.py --analisar-sumulas --sumula SUM-XXXX
+```
+
+Analisa somente a súmula indicada (pelo protocolo/nome). Sem este argumento, analisa todas as pendentes.
 
 ```bash
 python main.py --analisar-sumulas --process-local-only
 ```
 
-Analisa súmulas já baixadas; ainda pode mover arquivos/publicar controle no Drive.
+Analisa súmulas já baixadas, sem novo download.
 
 ```bash
 python main.py --analisar-sumulas --ia
 ```
 
 Analisa com IA; envia regulamento/relato ao provedor configurado.
+
+```bash
+python main.py --analisar-sumulas --ia --ajuste "seja mais brando no art. 22"
+```
+
+Com `--ia`, a orientação de `--ajuste` reinterpreta a pena/enquadramento (respeitando o regulamento). No modo regras fixas (sem `--ia`), `--ajuste` entra apenas como observação na nota, sem alterar a pena.
 
 ```bash
 python main.py --analisar-sumulas --process-local-only --ia
@@ -101,19 +121,19 @@ Usa IA nas súmulas locais, sem novo download.
 python main.py --gerar-pdf-nota 5
 ```
 
-Regera nota pelo número, atualiza punições e publica a nota se finalizada.
+EFETIVA a nota pelo número: grava a punição no controle e publica a nota oficial (substitui a prévia, mesmo número).
 
 ```bash
 python main.py --gerar-pdf-nota "SUM-PROTOCOLO"
 ```
 
-Regera a nota correspondente ao protocolo da súmula.
+Efetiva a nota correspondente ao protocolo da súmula.
 
 ```bash
 python main.py --gerar-pdf-nota "caminho/NOTA OFICIAL.txt"
 ```
 
-Regera pelo TXT editado; notas pendentes permanecem rascunhos sem assinatura.
+Efetiva pelo TXT editado; notas com pendências ([A DEFINIR]) permanecem rascunhos sem assinatura.
 
 ```bash
 python main.py --atualizar-controle-punicoes

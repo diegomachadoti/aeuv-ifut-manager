@@ -13900,6 +13900,12 @@ function interpretarNota_(conteudo, arquivo) {
     cidade: dataNotaAchada ? dataNotaAchada[1].trim() : '',
     dataNota: dataNotaAchada ? dataNotaAchada[2].trim() : '',
     pendente: corpo.join('\n').indexOf('[A DEFINIR') !== -1,
+    // Prévia (em análise): tem o selo "PRÉVIA EM ANÁLISE" no topo (antes do
+    // título) ou ainda contém [A DEFINIR]/divergências. A definitiva (efetivada
+    // com --gerar-pdf-nota) substitui o arquivo e perde esse selo.
+    emAnalise: /PR[ÉE]VIA EM AN[ÁA]LISE|AGUARDANDO APROVA[ÇC][ÃA]O/i.test(texto)
+      || texto.indexOf('[A DEFINIR') !== -1
+      || /DIVERG[ÊE]NCIAS? COM O REGULAMENTO/i.test(texto),
     texto: aparar_(corpo).join('\n'),
     arquivoNome: arquivo.getName(),
     arquivoUrl: arquivo.getUrl(),

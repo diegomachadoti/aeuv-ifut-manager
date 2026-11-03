@@ -417,6 +417,29 @@ class PublicadorDrive:
     def publicar_notas(self, arquivos) -> int:
         return self._publicar(arquivos, self.subpasta_id(PASTA_NOTAS, self.pasta_sumulas_id))
 
+    def remover_notas(self, nomes) -> int:
+        """Move para a lixeira os arquivos de nota (por nome) na pasta Notas Oficiais.
+
+        Usado quando a reanálise muda o nome do arquivo (ex.: alternar entre
+        regras fixas e IA): a prévia antiga precisa sair do Drive para não duplicar.
+        """
+        removidos = 0
+        pasta_id = self.subpasta_id(PASTA_NOTAS, self.pasta_sumulas_id)
+        for nome in nomes:
+            if not nome:
+                continue
+            nome_q = str(nome).replace("'", "\\'")
+            achados = self.service.files().list(
+                q=f"'{pasta_id}' in parents and trashed = false and name = '{nome_q}'",
+                fields="files(id,name)",
+                pageSize=10,
+            ).execute().get("files", [])
+            for item in achados:
+                self.service.files().update(fileId=item["id"], body={"trashed": True}).execute()
+                self.logger.info("[DRIVE] Prévia antiga removida: %s", item.get("name") or nome)
+                removidos += 1
+        return removidos
+
 
 # ---------------------------------------------------------------------------
 # Atalhos usados pelos fluxos de geracao de PDF
@@ -492,6 +515,31 @@ def publicar_nota(nota_txt: Path, config_path: Path, logger: logging.Logger = LO
         return 0
     arquivos = [nota_txt, nota_txt.with_suffix(".pdf")]
     return _silenciar("Nota oficial", logger,
+                      lambda: PublicadorDrive.carregar(config_path, logger).publicar_notas(arquivos))
+
+
+def despublicar_nota_por_nome(nome_txt: str, config_path: Path, logger: logging.Logger = LOGGER) -> int:
+    """Remove do Drive a nota (TXT + PDF) por nome, na pasta Notas Oficiais.
+
+    Útil quando a reanálise gera um arquivo com nome diferente (ex.: ganhou/perdeu
+    o sufixo " (IA)") e a prévia antiga precisa sair para não ficar duplicada.
+    """
+    nome_pdf = re.sub(r"\.txt$", ".pdf", nome_txt, flags=re.IGNORECASE)
+    nomes = [nome_txt, nome_pdf]
+    return _silenciar("Remoção da prévia antiga", logger,
+                      lambda: PublicadorDrive.carregar(config_path, logger).remover_notas(nomes))
+
+
+def publicar_previa_nota(nota_txt: Path, config_path: Path, logger: logging.Logger = LOGGER) -> int:
+    """Publica a PRÉVIA (rascunho) da nota no Drive, na mesma pasta "Notas Oficiais".
+
+    Diferente de publicar_nota, aqui publicamos mesmo que ainda seja rascunho,
+    para a tela "Notas oficiais" mostrar a prévia com selo "Em análise". Como o
+    nome do arquivo é o mesmo da versão definitiva (mesmo número de nota), ao
+    efetivar com --gerar-pdf-nota o arquivo é SUBSTITUÍDO no Drive (o link não muda).
+    """
+    arquivos = [nota_txt, nota_txt.with_suffix(".pdf")]
+    return _silenciar("Prévia da nota", logger,
                       lambda: PublicadorDrive.carregar(config_path, logger).publicar_notas(arquivos))
 
 

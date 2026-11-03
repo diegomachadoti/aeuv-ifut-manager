@@ -1876,6 +1876,18 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Com --analisar-sumulas: gera a nota com IA (Gemini/OpenAI) em vez das regras fixas",
     )
     parser.add_argument(
+        "--sumula",
+        metavar="ALVO",
+        help="Com --analisar-sumulas: analisa somente a súmula cujo nome/protocolo casa com ALVO "
+             "(ex.: SUM-20261102-XXXX). Sem este argumento, analisa todas as súmulas pendentes.",
+    )
+    parser.add_argument(
+        "--ajuste",
+        metavar="TEXTO",
+        help="Com --analisar-sumulas: orientação de interpretação/peso para a análise. No modo --ia "
+             "reinterpreta de verdade; no modo regras fixas entra como observação na nota.",
+    )
+    parser.add_argument(
         "--gerar-pdf-nota",
         metavar="ALVO",
         help="Regera o PDF de uma nota oficial a partir do TXT: caminho do TXT, numero da nota (ex.: 4) "
@@ -1997,6 +2009,10 @@ def validar_modos_cli(parser: argparse.ArgumentParser, args: argparse.Namespace)
         parser.error("modos de execucao mutuamente exclusivos: " + ", ".join(ativos))
     if args.ia and not args.analisar_sumulas:
         parser.error("--ia exige --analisar-sumulas")
+    if args.sumula and not args.analisar_sumulas:
+        parser.error("--sumula exige --analisar-sumulas")
+    if args.ajuste and not args.analisar_sumulas:
+        parser.error("--ajuste exige --analisar-sumulas")
     if args.oficio_final and not args.gerar_pdf_oficio:
         parser.error("--oficio-final exige --gerar-pdf-oficio")
     if args.process_local_only and ativos and not (
@@ -2228,7 +2244,8 @@ def main() -> int:
     if args.analisar_sumulas:
         from sumula_disciplinar import processar_sumulas
 
-        processar_sumulas(Path(args.config), local_only=args.process_local_only, usar_ia=args.ia)
+        processar_sumulas(Path(args.config), local_only=args.process_local_only, usar_ia=args.ia,
+                          alvo=args.sumula, ajuste=args.ajuste)
         return 0
     config = AppConfig(Path(args.config))
     selectors = SelectorConfig(Path(args.selectors))
