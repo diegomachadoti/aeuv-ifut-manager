@@ -12,41 +12,41 @@ assunto = Recebimento de taxa anual de filiação de equipe
 
 [assinatura]
 tipo = presidente
-data = Uberlândia, 27/10/2026.
+data = Uberlândia, 21/10/2026.
 
 [dados]
-numero = 0000/1
-equipe = BOCA JUNIORS UBERLANDIA
-pagador = MIRELY MARTINS DE FREITAS
-cpf_cnpj_pagador = 052.936.376-30
-representante = MIRELY MARTINS DE FREITAS
+numero = 0000/2
+equipe = LEOES DO MORUMBI
+pagador = Rosangela maria Silva Rosa
+cpf_cnpj_pagador = 094.368.928-70
+representante = Karlos Jhonatan Eugenio Rosa
 exercicio = 2027
 tipo_filiacao = Filiação inicial
 valor = 150,00
 valor_extenso = cento e cinquenta reais
-data_pagamento = 27/10/2026
+data_pagamento = 02/11/2026
 forma_pagamento = PIX
-identificador_pagamento = E003603052026102716567fe4b7871dO
-data_documento = 27 de outubro de 2026
+identificador_pagamento = https://drive.google.com/file/d/1vNV0GG1SFmJ2MV5G0sUwMXMZoizj2jRn/view?usp=drivesdk
+data_documento = 03 de novembro de 2026
 cidade = Uberlândia/MG
 
 ---
-**Recibo nº:** 0000/1
+**Recibo nº:** 0000/2
 
 * IDENTIFICAÇÃO DO RECEBIMENTO
 **Recebedora:** AEUV (Associação Esportiva Uberlandense Varzeana)
 **CNPJ da AEUV:** 67.645.389/0001-01
-**Equipe:** BOCA JUNIORS UBERLANDIA
-**Pagador:** MIRELY MARTINS DE FREITAS
-**CPF / CNPJ do pagador:** 052.936.376-30
-**Presidente / representante legal da equipe:** MIRELY MARTINS DE FREITAS
+**Equipe:** LEOES DO MORUMBI
+**Pagador:** Rosangela maria Silva Rosa
+**CPF / CNPJ do pagador:** 094.368.928-70
+**Presidente / representante legal da equipe:**  Karlos Jhonatan Eugenio Rosa
 
 > VALOR RECEBIDO: R$ 150,00
-Recebemos do pagador acima identificado a importância de **R$ 150,00 (cento e cinquenta reais)**, referente à taxa anual de **Filiação inicial** da equipe **BOCA JUNIORS UBERLANDIA** à AEUV, correspondente ao exercício **2027**.
+Recebemos do pagador acima identificado a importância de **R$ 150,00 (cento e cinquenta reais)**, referente à taxa anual de **Filiação inicial** da equipe **LEOES DO MORUMBI** à AEUV, correspondente ao exercício **2027**.
 
 * DADOS DO PAGAMENTO
-**Data do pagamento:** 27/10/2026
+**Data do pagamento:** 02/11/2026
 **Forma de pagamento:** PIX
-**Identificador / referência do comprovante:** {{identificador_pagamento}}
+**Identificador / referência do comprovante:** https://drive.google.com/file/d/1vNV0GG1SFmJ2MV5G0sUwMXMZoizj2jRn/view?usp=drivesdk
 
 Damos quitação exclusivamente ao valor e à obrigação descritos neste recibo.

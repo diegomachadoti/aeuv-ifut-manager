@@ -1101,14 +1101,17 @@
     /* ----- Cadastro de associados ----- */
 
     .associados { table-layout: fixed; font-size: 13px; }
-    .associados th, .associados td { padding: 9px 10px; }
+    .associados { width: 100%; }
+    .associados th, .associados td { padding: 9px 8px; overflow-wrap: anywhere; word-break: break-word; }
 
-    .associados th:nth-child(1) { width: 22%; }
-    .associados th:nth-child(2) { width: 13%; }
-    .associados th:nth-child(3) { width: 23%; }
-    .associados th:nth-child(4) { width: 18%; }
-    .associados th:nth-child(5) { width: 15%; }
-    .associados th:nth-child(6) { width: 9%; }
+    .associados th:nth-child(1) { width: 20%; }
+    .associados th:nth-child(2) { width: 11%; }
+    .associados th:nth-child(3) { width: 25%; }
+    .associados th:nth-child(4) { width: 22%; }
+    .associados th:nth-child(5) { width: 12%; }
+    .associados th:nth-child(6) { width: 10%; }
+    /* Coluna "Exercício anual" centralizada. */
+    .associados th:nth-child(5), .associados td:nth-child(5) { text-align: center; }
 
     .associados tbody tr { cursor: pointer; }
     .associados tbody tr:hover { background: var(--fundo); }
@@ -1191,29 +1194,42 @@
     }
     .vinculo-equipe-form select option { color: var(--texto); background: var(--fundo); }
 
+    /* Documentos do associado: lista compacta, 2 por linha no desktop. */
     .documento {
       grid-column: span 6;
       border: 1px solid var(--borda);
-      border-radius: 10px;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-areas: 'titulo acao' 'situacao acao' 'nome acao';
+      align-items: center;
+      gap: 2px 10px;
+      margin-bottom: 0;
     }
 
-    .documento .titulo { font-size: 13px; font-weight: bold; color: var(--azul); }
-    .documento .dica { font-size: 11px; color: var(--apoio); }
-
-    .documento .situacao { font-size: 12px; }
+    .documento .titulo { grid-area: titulo; font-size: 13px; font-weight: bold; color: var(--azul); }
+    /* Esconde as dicas (Opcional e descrição) para a lista ficar enxuta. */
+    .documento .dica { display: none; }
+    .documento .situacao { grid-area: situacao; font-size: 11px; }
     .documento .situacao.entregue { color: #1e8449; font-weight: bold; }
     .documento .situacao.falta { color: #8a5a00; }
-    .documento .selecao-anexo { position: relative; display: block; cursor: pointer; border: 2px dashed var(--apoio); border-radius: 10px; padding: 28px 16px; text-align: center; background: var(--fundo); }
+    .documento > span:nth-of-type(3) { grid-area: situacao; }
+    .documento .situacao a { font-size: 11px; }
+
+    /* Área de upload compacta: um botão pequeno. */
+    .documento .selecao-anexo {
+      grid-area: acao; position: relative; display: inline-flex; flex-direction: column; align-items: center;
+      cursor: pointer; border: 1px solid var(--azul); border-radius: 8px; padding: 6px 10px;
+      text-align: center; background: var(--fundo); white-space: nowrap;
+    }
     .documento .selecao-anexo:hover { background: var(--azul-claro); }
-    .documento .selecao-anexo:focus-within { outline: 2px solid var(--azul); outline-offset: 3px; }
-    .documento .upload-titulo { display: block; font-size: 18px; color: var(--azul); margin-bottom: 5px; }
-    .documento .upload-ajuda { display: block; font-size: 12px; font-weight: normal; color: var(--apoio); }
+    .documento .selecao-anexo:focus-within { outline: 2px solid var(--azul); outline-offset: 2px; }
+    .documento .upload-titulo { display: block; font-size: 11px; font-weight: bold; color: var(--azul); }
+    /* Esconde a ajuda "Selecione um PDF..." para o botão ficar pequeno. */
+    .documento .upload-ajuda { display: none; }
     .documento input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; padding: 0; }
-    .documento .arquivo-selecionado { overflow-wrap: anywhere; font-size: 12px; }
+    .documento .arquivo-selecionado { grid-area: nome; overflow-wrap: anywhere; font-size: 10px; color: var(--apoio); }
     #areaAssociados .campo [aria-invalid="true"] { border: 2px solid #b42318; background: #fff1f0; color: #7a271a; }
     #areaAssociados .campo:has([aria-invalid="true"]) label,
     #areaAssociados .obrigatorio, #areaAssociados .erro-campo { color: #b42318; }
@@ -1222,6 +1238,45 @@
     body.tema-escuro #areaAssociados .obrigatorio,
     body.tema-escuro #areaAssociados .erro-campo { color: #fca5a5; }
     .pessoa-filiacao { border: 1px solid var(--borda); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+
+    /* Cada etapa do cadastro de associado vira um expansor para deixar a tela mais limpa. */
+    details.etapa-associado { border: 1px solid var(--borda); border-radius: 10px; margin-bottom: 12px; padding: 0 14px; }
+    details.etapa-associado > summary {
+      list-style: none; cursor: pointer; padding: 12px 0; display: flex; align-items: center; gap: 8px;
+    }
+    details.etapa-associado > summary::-webkit-details-marker { display: none; }
+    details.etapa-associado > summary h4 { margin: 0; flex: 1; }
+    details.etapa-associado > summary::after {
+      content: '▸'; color: var(--texto-apoio, #6b7280); font-size: 14px; transition: transform .15s ease;
+    }
+    details.etapa-associado[open] > summary::after { transform: rotate(90deg); }
+    details.etapa-associado > .campos,
+    details.etapa-associado > :not(summary) { margin-bottom: 12px; }
+
+    /* Botão/seletor de "copiar dados" do representante legal. */
+    .copiar-dados { margin: 4px 0 12px; }
+    .copiar-dados label { display: block; font-size: 13px; margin-bottom: 4px; }
+    .copiar-dados-linha { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .copiar-dados-linha select { flex: 1; min-width: 180px; }
+
+    /* Geração de documentos (certificado/recibo) e modal do recibo. */
+    .doc-geracao { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 8px; }
+    .ultimos-docs { margin: 4px 0 8px; }
+    .ultimos-docs .ultimo-doc { font-size: 13px; margin: 2px 0; }
+    .ultimos-docs .link-doc { color: var(--azul); font-weight: bold; text-decoration: underline; margin-left: 6px; cursor: pointer; }
+    body.tema-escuro .ultimos-docs .link-doc { color: #93c5fd; }
+    .modal-recibo { text-align: left; max-width: 420px; width: 92vw; max-height: 86vh; overflow: auto; }
+    .modal-recibo h3 { margin: 0 0 6px; color: var(--azul); text-align: left; }
+    .modal-recibo p { text-align: left; }
+    .modal-recibo .campo { margin-bottom: 10px; display: block; text-align: left; }
+    .modal-recibo .campo label { display: block; font-size: 13px; margin-bottom: 4px; text-align: left; }
+    .modal-recibo .campo input {
+      width: 100%; box-sizing: border-box; display: block; margin: 0;
+      padding: 9px 10px; font-size: 14px; min-height: 40px; appearance: none; -webkit-appearance: none;
+    }
+    .modal-recibo .campo input[type="date"] { line-height: 1.2; }
+    .modal-recibo .dica { display: block; text-align: left; margin-top: 4px; }
+    .modal-recibo-acoes { display: flex; gap: 10px; margin-top: 8px; justify-content: flex-start; }
 
     .acoes-formulario {
       margin-top: 20px;
@@ -11974,7 +12029,7 @@
         + '</div>'
         + '<div class="tabela-rolagem"><table class="associados">'
         + '<thead><tr><th>Equipe</th><th>Situação</th><th>Representante</th>'
-        + '<th>Contato</th><th>Cidade</th><th>Docs.</th></tr></thead>'
+        + '<th>Contato</th><th>Exercício anual</th><th>Docs.</th></tr></thead>'
         + '<tbody id="linhasAssociados"></tbody></table></div>'
         + '</div>';
 
@@ -12087,7 +12142,7 @@
             + '<div class="equipe-dado">' + escapar(formatarCpf(r.cpf)) + '</div>')
           + celula('Contato', escapar(formatarTelefone(r.telefone))
             + '<div class="equipe-dado">' + escapar(r.email) + '</div>')
-          + celula('Cidade', escapar(r.cidade + (r.uf ? '/' + r.uf : '')))
+          + celula('Exercício anual', escapar(r.exercicioFiliacao || '—'))
           + celula('Documentos', docs)
           + '</tr>';
       }).join('');
@@ -12182,11 +12237,16 @@
         ? ''
         : '<button type="button" class="botao-apoio" id="voltarAssociados">Voltar &agrave; lista</button>';
 
+      // Cadastro novo começa com as etapas abertas (para preencher); na edição,
+      // começam recolhidas para a tela ficar limpa (abre-se a etapa desejada).
+      const ab = registro ? '' : ' open';
+
       document.getElementById('areaAssociados').innerHTML = '<div class="formulario">'
         + '<h3>' + escapar(titulo) + '</h3>'
         + historico
-        + '<p class="apoio">Campos com <span class="obrigatorio">*</span> são obrigatórios. Todos os uploads são opcionais.</p>'
-        + '<div class="grupo"><h4>Equipe</h4><div class="campos">'
+        + '<p class="apoio">Campos com <span class="obrigatorio">*</span> são obrigatórios. Todos os uploads são opcionais. '
+        + 'Clique em cada etapa para expandir ou recolher.</p>'
+        + '<details class="grupo etapa-associado"' + ab + '><summary><h4>Equipe</h4></summary><div class="campos">'
         + '<div class="campo largo"><label for="fEquipe">Equipe associada / nome fantasia</label>'
         + '<select id="fEquipe"' + trava + '>'
         + (registro ? '' : '<option value="">Selecione</option>') + opcoesEquipe + '</select>'
@@ -12199,20 +12259,20 @@
         + campoTexto('fCoresOficiais', 'Cores oficiais', registro ? registro.coresOficiais : '', 'largo', trava, 'text')
         + campoTexto('fSedeCampo', 'Campo / sede utilizada', registro ? registro.sedeCampo : '', 'largo', trava, 'text')
         + campoTexto('fEnderecoEquipe', 'Endereço da equipe', registro ? registro.enderecoEquipe : '', 'cheio', trava, 'text')
-        + '</div></div>'
-        + '<div class="grupo"><h4>Filiação</h4><div class="campos">'
+        + '</div></details>'
+        + '<details class="grupo etapa-associado"' + ab + '><summary><h4>Filiação</h4></summary><div class="campos">'
         + campoSelecaoAssociado_('fTipoFiliacao', 'Tipo de filiação', registro ? registro.tipoFiliacao : '',
           [['', 'Não informado'], ['inicial', 'Filiação inicial'], ['renovacao', 'Renovação anual']], trava)
         + campoTexto('fExercicioFiliacao', 'Exercício anual', registro ? registro.exercicioFiliacao : '', '', trava, 'text')
         + '</div><p class="apoio" id="taxaFiliacao"></p>'
         + '<p class="apoio">Cadastro e anexos não aprovam a filiação nem confirmam pagamento. '
-        + 'A análise, aprovação, cobrança e confirmação do pagamento são etapas separadas.</p></div>'
-        + '<div class="grupo"><h4>Diretoria e comissão técnica</h4>'
+        + 'A análise, aprovação, cobrança e confirmação do pagamento são etapas separadas.</p></details>'
+        + '<details class="grupo etapa-associado"' + ab + '><summary><h4>Diretoria e comissão técnica</h4></summary>'
         + '<p class="apoio">Relacione nome completo, cargo/função, CPF e RG de cada pessoa.</p>'
         + '<div id="pessoasFiliacao"></div>'
         + (somenteLeitura ? '' : '<button type="button" class="botao-apoio" id="adicionarPessoaFiliacao">Adicionar pessoa</button>')
-        + '</div>'
-        + '<div class="grupo"><h4>Vínculos e conferência de elegibilidade</h4><div class="campos">'
+        + '</details>'
+        + '<details class="grupo etapa-associado"' + ab + '><summary><h4>Vínculos e conferência de elegibilidade</h4></summary><div class="campos">'
         + campoSelecaoAssociado_('fVinculoAnterior', 'Vínculo anterior com outra associação varzeana', registro ? registro.vinculoAnterior : '',
           [['', 'Não informado'], ['nao', 'Não houve vínculo'], ['sim', 'Houve vínculo anterior']], trava)
         + campoTexto('fAssociacaoAnterior', 'Nome da associação anterior (quando aplicável)', registro ? registro.associacaoAnterior : '', 'largo', trava, 'text')
@@ -12221,16 +12281,18 @@
         + '</div><p class="apoio">Conferir ausência de filiação simultânea, desligamento quando aplicável '
         + 'e vínculos/conflitos de dirigentes e comissão. Registrar a conferência não aprova automaticamente a equipe.</p>'
         + '<p class="apoio" id="avisoDesligamento"></p>'
-        + '</div>'
-        + '<div class="grupo"><h4>Representante legal</h4><div class="campos">'
+        + '</details>'
+        + '<details class="grupo etapa-associado"' + ab + '><summary><h4>Representante legal</h4></summary>'
+        + (somenteLeitura ? '' : '<div class="copiar-dados" id="copiarRepresentante"></div>')
+        + '<div class="campos">'
         + campoTexto('fNome', 'Nome completo', registro ? registro.nome : '', 'cheio', trava, 'text')
         + campoTexto('fNascimento', 'Data de nascimento', paraDataInput(registro ? registro.nascimento : ''), '', trava, 'date')
         + campoTexto('fCpf', 'CPF', formatarCpf(registro ? registro.cpf : ''), '', trava, 'text')
         + campoTexto('fRg', 'RG', registro ? registro.rg : '', '', trava, 'text')
         + campoTexto('fEmail', 'E-mail', registro ? registro.email : '', 'largo', trava, 'email')
         + campoTexto('fTelefone', 'Telefone com DDD', formatarTelefone(registro ? registro.telefone : ''), 'largo', trava, 'tel')
-        + '</div></div>'
-        + '<div class="grupo"><h4>Endere&ccedil;o</h4><div class="campos">'
+        + '</div></details>'
+        + '<details class="grupo etapa-associado"' + ab + '><summary><h4>Endere&ccedil;o</h4></summary><div class="campos">'
         + campoTexto('fCep', 'CEP', formatarCep(registro ? registro.cep : ''), 'curto', trava, 'text')
         + campoTexto('fLogradouro', 'Logradouro', registro ? registro.logradouro : '', 'largo', trava, 'text')
         + campoTexto('fNumero', 'Número', registro ? registro.numero : '', 'curto', trava, 'text')
@@ -12238,12 +12300,21 @@
         + campoTexto('fBairro', 'Bairro', registro ? registro.bairro : '', '', trava, 'text')
         + campoTexto('fCidade', 'Cidade', registro ? registro.cidade : '', 'curto', trava, 'text')
         + campoTexto('fUf', 'UF', registro ? registro.uf : '', 'mini', trava, 'text')
-        + '</div></div>'
-        + '<div class="grupo"><h4>Documenta&ccedil;&atilde;o</h4>'
-        + '<p class="apoio">Arquivos PDF, JPG, PNG ou WEBP, de at&eacute; 5 MB cada. '
-        + 'Selecionar um arquivo novo substitui somente aquele documento ao salvar. Os demais anexos são mantidos. '
-        + 'Todos os anexos são opcionais e não impedem salvar o cadastro. O comprovante da taxa é apresentado após aprovação e cobrança.</p>'
-        + '<div class="campos">' + documentos + '</div></div>'
+        + '</div></details>'
+        + '<details class="grupo etapa-associado"' + ab + '><summary><h4>Documenta&ccedil;&atilde;o</h4></summary>'
+        + '<p class="apoio">Todos os anexos são opcionais (PDF, JPG, PNG ou WEBP, até 5 MB). Enviar um arquivo substitui apenas aquele documento.</p>'
+        + '<div class="campos">' + documentos + '</div></details>'
+        + (somenteLeitura || !registro ? '' :
+          '<details class="grupo etapa-associado" open><summary><h4>Gerar documentos (PDF)</h4></summary>'
+          + '<p class="apoio">Gera o Certificado de associação e o Recibo de filiação no padrão AEUV, '
+          + 'já assinados pelo Presidente, usando os dados deste cadastro. Salve o cadastro antes de gerar.</p>'
+          + '<div class="doc-geracao">'
+          + '<button type="button" class="botao-apoio" id="gerarCertificadoDoc" data-equipe="' + escapar(registro.equipe) + '">Gerar Certificado de associação</button>'
+          + '<button type="button" class="botao-apoio" id="gerarReciboDoc" data-equipe="' + escapar(registro.equipe) + '">Gerar Recibo de filiação</button>'
+          + '</div>'
+          + '<div class="ultimos-docs" id="ultimosDocsGerados"></div>'
+          + '<span class="apoio" id="avisoDocGeracao" role="status" aria-live="polite"></span>'
+          + '</details>')
         + '<div class="acoes-formulario">'
         + gravar
         + voltar
@@ -12268,7 +12339,12 @@
       }
       if (Array.isArray(pessoas)) pessoas.forEach(function (pessoa) { adicionarPessoaFiliacao_(pessoa, trava); });
       const adicionar = document.getElementById('adicionarPessoaFiliacao');
-      if (adicionar) adicionar.addEventListener('click', function () { adicionarPessoaFiliacao_({}, trava); });
+      if (adicionar) adicionar.addEventListener('click', function () {
+        adicionarPessoaFiliacao_({}, trava);
+        atualizarCopiarRepresentante_();
+      });
+      // Preenche (ou esconde) o seletor "Copiar dados" do representante legal.
+      atualizarCopiarRepresentante_();
       const atualizarIndicacoes = function () {
         const tipo = document.getElementById('fTipoFiliacao').value;
         document.getElementById('taxaFiliacao').textContent = tipo === 'inicial' ? 'Taxa anual de referência: R$ 150,00.'
@@ -12289,6 +12365,10 @@
         if (campo.matches('.campo input, .campo select') && campo.getAttribute('aria-invalid') === 'true') {
           validarCampoAssociado_(campo);
         }
+        // Mudou nome/cpf/rg de uma pessoa? Atualiza as opcoes de "copiar dados".
+        if (campo.dataset && campo.dataset.pessoaCampo) {
+          atualizarCopiarRepresentante_();
+        }
       };
       areaFormulario.oninput = revalidarCampo;
       areaFormulario.onchange = revalidarCampo;
@@ -12301,6 +12381,32 @@
             : registro && registro[documento] ? 'Anexo atual será mantido.' : 'Nenhum arquivo selecionado.';
         });
       });
+
+      const botaoCertificado = document.getElementById('gerarCertificadoDoc');
+      if (botaoCertificado) {
+        botaoCertificado.addEventListener('click', function () {
+          gerarCertificadoAssociadoDaTela_(botaoCertificado.dataset.equipe);
+        });
+      }
+      const botaoRecibo = document.getElementById('gerarReciboDoc');
+      if (botaoRecibo) {
+        botaoRecibo.addEventListener('click', function () {
+          abrirModalReciboAssociado_(botaoRecibo.dataset.equipe);
+        });
+      }
+
+      // Mostra, ao abrir o cadastro, os documentos já gerados (anexados no Drive).
+      ultimosDocsAssociado_ = { certificado: null, recibo: null };
+      if (registro) {
+        if (registro.termoAssociacao) {
+          registrarUltimoDocExistente_('certificado', 'Certificado de associação',
+            registro.numeroRecibo, registro.termoAssociacao);
+        }
+        if (registro.regulamento) {
+          registrarUltimoDocExistente_('recibo', 'Recibo de filiação',
+            registro.numeroRecibo, registro.regulamento);
+        }
+      }
 
       const botaoVoltar = document.getElementById('voltarAssociados');
 
@@ -12393,12 +12499,75 @@
         document.getElementById(id + campo).dataset.pessoaCampo = campo;
       });
       prepararCamposAssociado_();
-      if (!trava) div.querySelector('button').addEventListener('click', function () { div.remove(); });
+      if (!trava) div.querySelector('button').addEventListener('click', function () {
+        div.remove();
+        atualizarCopiarRepresentante_();
+      });
+    }
+
+    /**
+     * Monta (ou esconde) o seletor "Copiar dados" do Representante legal a partir
+     * das pessoas cadastradas em Diretoria/Comissão. Copia apenas os campos em
+     * comum: Nome, CPF e RG. Nascimento/E-mail/Telefone não existem na pessoa.
+     */
+    function atualizarCopiarRepresentante_() {
+      const area = document.getElementById('copiarRepresentante');
+      if (!area) return;
+      const pessoas = Array.prototype.slice.call(document.querySelectorAll('#pessoasFiliacao .pessoa-filiacao'))
+        .map(function (linha, indice) {
+          const campo = function (nome) {
+            const el = linha.querySelector('[data-pessoa-campo="' + nome + '"]');
+            return el ? el.value.trim() : '';
+          };
+          return { indice: indice, nome: campo('nome'), cargo: campo('cargo'), cpf: campo('cpf'), rg: campo('rg') };
+        })
+        .filter(function (p) { return p.nome || p.cpf || p.rg; });
+
+      if (!pessoas.length) {
+        area.innerHTML = '';
+        return;
+      }
+
+      const opcoes = pessoas.map(function (p) {
+        const rotulo = (p.nome || 'Pessoa ' + (p.indice + 1)) + (p.cargo ? ' — ' + p.cargo : '');
+        return '<option value="' + p.indice + '">' + escapar(rotulo) + '</option>';
+      }).join('');
+
+      area.innerHTML = '<label for="copiarRepresentanteSelect">Copiar dados de uma pessoa da diretoria/comissão</label>'
+        + '<div class="copiar-dados-linha">'
+        + '<select id="copiarRepresentanteSelect"><option value="">Selecione uma pessoa</option>' + opcoes + '</select>'
+        + '<button type="button" class="botao-apoio" id="copiarRepresentanteBtn">Copiar para o representante</button>'
+        + '</div>'
+        + '<span class="dica">Preenche Nome, CPF e RG (campos em comum). Os demais você completa manualmente.</span>';
+
+      document.getElementById('copiarRepresentanteBtn').addEventListener('click', function () {
+        const indice = document.getElementById('copiarRepresentanteSelect').value;
+        if (indice === '') return;
+        const p = pessoas.filter(function (item) { return String(item.indice) === String(indice); })[0];
+        if (!p) return;
+        copiarValorAssociado_('fNome', p.nome);
+        copiarValorAssociado_('fCpf', p.cpf);
+        copiarValorAssociado_('fRg', p.rg);
+        const aviso = document.getElementById('avisoAssociado');
+        if (aviso) aviso.textContent = 'Dados de "' + (p.nome || 'pessoa selecionada') + '" copiados para o representante legal.';
+      });
+    }
+
+    /**
+     * Preenche um campo do formulario e dispara os eventos para mascara/validacao.
+     */
+    function copiarValorAssociado_(id, valor) {
+      const campo = document.getElementById(id);
+      if (!campo || !valor) return;
+      campo.value = valor;
+      campo.dispatchEvent(new Event('input', { bubbles: true }));
+      campo.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
     function prepararCamposAssociado_() {
+      // CEP deixou de ser obrigatorio (fica opcional); os demais do endereco seguem obrigatorios.
       const obrigatorios = ['fEquipe', 'fStatus', 'fNome', 'fNascimento', 'fCpf', 'fRg', 'fEmail',
-        'fTelefone', 'fCep', 'fLogradouro', 'fNumero', 'fBairro', 'fCidade', 'fUf'];
+        'fTelefone', 'fLogradouro', 'fNumero', 'fBairro', 'fCidade', 'fUf'];
       if (document.getElementById('fVinculoAnterior').value === 'sim') obrigatorios.push('fAssociacaoAnterior');
       document.querySelectorAll('#areaAssociados .campo input, #areaAssociados .campo select').forEach(function (campo) {
         campo.required = obrigatorios.indexOf(campo.id) !== -1 || !!campo.dataset.pessoaCampo;
@@ -12474,6 +12643,9 @@
       });
       aviso.textContent = invalidos.length ? 'Confira os ' + invalidos.length + ' campos destacados em vermelho.' : '';
       if (invalidos.length) {
+        // Se o campo estiver dentro de uma etapa recolhida, abre a etapa antes de rolar/focar.
+        const etapa = invalidos[0].closest('details.etapa-associado');
+        if (etapa && !etapa.open) etapa.open = true;
         invalidos[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
         invalidos[0].focus({ preventScroll: true });
       }
@@ -12533,6 +12705,250 @@
       campo.addEventListener('input', function () {
         const limpo = campo.value.replace(/\D/g, '').slice(0, digitos);
         campo.value = limpo ? formatar(limpo) : '';
+      });
+    }
+
+    // Guarda o último certificado/recibo gerados nesta sessão, para listar na tela.
+    let ultimosDocsAssociado_ = { certificado: null, recibo: null };
+
+    /**
+     * Atualiza a lista "último gerado" (certificado e recibo) na seção de documentos.
+     */
+    function registrarUltimoDoc_(tipo, dados) {
+      if (!dados || !dados.nome) return;
+      ultimosDocsAssociado_[tipo] = {
+        nome: dados.nome,
+        numero: dados.numero || '',
+        base64: dados.base64 || '',
+        url: dados.url || '',
+        quando: new Date().toLocaleString('pt-BR')
+      };
+      const area = document.getElementById('ultimosDocsGerados');
+      if (!area) return;
+      const linha = function (rotulo, tipoDoc, doc) {
+        if (!doc) return '';
+        return '<div class="ultimo-doc"><strong>' + rotulo + ':</strong> ' + escapar(doc.nome)
+          + (doc.numero ? ' (nº ' + escapar(doc.numero) + ')' : '')
+          + ' <span class="apoio">— gerado em ' + escapar(doc.quando) + '</span>'
+          + (doc.base64
+            ? ' <a href="#" class="link-doc" data-doc-tipo="' + tipoDoc + '" data-doc-acao="abrir">Abrir</a>'
+              + ' <a href="#" class="link-doc" data-doc-tipo="' + tipoDoc + '" data-doc-acao="baixar">Baixar</a>'
+            : '')
+          + (doc.url ? ' <a href="' + escapar(doc.url) + '" target="_blank" rel="noopener" class="link-doc">Abrir no Drive</a>' : '')
+          + '</div>';
+      };
+      const html = linha('Último certificado', 'certificado', ultimosDocsAssociado_.certificado)
+        + linha('Último recibo', 'recibo', ultimosDocsAssociado_.recibo);
+      area.innerHTML = html ? '<p class="apoio">Documentos gerados nesta sessão:</p>' + html : '';
+      area.querySelectorAll('.link-doc').forEach(function (link) {
+        link.addEventListener('click', function (evento) {
+          evento.preventDefault();
+          abrirUltimoDoc_(link.dataset.docTipo, link.dataset.docAcao);
+        });
+      });
+    }
+
+    /**
+     * Registra um documento já existente (anexado no Drive) ao abrir o cadastro,
+     * para a seção "Gerar documentos" mostrar o link do último gerado.
+     */
+    function registrarUltimoDocExistente_(tipo, nome, numero, url) {
+      if (!url) return;
+      ultimosDocsAssociado_[tipo] = {
+        nome: nome + (numero ? ' nº ' + numero : ''),
+        numero: numero || '',
+        base64: '',
+        url: url,
+        quando: ''
+      };
+      const area = document.getElementById('ultimosDocsGerados');
+      if (!area) return;
+      const linha = function (rotulo, doc) {
+        if (!doc) return '';
+        return '<div class="ultimo-doc"><strong>' + rotulo + ':</strong> ' + escapar(doc.nome)
+          + (doc.quando ? ' <span class="apoio">— gerado em ' + escapar(doc.quando) + '</span>' : '')
+          + (doc.base64
+            ? ' <a href="#" class="link-doc" data-doc-tipo="' + (doc === ultimosDocsAssociado_.certificado ? 'certificado' : 'recibo') + '" data-doc-acao="abrir">Abrir</a>'
+            : '')
+          + (doc.url ? ' <a href="' + escapar(doc.url) + '" target="_blank" rel="noopener" class="link-doc">Abrir no Drive</a>' : '')
+          + '</div>';
+      };
+      area.innerHTML = '<p class="apoio">Documentos já gerados para esta equipe:</p>'
+        + linha('Certificado', ultimosDocsAssociado_.certificado)
+        + linha('Recibo', ultimosDocsAssociado_.recibo);
+    }
+
+    /**
+     * Reabre ou rebaixa um documento já gerado nesta sessão, a partir do base64
+     * guardado (sem chamar o servidor novamente).
+     */
+    function abrirUltimoDoc_(tipo, acao) {
+      const doc = ultimosDocsAssociado_[tipo];
+      if (!doc || !doc.base64) return;
+      const binario = atob(doc.base64);
+      const bytes = new Uint8Array(binario.length);
+      for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      if (acao === 'baixar') {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = doc.nome || 'documento.pdf';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        // Abre numa nova aba para visualizar o PDF.
+        window.open(url, '_blank');
+      }
+      window.setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    }
+
+    /**
+     * Baixa um PDF retornado pelo servidor em base64.
+     */
+    function baixarPdfBase64_(dados, nomePadrao) {
+      if (!dados || dados.mimeType !== 'application/pdf' || !dados.base64) {
+        throw new Error('O PDF não foi retornado. Tente novamente.');
+      }
+      const binario = atob(dados.base64);
+      const bytes = new Uint8Array(binario.length);
+      for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = dados.nome || nomePadrao || 'documento.pdf';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    }
+
+    /**
+     * Gera o Certificado de associação da equipe (automático a partir do cadastro).
+     */
+    function gerarCertificadoAssociadoDaTela_(equipe) {
+      const botao = document.getElementById('gerarCertificadoDoc');
+      const aviso = document.getElementById('avisoDocGeracao');
+      if (botao) botao.disabled = true;
+      if (aviso) aviso.textContent = '';
+      mostrarOverlayGlobal_('Gerando certificado...');
+      google.script.run
+        .withSuccessHandler(function (dados) {
+          removerOverlayGlobal_();
+          if (botao) botao.disabled = false;
+          try {
+            baixarPdfBase64_(dados, 'certificado.pdf');
+            registrarUltimoDoc_('certificado', dados);
+            if (aviso) aviso.textContent = 'Certificado nº ' + (dados.numero || '') + ' gerado. Download iniciado.';
+          } catch (erro) {
+            if (aviso) aviso.innerHTML = '<span style="color:#922b21;">' + escapar(erro.message) + '</span>';
+          }
+        })
+        .withFailureHandler(function (erro) {
+          removerOverlayGlobal_();
+          if (botao) botao.disabled = false;
+          confirmarDialogo_({
+            titulo: 'Não foi possível gerar o certificado',
+            mensagem: erro && erro.message ? erro.message : String(erro),
+            confirmar: 'Fechar', cancelar: 'Fechar', perigo: false
+          });
+        })
+        .gerarCertificadoAssociado({ equipe: equipe });
+    }
+
+    /**
+     * Abre o modal do recibo: busca a sugestão de número/valor e pede os dados do pagamento.
+     */
+    function abrirModalReciboAssociado_(equipe) {
+      mostrarOverlayGlobal_('Preparando recibo...');
+      google.script.run
+        .withSuccessHandler(function (sugestao) {
+          removerOverlayGlobal_();
+          montarModalReciboAssociado_(equipe, sugestao);
+        })
+        .withFailureHandler(function (erro) {
+          removerOverlayGlobal_();
+          confirmarDialogo_({
+            titulo: 'Não foi possível preparar o recibo',
+            mensagem: erro && erro.message ? erro.message : String(erro),
+            confirmar: 'Fechar', cancelar: 'Fechar', perigo: false
+          });
+        })
+        .sugerirReciboAssociado(equipe);
+    }
+
+    function montarModalReciboAssociado_(equipe, sugestao) {
+      const s = sugestao || {};
+      const overlay = document.createElement('div');
+      overlay.className = 'overlay-global';
+      overlay.innerHTML = '<div class="overlay-global-caixa modal-recibo" role="dialog" aria-modal="true" aria-label="Gerar recibo de filiação">'
+        + '<h3>Recibo de filiação — ' + escapar(s.equipe || equipe) + '</h3>'
+        + '<p class="apoio">Número ' + (s.reutilizado ? 'já atribuído a esta equipe (será atualizado): ' : 'sugerido: ')
+        + '<strong>' + escapar(s.numero || '') + '</strong>. Preencha os dados do pagamento.</p>'
+        + '<div class="campo"><label for="recPagador">Pagador</label><input id="recPagador" type="text" value="' + escapar(s.pagadorSugerido || '') + '"></div>'
+        + '<div class="campo"><label for="recCpf">CPF / CNPJ do pagador</label><input id="recCpf" type="text" value="' + escapar(s.cpfPagadorSugerido || '') + '"></div>'
+        + '<div class="campo"><label for="recValor">Valor (R$)</label><input id="recValor" type="text" inputmode="decimal" value="' + escapar(s.valorSugerido || '') + '" placeholder="150,00"></div>'
+        + '<div class="campo"><label for="recData">Data do pagamento</label><input id="recData" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA"></div>'
+        + '<div class="campo"><label for="recForma">Forma de pagamento</label><input id="recForma" type="text" value="PIX"></div>'
+        + '<div class="campo"><label for="recIdent">Identificador / comprovante</label><input id="recIdent" type="text" value="' + escapar(s.comprovanteUrl || '') + '" placeholder="Anexe o Comprovante da taxa anual no cadastro">'
+        + (s.comprovanteUrl ? '<span class="dica">Preenchido com o anexo "Comprovante da taxa anual".</span>' : '<span class="dica">Sem comprovante anexado no cadastro. Você pode informar um link manualmente.</span>') + '</div>'
+        + '<div class="modal-recibo-acoes">'
+        + '<button type="button" class="botao-principal" id="recGerar">Gerar recibo</button>'
+        + '<button type="button" class="botao-apoio" id="recCancelar">Cancelar</button>'
+        + '</div>'
+        + '<span class="apoio" id="recAviso" role="status" aria-live="polite"></span>'
+        + '</div>';
+      document.body.appendChild(overlay);
+
+      const fechar = function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+      overlay.querySelector('#recCancelar').addEventListener('click', fechar);
+
+      // Máscara simples de data DD/MM/AAAA (sem depender do locale do navegador).
+      const campoData = overlay.querySelector('#recData');
+      campoData.addEventListener('input', function () {
+        let d = campoData.value.replace(/\D/g, '').slice(0, 8);
+        if (d.length > 4) d = d.slice(0, 2) + '/' + d.slice(2, 4) + '/' + d.slice(4);
+        else if (d.length > 2) d = d.slice(0, 2) + '/' + d.slice(2);
+        campoData.value = d;
+      });
+
+      overlay.querySelector('#recGerar').addEventListener('click', function () {
+        const valor = overlay.querySelector('#recValor').value.trim();
+        const recAviso = overlay.querySelector('#recAviso');
+        if (!valor) {
+          recAviso.innerHTML = '<span style="color:#922b21;">Informe o valor recebido.</span>';
+          return;
+        }
+        const payload = {
+          equipe: equipe,
+          pagador: overlay.querySelector('#recPagador').value.trim(),
+          cpfPagador: overlay.querySelector('#recCpf').value.trim(),
+          valor: valor,
+          dataPagamento: overlay.querySelector('#recData').value.trim(),
+          formaPagamento: overlay.querySelector('#recForma').value.trim(),
+          identificador: overlay.querySelector('#recIdent').value.trim()
+        };
+        const btn = overlay.querySelector('#recGerar');
+        btn.disabled = true;
+        recAviso.textContent = 'Gerando...';
+        google.script.run
+          .withSuccessHandler(function (dados) {
+            try {
+              baixarPdfBase64_(dados, 'recibo.pdf');
+              registrarUltimoDoc_('recibo', dados);
+              fechar();
+              const aviso = document.getElementById('avisoDocGeracao');
+              if (aviso) aviso.textContent = 'Recibo nº ' + (dados.numero || '') + ' gerado. Download iniciado.';
+            } catch (erro) {
+              btn.disabled = false;
+              recAviso.innerHTML = '<span style="color:#922b21;">' + escapar(erro.message) + '</span>';
+            }
+          })
+          .withFailureHandler(function (erro) {
+            btn.disabled = false;
+            recAviso.innerHTML = '<span style="color:#922b21;">' + escapar(erro && erro.message ? erro.message : String(erro)) + '</span>';
+          })
+          .gerarReciboAssociado(payload);
       });
     }
 

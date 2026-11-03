@@ -14158,8 +14158,8 @@ const ASSOCIADOS_DOCUMENTOS = [
   { id: 'ata', nome: 'Ata de fundação', categoria: 'complementar', apoio: 'Se a equipe possuir ata de fundação.' },
   { id: 'documentoResponsavel', nome: 'Documento do responsável', categoria: 'complementar', apoio: 'RG ou CNH do representante legal.' },
   { id: 'comprovanteEndereco', nome: 'Comprovante de endereço', categoria: 'complementar', apoio: 'Emitido nos últimos três meses.' },
-  { id: 'termoAssociacao', nome: 'Termo de associação AEUV', categoria: 'complementar', apoio: 'Termo de responsabilidade assinado pelo representante.' },
-  { id: 'regulamento', nome: 'Regulamento assinado', categoria: 'complementar', apoio: 'Regulamento da competição, quando aplicável.' },
+  { id: 'termoAssociacao', nome: 'Certificado de associação AEUV', categoria: 'complementar', apoio: 'Certificado de associação emitido pela AEUV.' },
+  { id: 'regulamento', nome: 'Recibo de filiação à AEUV', categoria: 'complementar', apoio: 'Recibo de filiação emitido pela AEUV.' },
   { id: 'fichaCadastro', nome: 'Ficha de filiação assinada', categoria: 'complementar', apoio: 'Ficha preenchida, com a relação da diretoria e comissão.' },
   { id: 'comprovanteDesligamento', nome: 'Comprovante de desligamento', categoria: 'complementar', apoio: 'Se houve vínculo com outra associação varzeana, pode anexar o desligamento.' },
   { id: 'comprovantePagamento', nome: 'Comprovante da taxa anual', categoria: 'aposAprovacao', apoio: 'Após aprovação e cobrança. O anexo não confirma pagamento automaticamente.' }
@@ -14192,8 +14192,8 @@ const ASSOCIADOS_COLUNAS = [
   { id: 'ata', titulo: 'Ata de fundação' },
   { id: 'documentoResponsavel', titulo: 'Documento do responsável' },
   { id: 'comprovanteEndereco', titulo: 'Comprovante de endereço' },
-  { id: 'termoAssociacao', titulo: 'Termo de associação' },
-  { id: 'regulamento', titulo: 'Regulamento assinado' },
+  { id: 'termoAssociacao', titulo: 'Certificado de associação AEUV' },
+  { id: 'regulamento', titulo: 'Recibo de filiação à AEUV' },
   { id: 'criadoEm', titulo: 'Criado em' },
   { id: 'atualizadoEm', titulo: 'Atualizado em' },
   { id: 'atualizadoPor', titulo: 'Atualizado por' },
@@ -14211,8 +14211,418 @@ const ASSOCIADOS_COLUNAS = [
   { id: 'elegibilidadeConferida', titulo: 'Elegibilidade conferida' },
   { id: 'fichaCadastro', titulo: 'Ficha de filiação assinada' },
   { id: 'comprovanteDesligamento', titulo: 'Comprovante de desligamento' },
-  { id: 'comprovantePagamento', titulo: 'Comprovante da taxa anual' }
+  { id: 'comprovantePagamento', titulo: 'Comprovante da taxa anual' },
+  // Número do recibo de filiação já gerado para esta equipe (1-para-1 por
+  // filiado). Em branco = ainda não gerou; ao regerar, reutiliza o mesmo número.
+  { id: 'numeroRecibo', titulo: 'Número do recibo' }
 ];
+
+/* ============================================================
+ * GERAÇÃO DE CERTIFICADO E RECIBO DE FILIAÇÃO (direto na tela)
+ * Porta o fluxo Python (documento_pdf.py) para o Apps Script:
+ * monta o HTML no padrão AEUV e converte em PDF (getAs).
+ * ============================================================ */
+
+const AEUV_CNPJ = '67.645.389/0001-01';
+const PRESIDENTE_NOME = 'Iure Costtiti';
+
+/** Localiza o registro de associado de uma equipe (ou null). */
+function associadoPorEquipe_(equipe) {
+  const aba = abaAssociados_();
+  const valores = aba.getDataRange().getValues();
+  const chave = chaveEquipe_(equipe);
+  for (let i = 1; i < valores.length; i++) {
+    if (chaveEquipe_(valores[i][0]) === chave) {
+      return { linha: i + 1, registro: linhaParaAssociado_(valores[i]) };
+    }
+  }
+  return null;
+}
+
+/** Grava o número do recibo na linha da equipe (coluna numeroRecibo). */
+function salvarNumeroReciboAssociado_(linha, numero) {
+  const col = ASSOCIADOS_COLUNAS.findIndex(function (c) { return c.id === 'numeroRecibo'; }) + 1;
+  if (col <= 0) return;
+  const aba = abaAssociados_();
+  if (col > aba.getMaxColumns()) aba.insertColumnsAfter(aba.getMaxColumns(), col - aba.getMaxColumns());
+  aba.getRange(linha, col).setNumberFormat('@').setValue(numero);
+}
+
+/** Maior sequência de recibo já usada entre todos os associados (para sugerir o próximo). */
+function maiorSequenciaRecibo_() {
+  const aba = abaAssociados_();
+  const valores = aba.getDataRange().getValues();
+  const col = ASSOCIADOS_COLUNAS.findIndex(function (c) { return c.id === 'numeroRecibo'; });
+  let maior = 0;
+  if (col < 0) return 0;
+  for (let i = 1; i < valores.length; i++) {
+    const seq = sequenciaDoNumeroRecibo_(valores[i][col]);
+    if (seq > maior) maior = seq;
+  }
+  return maior;
+}
+
+/** Extrai a parte sequencial de um número de recibo como "0012/2027" -> 12. */
+function sequenciaDoNumeroRecibo_(numero) {
+  const texto = String(numero || '').trim();
+  const match = /(\d+)/.exec(texto);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+/** Monta um número de recibo no padrão "NNNN/AAAA". */
+function formatarNumeroRecibo_(sequencia, exercicio) {
+  const seq = String(sequencia).padStart(4, '0');
+  const ano = String(exercicio || new Date().getFullYear()).trim() || new Date().getFullYear();
+  return seq + '/' + ano;
+}
+
+/**
+ * Sugere os dados para gerar o recibo de uma equipe. Se a equipe já tem número,
+ * reutiliza (atualização 1-para-1); senão, sugere o próximo (maior + 1).
+ */
+function sugerirReciboAssociado(equipe) {
+  const sessao = sessaoAssociados_();
+  if (!podeEditarAssociados_(sessao.usuario.perfil)) {
+    throw new Error('O seu perfil pode consultar, mas não gerar documentos.');
+  }
+  const achado = associadoPorEquipe_(equipe);
+  if (!achado) throw new Error('Cadastro da equipe não encontrado. Salve o cadastro antes de gerar o recibo.');
+  const reg = achado.registro;
+  const exercicio = reg.exercicioFiliacao || String(new Date().getFullYear());
+  let numero = String(reg.numeroRecibo || '').trim();
+  let reutilizado = !!numero;
+  if (!numero) {
+    numero = formatarNumeroRecibo_(maiorSequenciaRecibo_() + 1, exercicio);
+  }
+  const valorPadrao = reg.tipoFiliacao === 'inicial' ? '150,00'
+    : reg.tipoFiliacao === 'renovacao' ? '100,00' : '';
+  return {
+    numero: numero,
+    reutilizado: reutilizado,
+    equipe: reg.equipe,
+    representante: reg.nome,
+    exercicio: exercicio,
+    tipoFiliacao: reg.tipoFiliacao,
+    valorSugerido: valorPadrao,
+    pagadorSugerido: reg.nome,
+    cpfPagadorSugerido: formatarCpfExibicao_(reg.cpf),
+    // Identificador do comprovante = URL do anexo "Comprovante da taxa anual".
+    comprovanteUrl: reg.comprovantePagamento || ''
+  };
+}
+
+function formatarCpfExibicao_(cpf) {
+  const d = String(cpf || '').replace(/\D/g, '').padStart(11, '0').slice(0, 11);
+  if (d.length !== 11) return String(cpf || '');
+  return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6, 9) + '-' + d.slice(9);
+}
+
+/** Valor por extenso em reais (ex.: 150,00 -> "cento e cinquenta reais"). */
+function valorPorExtenso_(valorTexto) {
+  const limpo = String(valorTexto || '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+  const n = Math.round(parseFloat(limpo) * 100);
+  if (!isFinite(n) || n < 0) return '';
+  const reais = Math.floor(n / 100);
+  const centavos = n % 100;
+  const extensoReais = inteiroPorExtenso_(reais);
+  let texto = '';
+  if (reais > 0) texto = extensoReais + (reais === 1 ? ' real' : ' reais');
+  if (centavos > 0) {
+    const extensoCent = inteiroPorExtenso_(centavos) + (centavos === 1 ? ' centavo' : ' centavos');
+    texto = texto ? texto + ' e ' + extensoCent : extensoCent;
+  }
+  return texto || 'zero real';
+}
+
+function inteiroPorExtenso_(n) {
+  if (n === 0) return 'zero';
+  if (n === 100) return 'cem';
+  const unidades = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove',
+    'dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+  const dezenas = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+  const centenas = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos',
+    'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+  const partes = [];
+  const milhares = Math.floor(n / 1000);
+  const resto = n % 1000;
+  if (milhares > 0) {
+    partes.push(milhares === 1 ? 'mil' : inteiroPorExtenso_(milhares) + ' mil');
+  }
+  if (resto > 0) {
+    const c = Math.floor(resto / 100);
+    const d = Math.floor((resto % 100) / 10);
+    const u = resto % 10;
+    const trecho = [];
+    if (c > 0) trecho.push(centenas[c]);
+    if (d === 1) {
+      trecho.push(unidades[10 + u]);
+    } else {
+      if (d > 1) trecho.push(dezenas[d]);
+      if (u > 0) trecho.push(unidades[u]);
+    }
+    partes.push(trecho.join(' e '));
+  }
+  return partes.join(' e ');
+}
+
+/** Escapa texto para HTML. */
+function escaparHtmlDoc_(texto) {
+  return String(texto === null || texto === undefined ? '' : texto)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Renderiza um identificador como link clicável quando for URL; senão, texto. */
+function identificadorComoLink_(valor) {
+  const txt = String(valor || '').trim();
+  if (!txt) return 'N/A';
+  if (/^https?:\/\//i.test(txt)) {
+    const href = txt.replace(/"/g, '&quot;');
+    return '<a href="' + href + '" style="color:#0B3D91;word-break:break-all;">' + escaparHtmlDoc_(txt) + '</a>';
+  }
+  return escaparHtmlDoc_(txt);
+}
+
+/** Assinatura do presidente como Data URL (ou '' se indisponível). */
+function assinaturaPresidenteDataUrl_() {
+  try {
+    const blob = assinaturaAtas_();
+    return 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes());
+  } catch (e) {
+    return '';
+  }
+}
+
+/** CSS e cabeçalho/rodapé comuns dos documentos de filiação. */
+function layoutDocumentoFiliacao_(opcoes) {
+  const e = escaparHtmlDoc_;
+  const logo = obterLogo_();
+  const css = '<style>'
+    + '@page { size: A4; margin: 28mm 18mm 24mm; }'
+    + 'body { font-family: Arial, Helvetica, sans-serif; color: #1f2937; font-size: 11pt; line-height: 1.5; }'
+    + '.topo { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #0B3D91; padding-bottom: 10px; margin-bottom: 16px; }'
+    + '.topo img { height: 46px; width: auto; }'
+    + '.topo .sub { color: #0B3D91; font-weight: bold; font-size: 10pt; }'
+    + '.topo .cab { color: #6b7280; font-size: 9pt; }'
+    + 'h1.doc { color: #0B3D91; font-size: 17pt; margin: 4px 0 2px; }'
+    + '.subtitulo { color: #374151; font-size: 11pt; margin: 0 0 14px; }'
+    + '.numero { color: #0B3D91; font-weight: bold; margin: 0 0 12px; }'
+    + '.secao { background: #0B3D91; color: #fff; font-weight: bold; padding: 6px 10px; border-radius: 4px; margin: 14px 0 8px; font-size: 10.5pt; }'
+    + '.linha { margin: 2px 0; }'
+    + '.linha b { color: #0B3D91; }'
+    + '.destaque { background: #eaf1fb; border: 1px solid #0B3D91; border-radius: 6px; padding: 10px 12px; margin: 10px 0; }'
+    + '.destaque b { color: #0B3D91; }'
+    + 'ul { margin: 4px 0 4px 18px; padding: 0; }'
+    + 'li { margin: 3px 0; }'
+    + '.assinatura { margin-top: 42px; text-align: center; }'
+    + '.assinatura img { height: 70px; display: block; margin: 0 auto -6px; }'
+    + '.assinatura .linha-ass { border-top: 1px solid #333; width: 260px; margin: 0 auto; padding-top: 4px; }'
+    + '.assinatura .nome { font-weight: bold; color: #0B3D91; }'
+    + '.data-local { margin-top: 24px; text-align: center; }'
+    + '.rodape { margin-top: 26px; border-top: 1px solid #d1d5db; padding-top: 8px; color: #6b7280; font-size: 8.5pt; text-align: center; }'
+    + '</style>';
+  const topo = '<div class="topo">' + (logo ? '<img src="' + e(logo) + '" alt="">' : '')
+    + '<div><div class="sub">' + e(ASSOCIACAO_NOME) + '</div>'
+    + '<div class="cab">' + e(opcoes.cabecalho || 'Filiação de Equipes · AEUV') + '</div></div></div>';
+  return { css: css, topo: topo };
+}
+
+/** Bloco de assinatura do presidente. */
+function blocoAssinaturaFiliacao_(cidade, data) {
+  const e = escaparHtmlDoc_;
+  const assinatura = assinaturaPresidenteDataUrl_();
+  return '<div class="data-local">' + e(cidade || 'Uberlândia/MG') + ', ' + e(data) + '.</div>'
+    + '<div class="assinatura">'
+    + (assinatura ? '<img src="' + e(assinatura) + '" alt="">' : '')
+    + '<div class="linha-ass"><div class="nome">' + e(PRESIDENTE_NOME) + '</div>'
+    + '<div>Presidente</div><div>' + e(ASSOCIACAO_NOME) + '</div></div></div>';
+}
+
+/** Data por extenso em pt-BR (ex.: 3 de novembro de 2026). */
+function dataPorExtenso_(data) {
+  const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho',
+    'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const d = data || new Date();
+  return d.getDate() + ' de ' + meses[d.getMonth()] + ' de ' + d.getFullYear();
+}
+
+/** Nome de arquivo seguro para o Drive/download. */
+function nomeArquivoDocumento_(base) {
+  return String(base).replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 150) + '.pdf';
+}
+
+/**
+ * Salva o PDF gerado na pasta de documentos do associado e grava a URL na
+ * coluna indicada (campo do cadastro), substituindo a geração anterior.
+ * Mantém os documentos disponíveis ao reabrir o cadastro.
+ * @return {string} URL do arquivo no Drive (ou '' em caso de falha).
+ */
+function anexarDocumentoGerado_(pdf, equipe, linha, campoId) {
+  try {
+    const pasta = pastaAssociados_();
+    const file = pasta.createFile(pdf);
+    file.setDescription('Documento gerado do associado: ' + equipe + ' - ' + campoId);
+    const col = ASSOCIADOS_COLUNAS.findIndex(function (c) { return c.id === campoId; }) + 1;
+    if (col > 0 && linha) {
+      const aba = abaAssociados_();
+      if (col > aba.getMaxColumns()) aba.insertColumnsAfter(aba.getMaxColumns(), col - aba.getMaxColumns());
+      aba.getRange(linha, col).setValue(file.getUrl());
+    }
+    return file.getUrl();
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Gera o Certificado de associação (PDF) a partir do cadastro da equipe.
+ * @param {{equipe:string, numero:string, inicioValidade:string, fimValidade:string}} payload
+ */
+function gerarCertificadoAssociado(payload) {
+  const sessao = sessaoAssociados_();
+  if (!podeEditarAssociados_(sessao.usuario.perfil)) {
+    throw new Error('O seu perfil pode consultar, mas não gerar documentos.');
+  }
+  const dados = payload || {};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  let reg, numero, exercicio, tipo, inicio, fim, linhaReg;
+  try {
+    const achado = associadoPorEquipe_(dados.equipe);
+    if (!achado) throw new Error('Cadastro da equipe não encontrado. Salve o cadastro antes de gerar o certificado.');
+    reg = achado.registro;
+    linhaReg = achado.linha;
+    exercicio = (dados.exercicio || reg.exercicioFiliacao || String(new Date().getFullYear())).toString().trim();
+    // Numeração compartilhada com o recibo: 1-para-1 por equipe. Usa o número
+    // já gravado; se não houver, cria o próximo e grava no cadastro.
+    numero = String(reg.numeroRecibo || '').trim();
+    if (!numero) {
+      numero = formatarNumeroRecibo_(maiorSequenciaRecibo_() + 1, exercicio);
+      salvarNumeroReciboAssociado_(achado.linha, numero);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  const e = escaparHtmlDoc_;
+  tipo = reg.tipoFiliacao === 'renovacao' ? 'Renovação anual'
+    : reg.tipoFiliacao === 'inicial' ? 'Filiação inicial' : 'Filiação';
+  inicio = dados.inicioValidade || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy');
+  fim = dados.fimValidade || ('31/12/' + exercicio);
+
+  const layout = layoutDocumentoFiliacao_({ cabecalho: 'Filiação de Equipes · AEUV' });
+  const html = '<!DOCTYPE html><html><head><meta charset="utf-8">' + layout.css + '</head><body>'
+    + layout.topo
+    + '<h1 class="doc">CERTIFICADO DE FILIAÇÃO</h1>'
+    + '<p class="subtitulo">Equipe associada à AEUV — Exercício ' + e(exercicio) + '</p>'
+    + (numero ? '<p class="numero">Certificado nº: ' + e(numero) + '</p>' : '')
+    + '<div class="secao">EQUIPE FILIADA</div>'
+    + '<div class="linha"><b>Nome fantasia:</b> ' + e(reg.equipe) + '</div>'
+    + '<div class="linha"><b>Razão social, se houver:</b> ' + e(reg.razaoSocial || 'N/A') + '</div>'
+    + '<div class="linha"><b>Presidente / representante legal da equipe:</b> ' + e(reg.nome) + '</div>'
+    + '<p>A <b>' + e(ASSOCIACAO_NOME) + '</b> certifica que a equipe acima identificada encontra-se filiada à entidade '
+    + 'no exercício <b>' + e(exercicio) + '</b>, após aprovação administrativa da documentação e confirmação do pagamento '
+    + 'da taxa anual correspondente.</p>'
+    + '<div class="destaque"><b>VIGÊNCIA DA FILIAÇÃO</b><br>'
+    + '<b>Modalidade:</b> ' + e(tipo) + '<br>'
+    + '<b>Período:</b> ' + e(inicio) + ' a ' + e(fim) + '</div>'
+    + '<p>A filiação confere à equipe o direito de disputar os campeonatos oficiais da AEUV, observados os critérios de '
+    + 'inscrição e os regulamentos de cada competição, além do Estatuto e do Regimento Interno da associação.</p>'
+    + '<div class="secao">COMPROMISSOS DA EQUIPE ASSOCIADA</div>'
+    + '<ul>'
+    + '<li>Cumprir o Estatuto e o Regimento Interno da AEUV, bem como as normas e regulamentos de cada competição.</li>'
+    + '<li>Manter a documentação da equipe, atletas e comissão técnica atualizada e em conformidade com as exigências da associação.</li>'
+    + '<li>Manter vínculo exclusivo com a AEUV, sem filiação simultânea a outra associação varzeana.</li>'
+    + '<li>Observar as regras de elegibilidade de dirigentes, representantes legais, atletas e comissão técnica aprovadas pela associação.</li>'
+    + '<li>Manter conduta ética, respeitosa e colaborativa com a AEUV, demais equipes filiadas, árbitros, torcedores e participantes.</li>'
+    + '<li>Manter a regularidade financeira com a associação, quitando as taxas e contribuições devidas dentro dos prazos.</li>'
+    + '<li>Manter a equipe em atividade, participando das competições oficiais da AEUV.</li>'
+    + '</ul>'
+    + '<div class="secao">ATUAÇÃO E BENEFÍCIOS INSTITUCIONAIS</div>'
+    + '<p>Visibilidade e valorização da equipe, organização e transparência. A AEUV buscará recursos e emendas futuras '
+    + 'para apoiar campos, arbitragem, materiais e premiações, conforme projetos e recursos obtidos, sem garantia de repasse financeiro.</p>'
+    + blocoAssinaturaFiliacao_(reg.cidade || 'Uberlândia/MG', dataPorExtenso_(new Date()))
+    + '<div class="rodape">' + e(ASSOCIACAO_NOME) + ' · Certificado de filiação</div>'
+    + '</body></html>';
+
+  const nomeArquivo = nomeArquivoDocumento_('Certificado de associacao - ' + reg.equipe + ' - ' + numero.replace('/', '-'));
+  const pdf = Utilities.newBlob(html, 'text/html', 'certificado.html').getAs('application/pdf').setName(nomeArquivo);
+  // Salva no Drive e anexa ao cadastro (campo "Certificado de associação AEUV").
+  const url = anexarDocumentoGerado_(pdf, reg.equipe, linhaReg, 'termoAssociacao');
+  return { nome: nomeArquivo, mimeType: 'application/pdf', numero: numero, url: url, base64: Utilities.base64Encode(pdf.getBytes()) };
+}
+
+/**
+ * Gera o Recibo de filiação (PDF). Numeração 1-para-1 por equipe: grava o número
+ * no cadastro na primeira geração e o reutiliza nas próximas (atualização).
+ * @param {Object} payload
+ */
+function gerarReciboAssociado(payload) {
+  const sessao = sessaoAssociados_();
+  if (!podeEditarAssociados_(sessao.usuario.perfil)) {
+    throw new Error('O seu perfil pode consultar, mas não gerar documentos.');
+  }
+  const dados = payload || {};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const achado = associadoPorEquipe_(dados.equipe);
+    if (!achado) throw new Error('Cadastro da equipe não encontrado. Salve o cadastro antes de gerar o recibo.');
+    const reg = achado.registro;
+    const e = escaparHtmlDoc_;
+    const exercicio = (reg.exercicioFiliacao || String(new Date().getFullYear())).toString().trim();
+
+    // Numeração 1-para-1: usa o número já gravado da equipe; se não houver, cria o próximo.
+    let numero = String(reg.numeroRecibo || '').trim();
+    if (!numero) {
+      numero = formatarNumeroRecibo_(maiorSequenciaRecibo_() + 1, exercicio);
+      salvarNumeroReciboAssociado_(achado.linha, numero);
+    }
+
+    const tipo = reg.tipoFiliacao === 'renovacao' ? 'Renovação anual'
+      : reg.tipoFiliacao === 'inicial' ? 'Filiação inicial' : 'Filiação';
+    const valor = String(dados.valor || '').trim();
+    if (!valor) throw new Error('Informe o valor recebido.');
+    const extenso = (dados.valorExtenso || valorPorExtenso_(valor)).trim();
+    const pagador = String(dados.pagador || reg.nome || '').trim();
+    const cpfPagador = String(dados.cpfPagador || '').trim();
+    const dataPagamento = String(dados.dataPagamento || '').trim();
+    const forma = String(dados.formaPagamento || '').trim();
+    const identificador = String(dados.identificador || '').trim();
+
+    const layout = layoutDocumentoFiliacao_({ cabecalho: 'Filiação de Equipes · AEUV' });
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8">' + layout.css + '</head><body>'
+      + layout.topo
+      + '<h1 class="doc">RECIBO DE PAGAMENTO</h1>'
+      + '<p class="subtitulo">Taxa anual de filiação de equipe à AEUV</p>'
+      + '<p class="numero">Recibo nº: ' + e(numero) + '</p>'
+      + '<div class="secao">IDENTIFICAÇÃO DO RECEBIMENTO</div>'
+      + '<div class="linha"><b>Recebedora:</b> ' + e(ASSOCIACAO_NOME) + '</div>'
+      + '<div class="linha"><b>CNPJ da AEUV:</b> ' + e(AEUV_CNPJ) + '</div>'
+      + '<div class="linha"><b>Equipe:</b> ' + e(reg.equipe) + '</div>'
+      + '<div class="linha"><b>Pagador:</b> ' + e(pagador) + '</div>'
+      + '<div class="linha"><b>CPF / CNPJ do pagador:</b> ' + e(cpfPagador || 'N/A') + '</div>'
+      + '<div class="linha"><b>Presidente / representante legal da equipe:</b> ' + e(reg.nome) + '</div>'
+      + '<div class="destaque"><b>VALOR RECEBIDO: R$ ' + e(valor) + '</b><br>'
+      + 'Recebemos do pagador acima identificado a importância de <b>R$ ' + e(valor) + ' (' + e(extenso) + ')</b>, '
+      + 'referente à taxa anual de <b>' + e(tipo) + '</b> da equipe <b>' + e(reg.equipe) + '</b> à AEUV, '
+      + 'correspondente ao exercício <b>' + e(exercicio) + '</b>.</div>'
+      + '<div class="secao">DADOS DO PAGAMENTO</div>'
+      + '<div class="linha"><b>Data do pagamento:</b> ' + e(dataPagamento || 'N/A') + '</div>'
+      + '<div class="linha"><b>Forma de pagamento:</b> ' + e(forma || 'N/A') + '</div>'
+      + '<div class="linha"><b>Identificador / referência do comprovante:</b> ' + identificadorComoLink_(identificador) + '</div>'
+      + '<p>Damos quitação exclusivamente ao valor e à obrigação descritos neste recibo.</p>'
+      + blocoAssinaturaFiliacao_(reg.cidade || 'Uberlândia/MG', dataPorExtenso_(new Date()))
+      + '<div class="rodape">' + e(ASSOCIACAO_NOME) + ' · Recibo de filiação</div>'
+      + '</body></html>';
+
+    const nomeArquivo = nomeArquivoDocumento_('Recibo de filiacao - ' + reg.equipe + ' - ' + numero.replace('/', '-'));
+    const pdf = Utilities.newBlob(html, 'text/html', 'recibo.html').getAs('application/pdf').setName(nomeArquivo);
+    // Salva no Drive e anexa ao cadastro (campo "Recibo de filiação à AEUV").
+    const url = anexarDocumentoGerado_(pdf, reg.equipe, achado.linha, 'regulamento');
+    return { nome: nomeArquivo, mimeType: 'application/pdf', numero: numero, url: url, base64: Utilities.base64Encode(pdf.getBytes()) };
+  } finally {
+    lock.releaseLock();
+  }
+}
 
 /******************************************************
  * ATAS DE REUNIOES

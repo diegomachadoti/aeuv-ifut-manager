@@ -241,6 +241,11 @@ class AppConfig:
         # Prazo maximo para o iFut confirmar a gravacao (pop-up fechar) apos Salvar/Remover/Inscrever.
         self.save_confirm_timeout_seconds = parser.getfloat("app", "save_confirm_timeout_seconds", fallback=45.0)
         self.portability_source_championship = parser.get("app", "portability_source_championship", fallback="2º COPA AMERICA 2026")
+        # No layout 2026 o filtro por campeonato de origem deixou de existir; por
+        # padrao a automacao nao usa o filtro (lista todos os importaveis).
+        self.portability_use_source_filter = parse_bool(
+            parser.get("app", "portability_use_source_filter", fallback="false"), default=False
+        )
         self.spreadsheet_id = parser.get("sheets", "spreadsheet_id", fallback="")
         self.sheets_range_times = parser.get("sheets", "range_times", fallback="A2:C")
         self.sheets_update_enabled = parse_bool(parser.get("sheets", "update_enabled", fallback="false"), default=False)
@@ -552,10 +557,60 @@ class IfutBot:
 
     def login(self) -> None:
         self.driver.get(self.config.login_url)
-        self._fill(self.selectors.get("login", "username_input"), self.config.username)
-        self._fill(self.selectors.get("login", "password_input"), self.config.password)
-        self._click(self.selectors.get("login", "submit_button"))
+        email_selector = self.selectors.get("login", "username_input")
+        senha_selector = self.selectors.get("login", "password_input")
+        submit_selector = self.selectors.get("login", "submit_button")
+
+        self._fill(email_selector, self.config.username)
+        self._fill(senha_selector, self.config.password)
+        # O novo layout (Vue/Quasar) so habilita o botao "Acessar" quando os
+        # campos disparam os eventos de input/change. O send_keys do _fill ja
+        # dispara, mas reforcamos por JS para nao depender de timing.
+        for selector in (email_selector, senha_selector):
+            try:
+                element = self.driver.find_element(*self._locator(selector))
+                self.driver.execute_script(
+                    "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));"
+                    "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));"
+                    "arguments[0].dispatchEvent(new Event('blur', {bubbles: true}));",
+                    element,
+                )
+            except Exception as exc:
+                self.logger.debug("Nao foi possivel reforcar eventos no campo de login: %s", exc)
+
+        # O botao "Acessar" nasce desabilitado; so clica quando o iFut o habilita.
+        by, value = self._locator(submit_selector)
+        try:
+            self.wait.until(lambda d: (
+                (btn := d.find_element(by, value))
+                and btn.is_enabled()
+                and btn.get_attribute("disabled") is None
+                and "disabled" not in (btn.get_attribute("class") or "")
+            ))
+        except TimeoutException as exc:
+            raise TimeoutException(
+                "O botao 'Acessar' continuou desabilitado apos preencher e-mail e senha. "
+                "Verifique as credenciais no config.local.ini ou se os campos de login mudaram."
+            ) from exc
+
+        self._click(submit_selector)
         self.wait.until(ec.url_contains("/campeonatos"))
+        self._dismiss_cookie_banner()
+
+    def _dismiss_cookie_banner(self) -> None:
+        """Fecha o banner de cookies (Recusar) para ele nao cobrir cliques nas telas."""
+        try:
+            botoes = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "[data-testid='consent-reject'], [data-testid='consent-accept']",
+            )
+            for botao in botoes:
+                if botao.is_displayed():
+                    self.driver.execute_script("arguments[0].click();", botao)
+                    self.logger.info("Banner de cookies fechado.")
+                    return
+        except Exception as exc:
+            self.logger.debug("Sem banner de cookies para fechar (ou falhou): %s", exc)
 
     def open_teams_page(self) -> None:
         self.driver.get(self.config.teams_url)
@@ -760,16 +815,12 @@ class IfutBot:
     def _remove_person(self, record: Record) -> None:
         self._open_removal_context(record)
         row = self._find_person_row(record.full_name)
+        self.logger.info("Card do atleta '%s' localizado; abrindo pop-up de remocao.", record.full_name)
         time.sleep(self.config.removal_click_delay_seconds)
-        try:
-            self._click_child(row, self.selectors.get("actions", "remove_row_button"))
-        except NoSuchElementException:
-            delete_button = row.find_element(
-                By.XPATH,
-                ".//button[contains(@class, 'text-negative') or .//i[contains(@class, 'delete')]]",
-            )
-            self.driver.execute_script("arguments[0].click();", delete_button)
+
         confirm = self.selectors.get_optional("actions", "confirm_remove_button")
+        self._abrir_popup_remocao(row, confirm)
+
         if confirm:
             self.wait.until(ec.presence_of_element_located(self._locator(confirm)))
             time.sleep(self.config.removal_confirm_delay_seconds)
@@ -779,10 +830,100 @@ class IfutBot:
             self._wait_dialog_closed(confirm, "remocao")
         self._restore_default_team_tab(record)
 
+    def _abrir_popup_remocao(self, row: WebElement, confirm_selector: str | None) -> None:
+        """Clica na lixeira vermelha do card e garante que o pop-up de remocao
+        abriu. Os botoes Quasar nem sempre respondem ao primeiro click via JS,
+        entao tentamos: click nativo, click via JS e dispatch de eventos,
+        verificando a cada tentativa se o pop-up apareceu."""
+        delete_button = self._encontrar_botao_remover(row)
+        if delete_button is None:
+            raise NoSuchElementException(
+                "Botao de remover (lixeira vermelha) nao encontrado no card do atleta."
+            )
+
+        try:
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", delete_button)
+        except Exception:
+            pass
+        time.sleep(0.3)
+
+        tentativas = (
+            ("click nativo", lambda b: b.click()),
+            ("click via JS", lambda b: self.driver.execute_script("arguments[0].click();", b)),
+            ("dispatch pointer/mouse", lambda b: self.driver.execute_script(
+                "for (const t of ['pointerdown','mousedown','pointerup','mouseup','click']) {"
+                "  arguments[0].dispatchEvent(new MouseEvent(t, {bubbles:true, cancelable:true, view:window}));"
+                "}", b)),
+        )
+        for descricao, acao in tentativas:
+            try:
+                # Rebusca o botao a cada tentativa (o card pode ter sido re-renderizado).
+                botao = self._encontrar_botao_remover(row) or delete_button
+                acao(botao)
+                self.logger.info("Remocao: clique na lixeira via %s.", descricao)
+            except Exception as exc:
+                self.logger.warning("Remocao: falha no clique via %s: %s", descricao, exc)
+                continue
+            if self._popup_remocao_aberto(confirm_selector):
+                self.logger.info("Pop-up de remocao aberto apos %s.", descricao)
+                return
+            time.sleep(0.5)
+
+        # Ultima verificacao antes de desistir.
+        if self._popup_remocao_aberto(confirm_selector):
+            return
+        raise TimeoutException(
+            "Clique na lixeira nao abriu o pop-up de confirmacao de remocao."
+        )
+
+    def _encontrar_botao_remover(self, row: WebElement):
+        """Localiza a lixeira vermelha DENTRO do card informado.
+
+        Usamos CSS relativo, que garante o escopo no elemento 'row'. XPath
+        relativo (.//) a partir de um WebElement e ambiguo em alguns drivers e
+        pode pegar o botao de OUTRO card (foi o que causava a remocao do atleta
+        errado)."""
+        seletores_css = (
+            "button.athlete-card__action-btn--red",
+            "button.text-negative",
+        )
+        for css in seletores_css:
+            try:
+                els = row.find_elements(By.CSS_SELECTOR, css)
+                if els:
+                    return els[0]
+            except Exception:
+                continue
+        # Fallback XPath, mas ancorado explicitamente no proprio 'row' (self::).
+        try:
+            return row.find_element(
+                By.XPATH,
+                ".//button[.//i[contains(@class,'delete') or contains(@class,'trash') or contains(@class,'lucide-trash')]]",
+            )
+        except NoSuchElementException:
+            return None
+
+    def _encontrar_child(self, parent: WebElement, selector: str) -> WebElement:
+        by, value = self._locator(selector)
+        return parent.find_element(by, value)
+
+    def _popup_remocao_aberto(self, confirm_selector: str | None) -> bool:
+        """Verifica se o pop-up de remocao (ds-dialog) esta visivel."""
+        if confirm_selector and self._has_visible(confirm_selector):
+            return True
+        for el in self.driver.find_elements(By.CSS_SELECTOR, ".ds-dialog__message, .ds-dialog__name"):
+            try:
+                if el.is_displayed():
+                    return True
+            except StaleElementReferenceException:
+                continue
+        return False
+
     def _port_person(self, record: Record) -> None:
         self._open_roster_section()
         self._click(self.selectors.get("actions", "portability_button"))
         time.sleep(self.config.portability_popup_wait_seconds)
+        self._selecionar_aba_portabilidade(record)
         self._select_portability_source_championship(record)
         match = self._find_portability_checkbox(record.full_name)
         if not match.matched or match.checkbox is None:
@@ -793,7 +934,14 @@ class IfutBot:
                 f"Similaridade: {match.score:.2f}. "
                 f"Limiar minimo: {match.threshold:.2f}."
             )
-        self.driver.execute_script("arguments[0].click();", match.checkbox)
+        # Seleciona o atleta: clica no indicador de selecao do card, se existir,
+        # senao no proprio card (evita cair no botao de expandir detalhes).
+        alvo_clique = match.checkbox
+        indicadores = match.checkbox.find_elements(By.CSS_SELECTOR, ".selection-indicator")
+        if indicadores:
+            alvo_clique = indicadores[0]
+        self.driver.execute_script("arguments[0].click();", alvo_clique)
+        time.sleep(1)
         if self.config.dry_run:
             self.logger.info(
                 "DRY RUN ativo: atleta marcado para portabilidade (%s, score=%.2f), sem clicar em inscrever.",
@@ -806,14 +954,44 @@ class IfutBot:
         time.sleep(2)
         self._wait_dialog_closed(self.selectors.get_optional("actions", "portability_submit_button"), "portabilidade")
 
+    def _selecionar_aba_portabilidade(self, record: Record) -> None:
+        """O pop-up "Importar cadastros" tem abas "Atletas" (default) e
+        "Comissao Tecnica". Para comissao, precisa clicar na aba antes de listar."""
+        if record.is_commission:
+            aba = self.selectors.get_optional("actions", "portability_tab_comissao")
+        else:
+            aba = self.selectors.get_optional("actions", "portability_tab_atletas")
+        if not aba:
+            return
+        try:
+            self._click(aba)
+            time.sleep(self.config.portability_popup_wait_seconds)
+        except Exception as exc:
+            self.logger.warning("Nao foi possivel trocar a aba de portabilidade: %s", exc)
+
     def _select_portability_source_championship(self, record: Record) -> None:
+        """No layout 2026 o filtro por campeonato de origem deixou de existir
+        (o seletor lista apenas categorias do proprio campeonato). Por padrao a
+        automacao nao usa o filtro e espera a lista de atletas carregar direto.
+        A logica antiga fica disponivel via [app] portability_use_source_filter."""
+        player_selector = self.selectors.get("actions", "portability_player_checkbox")
+        if not self.config.portability_use_source_filter:
+            # Sem filtro: apenas aguarda os cards de atletas importaveis aparecerem.
+            try:
+                self.wait.until(ec.presence_of_element_located(self._locator(player_selector)))
+            except TimeoutException:
+                self.logger.warning(
+                    "Lista de atletas importaveis nao carregou (sem filtro de origem)."
+                )
+            return
+        # Fluxo legado (caso o filtro por campeonato volte): seleciona a origem.
         championship_name = record.previous_competition or self.config.portability_source_championship
         self._click(self.selectors.get("actions", "portability_championship_select"))
         option_xpath = self.selectors.get("actions", "portability_championship_option").format(championship_name=championship_name)
         time.sleep(self.config.portability_popup_wait_seconds)
         self._click(option_xpath)
         time.sleep(self.config.portability_popup_wait_seconds)
-        self.wait.until(ec.presence_of_element_located(self._locator(self.selectors.get("actions", "portability_player_checkbox"))))
+        self.wait.until(ec.presence_of_element_located(self._locator(player_selector)))
 
     def _find_portability_checkbox(self, full_name: str) -> PortabilityMatch:
         from difflib import SequenceMatcher
@@ -830,7 +1008,16 @@ class IfutBot:
         best_score = 0.0
 
         for checkbox in checkboxes:
-            label = checkbox.get_attribute("aria-label") or checkbox.text
+            # Novo layout (2026): o nome do atleta fica em .import-name dentro do card.
+            label = ""
+            try:
+                nome_el = checkbox.find_elements(By.CSS_SELECTOR, ".import-name")
+                if nome_el:
+                    label = nome_el[0].text
+            except Exception:
+                label = ""
+            if not label:
+                label = checkbox.get_attribute("aria-label") or checkbox.text
             normalized_label = normalize_text(label)
 
             if normalized_target == normalized_label:
@@ -895,38 +1082,74 @@ class IfutBot:
         return differences <= 1 and abs(len(target_tokens) - len(candidate_tokens)) <= 2
 
     def _validate_removal_confirmation(self, record: Record) -> None:
-        try:
-            confirmation_msg = self.driver.find_element(
-                By.XPATH,
-                ".//div[contains(@class, 'q-dialog__message')]"
+        # Le o nome mostrado no pop-up com retry: o dialogo Quasar anima e o
+        # .text pode vir vazio por timing. Tentamos .text e, como reforco, o
+        # textContent via JS (independe de visibilidade).
+        nome_no_popup = self._ler_nome_remocao_popup()
+
+        if not nome_no_popup:
+            # Nao conseguimos LER o nome. Como o card exato ja foi localizado por
+            # nome e a lixeira clicada e daquele atleta, nao bloqueamos a remocao
+            # por falha de leitura (evita falso-negativo). Apenas registramos.
+            self.logger.warning(
+                "Nao foi possivel ler o nome no pop-up de remocao; prosseguindo "
+                "(o card ja foi localizado por nome). Esperado: '%s'", record.full_name,
             )
-            dialog_text = confirmation_msg.text.strip()
-            
-            extracted_name = self._extract_name_from_removal_dialog(dialog_text)
-            
-            if not extracted_name or not self._names_match(record.full_name, extracted_name):
-                self.logger.error(
-                    "Nome no popup de confirmacao nao bate: esperado '%s', encontrado '%s'",
-                    record.full_name,
-                    extracted_name or "NENHUM"
-                )
+            return
+
+        self.logger.info(
+            "Confirmacao de remocao: nome no pop-up='%s' | esperado='%s'",
+            nome_no_popup, record.full_name,
+        )
+
+        # So cancelamos quando ha CONFLITO REAL: lemos um nome e ele NAO bate.
+        if not self._names_match(record.full_name, nome_no_popup):
+            self.logger.error(
+                "Nome no pop-up de confirmacao nao bate: esperado '%s', encontrado '%s'. "
+                "Cancelando por seguranca.", record.full_name, nome_no_popup,
+            )
+            try:
                 deny_button = self.driver.find_element(
                     By.XPATH,
-                    ".//button[contains(., 'Eita, não')]"
+                    "//button[contains(@class, 'ds-dialog__cancel')] | //button[contains(., 'Eita, não')]"
                 )
                 self.driver.execute_script("arguments[0].click();", deny_button)
-                raise RemovalValidationError(
-                    f"Nome do registro ({record.full_name}) nao encontrado no popup de confirmacao. "
-                    f"Remocao foi cancelada por seguranca."
-                )
-            
-            self.logger.info("Confirmacao de remocao validada: '%s'", extracted_name)
-        except NoSuchElementException:
-            self.logger.warning("Nao foi possivel validar popup de confirmacao de remocao")
+            except NoSuchElementException:
+                self.logger.warning("Botao de cancelar do pop-up de remocao nao encontrado.")
+            raise RemovalValidationError(
+                f"Nome do registro ({record.full_name}) diverge do nome no pop-up "
+                f"('{nome_no_popup}'). Remocao cancelada por seguranca."
+            )
+
+        self.logger.info("Confirmacao de remocao validada: '%s'", nome_no_popup)
+
+    def _ler_nome_remocao_popup(self) -> str:
+        """Le o nome do atleta mostrado no pop-up de remocao, com retry e
+        multiplas fontes (mensagem e cabecalho), tolerante a timing de animacao."""
+        fim = time.time() + 5
+        while time.time() < fim:
+            # 1) Frase "excluir o atleta <NOME> desse" na mensagem.
+            for seletor in (".ds-dialog__message", ".q-dialog__message"):
+                for el in self.driver.find_elements(By.CSS_SELECTOR, seletor):
+                    texto = (el.text or el.get_attribute("textContent") or "").strip()
+                    nome = self._extract_name_from_removal_dialog(texto)
+                    if nome:
+                        return nome
+            # 2) Cabecalho .ds-dialog__name (nome puro).
+            for el in self.driver.find_elements(By.CSS_SELECTOR, ".ds-dialog__name"):
+                texto = (el.text or el.get_attribute("textContent") or "").strip()
+                if texto and texto not in {"---", "—"}:
+                    return texto
+            time.sleep(0.3)
+        return ""
 
     def _extract_name_from_removal_dialog(self, dialog_text: str) -> str:
         import re
-        match = re.search(r"excluir o atleta\s+(.+?)\s+desse", dialog_text, re.IGNORECASE)
+        # "Deseja excluir o atleta <NOME> desse campeonato?" (atleta) ou variacoes.
+        match = re.search(
+            r"excluir (?:o atleta|a comiss[aã]o|o membro)?\s*(.+?)\s+desse",
+            dialog_text, re.IGNORECASE | re.DOTALL,
+        )
         if match:
             return match.group(1).strip()
         return ""
@@ -1003,24 +1226,61 @@ class IfutBot:
             input_element = self.wait.until(ec.presence_of_element_located(self._locator(upload_selector)))
             input_element.send_keys(str(image_path.resolve()))
             time.sleep(1)
+            self._confirmar_recorte_imagem()
         self._fill(self.selectors.get("form", "full_name_input"), record.full_name)
         if record.requires_identity:
             self._fill(self.selectors.get("form", "birthdate_input"), record.birthdate)
             self._fill(self.selectors.get("form", "cpf_input"), record.cpf)
-        if record.is_commission:
-            role_selector = self.selectors.get_optional("form", "role_input")
-            role_option_selector = self.selectors.get_optional("form", "role_default_option")
-            if role_selector and role_option_selector:
-                self.logger.info("Clicando em Posição")
-                self._click(role_selector)
-                time.sleep(0.8)
-                self.logger.info("Clicando na opção Treinador")
-                self._click(role_option_selector)
-                self.logger.info("Aguardando 3 segundos para estabilizar o combobox...")
-                time.sleep(3.0)
-            document_selector = self.selectors.get_optional("form", "commission_document_input")
-            if document_selector and record.cpf and normalize_text(record.cpf) != "nao necessario":
-                self._fill(document_selector, record.cpf)
+        self._fill_commission_role(record)
+
+    def _confirmar_recorte_imagem(self) -> None:
+        """Novo passo (2026): ao enviar a foto o iFut abre um editor de recorte
+        ("Editar Imagem"); a foto so e aplicada apos clicar em Confirmar. Se o
+        editor nao aparecer (depende da imagem), segue sem erro."""
+        dialog_selector = self.selectors.get_optional("form", "image_crop_dialog")
+        confirm_selector = self.selectors.get_optional("form", "image_crop_confirm")
+        if not confirm_selector:
+            return
+        # Espera curta pelo editor; nem sempre aparece.
+        end_time = time.time() + min(self.config.timeout, 8)
+        apareceu = False
+        while time.time() < end_time:
+            if dialog_selector and self._has_visible(dialog_selector):
+                apareceu = True
+                break
+            if self._has_visible(confirm_selector):
+                apareceu = True
+                break
+            time.sleep(0.2)
+        if not apareceu:
+            return
+        self.logger.info("Editor de recorte de imagem aberto; clicando em Confirmar.")
+        self._click(confirm_selector)
+        # Espera o editor fechar para nao bloquear o preenchimento dos campos.
+        if dialog_selector:
+            try:
+                self.wait.until(ec.invisibility_of_element_located(self._locator(dialog_selector)))
+            except TimeoutException:
+                self.logger.warning("Editor de recorte permaneceu aberto apos Confirmar.")
+        else:
+            time.sleep(1)
+
+    def _fill_commission_role(self, record: Record) -> None:
+        if not record.is_commission:
+            return
+        role_selector = self.selectors.get_optional("form", "role_input")
+        role_option_selector = self.selectors.get_optional("form", "role_default_option")
+        if role_selector and role_option_selector:
+            self.logger.info("Clicando em Posição")
+            self._click(role_selector)
+            time.sleep(0.8)
+            self.logger.info("Clicando na opção Treinador")
+            self._click(role_option_selector)
+            self.logger.info("Aguardando 3 segundos para estabilizar o combobox...")
+            time.sleep(3.0)
+        document_selector = self.selectors.get_optional("form", "commission_document_input")
+        if document_selector and record.cpf and normalize_text(record.cpf) != "nao necessario":
+            self._fill(document_selector, record.cpf)
 
     def _find_duplicate_message(self) -> str | None:
         duplicate_selector = self.selectors.get_optional("messages", "duplicate_rg_card")
@@ -1182,17 +1442,30 @@ class IfutBot:
             return None
 
     def _extract_total_athletes(self) -> int | None:
-        """Extrai o total de atletas da página."""
+        """Extrai o total de atletas da pagina.
+
+        Novo layout (2026): o valor fica em div.tab-stat__value como "3 /40";
+        pegamos o primeiro numero (antes da barra). Mantemos um fallback para o
+        formato antigo ("Total de atletas: N") por seguranca.
+        """
         try:
            self.logger.debug("[PLANILHA] Procurando elemento com total de atletas...")
-           element = self.driver.find_element(By.XPATH, "//div[contains(@class, 'text-h5')]")
-           text = element.text
-           match = re.search(r'Total de atletas:\s*(\d+)', text)
-           if match:
-               total = int(match.group(1))
-               self.logger.info("[PLANILHA] Total de atletas extraido: %d", total)
-               return total
-           self.logger.warning("[PLANILHA] Formato de total de atletas nao reconhecido: %s", text)
+           # Layout novo: o card "Total de atletas" tem o numero em .tab-stat__value (ex.: "3 /40").
+           for element in self.driver.find_elements(By.CSS_SELECTOR, "div.tab-stat__value"):
+               text = (element.text or "").strip()
+               match = re.search(r'(\d+)', text)
+               if match:
+                   total = int(match.group(1))
+                   self.logger.info("[PLANILHA] Total de atletas extraido: %d", total)
+                   return total
+           # Fallback: formato antigo "Total de atletas: N".
+           for element in self.driver.find_elements(By.XPATH, "//div[contains(@class, 'text-h5')]"):
+               match = re.search(r'Total de atletas:\s*(\d+)', element.text or "")
+               if match:
+                   total = int(match.group(1))
+                   self.logger.info("[PLANILHA] Total de atletas extraido (formato antigo): %d", total)
+                   return total
+           self.logger.warning("[PLANILHA] Formato de total de atletas nao reconhecido")
         except Exception as exc:
            self.logger.warning("[PLANILHA] Nao foi possivel extrair total de atletas: %s", exc)
         return None
@@ -1334,32 +1607,49 @@ class IfutBot:
     def _find_person_row(self, full_name: str) -> WebElement:
         rows = self.driver.find_elements(*self._locator(self.selectors.get("team", "roster_row")))
         normalized_name = normalize_text(full_name)
-        search_tokens = [token for token in normalized_name.split() if token]
-        search_key = " ".join(search_tokens[:2]) if len(search_tokens) >= 2 else normalized_name
-        
-        # 1. Busca exata ou por chave (primeiros 2 nomes)
+
+        def nome_do_card(row: WebElement) -> str:
+            # O nome exato do atleta fica em .athlete-card__name; usar o row.text
+            # inteiro (que inclui RG, data, etc.) causava match no card errado
+            # quando um nome e prefixo de outro (ex.: "... um" vs "... dois").
+            try:
+                els = row.find_elements(By.CSS_SELECTOR, ".athlete-card__name")
+                if els:
+                    return normalize_text(els[0].text or els[0].get_attribute("textContent") or "")
+            except Exception:
+                pass
+            # Fallback: primeira linha do texto do card.
+            return normalize_text((row.text or "").split("\n")[0])
+
+        # 1. Match EXATO pelo nome do card (prioridade maxima).
         for row in rows:
-            row_text = normalize_text(row.text)
-            if normalized_name in row_text:
-                return row
-            if search_key and search_key in row_text:
+            if nome_do_card(row) == normalized_name:
+                self.logger.info("Atleta '%s' localizado por nome exato no card.", full_name)
                 return row
 
-        # 2. Busca por similaridade/fuzzy em cada card
+        # 2. Match por similaridade usando o NOME do card (nao o texto inteiro).
         best_row = None
         best_score = 0.0
+        best_nome = ""
         for row in rows:
-            row_text = normalize_text(row.text)
-            score = self._row_match_score(row_text, normalized_name)
+            nome_card = nome_do_card(row)
+            score = self._row_match_score(nome_card, normalized_name)
             if score > best_score:
                 best_score = score
                 best_row = row
+                best_nome = nome_card
 
-        if best_row and best_score >= 0.85:
-            self.logger.info("Atleta '%s' localizado na lista por similaridade (score=%.2f)", full_name, best_score)
+        if best_row and best_score >= 0.90:
+            self.logger.info(
+                "Atleta '%s' localizado por similaridade (card='%s', score=%.2f).",
+                full_name, best_nome, best_score,
+            )
             return best_row
 
-        raise LookupError(f"Pessoa nao encontrada na lista do time: {full_name}")
+        raise LookupError(
+            f"Pessoa nao encontrada na lista do time com seguranca: {full_name}. "
+            f"Nome mais proximo no card: '{best_nome or 'NENHUM'}' (score={best_score:.2f})."
+        )
 
     def _row_match_score(self, row_text: str, normalized_name: str) -> float:
         from difflib import SequenceMatcher
@@ -1565,6 +1855,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--process-local-only", action="store_true", help="Processa somente os TXTs locais ja baixados")
     parser.add_argument("--login-only", action="store_true", help="Abre o iFut e para logo apos o login")
     parser.add_argument(
+        "--apenas-login",
+        action="store_true",
+        help="So faz login (sem sincronizar o Drive) e mantem o Chrome aberto para inspecionar o layout; "
+             "fecha quando voce apertar Enter no terminal",
+    )
+    parser.add_argument(
         "--update-all-team-counts",
         action="store_true",
         help="Atualiza somente a quantidade de atletas de todos os times configurados na planilha",
@@ -1680,6 +1976,7 @@ def validar_modos_cli(parser: argparse.ArgumentParser, args: argparse.Namespace)
     modos = [
         ("--sync-drive-only", args.sync_drive_only),
         ("--login-only", args.login_only),
+        ("--apenas-login", args.apenas_login),
         ("--update-all-team-counts", args.update_all_team_counts),
         ("--analisar-sumulas", args.analisar_sumulas),
         ("--gerar-pdf-nota", bool(args.gerar_pdf_nota)),
@@ -1936,6 +2233,26 @@ def main() -> int:
     config = AppConfig(Path(args.config))
     selectors = SelectorConfig(Path(args.selectors))
     logger = configure_logging(config.log_path)
+
+    if args.apenas_login:
+        # Modo enxuto para checar/ajustar os seletores: nao toca no Drive, so
+        # abre o Chrome, faz login e mantem a janela aberta para inspecao (F12).
+        bot = IfutBot(config, selectors, logger)
+        try:
+            bot.login()
+            logger.info("Login executado com sucesso (--apenas-login). Chrome aberto para inspecao.")
+            print(
+                "\nLogin concluido. O Chrome esta aberto para voce inspecionar o layout "
+                "(F12 > Elements).\nPressione Enter aqui no terminal para fechar o navegador..."
+            )
+            try:
+                input()
+            except EOFError:
+                # Sem terminal interativo: segura alguns segundos para a janela nao sumir na hora.
+                time.sleep(30)
+        finally:
+            bot.close()
+        return 0
 
     downloader = DriveTxtDownloader(config.folder_embed_url, config.download_dir, config.service_account_json,
                                     config.path)

@@ -11,33 +11,33 @@ assunto = Certificação de filiação anual de equipe à AEUV
 
 [assinatura]
 tipo = presidente
-data = Uberlândia, 27/10/2026.
+data = Uberlândia, 21/10/2026.
 
 [dados]
-numero = 0000/1
-equipe = BOCA JUNIORS UBERLANDIA
+numero = 0000/2
+equipe = LEOES DO MORUMBI
 razao_social = N/A
-representante = MIRELY MARTINS DE FREITAS
+representante = Karlos Jhonatan Eugenio Rosa
 exercicio = 2027
 tipo_filiacao = Filiação inicial / Renovação anual
-inicio_validade = 27/10/2026
+inicio_validade = 21/10/2026
 fim_validade = 31/12/2027
-data_documento = 27 de outubro de 2026
+data_documento = -3 de novembro de 2026
 cidade = Uberlândia/MG
 
 ---
-**Certificado nº:** 0000/1
+**Certificado nº:** 0000/2
 
 * EQUIPE FILIADA
-**Nome fantasia:** BOCA JUNIORS UBERLANDIA
+**Nome fantasia:** LEOES DO MORUMBI
 **Razão social, se houver:** N/A
-**Presidente / representante legal da equipe:** MIRELY MARTINS DE FREITAS
+**Presidente / representante legal da equipe:** Karlos Jhonatan Eugenio Rosa
 
 A **AEUV (Associação Esportiva Uberlandense Varzeana)** certifica que a equipe acima identificada encontra-se filiada à entidade no exercício **2027**, após aprovação administrativa da documentação e confirmação do pagamento da taxa anual correspondente.
 
 > VIGÊNCIA DA FILIAÇÃO
 **Modalidade:** Filiação inicial
-**Período:** 27/10/2026 a 31/12/2027
+**Período:** 03/11/2026 a 31/12/2027
 
 A filiação confere à equipe o direito de disputar os campeonatos oficiais da AEUV, observados os critérios de inscrição e os regulamentos de cada competição, além do Estatuto e do Regimento Interno da associação.
 
