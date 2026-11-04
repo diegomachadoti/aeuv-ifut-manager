@@ -11429,6 +11429,18 @@ function interpretarSumula_(conteudo, achado, paraAtletas, metricas) {
   registro.fatos = aparar_(fatos).join('\n');
   registro.equipes = equipes;
   registro.quantidade = envolvidos.length;
+  registro.ocorrencias = ocorrencias.map(function (o) {
+    const quem = o['QUEM'] || '';
+    const coletivo = quem.toUpperCase().indexOf('COLETIVO') === 0;
+    return {
+      quem: quem,
+      coletivo: coletivo,
+      equipe: o['EQUIPE'] || '',
+      tipo: o['TIPO'] || '',
+      papel: o['PAPEL'] || '',
+      descricao: o['DESCRICAO'] || o['DESCRIÇÃO'] || ''
+    };
+  }).filter(function (o) { return o.tipo || o.quem; });
   registro.arquivoNome = achado.nome === undefined ? achado.arquivo.getName() : achado.nome;
   return registro;
 }

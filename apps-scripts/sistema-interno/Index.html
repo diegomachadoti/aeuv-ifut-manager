@@ -11388,6 +11388,8 @@
           + '<tbody>' + linhas + '</tbody></table>'
         : '<p class="equipe-dado">Nenhum atleta ou membro de comiss&atilde;o foi citado.</p>';
 
+      const tabelaOcorrencias = tabelaOcorrenciasSumula_(registro);
+
       const links = '<div class="barra-acoes" style="margin-top:12px;">'
         + (registro.pdfUrl
           ? '<a class="botao-apoio destaque" href="' + escapar(registro.pdfUrl) + '" target="_blank" rel="noopener">Súmula oficial (PDF)</a>'
@@ -11399,9 +11401,37 @@
         + (dados ? '<div class="detalhe-dados">' + dados + '</div>' : '')
         + fatos
         + tabela
+        + tabelaOcorrencias
         + blocoNota(registro)
         + links
         + '</div></td></tr>';
+    }
+
+    /**
+     * Tabela das ocorrências disciplinares informadas pelo árbitro (quando houver).
+     * "Quem" mostra o atleta ou "Coletivo / equipe"; papel/descrição aparecem só
+     * quando preenchidos.
+     */
+    function tabelaOcorrenciasSumula_(registro) {
+      const ocorrencias = registro.ocorrencias || [];
+      if (!ocorrencias.length) {
+        return '';
+      }
+      const linhas = ocorrencias.map(function (o, i) {
+        const quem = o.coletivo
+          ? ('Coletivo / equipe' + (o.equipe ? ' (' + escapar(o.equipe) + ')' : ''))
+          : (escapar(o.quem || '—') + (o.equipe && String(o.quem).indexOf('(') === -1 ? ' (' + escapar(o.equipe) + ')' : ''));
+        return '<tr>'
+          + celula('Nº', String(i + 1))
+          + celula('Quem', '<span class="pessoa-nome">' + quem + '</span>')
+          + celula('Tipo', escapar(o.tipo || '—'))
+          + celula('Papel', escapar(o.papel || '—'))
+          + celula('Descrição', escapar(o.descricao || '—'))
+          + '</tr>';
+      }).join('');
+      return '<div class="relato" style="margin-top:12px;"><h4>Ocorrências disciplinares</h4></div>'
+        + '<table class="pessoas"><thead><tr><th>Nº</th><th>Quem</th><th>Tipo</th><th>Papel</th><th>Descrição</th></tr></thead>'
+        + '<tbody>' + linhas + '</tbody></table>';
     }
 
     /**
