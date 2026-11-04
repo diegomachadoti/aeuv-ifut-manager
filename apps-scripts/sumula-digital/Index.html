@@ -592,6 +592,14 @@
     .campo-destaque strong { color: var(--azul); }
 
     /* Bloco de ocorrências disciplinares */
+    .ocorrencia-escolha {
+      border: 0; padding: 0; margin: 0;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px;
+    }
+    .ocorrencia-escolha legend {
+      font-weight: bold; color: var(--azul); margin-bottom: 8px; padding: 0;
+    }
+    .ocorrencia-escolha .check { margin: 0; }
     #areaOcorrencias { margin-top: 14px; }
     .ocorrencia-card {
       border: 1px solid var(--borda);
@@ -609,6 +617,9 @@
       display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
     }
     .ocorrencia-campo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    /* O atributo hidden precisa vencer o display:flex da classe acima (senão o
+       campo condicional "Equipe (coletivo)"/"Papel" continuaria visível). */
+    .ocorrencia-campo[hidden] { display: none; }
     .ocorrencia-campo--largo { grid-column: 1 / -1; }
     .ocorrencia-campo label { font-size: 13px; font-weight: bold; color: var(--azul); }
     .ocorrencia-campo select, .ocorrencia-campo textarea { width: 100%; box-sizing: border-box; }
@@ -769,11 +780,18 @@
 
       <section class="card">
         <h2>Ocorrência disciplinar</h2>
-        <p class="campo-destaque">Marque "Sim" <strong>apenas se houve conduta disciplinar grave</strong> (agressão, briga, ameaça, etc.). Isso ajuda a comissão a decidir com precisão. A lista "Quem" usa os <strong>Atletas envolvidos</strong> cadastrados acima e se atualiza sozinha conforme você os edita.</p>
-        <label class="check">
-          <input type="checkbox" id="temOcorrencia">
-          <span>Houve ocorrência disciplinar grave?</span>
-        </label>
+        <p class="campo-destaque">Responda <strong>sempre</strong>, mesmo sem ocorrência. Marque "Sim" <strong>apenas se houve conduta disciplinar grave</strong> (agressão, briga, ameaça, etc.). Isso ajuda a comissão a decidir com precisão. A lista "Quem" usa os <strong>Atletas envolvidos</strong> cadastrados acima e se atualiza sozinha conforme você os edita.</p>
+        <fieldset class="ocorrencia-escolha">
+          <legend>Houve ocorrência disciplinar grave? *</legend>
+          <label class="check">
+            <input type="radio" name="temOcorrencia" id="temOcorrenciaNao" value="nao" required>
+            <span>Não</span>
+          </label>
+          <label class="check">
+            <input type="radio" name="temOcorrencia" id="temOcorrenciaSim" value="sim" required>
+            <span>Sim</span>
+          </label>
+        </fieldset>
         <div id="areaOcorrencias" hidden>
           <div id="listaOcorrencias"></div>
           <div class="botoes">
@@ -974,17 +992,24 @@
     /**
      * Liga o toggle "Houve ocorrência disciplinar?" e os botões do bloco.
      */
+    function temOcorrenciaMarcada() {
+      const sim = document.getElementById('temOcorrenciaSim');
+      return !!(sim && sim.checked);
+    }
+
     function configurarOcorrencias() {
-      const toggle = document.getElementById('temOcorrencia');
       const area = document.getElementById('areaOcorrencias');
-      toggle.addEventListener('change', function () {
-        area.hidden = !toggle.checked;
-        if (toggle.checked && !listaOcorrencias.children.length) {
-          adicionarOcorrencia();
-        }
-        if (!toggle.checked) {
-          listaOcorrencias.innerHTML = '';
-        }
+      document.querySelectorAll('input[name="temOcorrencia"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+          const sim = temOcorrenciaMarcada();
+          area.hidden = !sim;
+          if (sim && !listaOcorrencias.children.length) {
+            adicionarOcorrencia();
+          }
+          if (!sim) {
+            listaOcorrencias.innerHTML = '';
+          }
+        });
       });
       document.getElementById('adicionarOcorrencia').addEventListener('click', adicionarOcorrencia);
     }
@@ -1114,7 +1139,7 @@
      * Lê os cartões e devolve a lista de ocorrências preenchidas.
      */
     function obterOcorrencias() {
-      if (!document.getElementById('temOcorrencia').checked) return [];
+      if (!temOcorrenciaMarcada()) return [];
       return [...listaOcorrencias.querySelectorAll('.ocorrencia-card')].map(function (card) {
         const quem = card.querySelector('[data-oc="quem"]');
         const opt = quem.options[quem.selectedIndex] || {};
@@ -1255,7 +1280,8 @@
         horaJogo: document.getElementById('horaJogo').value.trim(),
         fatos: document.getElementById('fatos').value.trim(),
         envolvidos: obterEnvolvidos(),
-        temOcorrencia: document.getElementById('temOcorrencia').checked,
+        temOcorrencia: temOcorrenciaMarcada(),
+        respostaOcorrencia: (document.querySelector('input[name="temOcorrencia"]:checked') || {}).value || '',
         ocorrencias: obterOcorrencias(),
         assinatura: assinaturaPreenchida ? assinaturaCanvas.toDataURL('image/png') : '',
         assinaturaPreenchida: assinaturaPreenchida
@@ -1316,8 +1342,10 @@
         }
       };
 
-      document.getElementById('modalSucessoFechar').onclick = function () { modal.hidden = true; };
-      // "Enviar outra súmula": recarrega a página para um formulário limpo.
+      // Depois de enviar, o formulário atrás não pode continuar reaproveitável
+      // (risco de reenvio duplicado). Qualquer saída do modal recarrega a página,
+      // deixando um formulário limpo. "Fechar" e "Enviar outra súmula" fazem o mesmo.
+      document.getElementById('modalSucessoFechar').onclick = function () { window.location.reload(); };
       document.getElementById('modalSucessoNova').onclick = function () { window.location.reload(); };
     }
 
@@ -1499,10 +1527,15 @@
           descricao: 'Descreva a ocorrência selecionada em "Outros".'
         };
 
+        const mensagensGrupo = {
+          temOcorrencia: 'Informe se houve ou não ocorrência disciplinar grave.'
+        };
+
         campo.setCustomValidity(
           mensagens[campo.id] ||
           mensagensEnvolvido[campo.dataset.campo] ||
           mensagensOcorrencia[campo.dataset.oc] ||
+          mensagensGrupo[campo.name] ||
           'Preencha este campo obrigatório.'
         );
       }, true);
@@ -1627,9 +1660,11 @@
 
       google.script.run
         .withSuccessHandler(function (res) {
-          botaoEnviar.disabled = false;
-          botaoEnviar.textContent = 'Enviar Súmula';
           alternarCarregando(false);
+          // NÃO reabilita o botão: a súmula já foi enviada. Evita reenvio
+          // duplicado caso o árbitro clique fora do modal. O formulário é
+          // zerado ao fechar o modal (reload).
+          botaoEnviar.textContent = 'Súmula enviada';
 
           baixarTxt(res.arquivoTxtNome, res.arquivoTxtConteudo);
           mostrarModalSucessoSumula(res);

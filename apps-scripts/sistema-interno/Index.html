@@ -8997,10 +8997,35 @@
         }).join(' ')).indexOf(busca) !== -1;
       });
 
+      ordenarPunicoes_(filtrados);
+
       desenharResumo(filtrados);
       punicoesPaginacao.registros = filtrados;
       punicoesPaginacao.pagina = 0;
       desenharPaginaConsulta_('Punicoes', punicoesPaginacao, desenharLinhas, 'punição(ões)');
+    }
+
+    /**
+     * Ordena as punições da partida mais recente para a mais antiga: primeiro
+     * pela data do jogo e, como desempate, pelo número da nota (sequencial por
+     * ano, ex.: 010/2026) e pela data da nota. Registros sem data/número vão
+     * para o fim. A ordenação é feita aqui porque o controle vem do TXT do
+     * Python na ordem de gravação, não cronológica.
+     */
+    function ordenarPunicoes_(lista) {
+      function chaveNota(valor) {
+        const m = String(valor || '').match(/(\d+)\s*\/\s*(\d{4})/);
+        return m ? Number(m[2]) * 1000 + Number(m[1]) : -1;
+      }
+      function chaveData(valor) {
+        const m = String(valor || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? Number(m[3] + m[2] + m[1]) : 0;
+      }
+      lista.sort(function (a, b) {
+        return chaveData(b.dataJogo) - chaveData(a.dataJogo)
+          || chaveNota(b.nota) - chaveNota(a.nota)
+          || chaveData(b.dataNota) - chaveData(a.dataNota);
+      });
     }
 
     /**
@@ -10848,15 +10873,32 @@
       document.getElementById('statusSumulas').outerHTML = ''
         + '<div id="statusSumulas">'
         + estadoCargaSumulas_(aviso)
-        + '<details class="info-punicoes"><summary>Como funciona a pré-carga das súmulas analisadas</summary>'
-        + '<div class="info-punicoes-corpo"><p>A pré-carga mostra rapidamente apenas o histórico <strong>Analisada</strong>. '
-        + 'A consulta atual roda em paralelo e confirma a listagem completa. Aguardando e Falha são sempre lidas da fonte atual. '
-        + 'TXT analisados só são reutilizados quando identidade, pasta, data de alteração e tamanho continuam iguais; notas, punições e justificativas são consultadas novamente.</p>'
-        + '<p>O administrador configura <code>CONFIG.sumulas.snapshotPastaId</code> e <code>snapshotOwnerEmail</code> no Apps Script, '
-        + 'usando uma pasta My Drive dedicada e restrita aos leitores das súmulas. Depois usa <strong>Gerar pré-carga</strong> '
-        + 'ou executa <code>recalcularSnapshotSumulas</code> no editor. A agenda compartilhada do Banco de Atletas também renova essa cópia quando configurada.</p>'
-        + '<p class="info-punicoes-nota">A cópia provisória expira após 24 horas. Sem pré-carga válida, a consulta normal continua funcionando. '
-        + 'As ações ficam disponíveis somente após conferir os dados atuais. O ganho aumenta com o volume de súmulas analisadas.</p></div></details>'
+        + '<details class="info-punicoes"><summary>Como funciona o fluxo de uma súmula e seus status</summary>'
+        + '<div class="info-punicoes-corpo">'
+        + '<p>Quando o árbitro envia a Súmula Digital, o TXT/PDF cai na pasta <strong>Entrada</strong> e a súmula aparece aqui como '
+        + '<strong>🕒 Aguardando</strong>. A partir daí o fluxo é:</p>'
+        + '<ol>'
+        + '<li><strong>Análise (propor):</strong> <code>python main.py --analisar-sumulas</code> lê o relato e as '
+        + '<em>ocorrências disciplinares</em> informadas pelo árbitro, enquadra pelo regulamento e gera a <em>prévia</em> da nota '
+        + '(aparece em <strong>Notas oficiais</strong> como <em>📝 Em análise</em>). Nada é gravado no controle de punições e a '
+        + 'súmula continua <strong>Aguardando</strong>.</li>'
+        + '<li><strong>Revisão da comissão:</strong> conferir a prévia e resolver os campos <em>[A DEFINIR]</em> no TXT da nota '
+        + '(ex.: pena por tempo, papel na agressão, tipo "Outros").</li>'
+        + '<li><strong>Efetivação:</strong> <code>python main.py --gerar-pdf-nota &lt;nº&gt;</code> grava as punições no '
+        + '<strong>Controle de punições</strong>, publica a nota oficial e move a súmula para <strong>Processados</strong> — ela '
+        + 'passa a <strong>🟢 Analisada</strong>.</li>'
+        + '</ol>'
+        + '<p><strong>Status desta tela</strong> (vêm da pasta do Drive em que a súmula está):</p>'
+        + '<ul>'
+        + '<li><strong>🕒 Aguardando</strong> (Entrada): recebida, ainda não efetivada.</li>'
+        + '<li><strong>🟢 Analisada</strong> (Processados): decisão fechada e nota oficial publicada. Também é o status quando a '
+        + 'comissão usa <em>Marcar analisada</em> em súmulas que não geram punição.</li>'
+        + '<li><strong>🔴 Falha</strong> (Falhas): o processamento não concluiu; conferir e reprocessar.</li>'
+        + '</ul>'
+        + '<p class="info-punicoes-nota">A lista usa uma pré-carga (cópia provisória, expira em 24h) só para exibir mais rápido o '
+        + 'histórico já <strong>Analisada</strong>; <strong>Aguardando</strong> e <strong>Falha</strong> são sempre lidas da fonte '
+        + 'atual e a listagem completa é confirmada em paralelo. Sem pré-carga válida, a consulta normal continua funcionando.</p>'
+        + '</div></details>'
         + '<div class="resumo" id="resumoSumulas"></div>'
         + '<div class="filtros">'
         + '<input type="search" id="buscaSumulas" placeholder="Buscar por protocolo, equipe, &aacute;rbitro, envolvido ou pelo relato">'

@@ -852,7 +852,10 @@
       document.getElementById('modalSucessoTxt').onclick = function () {
         baixarArquivoTxt(resultado.arquivoTxtNome, resultado.arquivoTxtConteudo);
       };
-      document.getElementById('modalSucessoFechar').onclick = function () { modal.hidden = true; };
+      // Depois de enviar, o formulário atrás não pode continuar reaproveitável
+      // (risco de inscrição duplicada). Qualquer saída do modal recarrega a página,
+      // deixando um formulário limpo. "Fechar" e "Enviar outra" fazem o mesmo.
+      document.getElementById('modalSucessoFechar').onclick = function () { window.location.reload(); };
       document.getElementById('modalSucessoNova').onclick = function () { window.location.reload(); };
     }
 
@@ -1001,8 +1004,10 @@
       google.script.run
         .withSuccessHandler(resultado => {
           alternarCarregando(false);
-          botaoEnviar.disabled = false;
-          botaoEnviar.textContent = 'Enviar inscrição';
+          // NÃO reabilita o botão: a inscrição já foi enviada. Evita envio
+          // duplicado caso o usuário clique fora do modal. O formulário é
+          // zerado ao fechar o modal (reload).
+          botaoEnviar.textContent = 'Inscrição enviada';
           mostrarModalSucessoInscricao(resultado);
         })
         .withFailureHandler(erro => {

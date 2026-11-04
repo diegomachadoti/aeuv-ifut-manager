@@ -341,7 +341,7 @@ function gerarPdf_(payload, id, data, pastaAnexosUrl) {
   });
 
   if (tabela.length > 1) {
-    estilizarTabelaPdf_(corpo.appendTable(tabela), true);
+    estilizarTabelaPdf_(corpo.appendTable(tabela), true, [28, 150, 110, 170, 52]);
   } else {
     corpo.appendParagraph('Nenhum envolvido informado.');
   }
@@ -366,7 +366,7 @@ function gerarPdf_(payload, id, data, pastaAnexosUrl) {
         o.descricao || '—'
       ]);
     });
-    estilizarTabelaPdf_(corpo.appendTable(tabelaOc), true);
+    estilizarTabelaPdf_(corpo.appendTable(tabelaOc), true, [28, 120, 150, 90, 122]);
   } else {
     corpo.appendParagraph('Nenhuma ocorrência disciplinar registrada.');
   }
@@ -644,9 +644,19 @@ function adicionarRelatoPdf_(corpo, texto) {
   });
 }
 
-function estilizarTabelaPdf_(tabela, temCabecalho) {
+function estilizarTabelaPdf_(tabela, temCabecalho, larguras) {
   tabela.setBorderColor('#d8deea');
   tabela.setBorderWidth(0.75);
+
+  // Larguras por coluna (em pontos). Sem isso, o DocumentApp distribui tudo
+  // igualmente e colunas de texto longo (ex.: Tipo/Descrição) ficam apertadas.
+  if (larguras && larguras.length) {
+    for (let c = 0; c < larguras.length; c++) {
+      if (larguras[c]) {
+        try { tabela.setColumnWidth(c, larguras[c]); } catch (e) { /* coluna ausente */ }
+      }
+    }
+  }
 
   for (let linha = 0; linha < tabela.getNumRows(); linha++) {
     const cabecalho = temCabecalho && linha === 0;
@@ -892,7 +902,18 @@ var PAPEIS_OCORRENCIA = ['Agressor inicial', 'Não inicial (revide)', 'Não sei 
  * @return {Array<Object>}
  */
 function validarOcorrencias_(p) {
-  if (!p.temOcorrencia && !(Array.isArray(p.ocorrencias) && p.ocorrencias.length)) {
+  // O árbitro precisa responder se houve ou não ocorrência (campo obrigatório).
+  // Compatível com envios antigos: se já vier lista de ocorrências, assume "sim".
+  const resposta = String(p.respostaOcorrencia || '').trim().toLowerCase();
+  const temLista = Array.isArray(p.ocorrencias) && p.ocorrencias.length > 0;
+  if (resposta !== 'sim' && resposta !== 'nao' && !temLista && typeof p.temOcorrencia !== 'boolean') {
+    throw new Error('Informe se houve ou não ocorrência disciplinar grave.');
+  }
+  if (resposta === 'nao') {
+    return [];
+  }
+
+  if (!p.temOcorrencia && !temLista) {
     return [];
   }
 

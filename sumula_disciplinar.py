@@ -200,6 +200,60 @@ REGRAS: tuple[Regra, ...] = (
     Regra("ameaca", "Ameaça", "32", "2", (r"\bameac",), sem_dispositivo=True),
 )
 
+REGRAS_POR_ID: dict[str, Regra] = {r.id: r for r in REGRAS}
+
+
+def _norm_tipo(valor: str) -> str:
+    return normalize_text(valor)
+
+
+# Mapa TIPO do formulário (sumula-digital) -> id da Regra (artigo/§/inciso do regulamento).
+# Para "Agressão por vias de fato" o inciso depende do PAPEL (ver regra_da_ocorrencia).
+# "Outros" não tem dispositivo fixo: a comissão decide (enquadramento [A DEFINIR]).
+TIPO_OCORRENCIA_REGRA: dict[str, str] = {
+    _norm_tipo("Briga / confusão generalizada"): "art8",
+    _norm_tipo("Tentativa de agressão"): "art9",
+    _norm_tipo("Agressão por vias de fato"): "art10_agressor",  # inciso ajustado pelo papel
+    _norm_tipo("Ofensas / incitar tumulto ou violência"): "art11",
+    _norm_tipo("Uso de entorpecente"): "art12",
+    _norm_tipo("Injúria racial / discriminação"): "art13",
+    _norm_tipo("Participação de suspenso cumprindo punição"): "art14",
+    _norm_tipo("Outros"): "",  # sem dispositivo fixo
+}
+
+# Papel informado na agressão (ART. 22, §2º): define o inciso.
+PAPEL_AGRESSOR_INICIAL = _norm_tipo("Agressor inicial")
+PAPEL_REVIDE = _norm_tipo("Não inicial (revide)")
+
+
+def regra_da_ocorrencia(oc: "OcorrenciaForm") -> tuple[Regra | None, bool]:
+    """Resolve a Regra do regulamento a partir do TIPO (e do PAPEL, no ART. 22).
+
+    Retorna (regra, definir): `definir` é True quando falta decisão humana — tipo
+    "Outros", agressão com papel "Não sei dizer", ou tipo desconhecido. Nesses casos
+    a nota sai como rascunho ([A DEFINIR PELA COMISSÃO]).
+    """
+    tipo = _norm_tipo(oc.tipo)
+    if not tipo:
+        return None, True
+    rid = TIPO_OCORRENCIA_REGRA.get(tipo)
+    if rid is None:
+        return None, True  # tipo fora do catálogo conhecido
+    if rid == "":
+        return None, True  # "Outros"
+
+    # ART. 22: o papel decide o inciso (I agressor inicial, II revide).
+    if rid == "art10_agressor":
+        papel = _norm_tipo(oc.papel)
+        if papel == PAPEL_REVIDE:
+            return REGRAS_POR_ID["art10_revide"], False
+        if papel == PAPEL_AGRESSOR_INICIAL:
+            return REGRAS_POR_ID["art10_agressor"], False
+        # "Não sei dizer" ou vazio: enquadra em ART. 22 §2º, mas o inciso fica a definir.
+        return REGRAS_POR_ID["art10_agressor"], True
+
+    return REGRAS_POR_ID.get(rid), False
+
 
 # ---------------------------------------------------------------------------
 # Sumula
@@ -228,6 +282,21 @@ class Envolvido:
 
 
 @dataclass
+class OcorrenciaForm:
+    """Ocorrência disciplinar preenchida no formulário (seção OCORRENCIAS DISCIPLINARES do TXT).
+
+    É a fonte estruturada da Fase 2: o tipo é tipificado por artigo e o papel define
+    o inciso do ART. 22. Substitui a dependência de achar palavras-chave no relato.
+    """
+    coletivo: bool
+    nome: str
+    equipe: str
+    tipo: str
+    papel: str
+    descricao: str
+
+
+@dataclass
 class Sumula:
     arquivo: Path
     protocolo: str
@@ -239,6 +308,7 @@ class Sumula:
     fatos: str
     envolvidos: list[Envolvido]
     pdf_url: str = ""
+    ocorrencias_form: list[OcorrenciaForm] = field(default_factory=list)
 
 
 def bloco_relatorio_pdf(sumula: Sumula) -> list[str]:
@@ -264,6 +334,43 @@ def inserir_antes_assinatura(nota: str, bloco: list[str], cidade: str) -> str:
                 i -= 1
             return "\n".join(linhas[:i] + bloco + linhas[i:]) + "\n"
     return "\n".join(linhas + bloco) + "\n"
+
+
+def _parsear_ocorrencias_form(texto: str) -> list[OcorrenciaForm]:
+    """Lê a seção 'OCORRENCIAS DISCIPLINARES' do TXT (formulário sumula-digital).
+
+    Retrocompatível: súmulas antigas sem a seção (ou com 'Nenhuma ocorrência...')
+    devolvem lista vazia e o fluxo cai para a análise por texto livre.
+    """
+    secao = re.search(
+        r"OCORRENCIAS DISCIPLINARES\s*\n-+\s*\n(.*?)(?:\n\s*S[UÚ]MULA OFICIAL \(PDF\)|\Z)",
+        texto, re.DOTALL,
+    )
+    if not secao:
+        return []
+
+    ocorrencias: list[OcorrenciaForm] = []
+    for bloco in re.split(r"\n\s*OCORRENCIA\s+\d+\s*\n", "\n" + secao.group(1)):
+        if not bloco.strip():
+            continue
+
+        def valor(nome: str) -> str:
+            achado = re.search(rf"^{nome}:\s*(.*)$", bloco, re.MULTILINE)
+            return achado.group(1).strip() if achado else ""
+
+        quem = valor("QUEM")
+        if not quem and not valor("TIPO"):
+            continue  # linha de cabeçalho / "Nenhuma ocorrência..."
+        coletivo = normalize_text(quem).startswith("coletivo")
+        ocorrencias.append(OcorrenciaForm(
+            coletivo=coletivo,
+            nome="" if coletivo else quem,
+            equipe=valor("EQUIPE"),
+            tipo=valor("TIPO"),
+            papel=valor("PAPEL"),
+            descricao=valor("DESCRICAO"),
+        ))
+    return ocorrencias
 
 
 def ler_sumula(path: Path) -> Sumula:
@@ -299,6 +406,7 @@ def ler_sumula(path: Path) -> Sumula:
         time2=partida.group(2).strip(),
         data_jogo=campo("DATA"),
         hora_jogo=campo("HORA"),
+        ocorrencias_form=_parsear_ocorrencias_form(texto),
         fatos=fatos.group(1).strip(),
         envolvidos=envolvidos,
         pdf_url=pdf.group(1) if pdf else "",
@@ -311,12 +419,17 @@ def ler_sumula(path: Path) -> Sumula:
 
 @dataclass
 class Ocorrencia:
-    regra: Regra
+    regra: Regra | None
     trecho_regulamento: str
     pena: str | None
     sujeito: Envolvido | str | None
     frases: list[str] = field(default_factory=list)
     confirmar_autoria: bool = False
+    # Fase 2 (fonte estruturada do formulário):
+    definir: bool = False          # enquadramento/pena a cargo da comissão (ex.: "Outros", papel indefinido)
+    titulo_livre: str = ""         # título quando não há dispositivo fixo (tipo "Outros")
+    descricao_form: str = ""       # descrição digitada pelo árbitro (tipo "Outros")
+    origem_form: bool = False      # veio da seção estruturada, não do texto livre
 
 
 def paragrafos_relato(fatos: str) -> list[str]:
@@ -424,7 +537,84 @@ def inferir_suspensos_participantes(fatos: str, envolvidos: list[Envolvido],
     return novos
 
 
+def _sujeito_da_ocorrencia_form(oc: OcorrenciaForm, sumula: Sumula) -> Envolvido | str | None:
+    """Resolve o sujeito a partir do que o árbitro escolheu no formulário.
+
+    Coletivo -> equipe (string). Individual -> casa com um envolvido da lista
+    (por nome+equipe); se não achar, cria um Envolvido inferido com os dados do
+    próprio formulário, para a infração não ficar sem sujeito.
+    """
+    if oc.coletivo:
+        return oc.equipe or MARCADOR_DEFINIR
+    if not oc.nome:
+        return None
+    alvo = normalize_text(oc.nome)
+    for e in sumula.envolvidos:
+        if normalize_text(e.nome) == alvo and (not oc.equipe or normalize_text(e.equipe) == normalize_text(oc.equipe)):
+            return e
+    # Não está na lista de envolvidos: cria pelo que o formulário informou.
+    return Envolvido(oc.equipe or MARCADOR_DEFINIR, "Atleta", oc.nome, "", inferido=True)
+
+
+def analisar_estruturado(sumula: Sumula, regulamento: Regulamento,
+                         logger: logging.Logger | None = None) -> list[Ocorrencia]:
+    """Fase 2: enquadra a partir da seção estruturada OCORRENCIAS DISCIPLINARES.
+
+    Cada ocorrência do formulário vira uma Ocorrencia com a Regra tipificada pelo
+    TIPO (e pelo PAPEL, no ART. 22). Tipos "Outros"/papel indefinido entram como
+    [A DEFINIR PELA COMISSÃO]. O relato (texto livre) é usado só para anexar as
+    frases que embasam a decisão, sem redefinir o enquadramento.
+    """
+    resultado: list[Ocorrencia] = []
+    for oc in sumula.ocorrencias_form:
+        regra, definir = regra_da_ocorrencia(oc)
+        sujeito = _sujeito_da_ocorrencia_form(oc, sumula)
+        trecho = ""
+        pena = None
+        if regra is not None:
+            trecho = regulamento.trecho(regra.artigo, regra.paragrafo, regra.inciso, regra.incluir_caput) or ""
+            if not trecho:
+                if logger:
+                    logger.warning("Dispositivo ART. %s §%s ausente no regulamento; ocorrencia %s marcada a definir",
+                                   regra.artigo, regra.paragrafo, regra.id)
+                definir = True
+            else:
+                pena = extrair_pena(trecho)
+        titulo_livre = ""
+        if regra is None:
+            titulo_livre = (oc.tipo.strip() or "Conduta disciplinar") if _norm_tipo(oc.tipo) != _norm_tipo("Outros") \
+                else "Outra conduta disciplinar grave"
+        ocorrencia = Ocorrencia(
+            regra=regra,
+            trecho_regulamento=trecho,
+            pena=pena,
+            sujeito=sujeito,
+            definir=definir,
+            titulo_livre=titulo_livre,
+            descricao_form=oc.descricao,
+            origem_form=True,
+        )
+        # Anexa trechos do relato que citam o sujeito (quando individual), como fundamentação.
+        if isinstance(sujeito, Envolvido):
+            for paragrafo in dividir_paragrafos(sumula.fatos):
+                for frase in paragrafo:
+                    if _envolvidos_citados(normalize_text(frase), [sujeito]) and frase not in ocorrencia.frases:
+                        ocorrencia.frases.append(frase)
+        if oc.descricao and oc.descricao not in ocorrencia.frases:
+            ocorrencia.frases.append(oc.descricao)
+        resultado.append(ocorrencia)
+    return resultado
+
+
 def analisar(sumula: Sumula, regulamento: Regulamento, logger: logging.Logger | None = None) -> list[Ocorrencia]:
+    # Fase 2: se o árbitro preencheu a seção estruturada, ela é a fonte do
+    # enquadramento (mais assertiva que casar palavras no relato). Sem ela,
+    # cai para a análise por texto livre (súmulas antigas / sem ocorrências).
+    if sumula.ocorrencias_form:
+        estruturadas = analisar_estruturado(sumula, regulamento, logger)
+        if estruturadas:
+            return estruturadas
+
     regras_validas: list[tuple[Regra, str]] = []
     for regra in REGRAS:
         trecho = regulamento.trecho(regra.artigo, regra.paragrafo, regra.inciso, regra.incluir_caput)
@@ -495,6 +685,20 @@ def _referencia(regra: Regra) -> str:
     return texto
 
 
+def _titulo_ocorrencia(o: Ocorrencia) -> str:
+    """Título da conduta: do dispositivo quando há regra, senão o informado no formulário."""
+    if o.regra is not None:
+        return o.regra.titulo
+    return o.titulo_livre or "Conduta disciplinar"
+
+
+def _referencia_ocorrencia(o: Ocorrencia) -> str:
+    """Referência legal; sem dispositivo fixo (ex.: 'Outros'), fica a cargo da comissão."""
+    if o.regra is not None:
+        return _referencia(o.regra)
+    return f"enquadramento {MARCADOR_DEFINIR}"
+
+
 def _citar(texto: str) -> list[str]:
     return [f"   \"{linha}\"" for linha in texto.splitlines()]
 
@@ -562,6 +766,11 @@ def dosimetria(o: Ocorrencia, ocorrencias: list[Ocorrencia], sumula: Sumula,
     historica (nome+equipe, lida do controle de punicoes) e a faixa literal do dispositivo. Penas sem
     faixa em partidas ficam com a penalidade prevista no dispositivo ou para a comissao definir.
     """
+    # Fase 2: ocorrência sem dispositivo fixo (tipo "Outros") ou com inciso/papel
+    # indefinido fica a cargo da comissão — enquadramento e pena [A DEFINIR].
+    if o.regra is None or o.definir:
+        return Dosimetria(None, MARCADOR_DEFINIR, o.pena or "", [])
+
     anteriores = _eh_reincidente(o, reincidentes)
     reincidente = anteriores > 0
 
@@ -591,10 +800,11 @@ def dosimetria(o: Ocorrencia, ocorrencias: list[Ocorrencia], sumula: Sumula,
     if len(o.frases) >= 2:
         circunstancias.append(f"reiteração da conduta ({len(o.frases)} trechos do relatório)")
     primeira_do_sujeito = next(
-        (x for x in ocorrencias if x.sujeito == o.sujeito and not x.regra.sem_dispositivo), None
+        (x for x in ocorrencias if x.sujeito == o.sujeito and x.regra is not None and not x.regra.sem_dispositivo),
+        None,
     )
     mesmo_sujeito = isinstance(o.sujeito, Envolvido) and primeira_do_sujeito is o and any(
-        x.regra.id == "ameaca" and x.sujeito == o.sujeito for x in ocorrencias
+        x.regra is not None and x.regra.id == "ameaca" and x.sujeito == o.sujeito for x in ocorrencias
     )
     if mesmo_sujeito and o.regra.id != "ameaca":
         circunstancias.append("ameaça registrada no relatório, considerada na gravidade da conduta")
@@ -613,10 +823,17 @@ def dosimetria(o: Ocorrencia, ocorrencias: list[Ocorrencia], sumula: Sumula,
 def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: int,
                competicao: str, cidade: str, hoje: date, associacao: str = ASSOCIACAO,
                reincidentes: dict | None = None, ajuste: str | None = None) -> str:
-    pessoas = [o for o in ocorrencias if isinstance(o.sujeito, Envolvido) and not o.regra.sem_dispositivo]
-    equipes = [o for o in ocorrencias if o.regra.sujeito == "equipe" and o.sujeito]
-    sem_sujeito = [o for o in ocorrencias if o.sujeito is None]
-    sem_dispositivo = [o for o in ocorrencias if o.regra.sem_dispositivo and o.sujeito is not None]
+    def _sem_dispositivo(o: Ocorrencia) -> bool:
+        # Regras "sem_dispositivo" (ex.: ameaça) são tratadas à parte; ocorrências
+        # do formulário com regra=None (tipo "Outros") NÃO entram aqui — elas são
+        # enquadráveis com pena a definir.
+        return o.regra is not None and o.regra.sem_dispositivo
+
+    pessoas = [o for o in ocorrencias if isinstance(o.sujeito, Envolvido) and not _sem_dispositivo(o)]
+    equipes = [o for o in ocorrencias
+               if not isinstance(o.sujeito, Envolvido) and o.sujeito is not None and not _sem_dispositivo(o)]
+    sem_sujeito = [o for o in ocorrencias if o.sujeito is None and not _sem_dispositivo(o)]
+    sem_dispositivo = [o for o in ocorrencias if _sem_dispositivo(o) and o.sujeito is not None]
     enquadraveis = pessoas + equipes
 
     nomes: list[str] = []
@@ -670,38 +887,49 @@ def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: 
     for i, o in enumerate(enquadraveis, start=1):
         sujeito = o.sujeito.rotulo() if isinstance(o.sujeito, Envolvido) else o.sujeito
         equipe = f" ({o.sujeito.equipe})" if isinstance(o.sujeito, Envolvido) else ""
-        linhas += ["", f"{i}. {o.regra.titulo} – {sujeito}{equipe}", "Trecho do relatório:"]
-        linhas += [f"   \"{frase}\"" for frase in o.frases]
+        linhas += ["", f"{i}. {_titulo_ocorrencia(o)} – {sujeito}{equipe}"]
+        if o.frases:
+            linhas.append("Trecho do relatório:")
+            linhas += [f"   \"{frase}\"" for frase in o.frases]
         if o.confirmar_autoria:
             linhas.append(f"⚠️ Mais de um envolvido citado no mesmo trecho – confirmar a autoria {MARCADOR_DEFINIR}.")
         if isinstance(o.sujeito, Envolvido) and o.sujeito.inferido:
             linhas.append(f"⚠️ {o.sujeito.nome} não consta na lista de envolvidos da súmula e foi identificado "
                           f"pelo relato – confirmar nome e equipe {MARCADOR_DEFINIR}.")
-        linhas += [f"A conduta enquadra-se no {_referencia(o.regra)}:"]
-        linhas += _citar(o.trecho_regulamento)
+        if o.regra is not None and o.trecho_regulamento:
+            linhas += [f"A conduta enquadra-se no {_referencia(o.regra)}:"]
+            linhas += _citar(o.trecho_regulamento)
+            if o.definir and o.regra.id == "art10_agressor":
+                linhas.append(f"⚠️ Papel na agressão não informado (agressor inicial x revide) – a comissão "
+                              f"deve definir o inciso aplicável {MARCADOR_DEFINIR}.")
+        else:
+            linhas.append(f"⚠️ Conduta sem dispositivo específico pré-definido – enquadramento {MARCADOR_DEFINIR}.")
+            if o.descricao_form:
+                linhas.append(f"Descrição informada pelo árbitro: {o.descricao_form}")
         if o.pena:
-            if normalize_text(o.pena).startswith("acrescida"):
-                linhas.append(f"O dispositivo prevê que a penalidade aplicada seja {o.pena}.")
+            pena_limpa = o.pena.replace("**", "").strip()
+            if normalize_text(pena_limpa).startswith("acrescida"):
+                linhas.append(f"O dispositivo prevê que a penalidade aplicada seja {pena_limpa}.")
             else:
-                linhas.append(f"O dispositivo prevê {o.pena}.")
-        linhas.append(f"➡️ {_referencia(o.regra)} – {destacar(doses[id(o)].decisao)}")
+                linhas.append(f"O dispositivo prevê {pena_limpa}.")
+        linhas.append(f"➡️ {_referencia_ocorrencia(o)} – {destacar(doses[id(o)].decisao)}")
 
     if sem_dispositivo:
         trecho = sem_dispositivo[0].trecho_regulamento
         linhas += ["", "Condutas sem dispositivo específico no regulamento"]
         for o in sem_dispositivo:
-            linhas.append(f"- {o.regra.titulo} – {o.sujeito.rotulo()} ({o.sujeito.equipe}):")
+            linhas.append(f"- {_titulo_ocorrencia(o)} – {o.sujeito.rotulo()} ({o.sujeito.equipe}):")
             linhas += [f"   \"{frase}\"" for frase in o.frases]
         linhas.append(
             "O regulamento não possui dispositivo específico para essa conduta. Nos termos do "
-            f"{_referencia(sem_dispositivo[0].regra)}:"
+            f"{_referencia_ocorrencia(sem_dispositivo[0])}:"
         )
         linhas += _citar(trecho)
 
     if sem_sujeito:
         linhas += ["", f"Ocorrências sem envolvido identificado no relatório {MARCADOR_DEFINIR}"]
         for o in sem_sujeito:
-            linhas.append(f"- {o.regra.titulo} ({_referencia(o.regra)}):")
+            linhas.append(f"- {_titulo_ocorrencia(o)} ({_referencia_ocorrencia(o)}):")
             linhas += [f"   \"{frase}\"" for frase in o.frases]
 
     linhas += [
@@ -720,9 +948,10 @@ def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: 
         for rotulo, itens in sujeitos.items():
             linhas.append(rotulo)
             for o in itens:
+                titulo = _titulo_ocorrencia(o)
                 linhas.append(
-                    f"➡️ {destacar(doses[id(o)].decisao)}, com fundamento no {_referencia(o.regra)}, "
-                    f"em razão de {o.regra.titulo[0].lower() + o.regra.titulo[1:]};"
+                    f"➡️ {destacar(doses[id(o)].decisao)}, com fundamento no {_referencia_ocorrencia(o)}, "
+                    f"em razão de {titulo[0].lower() + titulo[1:]};"
                 )
             com_partidas = [doses[id(o)] for o in itens if o.pena and "partidas" in o.pena]
             if com_partidas:
@@ -740,8 +969,14 @@ def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: 
     for paragrafo in dividir_paragrafos(sumula.fatos):
         for frase in paragrafo:
             for o in ocorrencias:
-                if frase in o.frases and o.regra.titulo not in sequencia[-1:]:
-                    sequencia.append(o.regra.titulo)
+                if frase in o.frases and _titulo_ocorrencia(o) not in sequencia[-1:]:
+                    sequencia.append(_titulo_ocorrencia(o))
+    if not sequencia:
+        # Fonte estruturada (Fase 2): a sequência vem dos tipos das ocorrências.
+        for o in enquadraveis:
+            titulo = _titulo_ocorrencia(o)
+            if titulo not in sequencia:
+                sequencia.append(titulo)
     for j, item in enumerate(sequencia):
         if j:
             linhas.append(" ⬇️")
@@ -756,15 +991,16 @@ def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: 
         d = doses[id(o)]
         sujeito = o.sujeito.nome if isinstance(o.sujeito, Envolvido) else f"equipe {o.sujeito}"
         if d.partidas is None:
-            linhas.append(f"- {_referencia(o.regra)} – {sujeito}: {destacar(d.decisao)}.")
+            linhas.append(f"- {_referencia_ocorrencia(o)} – {sujeito}: {destacar(d.decisao)}.")
             continue
         motivo = "; ".join(d.circunstancias) if d.circunstancias else (
             "nenhuma circunstância adicional registrada no relatório, aplicando-se a pena mínima"
         )
-        previsao = (f"que a penalidade aplicada seja {d.faixa}" if normalize_text(d.faixa).startswith("acrescida")
-                    else d.faixa)
+        faixa_limpa = (d.faixa or "").replace("**", "").strip()
+        previsao = (f"que a penalidade aplicada seja {faixa_limpa}" if normalize_text(faixa_limpa).startswith("acrescida")
+                    else faixa_limpa)
         linhas.append(
-            f"- {_referencia(o.regra)} – {sujeito}: o dispositivo prevê {previsao}; {motivo}. "
+            f"- {_referencia_ocorrencia(o)} – {sujeito}: o dispositivo prevê {previsao}; {motivo}. "
             f"Pena aplicada: {destacar(d.decisao)}."
         )
 

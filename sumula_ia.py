@@ -123,6 +123,36 @@ def montar_mensagens(sumula: Sumula, texto_sumula: str, regulamento_texto: str, 
         f"- {e.nome} | {e.tipo} | equipe {e.equipe}" + (f" | camisa {e.camisa}" if e.camisa else "")
         for e in sumula.envolvidos
     ) or "- (nenhum envolvido informado)"
+
+    # Ocorrências disciplinares estruturadas (Fase 2): o árbitro já tipificou cada
+    # conduta por categoria (e o papel, na agressão). É a base do enquadramento;
+    # o relato livre complementa. A IA deve respeitar o tipo/papel informados.
+    ocorrencias_form = getattr(sumula, "ocorrencias_form", None) or []
+    if ocorrencias_form:
+        linhas_oc = []
+        for i, oc in enumerate(ocorrencias_form, start=1):
+            quem = "Coletivo / equipe" if oc.coletivo else oc.nome
+            partes = [f"#{i} tipo: {oc.tipo}", f"quem: {quem}"]
+            if oc.equipe:
+                partes.append(f"equipe: {oc.equipe}")
+            if oc.papel:
+                partes.append(f"papel: {oc.papel}")
+            if oc.descricao:
+                partes.append(f"descrição: {oc.descricao}")
+            linhas_oc.append("- " + " | ".join(partes))
+        bloco_ocorrencias = (
+            "OCORRÊNCIAS DISCIPLINARES ESTRUTURADAS (informadas pelo árbitro — use como base do enquadramento)\n"
+            "Cada item já foi tipificado pelo árbitro. Enquadre pelo TIPO informado; na 'Agressão por vias de "
+            "fato', o PAPEL define o inciso do ART. 22 (agressor inicial x revide). Tipo 'Outros' ou papel "
+            "'Não sei dizer' devem ficar como decisão da comissão ([A DEFINIR PELA COMISSÃO]).\n"
+            + "\n".join(linhas_oc)
+        )
+    else:
+        bloco_ocorrencias = (
+            "OCORRÊNCIAS DISCIPLINARES ESTRUTURADAS\n"
+            "O árbitro não registrou ocorrências estruturadas; baseie o enquadramento no relatório (texto livre)."
+        )
+
     dados = f"""DADOS PARA A NOTA
 - Cabeçalho: "NOTA OFICIAL Nº {{NUMERO}}" (mantenha exatamente o marcador {{NUMERO}}) e, na linha seguinte, "{competicao.upper()}".
 - Competição: {competicao}
@@ -131,7 +161,9 @@ def montar_mensagens(sumula: Sumula, texto_sumula: str, regulamento_texto: str, 
 - Assinatura final: "{associacao}" e, na linha seguinte, "{competicao}".
 
 ENVOLVIDOS INFORMADOS PELO ÁRBITRO
-{envolvidos}"""
+{envolvidos}
+
+{bloco_ocorrencias}"""
 
     # Bloco de reincidencia: lista de envolvidos com punicao disciplinar anterior
     # registrada no controle da associacao (identificacao por nome + equipe).

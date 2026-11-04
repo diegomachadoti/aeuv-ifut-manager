@@ -11307,11 +11307,22 @@ function interpretarSumula_(conteudo, achado, paraAtletas, metricas) {
 
     if (titulo === 'ENVOLVIDOS') {
       secao = 'envolvidos';
+      atual = null;
+      return;
+    }
+
+    // Seção estruturada de ocorrências (posterior a ENVOLVIDOS). Sem tratá-la,
+    // suas linhas (QUEM/TIPO/EQUIPE/PAPEL/...) caíam no último envolvido e
+    // sobrescreviam o TIPO dele ("Atleta" virava "Agressão por vias de fato").
+    if (titulo.indexOf('OCORRENCIAS DISCIPLINARES') === 0 || titulo.indexOf('OCORRÊNCIAS DISCIPLINARES') === 0) {
+      secao = 'ocorrencias';
+      atual = null;
       return;
     }
 
     if (titulo.indexOf('SÚMULA OFICIAL') === 0 || titulo.indexOf('SUMULA OFICIAL') === 0) {
       secao = 'pdf';
+      atual = null;
       return;
     }
 
@@ -11330,6 +11341,12 @@ function interpretarSumula_(conteudo, achado, paraAtletas, metricas) {
       if (!pdfUrl && /^https?:\/\//i.test(texto)) {
         pdfUrl = texto;
       }
+      return;
+    }
+
+    // Ocorrências disciplinares não entram nos envolvidos nem no cabeçalho
+    // (são lidas pela automação Python, não exibidas nesta tela de súmulas).
+    if (secao === 'ocorrencias') {
       return;
     }
 
