@@ -939,7 +939,15 @@ Enquanto o corpo do TXT tiver `[A DEFINIR PELA COMISSÃO]` ou houver
 divergências da IA, o PDF sai com a marca d'água **RASCUNHO** e os avisos no
 topo. Depois que a comissão substitui todos os marcadores pela decisão e roda
 `--gerar-pdf-nota`, o PDF sai como versão final, sem marca d'água nem avisos. A
-linha de aviso do topo do TXT não precisa ser apagada.
+linha de aviso do topo do TXT não precisa ser apagada: ao efetivar uma nota sem
+pendências, os avisos do topo (selo de prévia, "gerada automaticamente",
+observações internas) são removidos do TXT automaticamente.
+
+Nota final = decisão fechada: ao efetivar, a súmula de origem é movida de
+`Entrada` para `Processados` (na pasta local e no Drive) e passa a **Analisada**
+na tela Súmulas Enviadas. Nota ainda em rascunho não fecha a súmula. O botão
+"Marcar analisada" da tela continua existindo para súmulas que não geram nota
+(ex.: sem punição).
 
 Para regerar o PDF depois de revisar o TXT ou de refazer a análise, sem
 analisar a súmula de novo:

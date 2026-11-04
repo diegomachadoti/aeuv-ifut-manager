@@ -13768,7 +13768,8 @@ function listarNotas() {
     equipes: equipesDasNotas_(recortados),
     total: registros.length,
     limite: limite,
-    pastaUrl: pasta.getUrl()
+    pastaUrl: pasta.getUrl(),
+    podeExcluir: sessao.usuario.perfil === 'admin'
   };
 }
 
@@ -13787,6 +13788,63 @@ function pastaNotas_() {
   }
 
   return pastas.next();
+}
+
+/**
+ * Exclui uma nota oficial (TXT + PDF) da pasta "Notas Oficiais" no Drive.
+ * Só admin. Move os arquivos para a lixeira (reversível pelo Drive).
+ *
+ * IMPORTANTE: o Controle de punições é um TXT mantido pela automação Python; o
+ * sistema interno NÃO escreve nele. Portanto, punições já gravadas no controle
+ * para esta nota continuam aparecendo até rodar "python main.py
+ * --atualizar-controle-punicoes", que reconstrói o controle a partir das notas
+ * existentes (sem a que foi excluída). Prévias "Em análise" não têm punição no
+ * controle, então excluí-las não deixa resíduo.
+ * @param {string} arquivoNome  Nome do arquivo TXT da nota.
+ * @return {{sucesso: boolean, mensagem: string, removidos: number}}
+ */
+function excluirNota(arquivoNome) {
+  const sessao = identificarUsuario_();
+  if (!sessao.autorizado || !moduloLiberado_('notas', sessao.usuario.perfil)) {
+    throw new Error('Você não tem permissão para consultar as notas oficiais.');
+  }
+  if (sessao.usuario.perfil !== 'admin') {
+    throw new Error('Somente o Administrador pode excluir notas oficiais.');
+  }
+
+  const alvo = String(arquivoNome || '').trim();
+  if (!/^NOTA OFICIAL.+\.txt$/i.test(alvo)) {
+    throw new Error('Nota inválida para exclusão.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const pasta = pastaNotas_();
+    const nomePdf = alvo.replace(/\.txt$/i, '.pdf');
+    let removidos = 0;
+
+    [alvo, nomePdf].forEach(function (nome) {
+      const arquivos = pasta.getFilesByName(nome);
+      while (arquivos.hasNext()) {
+        arquivos.next().setTrashed(true);
+        removidos++;
+      }
+    });
+
+    if (!removidos) {
+      throw new Error('Nota não encontrada; talvez já tenha sido removida. Use Atualizar.');
+    }
+
+    return {
+      sucesso: true,
+      removidos: removidos,
+      mensagem: 'Nota removida do Drive. Se houver punição vinculada no controle, rode '
+        + '"python main.py --atualizar-controle-punicoes" para atualizar o Controle de punições.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
@@ -16145,12 +16203,6 @@ function validarAssociado_(payload) {
     throw new Error('Informe o RG do representante legal.');
   }
 
-  const cep = somenteDigitos_(dados.cep);
-
-  if (cep.length !== 8) {
-    throw new Error('Informe o CEP com 8 dígitos.');
-  }
-
   // Confere antes de cortar: "MGX" cortado viraria "MG" e gravaria uma UF
   // que a pessoa nao escolheu.
   const uf = limparCampo_(dados.uf, 10).toUpperCase();
@@ -16166,7 +16218,9 @@ function validarAssociado_(payload) {
     nascimento: validarNascimento_(dados.nascimento),
     email: email,
     telefone: telefone,
-    cep: cep,
+    // CEP foi removido do cadastro; a coluna continua na planilha (para não
+    // desalinhar os registros antigos), porém gravamos sempre vazio.
+    cep: '',
     logradouro: exigirCampo_(dados.logradouro, 150, 'Informe o logradouro (rua, avenida).'),
     numero: exigirCampo_(dados.numero, 20, 'Informe o número do endereço.'),
     complemento: limparCampo_(dados.complemento, 60),

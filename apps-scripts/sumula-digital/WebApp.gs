@@ -221,6 +221,8 @@ function salvarSumula(payload) {
       pastaAnexos,
       (payload.anexos || []).length,
       (payload.envolvidos || []).length,
+      (payload.ocorrencias || []).length,
+      resumirOcorrencias_(payload.ocorrencias),
       'RECEBIDA'
     ]);
 
@@ -342,6 +344,31 @@ function gerarPdf_(payload, id, data, pastaAnexosUrl) {
     estilizarTabelaPdf_(corpo.appendTable(tabela), true);
   } else {
     corpo.appendParagraph('Nenhum envolvido informado.');
+  }
+
+  corpo.appendParagraph('');
+  adicionarTituloSecaoPdf_(corpo, 'OCORRÊNCIAS DISCIPLINARES');
+
+  const ocorrencias = payload.ocorrencias || [];
+  if (ocorrencias.length) {
+    const tabelaOc = [
+      ['Nº', 'Quem', 'Tipo', 'Papel', 'Descrição']
+    ];
+    ocorrencias.forEach(function (o, i) {
+      const quem = o.coletivo
+        ? ('Coletivo / equipe' + (o.equipe ? ' (' + o.equipe + ')' : ''))
+        : (o.nome + (o.equipe ? ' (' + o.equipe + ')' : ''));
+      tabelaOc.push([
+        String(i + 1),
+        quem,
+        o.tipo,
+        o.papel || '—',
+        o.descricao || '—'
+      ]);
+    });
+    estilizarTabelaPdf_(corpo.appendTable(tabelaOc), true);
+  } else {
+    corpo.appendParagraph('Nenhuma ocorrência disciplinar registrada.');
   }
 
   corpo.appendParagraph('');
@@ -831,6 +858,8 @@ function validarDados_(p) {
 
   p.envolvidos = envolvidosValidados;
 
+  p.ocorrencias = validarOcorrencias_(p);
+
   if (!p.assinaturaPreenchida || !p.assinatura) {
     throw new Error('Realize a assinatura do árbitro antes do envio.');
   }
@@ -838,6 +867,123 @@ function validarDados_(p) {
   if (!p.confirmacao) {
     throw new Error('O árbitro deve marcar a declaração de responsabilidade antes do envio.');
   }
+}
+
+/**
+ * Tipos de ocorrência disciplinar aceitos (tipificados pelo regulamento).
+ */
+var TIPOS_OCORRENCIA = [
+  'Briga / confusão generalizada',
+  'Tentativa de agressão',
+  'Agressão por vias de fato',
+  'Ofensas / incitar tumulto ou violência',
+  'Uso de entorpecente',
+  'Injúria racial / discriminação',
+  'Participação de suspenso cumprindo punição',
+  'Outros'
+];
+
+var PAPEIS_OCORRENCIA = ['Agressor inicial', 'Não inicial (revide)', 'Não sei dizer'];
+
+/**
+ * Valida a lista de ocorrências disciplinares. Só é obrigatória quando o árbitro
+ * marcou que houve ocorrência. Retorna a lista normalizada.
+ * @param {Object} p Payload da súmula (já com envolvidos validados).
+ * @return {Array<Object>}
+ */
+function validarOcorrencias_(p) {
+  if (!p.temOcorrencia && !(Array.isArray(p.ocorrencias) && p.ocorrencias.length)) {
+    return [];
+  }
+
+  if (!Array.isArray(p.ocorrencias)) {
+    p.ocorrencias = [];
+  }
+
+  if (p.temOcorrencia && p.ocorrencias.length === 0) {
+    throw new Error('Marque pelo menos uma ocorrência disciplinar ou desmarque "Houve ocorrência disciplinar".');
+  }
+
+  const timesPartida = [String(p.time1 || '').trim(), String(p.time2 || '').trim()].filter(Boolean);
+  const validadas = [];
+
+  p.ocorrencias.forEach(function (o, i) {
+    if (!o || typeof o !== 'object') {
+      throw new Error('Dados inválidos na ocorrência ' + (i + 1) + '.');
+    }
+
+    const coletivo = o.coletivo === true;
+    const nome = String(o.nome || '').trim();
+    const equipe = String(o.equipe || '').trim();
+    const tipo = String(o.tipo || '').trim();
+    const papel = String(o.papel || '').trim();
+    const descricao = String(o.descricao || '').trim();
+
+    if (!tipo) {
+      throw new Error('Selecione o tipo da ocorrência ' + (i + 1) + '.');
+    }
+
+    if (TIPOS_OCORRENCIA.indexOf(tipo) === -1) {
+      throw new Error('Tipo inválido na ocorrência ' + (i + 1) + '.');
+    }
+
+    if (coletivo) {
+      if (!equipe) {
+        throw new Error('Selecione a equipe responsável pela ocorrência coletiva ' + (i + 1) + '.');
+      }
+      if (timesPartida.indexOf(equipe) === -1) {
+        throw new Error('A equipe da ocorrência ' + (i + 1) + ' deve ser um dos times da partida.');
+      }
+    } else if (!nome) {
+      throw new Error('Selecione quem cometeu a ocorrência ' + (i + 1) + '.');
+    }
+
+    if (tipo === 'Agressão por vias de fato') {
+      if (!papel) {
+        throw new Error('Informe o papel do atleta na ocorrência ' + (i + 1) + ' (agressor inicial ou revide).');
+      }
+      if (PAPEIS_OCORRENCIA.indexOf(papel) === -1) {
+        throw new Error('Papel inválido na ocorrência ' + (i + 1) + '.');
+      }
+    }
+
+    if (tipo === 'Outros' && !descricao) {
+      throw new Error('Descreva a ocorrência ' + (i + 1) + ' (tipo "Outros").');
+    }
+
+    validadas.push({
+      coletivo: coletivo,
+      nome: coletivo ? '' : nome,
+      equipe: equipe,
+      tipo: tipo,
+      papel: tipo === 'Agressão por vias de fato' ? papel : '',
+      descricao: descricao
+    });
+  });
+
+  return validadas;
+}
+
+/**
+ * Monta um resumo de uma linha das ocorrências para a planilha.
+ * Ex.: "Agressão por vias de fato - João (TIME A) [Agressor inicial]; ..."
+ * @param {Array<Object>} ocorrencias
+ * @return {string}
+ */
+function resumirOcorrencias_(ocorrencias) {
+  if (!Array.isArray(ocorrencias) || !ocorrencias.length) {
+    return '';
+  }
+  return ocorrencias.map(function (o) {
+    const quem = o.coletivo
+      ? ('Coletivo' + (o.equipe ? '/' + o.equipe : ''))
+      : (o.nome + (o.equipe ? ' (' + o.equipe + ')' : ''));
+    let txt = o.tipo + ' - ' + quem;
+    if (o.papel) {
+      txt += ' [' + o.papel + ']';
+    }
+    return txt;
+  }).join('; ');
 }
 
 /******************************************************
@@ -886,6 +1032,31 @@ function gerarTxt_(payload, id, data, pdfUrl) {
     linhas.push('NOME: ' + e.nome);
     linhas.push('CAMISA: ' + (e.camisa || ''));
   });
+
+  linhas.push('');
+  linhas.push('OCORRENCIAS DISCIPLINARES');
+  linhas.push('--------------------------------');
+
+  const ocorrencias = payload.ocorrencias || [];
+  if (!ocorrencias.length) {
+    linhas.push('Nenhuma ocorrência disciplinar registrada.');
+  } else {
+    ocorrencias.forEach(function (o, i) {
+      linhas.push('');
+      linhas.push('OCORRENCIA ' + (i + 1));
+      linhas.push('QUEM: ' + (o.coletivo ? 'Coletivo / equipe' : o.nome));
+      if (o.equipe) {
+        linhas.push('EQUIPE: ' + o.equipe);
+      }
+      linhas.push('TIPO: ' + o.tipo);
+      if (o.papel) {
+        linhas.push('PAPEL: ' + o.papel);
+      }
+      if (o.descricao) {
+        linhas.push('DESCRICAO: ' + o.descricao);
+      }
+    });
+  }
 
   if (pdfUrl) {
     linhas.push('');

@@ -567,7 +567,54 @@
       color: #647089;
     }
 
+    /* Aviso em destaque para o árbitro (ex.: critério da ocorrência disciplinar). */
+    .campo-destaque {
+      margin: -4px 0 16px;
+      padding: 12px 14px 12px 42px;
+      position: relative;
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: var(--azul);
+      background: #fff6e6;
+      border: 1px solid #f3d38a;
+      border-left: 5px solid var(--dourado);
+      border-radius: 8px;
+    }
+    .campo-destaque::before {
+      content: "⚠️";
+      position: absolute;
+      left: 13px;
+      top: 11px;
+      font-size: 16px;
+    }
+    /* Variante informativa (mesma caixa, ícone de informação em vez de alerta). */
+    .campo-destaque.info::before { content: "ℹ️"; }
+    .campo-destaque strong { color: var(--azul); }
+
+    /* Bloco de ocorrências disciplinares */
+    #areaOcorrencias { margin-top: 14px; }
+    .ocorrencia-card {
+      border: 1px solid var(--borda);
+      border-left: 4px solid var(--dourado);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+      background: #fffdf8;
+    }
+    .ocorrencia-cabecalho {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+    }
+    .ocorrencia-numero { color: var(--azul); }
+    .ocorrencia-campos {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    .ocorrencia-campo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .ocorrencia-campo--largo { grid-column: 1 / -1; }
+    .ocorrencia-campo label { font-size: 13px; font-weight: bold; color: var(--azul); }
+    .ocorrencia-campo select, .ocorrencia-campo textarea { width: 100%; box-sizing: border-box; }
+
     @media (max-width: 700px) {
+      .ocorrencia-campos { grid-template-columns: 1fr; }
       .grade {
         grid-template-columns: 1fr;
       }
@@ -698,7 +745,7 @@
 
       <section class="card">
         <h2>Atletas envolvidos</h2>
-        <p class="campo-info">Opcional. Selecione os times da partida para escolher a equipe dos envolvidos. Ao preencher qualquer campo de um envolvido, complete equipe, tipo, nome e número da camisa. Para comissão, o número da camisa não é necessário.</p>
+        <p class="campo-destaque info"><strong>Opcional.</strong> Selecione os times da partida para escolher a equipe dos envolvidos. Ao preencher qualquer campo de um envolvido, complete equipe, tipo, nome e número da camisa. Para comissão, o número da camisa não é necessário.</p>
         <div class="tabela">
           <table>
             <thead>
@@ -717,6 +764,21 @@
         <div class="botoes">
           <button type="button" class="adicionar" id="adicionar">+ Adicionar envolvido</button>
           <span class="contador" id="contador"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Ocorrência disciplinar</h2>
+        <p class="campo-destaque">Marque "Sim" <strong>apenas se houve conduta disciplinar grave</strong> (agressão, briga, ameaça, etc.). Isso ajuda a comissão a decidir com precisão. A lista "Quem" usa os <strong>Atletas envolvidos</strong> cadastrados acima e se atualiza sozinha conforme você os edita.</p>
+        <label class="check">
+          <input type="checkbox" id="temOcorrencia">
+          <span>Houve ocorrência disciplinar grave?</span>
+        </label>
+        <div id="areaOcorrencias" hidden>
+          <div id="listaOcorrencias"></div>
+          <div class="botoes">
+            <button type="button" class="adicionar" id="adicionarOcorrencia">+ Adicionar ocorrência</button>
+          </div>
         </div>
       </section>
 
@@ -790,6 +852,58 @@
     </tr>
   </template>
 
+  <template id="modeloOcorrencia">
+    <div class="ocorrencia-card">
+      <div class="ocorrencia-cabecalho">
+        <strong class="ocorrencia-numero"></strong>
+        <button type="button" class="excluir ocorrencia-remover" title="Remover ocorrência">×</button>
+      </div>
+      <div class="ocorrencia-campos">
+        <div class="ocorrencia-campo">
+          <label>Quem *</label>
+          <select data-oc="quem">
+            <option value="">Selecione</option>
+            <option value="__COLETIVO__">Coletivo / equipe (briga generalizada)</option>
+          </select>
+        </div>
+        <div class="ocorrencia-campo" data-oc-equipe-wrap hidden>
+          <label>Equipe (coletivo) *</label>
+          <select data-oc="equipe">
+            <option value="">Selecione</option>
+          </select>
+        </div>
+        <div class="ocorrencia-campo">
+          <label>Tipo *</label>
+          <select data-oc="tipo">
+            <option value="">Selecione</option>
+            <option>Briga/confusão generalizada</option>
+            <option>Tentativa de agressão</option>
+            <option>Agressão por vias de fato</option>
+            <option>Ofensas / incitar tumulto ou violência</option>
+            <option>Uso de entorpecente</option>
+            <option>Injúria racial / discriminação</option>
+            <option>Participação de suspenso cumprindo punição</option>
+            <option>Outros</option>
+          </select>
+        </div>
+        <div class="ocorrencia-campo" data-oc-papel-wrap hidden>
+          <label>Papel na agressão *</label>
+          <select data-oc="papel">
+            <option value="">Selecione</option>
+            <option>Agressor inicial</option>
+            <option>Não inicial (revide)</option>
+            <option>Não sei dizer</option>
+          </select>
+        </div>
+        <div class="ocorrencia-campo ocorrencia-campo--largo">
+          <label data-oc-descricao-label>Descrição</label>
+          <textarea data-oc="descricao" maxlength="500" rows="2"
+            placeholder="Detalhe o que aconteceu (obrigatório quando o tipo for Outros)."></textarea>
+        </div>
+      </div>
+    </div>
+  </template>
+
   <script>
     const tbody = document.getElementById('linhas');
     const modelo = document.getElementById('modeloLinha');
@@ -853,6 +967,171 @@
 
     prepararContextoAssinatura(1);
 
+    const modeloOcorrencia = document.getElementById('modeloOcorrencia');
+    const listaOcorrencias = document.getElementById('listaOcorrencias');
+    const MAX_OCORRENCIAS = 20;
+
+    /**
+     * Liga o toggle "Houve ocorrência disciplinar?" e os botões do bloco.
+     */
+    function configurarOcorrencias() {
+      const toggle = document.getElementById('temOcorrencia');
+      const area = document.getElementById('areaOcorrencias');
+      toggle.addEventListener('change', function () {
+        area.hidden = !toggle.checked;
+        if (toggle.checked && !listaOcorrencias.children.length) {
+          adicionarOcorrencia();
+        }
+        if (!toggle.checked) {
+          listaOcorrencias.innerHTML = '';
+        }
+      });
+      document.getElementById('adicionarOcorrencia').addEventListener('click', adicionarOcorrencia);
+    }
+
+    /**
+     * Adiciona um cartão de ocorrência disciplinar.
+     */
+    function adicionarOcorrencia() {
+      if (listaOcorrencias.children.length >= MAX_OCORRENCIAS) {
+        mostrarMensagem('Limite máximo de ' + MAX_OCORRENCIAS + ' ocorrências.', 'erro');
+        return;
+      }
+      const frag = modeloOcorrencia.content.cloneNode(true);
+      const card = frag.querySelector('.ocorrencia-card');
+      listaOcorrencias.appendChild(frag);
+
+      const quem = card.querySelector('[data-oc="quem"]');
+      const tipo = card.querySelector('[data-oc="tipo"]');
+      card.querySelector('.ocorrencia-remover').addEventListener('click', function () {
+        card.remove();
+        numerarOcorrencias();
+      });
+      quem.addEventListener('change', function () { atualizarCamposOcorrencia(card); });
+      tipo.addEventListener('change', function () { atualizarCamposOcorrencia(card); });
+
+      preencherQuemOcorrencia(card);
+      atualizarCamposOcorrencia(card);
+      numerarOcorrencias();
+    }
+
+    function numerarOcorrencias() {
+      [...listaOcorrencias.querySelectorAll('.ocorrencia-card')].forEach(function (card, i) {
+        card.querySelector('.ocorrencia-numero').textContent = 'Ocorrência ' + (i + 1);
+      });
+    }
+
+    /**
+     * Popula o select "Quem" com os envolvidos já cadastrados (nome + equipe),
+     * mantendo a opção "Coletivo/equipe". Chamado ao criar a ocorrência e quando
+     * os envolvidos mudam.
+     */
+    /**
+     * Identidade estável de um envolvido (nome+equipe+camisa). Usada como value
+     * do select "Quem": se o árbitro editar o envolvido, a identidade muda e a
+     * seleção antiga deixa de existir (volta a "Selecione"), em vez de apontar
+     * silenciosamente para outra pessoa — o que aconteceria usando o índice.
+     */
+    function chaveEnvolvido(e) {
+      return 'env:' + [e.nome, e.equipe, e.camisa].join('|');
+    }
+
+    function preencherQuemOcorrencia(card) {
+      const quem = card.querySelector('[data-oc="quem"]');
+      const atual = quem.value;
+      const envolvidos = obterEnvolvidos();
+      quem.innerHTML = '';
+      quem.add(new Option('Selecione', ''));
+      quem.add(new Option('Coletivo / equipe (briga generalizada)', '__COLETIVO__'));
+      envolvidos.forEach(function (e) {
+        if (!e.nome) return; // sem nome não dá para identificar quem foi
+        const rotulo = e.nome + (e.equipe ? ' (' + e.equipe + ')' : '')
+          + (e.camisa ? ' – nº ' + e.camisa : '');
+        const opt = new Option(rotulo, chaveEnvolvido(e));
+        opt.dataset.nome = e.nome;
+        opt.dataset.equipe = e.equipe;
+        quem.add(opt);
+      });
+      // Preserva a seleção se o envolvido ainda existir com os mesmos dados.
+      quem.value = [...quem.options].some(function (o) { return o.value === atual; }) ? atual : '';
+      // Re-popular o select não dispara "change"; sincroniza os campos
+      // condicionais (ex.: esconder "Equipe" quando "Quem" deixa de ser coletivo).
+      atualizarCamposOcorrencia(card);
+    }
+
+    function preencherQuemOcorrencias() {
+      [...listaOcorrencias.querySelectorAll('.ocorrencia-card')].forEach(preencherQuemOcorrencia);
+    }
+
+    /**
+     * Mostra/esconde campos condicionais (equipe do coletivo, papel na agressão)
+     * e define a obrigatoriedade conforme a seleção.
+     */
+    function atualizarCamposOcorrencia(card) {
+      const quem = card.querySelector('[data-oc="quem"]');
+      const tipo = card.querySelector('[data-oc="tipo"]');
+      const equipeWrap = card.querySelector('[data-oc-equipe-wrap]');
+      const equipe = card.querySelector('[data-oc="equipe"]');
+      const papelWrap = card.querySelector('[data-oc-papel-wrap]');
+      const papel = card.querySelector('[data-oc="papel"]');
+      const descricao = card.querySelector('[data-oc="descricao"]');
+      const descricaoLabel = card.querySelector('[data-oc-descricao-label]');
+
+      // Quem e Tipo são sempre obrigatórios (quando o bloco está ativo).
+      quem.required = true;
+      tipo.required = true;
+
+      // Equipe do coletivo: só quando "Quem" = Coletivo/equipe.
+      const coletivo = quem.value === '__COLETIVO__';
+      equipeWrap.hidden = !coletivo;
+      equipe.required = coletivo;
+      if (coletivo) {
+        const times = obterTimesPartida();
+        const atual = equipe.value;
+        equipe.innerHTML = '';
+        equipe.add(new Option(times.length ? 'Selecione' : 'Selecione os times na partida', ''));
+        times.forEach(function (t) { equipe.add(new Option(t, t)); });
+        equipe.value = times.includes(atual) ? atual : '';
+      } else {
+        // Não-coletivo: campo oculto e sem resíduo (a equipe vem do atleta escolhido).
+        equipe.value = '';
+        equipe.setCustomValidity('');
+      }
+
+      // Papel: só quando Tipo = Agressão por vias de fato.
+      const viasDeFato = tipo.value === 'Agressão por vias de fato';
+      papelWrap.hidden = !viasDeFato;
+      papel.required = viasDeFato;
+      if (!viasDeFato) papel.value = '';
+
+      // Descrição: obrigatória só quando Tipo = Outros.
+      const outros = tipo.value === 'Outros';
+      descricao.required = outros;
+      descricaoLabel.textContent = outros ? 'Descrição *' : 'Descrição';
+    }
+
+    /**
+     * Lê os cartões e devolve a lista de ocorrências preenchidas.
+     */
+    function obterOcorrencias() {
+      if (!document.getElementById('temOcorrencia').checked) return [];
+      return [...listaOcorrencias.querySelectorAll('.ocorrencia-card')].map(function (card) {
+        const quem = card.querySelector('[data-oc="quem"]');
+        const opt = quem.options[quem.selectedIndex] || {};
+        const coletivo = quem.value === '__COLETIVO__';
+        return {
+          coletivo: coletivo,
+          nome: coletivo ? '' : (opt.dataset ? opt.dataset.nome || '' : ''),
+          equipe: coletivo
+            ? card.querySelector('[data-oc="equipe"]').value
+            : (opt.dataset ? opt.dataset.equipe || '' : ''),
+          tipo: card.querySelector('[data-oc="tipo"]').value,
+          papel: card.querySelector('[data-oc="papel"]').value,
+          descricao: card.querySelector('[data-oc="descricao"]').value.trim()
+        };
+      });
+    }
+
     /**
      * Adiciona uma nova linha de envolvido à tabela.
      */
@@ -913,6 +1192,7 @@
       });
 
       contador.textContent = linhas.length + ' de ' + MAX_ENVOLVIDOS + ' envolvidos';
+      preencherQuemOcorrencias();
     }
 
     /**
@@ -975,6 +1255,8 @@
         horaJogo: document.getElementById('horaJogo').value.trim(),
         fatos: document.getElementById('fatos').value.trim(),
         envolvidos: obterEnvolvidos(),
+        temOcorrencia: document.getElementById('temOcorrencia').checked,
+        ocorrencias: obterOcorrencias(),
         assinatura: assinaturaPreenchida ? assinaturaCanvas.toDataURL('image/png') : '',
         assinaturaPreenchida: assinaturaPreenchida
       };
@@ -1209,10 +1491,18 @@
           nome: 'Informe o nome completo do envolvido.',
           camisa: 'Informe o número da camisa do envolvido.'
         };
+        const mensagensOcorrencia = {
+          quem: 'Selecione quem cometeu a ocorrência.',
+          equipe: 'Selecione a equipe responsável pela ocorrência coletiva.',
+          tipo: 'Selecione o tipo da ocorrência disciplinar.',
+          papel: 'Informe se o atleta foi o agressor inicial ou revidou.',
+          descricao: 'Descreva a ocorrência selecionada em "Outros".'
+        };
 
         campo.setCustomValidity(
           mensagens[campo.id] ||
           mensagensEnvolvido[campo.dataset.campo] ||
+          mensagensOcorrencia[campo.dataset.oc] ||
           'Preencha este campo obrigatório.'
         );
       }, true);
@@ -1367,13 +1657,21 @@
     document.getElementById('adicionar').addEventListener('click', adicionarLinha);
 
     ['time1', 'time2'].forEach(function (id) {
-      document.getElementById(id).addEventListener('change', atualizarEquipesEnvolvidos);
+      document.getElementById(id).addEventListener('change', function () {
+        atualizarEquipesEnvolvidos();
+        // Mudar os times da partida muda a equipe dos envolvidos: reflete no "Quem".
+        preencherQuemOcorrencias();
+      });
     });
 
     ['input', 'change'].forEach(function (tipoEvento) {
       tbody.addEventListener(tipoEvento, function (evento) {
         const campo = evento.target.closest('[data-campo]');
-        if (campo) atualizarValidacaoEnvolvido(campo);
+        if (!campo) return;
+        atualizarValidacaoEnvolvido(campo);
+        // Editar nome/equipe/tipo de um envolvido atualiza o select "Quem" das
+        // ocorrências em tempo real (sem precisar adicionar/remover linha).
+        preencherQuemOcorrencias();
       });
     });
 
@@ -1464,6 +1762,7 @@
 
     configurarValidacaoFormulario(document.getElementById('formSumula'));
     configurarDataHora();
+    configurarOcorrencias();
     adicionarLinha();
     ajustarCanvasAssinatura();
   </script>

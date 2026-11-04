@@ -79,7 +79,7 @@ Atualiza a mesma contagem sem o download inicial dos TXT.
 
 ## 3. Súmulas / notas oficiais / punições
 
-> **Fluxo:** a análise gera só uma PRÉVIA (nota TXT/PDF publicada como "Em análise" em Notas oficiais). Ela NÃO grava punição no controle nem muda o status da súmula. A punição só entra no controle ao EFETIVAR com `--gerar-pdf-nota`, e só conta no histórico do atleta após ser Aprovada no Controle de punições.
+> **Fluxo:** a análise gera só uma PRÉVIA (nota TXT/PDF publicada como "Em análise" em Notas oficiais). Ela NÃO grava punição no controle nem muda o status da súmula. A punição só entra no controle ao EFETIVAR com `--gerar-pdf-nota`; nesse momento, se a nota estiver final (sem `[A DEFINIR]`), a súmula também é movida para Processados e passa a "Analisada" em Súmulas Enviadas. A punição só conta no histórico do atleta após ser Aprovada no Controle de punições.
 
 ```bash
 python main.py --analisar-sumulas

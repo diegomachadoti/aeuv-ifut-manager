@@ -106,7 +106,7 @@ function setup(profile = 'admin', team = '') {
 const representative = {
   equipe: 'Equipe A', status: 'pendente', nome: 'Pessoa Exemplo', nascimento: '1990-10-08',
   email: 'pessoa@example.test', telefone: '34999999999', cpf: '52998224725', rg: '123456',
-  cep: '38400000', logradouro: 'Rua Exemplo', numero: '1', complemento: '',
+  logradouro: 'Rua Exemplo', numero: '1', complemento: '',
   bairro: 'Centro', cidade: 'Uberlandia', uf: 'MG'
 };
 
@@ -364,10 +364,11 @@ test('upload validation rejects bad MIME and oversized files before Drive writes
 
 test('form retains existing fields and offers optional styled uploads and individual replacement', () => {
   const form = functionSource(html, 'abrirFormularioAssociado', '    ');
-  for (const id of ['fNome', 'fNascimento', 'fCpf', 'fRg', 'fCep', 'fLogradouro', 'fNumero',
+  for (const id of ['fNome', 'fNascimento', 'fCpf', 'fRg', 'fLogradouro', 'fNumero',
     'fComplemento', 'fBairro', 'fCidade', 'fUf', 'fRazaoSocial', 'fCnpjEquipe', 'fCoresOficiais',
     'fSedeCampo', 'fEnderecoEquipe', 'fTipoFiliacao', 'fExercicioFiliacao', 'fVinculoAnterior',
     'fAssociacaoAnterior', 'fElegibilidadeConferida', 'pessoasFiliacao']) assert.ok(form.includes(id), id);
+  assert.ok(!form.includes('fCep'), 'CEP foi removido do cadastro de associados');
   assert.ok(!form.includes('Data de nascimento (opcional)'));
   assert.ok(form.includes('Pesquisar arquivo'));
   assert.ok(form.includes('Todos os uploads são opcionais'));
@@ -419,7 +420,7 @@ function clientForm() {
 test('save marks every missing required field and focuses and scrolls to the first', () => {
   const { context, add, elements } = clientForm();
   const ids = ['fEquipe', 'fStatus', 'fNome', 'fNascimento', 'fCpf', 'fRg', 'fEmail',
-    'fTelefone', 'fCep', 'fLogradouro', 'fNumero', 'fBairro', 'fCidade', 'fUf'];
+    'fTelefone', 'fLogradouro', 'fNumero', 'fBairro', 'fCidade', 'fUf'];
   ids.forEach(id => add(id));
   const optional = add('fComplemento');
   const notice = {};
@@ -430,7 +431,7 @@ test('save marks every missing required field and focuses and scrolls to the fir
     assert.equal(elements[id].getAttribute('aria-invalid'), 'true', id);
     assert.ok(elements[id + 'Erro'].textContent, id);
   });
-  assert.ok(notice.textContent.includes('14'));
+  assert.ok(notice.textContent.includes('13'));
   assert.equal(elements.fEquipe.focused, true);
   assert.equal(elements.fEquipe.scrolled, true);
   assert.equal(optional.hasStar(), false);
@@ -461,13 +462,13 @@ test('conditional association and added board people get required stars without 
 test('client accepts complete required data without files and rejects invalid formats', () => {
   const { context, add } = clientForm();
   const ids = { equipe: 'fEquipe', status: 'fStatus', nome: 'fNome', nascimento: 'fNascimento', cpf: 'fCpf',
-    rg: 'fRg', email: 'fEmail', telefone: 'fTelefone', cep: 'fCep', logradouro: 'fLogradouro',
+    rg: 'fRg', email: 'fEmail', telefone: 'fTelefone', logradouro: 'fLogradouro',
     numero: 'fNumero', bairro: 'fBairro', cidade: 'fCidade', uf: 'fUf' };
   Object.entries(ids).forEach(([key, id]) => add(id, key === 'nascimento' ? '08/10/1990' : representative[key],
     key === 'nascimento' ? { formato: 'data-br' } : {}));
   assert.equal(context.validarFormularioAssociado_({}), true);
   for (const [id, value] of [['fNome', 'Pessoa'], ['fCpf', '11111111111'], ['fCnpjEquipe', '11222333000182'],
-    ['fEmail', 'invalid'], ['fTelefone', '123'], ['fCep', '123'], ['fUf', 'MGX'],
+    ['fEmail', 'invalid'], ['fTelefone', '123'], ['fUf', 'MGX'],
     ['fExercicioFiliacao', '26'], ['fNascimento', '31/02/1990'], ['fNascimento', '01/01/2020']]) {
     const field = add(id, value, id === 'fNascimento' ? { formato: 'data-br' } : {});
     assert.notEqual(context.validarCampoAssociado_(field), '', id);

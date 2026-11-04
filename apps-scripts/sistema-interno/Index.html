@@ -579,6 +579,16 @@
 
     .botao-apoio.destaque:hover { background: #17325c; }
 
+    /* Coluna "Documento" das notas: empilha "Ver nota" e "Excluir" com um
+       respiro entre eles, para o botão destrutivo não grudar no de ação. */
+    .acoes-nota {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+    }
+    .acoes-nota .botao-apoio { width: auto; }
+
     .tabela-rolagem { overflow-x: auto; }
 
     /* Bloco informativo recolhível explicando o fluxo das punições. */
@@ -3834,7 +3844,7 @@
         { cmd: 'python main.py --analisar-sumulas --sumula SUM-XXXX', desc: 'Analisa somente a súmula indicada (pelo protocolo/nome).' },
         { cmd: 'python main.py --analisar-sumulas --ia --ajuste "..."', desc: 'Analisa com IA; --ajuste reinterpreta a pena/enquadramento conforme a orientação (respeitando o regulamento).' },
         { cmd: 'python main.py --analisar-sumulas --process-local-only', desc: 'Analisa as súmulas já baixadas, sem novo download.' },
-        { cmd: 'python main.py --gerar-pdf-nota 5', desc: 'EFETIVA a nota pelo número: grava a punição no controle e publica a nota oficial (substitui a prévia).' },
+        { cmd: 'python main.py --gerar-pdf-nota 5', desc: 'EFETIVA a nota pelo número: grava a punição no controle, publica a nota oficial (substitui a prévia) e move a súmula para Analisada.' },
         { cmd: 'python main.py --gerar-pdf-nota "SUM-PROTOCOLO"', desc: 'Efetiva a nota pelo protocolo da súmula.' },
         { cmd: 'python main.py --atualizar-controle-punicoes', desc: 'Reconstrói o TXT/PDF de punições pelas notas e publica o controle no Drive.' }
       ] },
@@ -3880,7 +3890,7 @@
     ];
 
     const COMANDOS_AVISOS = [
-      '--analisar-sumulas gera só a PRÉVIA (aparece como "Em análise") e não grava punição no controle. A punição só entra no controle ao efetivar com --gerar-pdf-nota; e só conta no histórico do atleta após ser Aprovada no Controle de punições.',
+      '--analisar-sumulas gera só a PRÉVIA (aparece como "Em análise") e não grava punição no controle. A punição só entra no controle ao efetivar com --gerar-pdf-nota (com a nota final, a súmula também passa a Analisada); e só conta no histórico do atleta após ser Aprovada no Controle de punições.',
       '--ajuste reinterpreta a pena apenas no modo --ia; no modo regras fixas ele entra como observação na nota (não altera a pena).',
       '--process-local-only evita o download inicial, mas NÃO garante ausência de escrita remota.',
       'dry_run é configurado no INI; não impede remoções, publicação/movimentação no Drive ou planilha. Não existe flag --dry-run.',
@@ -8878,7 +8888,7 @@
         + '<li><strong>Processamento manual:</strong> o responsável executa a automação no terminal. Ela baixa as súmulas, enquadra as condutas nos artigos do regulamento e calcula a pena por <em>dosimetria</em> — parte da pena mínima do dispositivo e soma 1 partida por circunstância registrada no relato (reiteração, ameaça, continuidade após expulsão e <em>reincidência</em>), sem passar do máximo. Comandos típicos:'
         + '<div class="info-punicoes-cmd">python main.py --analisar-sumulas<br>python main.py --analisar-sumulas --sumula SUM-XXXX  <span class="info-punicoes-coment"># só uma súmula</span><br>python main.py --analisar-sumulas --ia --ajuste "..."  <span class="info-punicoes-coment"># IA reinterpreta a pena</span></div><br><span class="info-punicoes-coment">A análise gera apenas uma PRÉVIA; nada entra neste controle ainda.</span></li>'
         + '<li><strong>Nota em análise:</strong> havendo infração, a prévia da nota disciplinar numerada (NNN/AAAA) aparece em <strong>Notas oficiais</strong> com o selo <em>📝 Em análise</em>. O <em>Status</em> da pena será <strong>DEFINIDA</strong> quando já decidida, ou <strong>[A DEFINIR]</strong> quando exigir decisão da comissão (ex.: reincidência com suspensão por tempo). Súmula sem infração gera apenas uma análise, sem punição.</li>'
-        + '<li><strong>Efetivação (só aqui entra no controle):</strong> a comissão revisa, resolve os campos <em>[A DEFINIR]</em> e efetiva pelo número da nota. Só então a punição é gravada neste controle e a prévia vira nota oficial no Drive (mesmo número).'
+        + '<li><strong>Efetivação (só aqui entra no controle):</strong> a comissão revisa, resolve os campos <em>[A DEFINIR]</em> e efetiva pelo número da nota. Só então a punição é gravada neste controle, a prévia vira nota oficial no Drive (mesmo número) e a súmula de origem passa a <strong>Analisada</strong>.'
         + '<div class="info-punicoes-cmd">python main.py --gerar-pdf-nota 5  <span class="info-punicoes-coment"># efetiva a nota nº 5</span><br>python main.py --atualizar-controle-punicoes<br>python main.py --publicar-drive</div></li>'
         + '<li><strong>Aprovação da diretoria (nesta tela):</strong> cada punição precisa ser <em>Aprovada</em> aqui para contar no histórico disciplinar do atleta (suspensões e reincidência). Enquanto não aprovada, aparece como <em>Não aprovada</em> e não suspende ninguém.</li>'
         + '<li><strong>Cumprimento:</strong> a <em>Situação</em> acompanha o cumprimento — <em>A cumprir</em> enquanto restam jogos de suspensão e <em>Cumprida</em> ao final.</li>'
@@ -11465,7 +11475,7 @@
         + 'Reanalisar a mesma súmula (ex.: com <code>--ajuste</code> ou editando o TXT) <strong>substitui</strong> a prévia, mantendo o mesmo número. '
         + 'Pendências como <code>[A DEFINIR PELA COMISSÃO]</code> devem ser resolvidas antes de efetivar.</li>'
         + '<li><strong>Efetivação:</strong> ao fechar a decisão, efetive pelo número da nota '
-        + '(no exemplo, 8; substitua pelo desejado). Só aqui a punição entra no <strong>Controle de punições</strong> e a nota passa de prévia a oficial.'
+        + '(no exemplo, 8; substitua pelo desejado). Só aqui a punição entra no <strong>Controle de punições</strong>, a nota passa de prévia a oficial e a súmula de origem passa a <strong>Analisada</strong>.'
         + '<div class="info-punicoes-cmd">python main.py --gerar-pdf-nota 8'
         + '<br><span class="info-punicoes-coment"># Alternativa: reenviar os documentos ao Drive em lote</span>'
         + '<br>python main.py --publicar-drive</div>'
@@ -11487,6 +11497,7 @@
     function carregarNotas() {
       google.script.run
         .withSuccessHandler(function (dados) {
+          removerOverlayGlobal_();
           if (moduloAtual !== 'notas') {
             return;
           }
@@ -11496,6 +11507,7 @@
           montarTelaNotas();
         })
         .withFailureHandler(function (erro) {
+          removerOverlayGlobal_();
           if (moduloAtual !== 'notas') {
             return;
           }
@@ -11687,7 +11699,13 @@
           + celula('Publicada em', escapar(r.dataNota || '—'))
           + celula('Partida', '<span class="equipe-nome">' + escapar(r.confronto || '—') + '</span>'
             + '<div class="equipe-dado">' + escapar(r.dataJogo || r.competicao || '—') + '</div>')
-          + celula('Documento', atalhoPdfDaNota(r))
+          + celula('Documento', '<div class="acoes-nota">'
+            + atalhoPdfDaNota(r)
+            + (notas.podeExcluir
+              ? '<button type="button" class="botao-apoio perigo acao-excluir-nota" data-nao-abre="1" '
+                + 'data-arquivo="' + escapar(r.arquivoNome) + '" title="Excluir esta nota">🗑️ Excluir</button>'
+              : '')
+            + '</div>')
           + celula('Punidos', resumoPunidosDaNota(r))
           + '</tr>';
 
@@ -11727,6 +11745,68 @@
           evento.stopPropagation();
           abrirModulo('punicoes', botao.dataset.irPunicoes);
         });
+      });
+
+      conteudo.querySelectorAll('#linhasNotas .acao-excluir-nota').forEach(function (botao) {
+        botao.addEventListener('click', function (evento) {
+          evento.stopPropagation();
+          excluirNotaDaTela_(botao);
+        });
+      });
+    }
+
+    /**
+     * Exclui uma nota oficial (só admin): confirma, chama o servidor (move TXT+PDF
+     * para a lixeira do Drive) e recarrega a tela.
+     */
+    function excluirNotaDaTela_(botao) {
+      if (!botao || botao.disabled) return;
+      const arquivo = botao.dataset.arquivo;
+
+      confirmarDialogo_({
+        origemFoco: botao,
+        titulo: 'Excluir nota oficial',
+        mensagem: 'A nota (TXT e PDF) será removida do Drive (vai para a lixeira). '
+          + 'Se houver punição vinculada no Controle de punições, rode depois '
+          + '"python main.py --atualizar-controle-punicoes" para atualizar o controle. Deseja continuar?',
+        confirmar: 'Excluir',
+        cancelar: 'Cancelar',
+        perigo: true
+      }).then(function (ok) {
+        if (!ok || moduloAtual !== 'notas') return;
+        botao.disabled = true;
+        mostrarOverlayGlobal_('Excluindo nota...');
+        google.script.run
+          .withSuccessHandler(function () {
+            removerOverlayGlobal_();
+            if (moduloAtual !== 'notas') return;
+            // Atualiza a lista localmente (sem reler todas as notas do Drive, que
+            // é lento e deixaria o loading travado): tira a nota removida da
+            // cópia em memória e redesenha a tela imediatamente.
+            if (notas && Array.isArray(notas.registros)) {
+              notas.registros = notas.registros.filter(function (r) {
+                return r.arquivoNome !== arquivo;
+              });
+              if (typeof notas.total === 'number' && notas.total > 0) {
+                notas.total -= 1;
+              }
+              delete notasAbertas[arquivo];
+            }
+            // filtrarNotas() recalcula os indicadores e redesenha só a tabela
+            // (e religa os botões). É seguro rodar várias vezes, ao contrário de
+            // montarTelaNotas(), que recria o cabeçalho a partir de #statusNotas.
+            filtrarNotas();
+          })
+          .withFailureHandler(function (erro) {
+            removerOverlayGlobal_();
+            if (botao) botao.disabled = false;
+            confirmarDialogo_({
+              titulo: 'Não foi possível excluir',
+              mensagem: erro && erro.message ? erro.message : String(erro),
+              confirmar: 'Fechar', cancelar: 'Fechar', perigo: false
+            });
+          })
+          .excluirNota(arquivo);
       });
     }
 
@@ -12305,7 +12385,6 @@
         + campoTexto('fTelefone', 'Telefone com DDD', formatarTelefone(registro ? registro.telefone : ''), 'largo', trava, 'tel')
         + '</div></details>'
         + '<details class="grupo etapa-associado"' + ab + '><summary><h4>Endere&ccedil;o</h4></summary><div class="campos">'
-        + campoTexto('fCep', 'CEP', formatarCep(registro ? registro.cep : ''), 'curto', trava, 'text')
         + campoTexto('fLogradouro', 'Logradouro', registro ? registro.logradouro : '', 'largo', trava, 'text')
         + campoTexto('fNumero', 'Número', registro ? registro.numero : '', 'curto', trava, 'text')
         + campoTexto('fComplemento', 'Complemento', registro ? registro.complemento : '', '', trava, 'text')
@@ -12577,7 +12656,7 @@
     }
 
     function prepararCamposAssociado_() {
-      // CEP deixou de ser obrigatorio (fica opcional); os demais do endereco seguem obrigatorios.
+      // CEP foi removido do cadastro; os demais campos do endereço seguem obrigatorios.
       const obrigatorios = ['fEquipe', 'fStatus', 'fNome', 'fNascimento', 'fCpf', 'fRg', 'fEmail',
         'fTelefone', 'fLogradouro', 'fNumero', 'fBairro', 'fCidade', 'fUf'];
       if (document.getElementById('fVinculoAnterior').value === 'sim') obrigatorios.push('fAssociacaoAnterior');
@@ -12617,7 +12696,6 @@
         else if (campo.id === 'fCnpjEquipe' && !documentoNumericoAssociadoValido_(valor, true)) mensagem = 'Informe um CNPJ válido.';
         else if (campo.id === 'fEmail' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(valor)) mensagem = 'Informe um e-mail válido.';
         else if (campo.id === 'fTelefone' && (digitos.length < 10 || digitos.length > 11)) mensagem = 'Informe o telefone com DDD (10 ou 11 dígitos).';
-        else if (campo.id === 'fCep' && digitos.length !== 8) mensagem = 'Informe o CEP com 8 dígitos.';
         else if (campo.id === 'fUf' && !/^[A-Za-z]{2}$/.test(valor)) mensagem = 'Informe a UF com duas letras.';
         else if (campo.id === 'fExercicioFiliacao' && !/^[1-9]\d{3}$/.test(valor)) mensagem = 'Informe o exercício com quatro dígitos.';
         else if (campo.id === 'fNascimento') {
@@ -12677,17 +12755,13 @@
     }
 
     /**
-     * Formata CPF, telefone e CEP enquanto a pessoa digita.
+     * Formata CPF e telefone enquanto a pessoa digita.
      */
     function ligarMascaras() {
       mascara('fCpf', 11, function (d) {
         return d.replace(/^(\d{3})(\d{3})?(\d{3})?(\d{0,2})?$/, function (t, a, b, c, e) {
           return a + (b ? '.' + b : '') + (c ? '.' + c : '') + (e ? '-' + e : '');
         });
-      });
-
-      mascara('fCep', 8, function (d) {
-        return d.length > 5 ? d.slice(0, 5) + '-' + d.slice(5) : d;
       });
 
       mascara('fTelefone', 11, function (d) {
@@ -12986,7 +13060,6 @@
         nascimento: lerDataFormulario_('fNascimento'),
         email: document.getElementById('fEmail').value,
         telefone: document.getElementById('fTelefone').value,
-        cep: document.getElementById('fCep').value,
         logradouro: document.getElementById('fLogradouro').value,
         numero: document.getElementById('fNumero').value,
         complemento: document.getElementById('fComplemento').value,
@@ -13119,12 +13192,6 @@
       }
 
       return d.length === 10 ? d.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3') : (valor || '');
-    }
-
-    function formatarCep(valor) {
-      const d = String(valor || '').replace(/\D/g, '');
-
-      return d.length === 8 ? d.replace(/(\d{5})(\d{3})/, '$1-$2') : (valor || '');
     }
 
     /**

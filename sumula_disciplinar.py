@@ -149,6 +149,16 @@ PADROES_AGRESSAO = (
     r"\barremess\w*\s+(um|uma)?\s*(objeto|garrafa|pedra|copo|lata)",
 )
 
+# ART. 26: atleta/membro da comissao participando da partida enquanto cumpre punicao.
+# Padroes contextuais (sobre texto normalizado, sem acento): "suspensao" sozinho aparece em
+# relatos de cartao vermelho ("suspensao automatica"), entao nao e usado isoladamente.
+PADROES_PARTICIPACAO_SUSPENSO = (
+    r"\bsuspens[oa]s?\b",
+    r"cumprindo (suspensao|punicao)",
+    r"\b(infring|descumpr|desrespeit|violand|violou)\w*\s+(a\s+|sua\s+)?(regra|pena|norma)?\s*(de\s+|da\s+)?(suspensao|punicao)",
+    r"\b(esta|estava|encontra\w*|ainda)\s+(\w+\s+)?(punid[oa]s?|suspens[oa]s?|cumprindo)\b",
+)
+
 REGRAS: tuple[Regra, ...] = (
     Regra("art8", "Briga generalizada", "20", "1",
           (r"briga generalizada", r"confusao generalizada", r"tumulto generalizado", r"briga entre as equipes"),
@@ -174,7 +184,7 @@ REGRAS: tuple[Regra, ...] = (
           (r"\bracis", r"injuria racial", r"discrimin", r"preconceit", r"\bmacaco\b", r"xenofob",
            r"intoleranc\w*\s+religios"), incluir_caput=True),
     Regra("art14", "Participação de atleta ou membro da comissão cumprindo punição", "26", "2",
-          (r"\bsuspens[oa]s?\b", r"cumprindo (suspensao|punicao)")),
+          PADROES_PARTICIPACAO_SUSPENSO),
     Regra("art15_abandono", "Abandono de partida", "27", "7",
           (r"\babandon\w*\s+(a\s+|o\s+)?(partida|jogo|campo)", r"\bretir\w*\s+(a equipe|o time)\s+d[eo]\s+campo"),
           sujeito="equipe"),
@@ -201,6 +211,8 @@ class Envolvido:
     tipo: str
     nome: str
     camisa: str
+    # True quando a pessoa NAO estava na lista ENVOLVIDOS da sumula e foi identificada pelo relato.
+    inferido: bool = False
 
     @property
     def comissao(self) -> bool:
@@ -276,6 +288,9 @@ def ler_sumula(path: Path) -> Sumula:
         )
     ]
     pdf = re.search(r"S[UÚ]MULA OFICIAL \(PDF\)\s*\n-+\s*\n\s*(https?://\S+)", texto)
+    envolvidos += inferir_suspensos_participantes(
+        fatos.group(1).strip(), envolvidos, partida.group(1).strip(), partida.group(2).strip()
+    )
     return Sumula(
         arquivo=path,
         protocolo=campo("PROTOCOLO"),
@@ -310,12 +325,19 @@ def paragrafos_relato(fatos: str) -> list[str]:
     return [re.sub(r"\s+", " ", bloco).strip() for bloco in blocos if bloco.strip()]
 
 
+ABREVIATURAS = re.compile(r"\b(Sr|Sra|Srta|Dr|Dra|Prof|Profa|Exmo|Exma)\.(?=\s)")
+_PONTO_PROTEGIDO = "\u2024"  # "ponto de um ponto": nao encerra frase
+
+
+def dividir_frases(paragrafo: str) -> list[str]:
+    """Divide em frases sem cortar apos abreviaturas como 'Sr.' (que quebrariam o nome da pessoa)."""
+    protegido = ABREVIATURAS.sub(lambda m: m.group(1) + _PONTO_PROTEGIDO, paragrafo)
+    frases = [f.strip() for f in re.split(r"(?<=[.!?;])\s+", protegido) if f.strip()]
+    return [f.replace(_PONTO_PROTEGIDO, ".") for f in frases]
+
+
 def dividir_paragrafos(fatos: str) -> list[list[str]]:
-    paragrafos = []
-    for paragrafo in paragrafos_relato(fatos):
-        frases = [f.strip() for f in re.split(r"(?<=[.!?;])\s+", paragrafo) if f.strip()]
-        paragrafos.append(frases)
-    return paragrafos
+    return [dividir_frases(paragrafo) for paragrafo in paragrafos_relato(fatos)]
 
 
 def _casa(padrao: str, texto: str) -> bool:
@@ -352,6 +374,54 @@ def _envolvidos_citados(texto: str, envolvidos: list[Envolvido]) -> list[Envolvi
 
 def _equipes_citadas(texto: str, sumula: Sumula) -> list[str]:
     return [t for t in (sumula.time1, sumula.time2) if normalize_text(t) and normalize_text(t) in texto]
+
+
+PADRAO_NOME_CITADO = re.compile(
+    r"\b(?:Sr|Sra|Srta|Senhor|Senhora)\.?\s+"
+    r"([A-ZÀ-Ý][A-Za-zÀ-ÿ'’\-]+(?:\s+(?:d[aeo]s?\s+)?[A-ZÀ-Ý][A-Za-zÀ-ÿ'’\-]+){0,5})"
+)
+PADRAO_COMISSAO = (r"\b(comissao tecnica|membro da comissao|tecnico|treinador|massagista|auxiliar tecnico|"
+                   r"dirigente|diretor)\b")
+
+
+def inferir_suspensos_participantes(fatos: str, envolvidos: list[Envolvido],
+                                    time1: str, time2: str) -> list[Envolvido]:
+    """Pessoas que o arbitro relata como participando da partida cumprindo punicao (ART. 26) mas que
+    nao foram listadas em ENVOLVIDOS. Sem isso a infracao ficaria sem sujeito (ou seria atribuida a
+    outro envolvido). O nome vem do relato ('Sr. NOME'); tipo e equipe, do proprio trecho."""
+    novos: list[Envolvido] = []
+    for paragrafo in paragrafos_relato(fatos):
+        for frase in dividir_frases(paragrafo):
+            texto = normalize_text(frase)
+            if not any(_casa(p, texto) for p in PADROES_PARTICIPACAO_SUSPENSO):
+                continue
+            conhecidos = envolvidos + novos
+            if _envolvidos_citados(texto, conhecidos):
+                continue  # a frase ja aponta uma pessoa da lista
+            nome = ""
+            for origem in (frase, paragrafo):
+                for achado in PADRAO_NOME_CITADO.finditer(origem):
+                    candidato = achado.group(1).strip()
+                    if not _envolvidos_citados(normalize_text(candidato), conhecidos):
+                        nome = candidato
+                        break
+                if nome:
+                    break
+            if not nome:
+                continue
+            texto_paragrafo = normalize_text(paragrafo)
+            comissao = re.search(PADRAO_COMISSAO, texto) or re.search(PADRAO_COMISSAO, texto_paragrafo)
+            times = [t for t in (time1, time2) if normalize_text(t) and normalize_text(t) in texto]
+            if len(times) != 1:
+                times = [t for t in (time1, time2) if normalize_text(t) and normalize_text(t) in texto_paragrafo]
+            novos.append(Envolvido(
+                times[0] if len(times) == 1 else MARCADOR_DEFINIR,
+                "Comissão" if comissao else "Atleta",
+                nome.title() if nome.isupper() else nome,
+                "",
+                inferido=True,
+            ))
+    return novos
 
 
 def analisar(sumula: Sumula, regulamento: Regulamento, logger: logging.Logger | None = None) -> list[Ocorrencia]:
@@ -563,7 +633,8 @@ def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: 
 
     linhas = [
         "📝 PRÉVIA EM ANÁLISE – AGUARDANDO APROVAÇÃO DA COMISSÃO. Esta nota ainda NÃO é oficial e a punição "
-        "ainda NÃO foi registrada no controle. Revise e efetive com: python main.py --gerar-pdf-nota "
+        "ainda NÃO foi registrada no controle. Resolva os campos [A DEFINIR] e efetive com (a súmula passa "
+        "a Analisada): python main.py --gerar-pdf-nota "
         + f"{numero}.",
         "⚠️ NOTA GERADA AUTOMATICAMENTE (regras fixas) – as decisões sugeridas estão entre ** ** "
         f"(vermelho no PDF); revise-as e os campos {MARCADOR_DEFINIR}, se houver, antes de publicar.",
@@ -603,10 +674,16 @@ def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: 
         linhas += [f"   \"{frase}\"" for frase in o.frases]
         if o.confirmar_autoria:
             linhas.append(f"⚠️ Mais de um envolvido citado no mesmo trecho – confirmar a autoria {MARCADOR_DEFINIR}.")
+        if isinstance(o.sujeito, Envolvido) and o.sujeito.inferido:
+            linhas.append(f"⚠️ {o.sujeito.nome} não consta na lista de envolvidos da súmula e foi identificado "
+                          f"pelo relato – confirmar nome e equipe {MARCADOR_DEFINIR}.")
         linhas += [f"A conduta enquadra-se no {_referencia(o.regra)}:"]
         linhas += _citar(o.trecho_regulamento)
         if o.pena:
-            linhas.append(f"O dispositivo prevê {o.pena}.")
+            if normalize_text(o.pena).startswith("acrescida"):
+                linhas.append(f"O dispositivo prevê que a penalidade aplicada seja {o.pena}.")
+            else:
+                linhas.append(f"O dispositivo prevê {o.pena}.")
         linhas.append(f"➡️ {_referencia(o.regra)} – {destacar(doses[id(o)].decisao)}")
 
     if sem_dispositivo:
@@ -684,8 +761,10 @@ def gerar_nota(sumula: Sumula, ocorrencias: list[Ocorrencia], numero: int, ano: 
         motivo = "; ".join(d.circunstancias) if d.circunstancias else (
             "nenhuma circunstância adicional registrada no relatório, aplicando-se a pena mínima"
         )
+        previsao = (f"que a penalidade aplicada seja {d.faixa}" if normalize_text(d.faixa).startswith("acrescida")
+                    else d.faixa)
         linhas.append(
-            f"- {_referencia(o.regra)} – {sujeito}: o dispositivo prevê {d.faixa}; {motivo}. "
+            f"- {_referencia(o.regra)} – {sujeito}: o dispositivo prevê {previsao}; {motivo}. "
             f"Pena aplicada: {destacar(d.decisao)}."
         )
 
@@ -857,6 +936,41 @@ def _registrar_controle(nota_txt: Path, sumula: Sumula, config_path: Path, logge
     controle_punicoes.registrar_nota(nota_txt, sumula, config_path, logger)
 
 
+def fechar_sumula(nota_txt: Path, config_path: Path, logger: logging.Logger) -> bool:
+    """Nota FINAL gerada = decisao fechada: move a sumula de Entrada para Processados (local e Drive).
+
+    Na tela "Sumulas Enviadas" ela passa de Aguardando para Analisada. Chamado so na efetivacao
+    (--gerar-pdf-nota) e so quando a nota nao tem pendencias. Falhas sao apenas registradas: a nota
+    e o controle ja foram gravados e a sumula pode ser marcada como analisada pela tela.
+    """
+    try:
+        import controle_punicoes
+
+        achado = controle_punicoes.RE_SUMULA.search(nota_txt.read_text(encoding="utf-8-sig", errors="ignore"))
+        if not achado:
+            logger.warning("[SUMULAS] Protocolo da sumula nao encontrado em %s; sumula nao movida", nota_txt.name)
+            return False
+        protocolo = achado.group(0).upper()
+        config = ConfigSumulas.carregar(config_path)
+
+        # Local: so move se ainda estiver na pasta de entrada (ja em processados = nada a fazer).
+        nome = f"SUMULA_{protocolo}.txt"
+        local = next(iter(config.download_dir.glob(f"*{protocolo}*.txt")), None)
+        if local:
+            nome = local.name
+            move_file(local, config.processed_dir)
+            logger.info("[SUMULAS] %s movida para %s (decisao fechada)", nome, config.processed_dir)
+
+        # Drive: Entrada -> Processados (a tela passa a mostrar "Analisada").
+        downloader = DriveTxtDownloader(config.folder_embed_url, config.download_dir, config.service_account_json,
+                                        config.path)
+        return downloader.mover_por_nome(nome, "processed", logger) or bool(local)
+    except Exception as exc:
+        logger.warning("[SUMULAS] Nao foi possivel mover a sumula da nota %s para Processados: %s",
+                       nota_txt.name, exc)
+        return False
+
+
 def _publicar_previa(nota_txt: Path, config_path: Path, logger: logging.Logger) -> None:
     """Publica a PREVIA da nota no Drive (falhas nao interrompem a analise)."""
     try:
@@ -898,8 +1012,8 @@ def processar_sumulas(config_path: Path = DEFAULT_CONFIG_PATH, local_only: bool 
 
     A análise agora é só PROPOSTA: gera o TXT/PDF rascunho mas NÃO grava no
     controle de punições nem move a súmula para "Processados". A efetivação
-    (gravar no controle, publicar a nota oficial) acontece só no
-    --gerar-pdf-nota, após a comissão revisar.
+    (gravar no controle, publicar a nota oficial e mover a súmula para
+    "Processados") acontece só no --gerar-pdf-nota, após a comissão revisar.
 
     - alvo: protocolo/nome de uma súmula específica (ex.: SUM-XXXX). Sem alvo, roda todas.
     - ajuste: instrução de interpretação/peso. Plena no modo IA (entra no prompt);

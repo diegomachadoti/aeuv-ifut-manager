@@ -484,6 +484,12 @@ def regerar_pdf(alvo: str, config_path: Path = DEFAULT_CONFIG_PATH, logger: logg
     import publicacao_drive
 
     publicacao_drive.publicar_nota(nota_txt, config_path, logger)
+    # Nota final = decisao fechada: a sumula sai de "Aguardando" e vai para "Analisada".
+    # Nota ainda em rascunho ([A DEFINIR]/divergencias) NAO fecha a sumula.
+    if not tem_pendencias(nota_txt.read_text(encoding="utf-8-sig")):
+        import sumula_disciplinar
+
+        sumula_disciplinar.fechar_sumula(nota_txt, config_path, logger)
     return destino
 
 

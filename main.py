@@ -438,6 +438,40 @@ class DriveTxtDownloader:
             if logger:
                 logger.error("Erro ao mover arquivo no Drive %s: %s", file_name, exc)
 
+    def mover_por_nome(self, file_name: str, destination_kind: str = "processed", logger=None) -> bool:
+        """Move no Drive o arquivo `file_name` da pasta Entrada para Processados/Falhas, sem baixar nada.
+
+        Serve para fechar uma sumula numa execucao diferente da que a baixou (ex.: ao gerar a nota
+        final). Idempotente: se o arquivo nao esta mais em Entrada, apenas avisa e devolve False.
+        """
+        if not drive_auth.tem_credencial(self.config_path):
+            if logger:
+                logger.warning("Sem credencial do Drive; %s nao foi movido remotamente", file_name)
+            return False
+        if not self._drive_service:
+            service = build("drive", "v3", credentials=drive_auth.credenciais_por_arquivo(self.config_path))
+            self._drive_service = service
+            self._root_folder_id = self._extract_folder_id(self.folder_embed_url)
+            self._entry_folder_id = self._find_named_folder_id(service, self._root_folder_id, "Entrada") \
+                or self._root_folder_id
+            self._processed_folder_id = self._find_named_folder_id(service, self._root_folder_id, "Processados")
+            self._failed_folder_id = self._find_named_folder_id(service, self._root_folder_id, "Falhas")
+            self._results_folder_id = self._find_named_folder_id(service, self._root_folder_id, "Resultados")
+        self.ensure_status_folders(logger)
+        nome = file_name.replace("\\", "\\\\").replace("'", "\\'")
+        resposta = self._drive_service.files().list(
+            q=f"'{self._entry_folder_id}' in parents and trashed = false and name = '{nome}'",
+            fields="files(id, name)", pageSize=5,
+        ).execute()
+        achados = resposta.get("files", [])
+        if not achados:
+            if logger:
+                logger.info("Arquivo %s nao esta em Entrada no Drive (ja movido?); nada a fazer", file_name)
+            return False
+        self.remote_files_by_name[file_name] = achados[0]["id"]
+        self.move_remote_file(file_name, destination_kind, logger)
+        return True
+
     MIMES_RESULTADO = {".txt": "text/plain", ".pdf": "application/pdf"}
 
     def publish_results(self, paths, logger=None) -> None:
