@@ -896,6 +896,31 @@ var TIPOS_OCORRENCIA = [
 var PAPEIS_OCORRENCIA = ['Agressor inicial', 'Não inicial (revide)', 'Não sei dizer'];
 
 /**
+ * Normaliza um texto para comparação tolerante (sem acento, minúsculo, espaços
+ * colapsados e sem espaço ao redor de "/"). Evita rejeitar o tipo por uma
+ * diferença boba de formatação entre o formulário e esta lista.
+ */
+function normalizarTipoOc_(valor) {
+  return String(valor || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Devolve o valor canônico da lista para um tipo informado, ou '' se não casar. */
+function tipoOcorrenciaCanonico_(valor) {
+  const alvo = normalizarTipoOc_(valor);
+  for (var i = 0; i < TIPOS_OCORRENCIA.length; i++) {
+    if (normalizarTipoOc_(TIPOS_OCORRENCIA[i]) === alvo) {
+      return TIPOS_OCORRENCIA[i];
+    }
+  }
+  return '';
+}
+
+/**
  * Valida a lista de ocorrências disciplinares. Só é obrigatória quando o árbitro
  * marcou que houve ocorrência. Retorna a lista normalizada.
  * @param {Object} p Payload da súmula (já com envolvidos validados).
@@ -936,15 +961,17 @@ function validarOcorrencias_(p) {
     const coletivo = o.coletivo === true;
     const nome = String(o.nome || '').trim();
     const equipe = String(o.equipe || '').trim();
-    const tipo = String(o.tipo || '').trim();
+    const tipoBruto = String(o.tipo || '').trim();
     const papel = String(o.papel || '').trim();
     const descricao = String(o.descricao || '').trim();
 
-    if (!tipo) {
+    if (!tipoBruto) {
       throw new Error('Selecione o tipo da ocorrência ' + (i + 1) + '.');
     }
 
-    if (TIPOS_OCORRENCIA.indexOf(tipo) === -1) {
+    // Casa de forma tolerante (espaço/acento/caixa) e grava o valor canônico.
+    const tipo = tipoOcorrenciaCanonico_(tipoBruto);
+    if (!tipo) {
       throw new Error('Tipo inválido na ocorrência ' + (i + 1) + '.');
     }
 

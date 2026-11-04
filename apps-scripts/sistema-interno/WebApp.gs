@@ -11280,6 +11280,8 @@ function interpretarSumula_(conteudo, achado, paraAtletas, metricas) {
   const partida = {};
   const pessoas = [];
   const fatos = [];
+  const ocorrencias = [];
+  let ocAtual = null;
   let secao = 'topo';
   let atual = null;
   let confronto = '';
@@ -11317,6 +11319,7 @@ function interpretarSumula_(conteudo, achado, paraAtletas, metricas) {
     if (titulo.indexOf('OCORRENCIAS DISCIPLINARES') === 0 || titulo.indexOf('OCORRÊNCIAS DISCIPLINARES') === 0) {
       secao = 'ocorrencias';
       atual = null;
+      ocAtual = null;
       return;
     }
 
@@ -11344,9 +11347,18 @@ function interpretarSumula_(conteudo, achado, paraAtletas, metricas) {
       return;
     }
 
-    // Ocorrências disciplinares não entram nos envolvidos nem no cabeçalho
-    // (são lidas pela automação Python, não exibidas nesta tela de súmulas).
+    // Ocorrências disciplinares: acumula num objeto por bloco "OCORRENCIA n".
+    // Não contaminam os envolvidos nem o cabeçalho.
     if (secao === 'ocorrencias') {
+      if (/^OCORR[EÊ]NCIA\s+\d+/i.test(texto)) {
+        ocAtual = {};
+        ocorrencias.push(ocAtual);
+        return;
+      }
+      const corteOc = texto.indexOf(':');
+      if (corteOc !== -1 && ocAtual) {
+        ocAtual[texto.slice(0, corteOc).trim().toUpperCase()] = texto.slice(corteOc + 1).trim();
+      }
       return;
     }
 
