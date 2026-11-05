@@ -80,7 +80,7 @@
     }
     .rodape-identidade { color: var(--texto); }
     .rodape-direitos { text-align: right; }
-    body.tema-escuro .rodape-sistema { background: var(--superficie, #101626); }
+    body.tema-noturno .rodape-sistema { background: var(--superficie, #101626); }
     @media (max-width: 900px) {
       .rodape-conteudo { grid-template-columns: 1fr; gap: 4px; padding: 16px 20px; text-align: center; }
       .rodape-direitos { text-align: center; }
@@ -352,7 +352,7 @@
       border-radius: 10px;
       background: var(--superficie, #fff);
     }
-    body.tema-escuro .perfil-legenda { background: #141c2e; }
+    body.tema-noturno .perfil-legenda { background: #141c2e; }
 
     .perfil-legenda-cabecalho {
       display: flex;
@@ -383,7 +383,7 @@
       font-size: 14px;
     }
     .permissao-item:hover { background: #f1f5fb; }
-    body.tema-escuro .permissao-item:hover { background: #1b2440; }
+    body.tema-noturno .permissao-item:hover { background: #1b2440; }
     .permissao-item input { width: 18px; height: 18px; flex: 0 0 auto; cursor: pointer; }
 
     .alerta { color: #922b21; }
@@ -629,9 +629,9 @@
     }
     .info-punicoes-coment { color: #94a3b8; }
 
-    body.tema-escuro .info-punicoes { background: var(--superficie-2); border-color: #33425f; }
-    body.tema-escuro .info-punicoes[open] > summary { border-color: #33425f; }
-    body.tema-escuro .info-punicoes-cmd { background: #0b1020; border: 1px solid #33425f; }
+    body.tema-noturno .info-punicoes { background: var(--superficie-2); border-color: #33425f; }
+    body.tema-noturno .info-punicoes[open] > summary { border-color: #33425f; }
+    body.tema-noturno .info-punicoes-cmd { background: #0b1020; border: 1px solid #33425f; }
 
     /* Tela "Comandos do Sistema". */
     .cmd-intro { margin: 10px 0 14px; line-height: 1.6; }
@@ -662,9 +662,9 @@
     .cmd-avisos ul { margin: 0; padding-left: 20px; }
     .cmd-avisos li { margin-bottom: 6px; font-size: 13px; color: var(--apoio); line-height: 1.5; }
 
-    body.tema-escuro .cmd-intro code { background: var(--superficie-2); }
-    body.tema-escuro .cmd-item { background: var(--superficie-2); border-color: #33425f; }
-    body.tema-escuro .cmd-linha code { background: #0b1020; border: 1px solid #33425f; }
+    body.tema-noturno .cmd-intro code { background: var(--superficie-2); }
+    body.tema-noturno .cmd-item { background: var(--superficie-2); border-color: #33425f; }
+    body.tema-noturno .cmd-linha code { background: #0b1020; border: 1px solid #33425f; }
 
     /* Larguras fixas: a tabela cabe na tela sem empurrar as colunas curtas. */
     .punicoes { table-layout: fixed; font-size: 13px; }
@@ -773,9 +773,9 @@
       border-radius: 50%;
       animation: overlay-global-girar .8s linear infinite;
     }
-    body.tema-escuro .overlay-global .spinner { border-top-color: var(--dourado, #c9a227); }
+    body.tema-noturno .overlay-global .spinner { border-top-color: var(--dourado, #c9a227); }
     .overlay-global .texto { font-weight: 600; color: var(--azul, #14213d); margin: 0; }
-    body.tema-escuro .overlay-global .texto { color: var(--texto, #e6eaf2); }
+    body.tema-noturno .overlay-global .texto { color: var(--texto, #e6eaf2); }
     @keyframes overlay-global-girar { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) {
       .overlay-global { animation: none; }
@@ -794,7 +794,7 @@
       gap: 12px;
       z-index: 1000;
     }
-    body.tema-escuro .punicoes-overlay { background: rgba(16, 22, 38, .82); }
+    body.tema-noturno .punicoes-overlay { background: rgba(16, 22, 38, .82); }
     .punicoes-overlay .spinner {
       width: 38px; height: 38px;
       border: 4px solid var(--borda, #d6dbe4);
@@ -802,9 +802,9 @@
       border-radius: 50%;
       animation: punicoes-girar .8s linear infinite;
     }
-    body.tema-escuro .punicoes-overlay .spinner { border-top-color: var(--dourado, #c9a227); }
+    body.tema-noturno .punicoes-overlay .spinner { border-top-color: var(--dourado, #c9a227); }
     .punicoes-overlay .texto { font-weight: 600; color: var(--azul, #14213d); }
-    body.tema-escuro .punicoes-overlay .texto { color: var(--texto, #e6eaf2); }
+    body.tema-noturno .punicoes-overlay .texto { color: var(--texto, #e6eaf2); }
     @keyframes punicoes-girar { to { transform: rotate(360deg); } }
 
     /* ----- Solicitações de inscrição ----- */
@@ -864,8 +864,8 @@
     }
     .analise-manual-titulo { font-weight: bold; color: #1e7b34; font-size: 13px; }
     .analise-manual-motivo { margin-top: 4px; font-size: 13px; color: var(--texto); line-height: 1.4; }
-    body.tema-escuro .analise-manual { background: #16251b; border-color: #2f5a39; }
-    body.tema-escuro .analise-manual-titulo { color: #4ade80; }
+    body.tema-noturno .analise-manual { background: #16251b; border-color: #2f5a39; }
+    body.tema-noturno .analise-manual-titulo { color: #4ade80; }
 
     /* Lista de motivos (radio) do modal "Marcar súmula como analisada". */
     .motivos-sumula {
@@ -901,7 +901,7 @@
       transition: none;
     }
     .opcao-motivo-sumula span { flex: 1 1 auto; min-width: 0; }
-    body.tema-escuro .opcao-motivo-sumula:hover { background: rgba(255, 255, 255, .05); }
+    body.tema-noturno .opcao-motivo-sumula:hover { background: rgba(255, 255, 255, .05); }
 
     /* Campo "Outros": aparece abaixo dos motivos, com respiro, só quando
        "Outros (descrever)" é selecionado. */
@@ -1002,7 +1002,7 @@
 
     /* Nota ainda em análise (prévia, não efetivada): leve destaque âmbar. */
     .notas tr.nota-em-analise { background: #fff8ec; }
-    body.tema-escuro .notas tr.nota-em-analise { background: rgba(245, 158, 11, .08); }
+    body.tema-noturno .notas tr.nota-em-analise { background: rgba(245, 158, 11, .08); }
 
     /* ----- Regulamentos ----- */
 
@@ -1249,8 +1249,8 @@
     #areaAssociados .obrigatorio, #areaAssociados .erro-campo { color: #b42318; }
     #areaAssociados .erro-campo { display: block; font-size: 12px; margin-top: 5px; }
     #areaAssociados .excluir-associado { color: #b42318; border-color: #b42318; }
-    body.tema-escuro #areaAssociados .obrigatorio,
-    body.tema-escuro #areaAssociados .erro-campo { color: #fca5a5; }
+    body.tema-noturno #areaAssociados .obrigatorio,
+    body.tema-noturno #areaAssociados .erro-campo { color: #fca5a5; }
     .pessoa-filiacao { border: 1px solid var(--borda); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
 
     /* Cada etapa do cadastro de associado vira um expansor para deixar a tela mais limpa. */
@@ -1278,7 +1278,7 @@
     .ultimos-docs { margin: 4px 0 8px; }
     .ultimos-docs .ultimo-doc { font-size: 13px; margin: 2px 0; }
     .ultimos-docs .link-doc { color: var(--azul); font-weight: bold; text-decoration: underline; margin-left: 6px; cursor: pointer; }
-    body.tema-escuro .ultimos-docs .link-doc { color: #93c5fd; }
+    body.tema-noturno .ultimos-docs .link-doc { color: #93c5fd; }
     .modal-recibo { text-align: left; max-width: 420px; width: 92vw; max-height: 86vh; overflow: auto; }
     .modal-recibo h3 { margin: 0 0 6px; color: var(--azul); text-align: left; }
     .modal-recibo p { text-align: left; }
@@ -1561,7 +1561,7 @@
         justify-content: flex-start;
       }
 
-      body.tema-escuro .tabela-financeiro tbody tr {
+      body.tema-noturno .tabela-financeiro tbody tr {
         background: var(--superficie-2, #1b2940);
       }
     }
@@ -1600,11 +1600,11 @@
       display: block; margin-top: 6px; padding: 8px 10px; border-radius: 6px;
       background: rgba(0, 0, 0, .05); font-size: 12px; overflow-wrap: anywhere; color: var(--apoio);
     }
-    body.tema-escuro .erro-amigavel {
+    body.tema-noturno .erro-amigavel {
       background: #2a1619; border-color: #5b2a2e;
     }
-    body.tema-escuro .erro-amigavel-corpo h3 { color: #fca5a5; }
-    body.tema-escuro .erro-detalhe code { background: rgba(255, 255, 255, .06); }
+    body.tema-noturno .erro-amigavel-corpo h3 { color: #fca5a5; }
+    body.tema-noturno .erro-detalhe code { background: rgba(255, 255, 255, .06); }
 
     @media (max-width: 900px) {
       .layout { grid-template-columns: 1fr; }
@@ -1922,8 +1922,8 @@
     .proj-tabela .proj-linha-remover svg { width: 17px; height: 17px; }
     .proj-tabela .proj-vazio { text-align: center; color: var(--apoio); font-size: 13px; padding: 20px; }
     .proj-acoes { border-top: 1px solid var(--borda); padding-top: 16px; gap: 10px; }
-    body.tema-escuro .proj-grupo { background: var(--superficie, #101626); }
-    body.tema-escuro .proj-tabela input { background: var(--superficie-2, #1b2940); }
+    body.tema-noturno .proj-grupo { background: var(--superficie, #101626); }
+    body.tema-noturno .proj-tabela input { background: var(--superficie-2, #1b2940); }
     @media (max-width: 600px) {
       .proj-grupo-cabecalho { padding: 12px; gap: 8px; }
       .proj-grupo-cabecalho button { min-height: 44px; }
@@ -1945,7 +1945,7 @@
     .proj-linha .proj-linha-desc { flex: 1 1 auto; min-width: 0; border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px; font-family: inherit; font-size: 14px; color: var(--texto); background: #fff; }
     .proj-linha .proj-linha-valor { flex: 0 0 auto; width: 150px; border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px; font-family: inherit; font-size: 14px; color: var(--texto); background: #fff; text-align: right; }
     .proj-linha .proj-linha-remover { flex: 0 0 auto; padding: 6px 9px; }
-    body.tema-escuro .proj-linha .proj-linha-desc, body.tema-escuro .proj-linha .proj-linha-valor { background: var(--superficie-2, #1b2940); }
+    body.tema-noturno .proj-linha .proj-linha-desc, body.tema-noturno .proj-linha .proj-linha-valor { background: var(--superficie-2, #1b2940); }
     @media (max-width: 600px) {
       /* No celular: nome ocupa a 1ª linha inteira; valor + lixeira dividem a 2ª,
          com o valor crescendo e a lixeira compacta ao lado (sem linha solta). */
@@ -2358,8 +2358,8 @@
     .tabela-abas button { flex: 0 0 auto; min-height: 44px; padding: 10px 16px; white-space: nowrap; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; background: transparent; color: var(--apoio); }
     .tabela-abas button[aria-pressed="true"] { background: var(--superficie, #fff); color: var(--texto); border-color: var(--borda); font-weight: bold; box-shadow: inset 0 3px 0 var(--dourado); }
     .tabela-abas button:focus-visible { outline: 2px solid var(--dourado); outline-offset: -2px; }
-    body.tema-escuro .tabela-abas button { background: transparent; color: var(--apoio); }
-    body.tema-escuro .tabela-abas button[aria-pressed="true"] { background: var(--superficie-2, #1b2940); color: var(--texto); border-color: var(--borda); }
+    body.tema-noturno .tabela-abas button { background: transparent; color: var(--apoio); }
+    body.tema-noturno .tabela-abas button[aria-pressed="true"] { background: var(--superficie-2, #1b2940); color: var(--texto); border-color: var(--borda); }
     #tabelaPainel { border: 1px solid var(--borda); border-top: 0; padding: 16px; min-width: 0; }
     .tabela-rodada { border: 1px solid var(--borda); border-radius: 10px; padding: 14px; margin-top: 18px; }
     .tabela-rodada-cabecalho { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 2px solid var(--dourado); padding-bottom: 12px; margin-bottom: 14px; }
@@ -2423,14 +2423,14 @@
       display: flex; align-items: center; justify-content: space-between; gap: 14px;
       padding: 10px 12px; border: 1px solid var(--borda); border-radius: 8px; background: #fff;
     }
-    body.tema-escuro .tabela-grupo-equipe { background: var(--superficie-2, #1b2940); }
+    body.tema-noturno .tabela-grupo-equipe { background: var(--superficie-2, #1b2940); }
     .tabela-grupo-equipe .tabela-grupo-nome { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
     .tabela-grupo-equipe select {
       flex: 0 0 auto; width: auto; min-width: 160px; max-width: 260px;
       border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px;
       font-family: inherit; font-size: 14px; color: var(--texto); background: #fff;
     }
-    body.tema-escuro .tabela-grupo-equipe select { background: var(--superficie, #0f1b30); color: var(--texto); }
+    body.tema-noturno .tabela-grupo-equipe select { background: var(--superficie, #0f1b30); color: var(--texto); }
     /* Linha do painel de critérios reaproveita a classe; mantém em coluna. */
     .tabela-grupo-equipe[data-tcr-linha] { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 1fr); }
     .tabela-fases-checks { display: flex; flex-wrap: wrap; gap: 14px; }
@@ -2453,7 +2453,7 @@
     .resultado-resumo { margin: 16px 0; }
     .resultado-contexto { overflow-wrap: anywhere; }
     .tabela-campeonato [hidden], #cEliminatorias[hidden] { display: none !important; }
-    body.tema-escuro .tabela-painel, body.tema-escuro .tabela-jogo { background: var(--superficie-2, #1b2940); }
+    body.tema-noturno .tabela-painel, body.tema-noturno .tabela-jogo { background: var(--superficie-2, #1b2940); }
     @media (max-width: 600px) {
       .tabela-painel { padding: 12px; }
       #tabelaPainel { padding: 10px; }
@@ -2508,142 +2508,173 @@
       color-scheme: dark;
     }
 
-    body.tema-escuro .topo { background: #070d1a; }
-    body.tema-escuro .inicial { color: #14213d; }
-    body.tema-escuro .brasao { box-shadow: 0 6px 18px rgba(0, 0, 0, .55); }
+    /* ---------- Tema grafite (intermediario) ----------
+       Grafite azulado: mais leve que o escuro, mais confortavel que o claro, e
+       conversa com o azul-marinho da marca para o dourado continuar destacando.
+       Compartilha com o escuro a classe .tema-noturno (todas as regras de estilo
+       escuro valem aqui); aqui so trocamos as variaveis e os poucos fundos fixos
+       que no grafite ficam mais claros que no escuro. */
+    body.tema-grafite {
+      --azul: #cdd9f2;
+      --azul-claro: #3b4a66;
+      --fundo: #2b3240;
+      --borda: #454f63;
+      --texto: #e8ebf2;
+      --apoio: #aab4c6;
+      --superficie: #333b4b;
+      --superficie-2: #3b4556;
+      --fundo-forte: #3f4a60;
+      color-scheme: dark;
+    }
 
-    body.tema-escuro .card,
-    body.tema-escuro .menu,
-    body.tema-escuro .abrir-menu,
-    body.tema-escuro .cartao,
-    body.tema-escuro .fin-relatorios,
-    body.tema-escuro .indicador,
-    body.tema-escuro .regulamento,
-    body.tema-escuro .detalhe-caixa,
-    body.tema-escuro .formulario,
-    body.tema-escuro .modal-fin-caixa,
-    body.tema-escuro .punicoes tr,
-    body.tema-escuro .associados tr,
-    body.tema-escuro .usuarios tr,
-    body.tema-escuro .solicitacoes tr.linha {
+    /* Fundos fixos que no escuro sao quase-pretos; no grafite ficam grafite.
+       Usamos a dupla classe (.tema-grafite.tema-noturno) para VENCER as regras
+       .tema-noturno .classe que vem depois no CSS (mesma especificidade, ordem). */
+    body.tema-grafite.tema-noturno .topo { background: #232a37; }
+    body.tema-grafite.tema-noturno .info-punicoes-cmd,
+    body.tema-grafite.tema-noturno .cmd-linha code { background: #232a37; border-color: #454f63; }
+    body.tema-grafite.tema-noturno .proj-grupo { background: #333b4b; }
+    /* Blocos de "código"/terminal que no escuro usam quase-preto (#0b1020). */
+    body.tema-grafite.tema-noturno .info-punicoes-cmd,
+    body.tema-grafite.tema-noturno .cmd-item,
+    body.tema-grafite.tema-noturno .info-punicoes { background: var(--superficie-2); border-color: var(--borda); }
+
+    body.tema-noturno .topo { background: #070d1a; }
+    body.tema-noturno .inicial { color: #14213d; }
+    body.tema-noturno .brasao { box-shadow: 0 6px 18px rgba(0, 0, 0, .55); }
+
+    body.tema-noturno .card,
+    body.tema-noturno .menu,
+    body.tema-noturno .abrir-menu,
+    body.tema-noturno .cartao,
+    body.tema-noturno .fin-relatorios,
+    body.tema-noturno .indicador,
+    body.tema-noturno .regulamento,
+    body.tema-noturno .detalhe-caixa,
+    body.tema-noturno .formulario,
+    body.tema-noturno .modal-fin-caixa,
+    body.tema-noturno .punicoes tr,
+    body.tema-noturno .associados tr,
+    body.tema-noturno .usuarios tr,
+    body.tema-noturno .solicitacoes tr.linha {
       background: var(--superficie);
       border-color: var(--borda);
       box-shadow: none;
     }
 
-    body.tema-escuro input,
-    body.tema-escuro select,
-    body.tema-escuro textarea,
-    body.tema-escuro .botao-apoio,
-    body.tema-escuro .fin-grupo-data,
-    body.tema-escuro .fin-campo .fin-input-valor {
+    body.tema-noturno input,
+    body.tema-noturno select,
+    body.tema-noturno textarea,
+    body.tema-noturno .botao-apoio,
+    body.tema-noturno .fin-grupo-data,
+    body.tema-noturno .fin-campo .fin-input-valor {
       background: var(--superficie-2);
       color: var(--texto);
       border-color: #33425f;
     }
 
     /* "Editar" azul-claro no tema escuro: azul translúcido com texto claro. */
-    body.tema-escuro .botao-apoio.azul-claro {
+    body.tema-noturno .botao-apoio.azul-claro {
       background: #1a2540;
       border-color: #33518a;
       color: #9dc1f5;
     }
-    body.tema-escuro .botao-apoio.azul-claro:hover { background: #22345c; }
+    body.tema-noturno .botao-apoio.azul-claro:hover { background: #22345c; }
 
     /* "Aprovar" (destaque) desabilitado no tema escuro. */
-    body.tema-escuro .botao-apoio.destaque:disabled {
+    body.tema-noturno .botao-apoio.destaque:disabled {
       background: #2a3344;
       border-color: #33425f;
       color: #6f7c95;
     }
 
-    body.tema-escuro .fin-grupo-data input[type="text"] { background: transparent; }
-    body.tema-escuro .fin-campo .fin-input-valor { color: #4ade80; }
-    body.tema-escuro .fin-alternar-valores[aria-pressed="true"] {
+    body.tema-noturno .fin-grupo-data input[type="text"] { background: transparent; }
+    body.tema-noturno .fin-campo .fin-input-valor { color: #4ade80; }
+    body.tema-noturno .fin-alternar-valores[aria-pressed="true"] {
       background: #1a2540;
       border-color: var(--azul);
     }
-    body.tema-escuro input::placeholder,
-    body.tema-escuro textarea::placeholder { color: #6f7c95; }
+    body.tema-noturno input::placeholder,
+    body.tema-noturno textarea::placeholder { color: #6f7c95; }
 
-    body.tema-escuro th,
-    body.tema-escuro .tabela-financeiro th,
-    body.tema-escuro .menu button.ativo,
-    body.tema-escuro .botao-apoio.destaque,
-    body.tema-escuro .botao-principal,
-    body.tema-escuro .botao-novo-lancamento {
+    body.tema-noturno th,
+    body.tema-noturno .tabela-financeiro th,
+    body.tema-noturno .menu button.ativo,
+    body.tema-noturno .botao-apoio.destaque,
+    body.tema-noturno .botao-principal,
+    body.tema-noturno .botao-novo-lancamento {
       background: var(--fundo-forte);
       border-color: var(--fundo-forte);
       color: #fff;
     }
 
-    body.tema-escuro .botao-principal:hover,
-    body.tema-escuro .botao-novo-lancamento:hover { background: #26386b; }
+    body.tema-noturno .botao-principal:hover,
+    body.tema-noturno .botao-novo-lancamento:hover { background: #26386b; }
 
-    body.tema-escuro .saudacao { background: linear-gradient(120deg, #13203d, #22345c); }
-    body.tema-escuro .aviso { background: #2a2210; }
+    body.tema-noturno .saudacao { background: linear-gradient(120deg, #13203d, #22345c); }
+    body.tema-noturno .aviso { background: #2a2210; }
 
-    body.tema-escuro .etiqueta,
-    body.tema-escuro .pilula { background: #1f2a44; }
-    body.tema-escuro .pilula.cumprir,
-    body.tema-escuro .pilula.aguardando,
-    body.tema-escuro .pilula.pendente { background: #3a2c0c; color: #fbbf24; }
-    body.tema-escuro .pilula.cumprida,
-    body.tema-escuro .pilula.definida,
-    body.tema-escuro .pilula.processada,
-    body.tema-escuro .pilula.analisada,
-    body.tema-escuro .pilula.ativo { background: #10331f; color: #4ade80; }
-    body.tema-escuro .pilula.alerta,
-    body.tema-escuro .pilula.falha,
-    body.tema-escuro .pilula.inativo { background: #3b1a1d; color: #f87171; }
-    body.tema-escuro .pilula.suspenso,
-    body.tema-escuro .pilula.nao-aprovada { background: #262c38; color: #b8c1d1; }
-    body.tema-escuro .pilula.arbitragem { background: #2a2346; color: #c4b5fd; }
+    body.tema-noturno .etiqueta,
+    body.tema-noturno .pilula { background: #1f2a44; }
+    body.tema-noturno .pilula.cumprir,
+    body.tema-noturno .pilula.aguardando,
+    body.tema-noturno .pilula.pendente { background: #3a2c0c; color: #fbbf24; }
+    body.tema-noturno .pilula.cumprida,
+    body.tema-noturno .pilula.definida,
+    body.tema-noturno .pilula.processada,
+    body.tema-noturno .pilula.analisada,
+    body.tema-noturno .pilula.ativo { background: #10331f; color: #4ade80; }
+    body.tema-noturno .pilula.alerta,
+    body.tema-noturno .pilula.falha,
+    body.tema-noturno .pilula.inativo { background: #3b1a1d; color: #f87171; }
+    body.tema-noturno .pilula.suspenso,
+    body.tema-noturno .pilula.nao-aprovada { background: #262c38; color: #b8c1d1; }
+    body.tema-noturno .pilula.arbitragem { background: #2a2346; color: #c4b5fd; }
 
-    body.tema-escuro .alerta { color: #f87171; }
-    body.tema-escuro .documento .situacao.entregue { color: #4ade80; }
-    body.tema-escuro .documento .situacao.falta { color: #fbbf24; }
+    body.tema-noturno .alerta { color: #f87171; }
+    body.tema-noturno .documento .situacao.entregue { color: #4ade80; }
+    body.tema-noturno .documento .situacao.falta { color: #fbbf24; }
 
-    body.tema-escuro .sucesso { background: #10331f; color: #4ade80; }
-    body.tema-escuro .erro { background: #3b1a1d; color: #fca5a5; }
-    body.tema-escuro .botao-apoio.perigo { color: #f87171; border-color: #5b2a2e; }
-    body.tema-escuro .botao-apoio.perigo:hover { background: #3b1a1d; }
+    body.tema-noturno .sucesso { background: #10331f; color: #4ade80; }
+    body.tema-noturno .erro { background: #3b1a1d; color: #fca5a5; }
+    body.tema-noturno .botao-apoio.perigo { color: #f87171; border-color: #5b2a2e; }
+    body.tema-noturno .botao-apoio.perigo:hover { background: #3b1a1d; }
 
-    body.tema-escuro .fin-upload-area,
-    body.tema-escuro .modal-pdf-guia,
-    body.tema-escuro .fin-linha-datas,
-    body.tema-escuro .fin-comprovante-atual {
+    body.tema-noturno .fin-upload-area,
+    body.tema-noturno .modal-pdf-guia,
+    body.tema-noturno .fin-linha-datas,
+    body.tema-noturno .fin-comprovante-atual {
       background: var(--superficie-2);
       border-color: var(--borda);
     }
 
-    body.tema-escuro .fin-upload-area:hover,
-    body.tema-escuro .tabela-financeiro tbody tr:hover,
-    body.tema-escuro .btn-anexo-fin,
-    body.tema-escuro .btn-acao-editar:hover,
-    body.tema-escuro .fin-aviso-edicao {
+    body.tema-noturno .fin-upload-area:hover,
+    body.tema-noturno .tabela-financeiro tbody tr:hover,
+    body.tema-noturno .btn-anexo-fin,
+    body.tema-noturno .btn-acao-editar:hover,
+    body.tema-noturno .fin-aviso-edicao {
       background: #1a2540;
       border-color: #33425f;
     }
 
-    body.tema-escuro .fin-upload-ajuda { color: var(--apoio); }
-    body.tema-escuro .fin-upload-nome { background: #10331f; color: #4ade80; }
-    body.tema-escuro .fin-aviso-edicao,
-    body.tema-escuro .btn-acao-editar { color: var(--texto); }
-    body.tema-escuro .btn-acao-editar { border-color: #33425f; }
-    body.tema-escuro .btn-acao-excluir { border-color: #5b2a2e; color: #f87171; }
-    body.tema-escuro .btn-acao-excluir:hover { background: #3b1a1d; }
-    body.tema-escuro .fin-desc-id { color: #7d8aa3; }
+    body.tema-noturno .fin-upload-ajuda { color: var(--apoio); }
+    body.tema-noturno .fin-upload-nome { background: #10331f; color: #4ade80; }
+    body.tema-noturno .fin-aviso-edicao,
+    body.tema-noturno .btn-acao-editar { color: var(--texto); }
+    body.tema-noturno .btn-acao-editar { border-color: #33425f; }
+    body.tema-noturno .btn-acao-excluir { border-color: #5b2a2e; color: #f87171; }
+    body.tema-noturno .btn-acao-excluir:hover { background: #3b1a1d; }
+    body.tema-noturno .fin-desc-id { color: #7d8aa3; }
 
     /* Cores fixas aplicadas via style inline pelo JavaScript */
-    body.tema-escuro [style*="background:#eefbf0"] { background: #10331f !important; border-color: #1f5c38 !important; }
-    body.tema-escuro [style*="background:#fdf2f2"] { background: #3b1a1d !important; border-color: #6b2a30 !important; }
-    body.tema-escuro [style*="background:#eef4fd"] { background: #1a2540 !important; border-color: #33425f !important; }
-    body.tema-escuro [style*="color:#14213d"] { color: var(--texto) !important; }
-    body.tema-escuro [style*="color:#1e7b34"] { color: #4ade80 !important; }
-    body.tema-escuro [style*="color:#b3261e"],
-    body.tema-escuro [style*="color:#922b21"] { color: #f87171 !important; }
-    body.tema-escuro [style*="color:#555"] { color: var(--apoio) !important; }
+    body.tema-noturno [style*="background:#eefbf0"] { background: #10331f !important; border-color: #1f5c38 !important; }
+    body.tema-noturno [style*="background:#fdf2f2"] { background: #3b1a1d !important; border-color: #6b2a30 !important; }
+    body.tema-noturno [style*="background:#eef4fd"] { background: #1a2540 !important; border-color: #33425f !important; }
+    body.tema-noturno [style*="color:#14213d"] { color: var(--texto) !important; }
+    body.tema-noturno [style*="color:#1e7b34"] { color: #4ade80 !important; }
+    body.tema-noturno [style*="color:#b3261e"],
+    body.tema-noturno [style*="color:#922b21"] { color: #f87171 !important; }
+    body.tema-noturno [style*="color:#555"] { color: var(--apoio) !important; }
 
     .abas-cadastro-pessoas {
       display: flex;
@@ -2684,10 +2715,10 @@
       border-color: var(--borda); color: var(--texto); font-weight: 700;
       box-shadow: inset 0 3px 0 var(--dourado);
     }
-    body.tema-escuro .elenco-abas .elenco-aba {
+    body.tema-noturno .elenco-abas .elenco-aba {
       background: transparent; border-color: transparent; color: var(--apoio);
     }
-    body.tema-escuro .elenco-abas .elenco-aba[aria-selected="true"] {
+    body.tema-noturno .elenco-abas .elenco-aba[aria-selected="true"] {
       background: var(--superficie); border-color: var(--borda); color: var(--texto);
     }
     .elenco-abas .elenco-aba:disabled { opacity: 1; cursor: not-allowed; }
@@ -2766,7 +2797,7 @@
       font-weight: bold;
     }
     .elenco-detalhes-marca img { width: 48px; height: 48px; object-fit: contain; }
-    body.tema-escuro .elenco-detalhes-marca { color: var(--texto); }
+    body.tema-noturno .elenco-detalhes-marca { color: var(--texto); }
     .elenco-detalhes-topo {
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
       margin-bottom: 16px;
@@ -2786,9 +2817,9 @@
     .elenco-detalhes-dados dt { color: var(--apoio); font-size: 12px; }
     .elenco-detalhes-dados dd { margin: 2px 0 0; }
     .elenco-detalhes-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-    body.tema-escuro .elenco-pessoa-card { background: var(--superficie-2); }
-    body.tema-escuro .elenco-pessoa-foto,
-    body.tema-escuro .elenco-detalhes-foto { background: var(--fundo); border-color: #33425f; }
+    body.tema-noturno .elenco-pessoa-card { background: var(--superficie-2); }
+    body.tema-noturno .elenco-pessoa-foto,
+    body.tema-noturno .elenco-detalhes-foto { background: var(--fundo); border-color: #33425f; }
     .elenco-form .campos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
     .elenco-form .campo,
     .elenco-form .campo.curto,
@@ -2984,14 +3015,14 @@
       display: block;
     }
 
-    body.tema-escuro .cadastro-resumo-obrigatoriedade,
-    body.tema-escuro .time-card-campeonato,
-    body.tema-escuro .time-atleta-item {
+    body.tema-noturno .cadastro-resumo-obrigatoriedade,
+    body.tema-noturno .time-card-campeonato,
+    body.tema-noturno .time-atleta-item {
       background: var(--superficie-2);
       border-color: #33425f;
     }
 
-    body.tema-escuro .cadastro-foto-placeholder {
+    body.tema-noturno .cadastro-foto-placeholder {
       background: var(--superficie-2);
       border-color: #33425f;
       color: var(--apoio);
@@ -3085,17 +3116,17 @@
       white-space: nowrap;
     }
 
-    body.tema-escuro .campeonato-card {
+    body.tema-noturno .campeonato-card {
       background: var(--superficie-2);
       border-color: #33425f;
     }
 
-    body.tema-escuro .campeonato-card:hover {
+    body.tema-noturno .campeonato-card:hover {
       border-color: var(--fundo-forte);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
 
-    body.tema-escuro .campeonato-escudo-placeholder {
+    body.tema-noturno .campeonato-escudo-placeholder {
       background: var(--fundo);
       border-color: #33425f;
     }
@@ -3104,7 +3135,13 @@
 <body>
   <script>
     // Aplica o tema salvo antes de desenhar a tela, evitando "piscar" o claro.
-    try { if (localStorage.getItem('aeuv-interno-tema') === 'escuro') document.body.classList.add('tema-escuro'); } catch (e) {}
+    // Temas: 'claro' | 'grafite' | 'escuro'. 'tema-noturno' acompanha grafite/escuro
+    // (carrega todas as regras de estilo escuro; a variacao e so nas variaveis).
+    try {
+      var temaSalvo = localStorage.getItem('aeuv-interno-tema');
+      if (temaSalvo === 'escuro') document.body.classList.add('tema-escuro', 'tema-noturno');
+      else if (temaSalvo === 'grafite') document.body.classList.add('tema-grafite', 'tema-noturno');
+    } catch (e) {}
   </script>
   <header class="topo">
     <div class="topo-conteudo">
@@ -3180,6 +3217,7 @@
       terminal: '<path d="M12 19h8m-16-2 6-6-6-6"/>',
       moon: '<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
       sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2m-7.07-17.07 1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+      contrast: '<circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12z"/>',
       chevron: '<path d="m6 9 6 6 6-6"/>'
     };
     const ICONES_MODULOS = {
@@ -3198,16 +3236,42 @@
 
     (function configurarAlternanciaTema() {
       var botao = document.getElementById('alternarTema');
-      function sincronizar() {
-        var escuro = document.body.classList.contains('tema-escuro');
-        botao.innerHTML = iconeSistema_(escuro ? 'sun' : 'moon');
-        botao.title = escuro ? 'Voltar ao modo claro' : 'Ativar modo escuro';
-        botao.setAttribute('aria-pressed', escuro ? 'true' : 'false');
+      // Ciclo de 3 temas: claro -> grafite -> escuro -> claro.
+      var ORDEM_TEMAS = ['claro', 'grafite', 'escuro'];
+      var ICONE_TEMA = { claro: 'sun', grafite: 'contrast', escuro: 'moon' };
+      // Rotulo = proximo tema do ciclo (o que o clique vai ativar).
+      var PROXIMO_ROTULO = {
+        claro: 'Ativar modo grafite',
+        grafite: 'Ativar modo escuro',
+        escuro: 'Voltar ao modo claro'
+      };
+
+      function temaAtual_() {
+        if (document.body.classList.contains('tema-escuro')) return 'escuro';
+        if (document.body.classList.contains('tema-grafite')) return 'grafite';
+        return 'claro';
       }
-      botao.addEventListener('click', function () {
-        var escuro = document.body.classList.toggle('tema-escuro');
-        try { localStorage.setItem('aeuv-interno-tema', escuro ? 'escuro' : 'claro'); } catch (e) {}
+
+      function aplicarTema_(tema) {
+        document.body.classList.remove('tema-escuro', 'tema-grafite', 'tema-noturno');
+        if (tema === 'escuro') document.body.classList.add('tema-escuro', 'tema-noturno');
+        else if (tema === 'grafite') document.body.classList.add('tema-grafite', 'tema-noturno');
+        try { localStorage.setItem('aeuv-interno-tema', tema); } catch (e) {}
         sincronizar();
+      }
+
+      function sincronizar() {
+        var tema = temaAtual_();
+        // O icone mostra o tema ATUAL; o title indica o proximo do ciclo.
+        botao.innerHTML = iconeSistema_(ICONE_TEMA[tema] || 'sun');
+        botao.title = PROXIMO_ROTULO[tema] || 'Alternar tema';
+        botao.setAttribute('aria-label', botao.title);
+      }
+
+      botao.addEventListener('click', function () {
+        var atual = temaAtual_();
+        var proximo = ORDEM_TEMAS[(ORDEM_TEMAS.indexOf(atual) + 1) % ORDEM_TEMAS.length];
+        aplicarTema_(proximo);
       });
       sincronizar();
     })();
