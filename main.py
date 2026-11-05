@@ -831,8 +831,10 @@ class IfutBot:
             time.sleep(self.config.portability_popup_wait_seconds)
         self._fill_person_form(record)
         if self.config.dry_run:
+            # Nao fecha o modal nem volta a aba: deixa o formulario preenchido na
+            # tela para conferencia (tentar trocar de aba com o modal aberto dispara
+            # a trava anti-vazamento de contexto).
             self.logger.info("DRY RUN ativo: formulario preenchido, sem clicar em salvar.")
-            self._restore_default_team_tab(record)
             return "Formulario preenchido em DRY RUN"
         self._click(self.selectors.get("actions", "save_button"))
         duplicate_message = self._wait_for_include_outcome()
@@ -1265,6 +1267,10 @@ class IfutBot:
         if record.requires_identity:
             self._fill(self.selectors.get("form", "birthdate_input"), record.birthdate)
             self._fill(self.selectors.get("form", "cpf_input"), record.cpf)
+        elif record.is_commission:
+            # Comissao: preenche o RG/documento ANTES do cargo (ordem natural do
+            # formulario: nome -> RG -> cargo). O campo e o mesmo name$='-document'.
+            self._fill_commission_document(record)
         self._fill_commission_role(record)
 
     def _confirmar_recorte_imagem(self) -> None:
@@ -1302,19 +1308,131 @@ class IfutBot:
     def _fill_commission_role(self, record: Record) -> None:
         if not record.is_commission:
             return
-        role_selector = self.selectors.get_optional("form", "role_input")
+        # Abre o q-select pelo CONTROL/label (o input role=combobox e readonly e
+        # nao passa em element_to_be_clickable). Preferencia: control > label > input.
+        role_selector = (self.selectors.get_optional("form", "role_field_control")
+                         or self.selectors.get_optional("form", "role_input")
+                         or self.selectors.get_optional("form", "role_combobox_input"))
         role_option_selector = self.selectors.get_optional("form", "role_default_option")
+        role_any_option = self.selectors.get_optional("form", "role_any_option")
         if role_selector and role_option_selector:
-            self.logger.info("Clicando em Posição")
-            self._click(role_selector)
-            time.sleep(0.8)
-            self.logger.info("Clicando na opção Treinador")
-            self._click(role_option_selector)
-            self.logger.info("Aguardando 3 segundos para estabilizar o combobox...")
-            time.sleep(3.0)
+            self._select_commission_role(role_selector, role_option_selector, role_any_option)
+
+    def _fill_commission_document(self, record: Record) -> None:
+        """Preenche o RG/documento da comissao (campo name$='-document').
+
+        Aceita o valor em record.cpf (e o campo que o TXT/teste usa para o documento).
+        Ignora vazio ou o marcador 'NAO NECESSARIO'. Nao derruba o cadastro se falhar.
+        """
         document_selector = self.selectors.get_optional("form", "commission_document_input")
-        if document_selector and record.cpf and normalize_text(record.cpf) != "nao necessario":
-            self._fill(document_selector, record.cpf)
+        valor = (record.cpf or "").strip()
+        if not document_selector or not valor or normalize_text(valor) == "nao necessario":
+            return
+        try:
+            self.logger.info("Preenchendo o RG/documento da comissao")
+            self._fill(document_selector, valor)
+        except Exception as exc:
+            self.logger.warning("Nao foi possivel preencher o RG/documento da comissao: %s", exc)
+
+    def _select_commission_role(self, role_selector: str, role_option_selector: str,
+                                role_any_option: str | None = None) -> None:
+        """Seleciona o cargo da comissao no combobox (q-select do layout 2026).
+
+        O TXT da solicitacao nao traz o cargo, entao usamos o padrao configurado
+        (role_default_option = 'Treinador'). O iFut EXIGE um cargo: sem ele a
+        inclusao da comissao nao conclui. Por isso o metodo e tolerante e garante
+        o preenchimento: abre a lista com retry; escolhe 'Treinador'; se esse texto
+        nao renderizar, cai para a primeira opcao disponivel (role_any_option).
+        """
+        from selenium.common.exceptions import (
+            ElementClickInterceptedException,
+            StaleElementReferenceException,
+            TimeoutException as _Timeout,
+        )
+        from selenium.webdriver.support.ui import WebDriverWait
+
+        def _abrir_combobox() -> bool:
+            # Clica no control/label do q-select via JS (o input e readonly e nao
+            # passa em element_to_be_clickable; por isso NAO usamos self._click aqui).
+            try:
+                by, value = self._locator(role_selector)
+                els = self.driver.find_elements(by, value)
+                alvo = next((e for e in els if e.is_displayed()), els[0] if els else None)
+                if not alvo:
+                    return False
+                self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", alvo)
+                self.driver.execute_script("arguments[0].click();", alvo)
+                return True
+            except Exception as exc:
+                self.logger.warning("Nao foi possivel clicar no campo de cargo: %s", exc)
+                return False
+
+        # Abre a lista: ate 3 tentativas, pois o q-select as vezes nao abre no 1o clique.
+        opcao_alvo = None
+        for tentativa in range(3):
+            self.logger.info("Abrindo o combobox de cargo (tentativa %d)", tentativa + 1)
+            if not _abrir_combobox():
+                time.sleep(0.6)
+                continue
+            # Espera curta a opcao padrao aparecer; senao, qualquer opcao da lista.
+            try:
+                WebDriverWait(self.driver, 4).until(
+                    ec.element_to_be_clickable(self._locator(role_option_selector))
+                )
+                opcao_alvo = role_option_selector
+                break
+            except _Timeout:
+                if role_any_option and self._has_visible(role_any_option):
+                    self.logger.info("Opcao 'Técnico' nao encontrada; usando a primeira opcao da lista.")
+                    opcao_alvo = role_any_option
+                    break
+                self.logger.info("Lista de cargos ainda nao apareceu; tentando reabrir.")
+                time.sleep(0.6)
+
+        if not opcao_alvo:
+            self.logger.warning(
+                "Combobox de cargo nao abriu/sem opcoes; seguindo sem definir o cargo. "
+                "Atencao: o iFut pode recusar a inclusao sem cargo."
+            )
+            return
+
+        def _clicar_opcao(sel: str) -> bool:
+            try:
+                by, value = self._locator(sel)
+                els = self.driver.find_elements(by, value)
+                alvo = next((e for e in els if e.is_displayed()), els[0] if els else None)
+                if not alvo:
+                    return False
+                self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", alvo)
+                self.driver.execute_script("arguments[0].click();", alvo)
+                return True
+            except (ElementClickInterceptedException, StaleElementReferenceException) as exc:
+                self.logger.info("Falha ao clicar na opcao de cargo (%s).", type(exc).__name__)
+                return False
+
+        # Escolhe a opcao (clique JS direto), com recuo para a primeira opcao caso
+        # a padrao fique indisponivel na hora do clique.
+        selecionou = False
+        for tentativa in range(3):
+            self.logger.info("Selecionando o cargo da comissao")
+            if _clicar_opcao(opcao_alvo):
+                selecionou = True
+                break
+            if opcao_alvo == role_option_selector and role_any_option and self._has_visible(role_any_option):
+                opcao_alvo = role_any_option
+            time.sleep(0.6)
+
+        if not selecionou:
+            self.logger.warning("Nao foi possivel confirmar a selecao do cargo da comissao.")
+            return
+
+        # Espera curta para o combobox fechar/estabilizar antes de prosseguir.
+        try:
+            WebDriverWait(self.driver, 4).until(
+                ec.invisibility_of_element_located(self._locator(role_option_selector))
+            )
+        except _Timeout:
+            time.sleep(1.0)
 
     def _find_duplicate_message(self) -> str | None:
         duplicate_selector = self.selectors.get_optional("messages", "duplicate_rg_card")
