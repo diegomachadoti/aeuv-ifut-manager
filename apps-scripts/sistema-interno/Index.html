@@ -1638,10 +1638,10 @@
     .modal-fin-caixa {
       background: #ffffff;
       border-radius: 14px;
-      padding: 24px;
+      padding: 20px 24px;
       max-width: 620px;
       width: 100%;
-      max-height: 92vh;
+      max-height: 94vh;
       overflow-y: auto;
       box-shadow: 0 20px 45px -10px rgba(20, 33, 61, 0.35);
       border: 1px solid var(--borda);
@@ -1658,8 +1658,8 @@
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid var(--borda);
-      padding-bottom: 12px;
-      margin-bottom: 18px;
+      padding-bottom: 10px;
+      margin-bottom: 14px;
     }
 
     .modal-fin-cabecalho h3 {
@@ -1690,7 +1690,7 @@
     .fin-grupo-campos {
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 11px;
     }
 
     .fin-linha-2 {
@@ -1741,7 +1741,7 @@
 
     .fin-upload-area {
       display: block;
-      padding: 18px 14px;
+      padding: 12px 14px;
       border: 2px dashed #8995aa;
       border-radius: 10px;
       text-align: center;
@@ -1765,9 +1765,9 @@
     }
 
     .fin-upload-icone {
-      font-size: 26px;
+      font-size: 20px;
       display: block;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     .fin-upload-titulo {
@@ -14799,23 +14799,27 @@
         + '        </select>'
         + '      </div>'
         + '    </div>'
-        + '    <div class="fin-campo">'
-        + '      <label for="finOrigem">Origem / Competição *</label>'
-        + '      <select id="finOrigem" required>'
+        + '    <div class="fin-linha-2">'
+        + '      <div class="fin-campo">'
+        + '        <label for="finOrigem">Origem / Competição *</label>'
+        + '        <select id="finOrigem" required>'
         + (d.competicoes || []).map(function(c) { return '<option value="' + escapar(c) + '">' + escapar(c) + '</option>'; }).join('')
-        + '      </select>'
+        + '        </select>'
+        + '      </div>'
+        + '      <div class="fin-campo">'
+        + '        <label for="finCategoria">Categoria do Lançamento *</label>'
+        + '        <select id="finCategoria" required></select>'
+        + '      </div>'
         + '    </div>'
-        + '    <div class="fin-campo">'
-        + '      <label for="finCategoria">Categoria do Lançamento *</label>'
-        + '      <select id="finCategoria" required></select>'
-        + '    </div>'
-        + '    <div class="fin-campo">'
-        + '      <label for="finDesc">Descrição detalhada / Histórico *</label>'
-        + '      <input type="text" id="finDesc" placeholder="Ex: Pagamento da taxa de arbitragem da 2ª rodada" required>'
-        + '    </div>'
-        + '    <div class="fin-campo">'
-        + '      <label for="finValor">Valor (R$) *</label>'
-        + '      <input type="text" id="finValor" class="fin-input-valor" data-campo-valor-financeiro placeholder="R$ 0,00" inputmode="numeric" required autocomplete="off">'
+        + '    <div class="fin-linha-2">'
+        + '      <div class="fin-campo">'
+        + '        <label for="finDesc">Descrição detalhada / Histórico *</label>'
+        + '        <input type="text" id="finDesc" placeholder="Ex: Taxa de arbitragem da 2ª rodada" required>'
+        + '      </div>'
+        + '      <div class="fin-campo">'
+        + '        <label for="finValor">Valor (R$) *</label>'
+        + '        <input type="text" id="finValor" class="fin-input-valor" data-campo-valor-financeiro placeholder="R$ 0,00" inputmode="numeric" required autocomplete="off">'
+        + '      </div>'
         + '    </div>'
         + '    <div class="fin-linha-2">'
         + '      <div class="fin-campo">'
