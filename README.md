@@ -985,6 +985,94 @@ Se `logo` não existir, a logomarca é baixada de `logo_url` (link público do
 Drive) e salva reduzida. Para trocar a logo, substitua o arquivo ou apague-o
 para baixar de novo. Usa `reportlab` e `pillow` (em `requirements.txt`).
 
+### Julgamento de recurso (ART. 34)
+
+Quando uma equipe recorre de uma Nota Oficial, a automação monta a **prévia da
+nota de julgamento do recurso**. Ela não decide o recurso: confere as regras
+objetivas e sugere o resultado. A decisão de mérito é sempre da comissão
+(ART. 34 §5º).
+
+Passo a passo:
+
+1. Salve o arquivo recebido (PDF, DOCX, DOC ou TXT), por exemplo em
+   `downloads/sumulas/`.
+2. Gere a prévia informando a nota recorrida e a data/hora do recebimento:
+
+   ```bash
+   ./.venv/bin/python main.py --julgar-recurso "downloads/sumulas/Recurso - Paulo Henrique.pdf" --nota-recorrida 10 --recebido "05/11/2026 21:29"
+   # opcionais
+   ./.venv/bin/python main.py --julgar-recurso "downloads/sumulas/Recurso - Paulo Henrique.pdf" --nota-recorrida 10 --recebido "05/11/2026 21:29" \
+       --publicada "04/11/2026 14:52" --recorrente "PAULO HENRIQUE SILVA SANTOS" --anexo "downloads/sumulas/video.mp4" --process-local-only
+   ```
+
+   `--nota-recorrida` aceita o número, o protocolo `SUM-...` ou o caminho do
+   TXT. Sem `--publicada`, o prazo é contado a partir da data escrita na nota
+   ("Uberlândia/MG, ..."). Se o recurso chegar no último dia, o prazo sai como
+   `[A DEFINIR]`. `--process-local-only` não publica a prévia no Drive.
+3. Revise o TXT gerado em `downloads/sumulas/notas-oficiais/` (nome terminado
+   em `(JULGAMENTO DE RECURSO).txt`). Substitua os `[A DEFINIR PELA COMISSÃO]`
+   pela decisão.
+4. Efetive com `./.venv/bin/python main.py --gerar-pdf-nota <número>`.
+
+O que a automação verifica:
+
+| Item | Regra |
+| --- | --- |
+| Texto do recurso | Extraído para `REC-... (texto extraído).txt` na pasta de recursos (PyMuPDF para PDF; DOCX lido direto; DOC via Word/pywin32) |
+| Prazo | 48h após a publicação da nota recorrida (ART. 34 §1º I) |
+| Legitimidade | Recorrente punido na nota ou representante da equipe (presidente/diretor/responsável) |
+| Assinatura | Exigida (ART. 34 §1º IV); a falta é apontada, a comissão pode aceitar mesmo assim |
+| Provas | Anexos e prazo de 72h após o jogo (ART. 34 §2º) |
+| Recurso coletivo | Apontado: o recurso é individual (ART. 34 §6º) |
+| Pena | Comparada com a faixa do artigo: mínima, acima do mínimo, fora da faixa ou fixa |
+| Histórico | Primariedade/reincidência pelo controle de punições e retroativas; outra nota para o mesmo fato é sinalizada (possível dupla punição) |
+| Pedidos | Efeito suspensivo (indeferido: ART. 34 §4º), anulação, redução, conversão em advertência |
+| Argumentos | Primariedade, ausência de lesão, calor do jogo, CBJD, amadorismo, proporcionalidade, confissão: cada um recebe resposta pelo regulamento |
+
+O PDF sai com a marca d'água **RASCUNHO** enquanto houver `[A DEFINIR]`, com as
+seções DO RECURSO, DA ADMISSIBILIDADE, DO PEDIDO DE EFEITO SUSPENSIVO, DO MÉRITO
+e DA DECISÃO. Rodar de novo para o mesmo recurso reaproveita o protocolo e o
+número da nota.
+
+#### Pasta e controle de recursos
+
+Na leitura, o recurso sai do local onde foi salvo: ele é **movido para
+`downloads/sumulas/recursos/` e renomeado** com um protocolo sequencial por ano.
+Os anexos de `--anexo` também são movidos e renomeados:
+
+```text
+downloads/sumulas/recursos/
+├── CONTROLE DE RECURSOS - AEUV.txt
+├── REC-2026-001 - NOTA 010-2026 - AJAX - PAULO HENRIQUE SILVA SANTOS.pdf
+├── REC-2026-001 - NOTA 010-2026 - AJAX - PAULO HENRIQUE SILVA SANTOS (texto extraído).txt
+└── REC-2026-001 - NOTA 010-2026 - AJAX - PAULO HENRIQUE SILVA SANTOS - ANEXO 01.jpg
+```
+
+O `CONTROLE DE RECURSOS - AEUV.txt` tem uma linha por recurso, com colunas
+separadas por `|`: RECURSO (protocolo), RECEBIDO, NOTA RECORRIDA, EQUIPE,
+RECORRENTE, NOTA JULGAMENTO, ADMISSIBILIDADE (itens pendentes ou `OK`), SUGESTÃO,
+DECISÃO, SITUAÇÃO, ARQUIVO, ANEXOS, ARQUIVO ORIGINAL e HASH.
+
+- **SITUAÇÃO** começa como `EM ANÁLISE`. Passa a `JULGADO` ao efetivar a nota de
+  julgamento sem pendências (`--gerar-pdf-nota`); a DECISÃO é lida da linha "No
+  mérito:" da nota. A comissão pode editar a coluna, e o valor é mantido nas
+  próximas atualizações.
+- O **HASH** identifica o conteúdo. Reanalisar o mesmo arquivo, pelo caminho
+  antigo (já movido) ou pelo novo, reaproveita o protocolo, os anexos e o
+  número da nota. Uma cópia idêntica do arquivo é removida.
+- A pasta pode ser trocada em `config.ini`:
+
+  ```ini
+  [recursos]
+  pasta = downloads/sumulas/recursos
+  ```
+
+A nota de recurso é marcada como `JULGAMENTO DE RECURSO` e **não altera o
+controle de punições nem a súmula**: `--gerar-pdf-nota` só a publica, e
+`--atualizar-controle-punicoes` a ignora. Assim ela não substitui as punições
+da nota recorrida. Se o recurso for provido e a pena mudar, ajuste o TXT da nota
+recorrida e efetive-a de novo com `--gerar-pdf-nota`.
+
 ### Controle de punições da associação
 
 Depois de cada Nota Oficial (regras fixas ou IA), os punidos da seção **DA

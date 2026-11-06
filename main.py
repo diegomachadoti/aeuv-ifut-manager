@@ -2046,6 +2046,38 @@ def build_argument_parser() -> argparse.ArgumentParser:
              "ou protocolo da sumula (SUM-...)",
     )
     parser.add_argument(
+        "--julgar-recurso",
+        metavar="ARQUIVO",
+        help="Gera a PRÉVIA da nota de julgamento de um recurso (ART. 34) a partir do arquivo do recurso "
+             "(PDF, DOCX, DOC ou TXT). Exige --nota-recorrida e --recebido",
+    )
+    parser.add_argument(
+        "--nota-recorrida",
+        metavar="NUMERO",
+        help="Com --julgar-recurso: numero da nota oficial recorrida (ex.: 10), caminho do TXT ou protocolo SUM-...",
+    )
+    parser.add_argument(
+        "--recebido",
+        metavar="\"DD/MM/AAAA HH:MM\"",
+        help="Com --julgar-recurso: data e hora em que o recurso foi recebido pela organizacao",
+    )
+    parser.add_argument(
+        "--publicada",
+        metavar="\"DD/MM/AAAA HH:MM\"",
+        help="Com --julgar-recurso: data e hora de publicacao da nota recorrida (sem isso usa a data da nota)",
+    )
+    parser.add_argument(
+        "--recorrente",
+        metavar="NOME",
+        help="Com --julgar-recurso: nome do punido que recorre (se nao for identificado no texto do recurso)",
+    )
+    parser.add_argument(
+        "--anexo",
+        action="append",
+        metavar="ARQUIVO",
+        help="Com --julgar-recurso: arquivo de prova enviado junto com o recurso (pode repetir)",
+    )
+    parser.add_argument(
         "--gerar-pdf-regulamento",
         metavar="ARQUIVO",
         help="Gera o PDF do regulamento (layout AEUV, com assinatura do Presidente) a partir do arquivo texto, "
@@ -2167,8 +2199,13 @@ def validar_modos_cli(parser: argparse.ArgumentParser, args: argparse.Namespace)
         parser.error("--ajuste exige --analisar-sumulas")
     if args.oficio_final and not args.gerar_pdf_oficio:
         parser.error("--oficio-final exige --gerar-pdf-oficio")
+    opcoes_recurso = [args.nota_recorrida, args.recebido, args.publicada, args.recorrente, args.anexo]
+    if any(opcoes_recurso) and not args.julgar_recurso:
+        parser.error("--nota-recorrida, --recebido, --publicada, --recorrente e --anexo exigem --julgar-recurso")
+    if args.julgar_recurso and not (args.nota_recorrida and args.recebido):
+        parser.error("--julgar-recurso exige --nota-recorrida NUMERO e --recebido \"DD/MM/AAAA HH:MM\"")
     if args.process_local_only and ativos and not (
-        args.analisar_sumulas or args.login_only or args.update_all_team_counts
+        args.analisar_sumulas or args.login_only or args.update_all_team_counts or args.julgar_recurso
     ):
         parser.error("--process-local-only nao pode ser combinado com " + ativos[0])
     filtros_financeiros = [args.origem, args.emenda, args.periodo, args.data_inicio, args.data_fim]
@@ -2392,6 +2429,19 @@ def main() -> int:
 
         config = AppConfig(Path(args.config))
         regerar_pdf(args.gerar_pdf_nota, Path(args.config), configure_logging(config.log_path))
+        return 0
+    if args.julgar_recurso:
+        from recurso_julgamento import julgar_recurso
+
+        config = AppConfig(Path(args.config))
+        logger = configure_logging(config.log_path)
+        try:
+            julgar_recurso(args.julgar_recurso, args.nota_recorrida, args.recebido, publicada=args.publicada,
+                           recorrente=args.recorrente, anexos=args.anexo, config_path=Path(args.config),
+                           logger=logger, publicar_previa=not args.process_local_only)
+        except (ValueError, FileNotFoundError, RuntimeError) as exc:
+            logger.error("[RECURSO] %s", exc)
+            return 1
         return 0
     if args.analisar_sumulas:
         from sumula_disciplinar import processar_sumulas

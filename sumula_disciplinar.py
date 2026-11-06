@@ -1148,6 +1148,8 @@ def nota_existente_da_sumula(notas_dir: Path, sumula: "Sumula") -> tuple[int, Pa
             continue
         if protocolo not in conteudo:
             continue
+        if "JULGAMENTO DE RECURSO" in conteudo:
+            continue  # nota de recurso nao e a nota da sumula
         achado = re.search(r"Nº (\d+)-", txt.name)
         numero = int(achado.group(1)) if achado else 0
         if melhor is None or numero > melhor[0]:

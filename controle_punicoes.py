@@ -577,6 +577,11 @@ def registrar_nota(nota_txt: Path, sumula=None, config_path: Path = DEFAULT_CONF
     """Registra no controle as punicoes de uma nota; falhas sao logadas sem interromper o fluxo."""
     try:
         config = ConfigControle.carregar(config_path)
+        import nota_pdf
+
+        if nota_pdf.eh_nota_recurso(nota_txt.read_text(encoding="utf-8-sig", errors="ignore")):
+            logger.info("[CONTROLE] %s e julgamento de recurso; controle nao alterado", nota_txt.name)
+            return []
         sumula = sumula or localizar_sumula(nota_txt, config)
         if sumula is None:
             logger.warning("[CONTROLE] Sumula da nota %s nao encontrada; controle nao atualizado", nota_txt.name)
@@ -597,6 +602,10 @@ def reconstruir_controle(config_path: Path = DEFAULT_CONFIG_PATH, logger: loggin
     situacoes = {_chave(p): p.situacao for p in ler_controle(config.arquivo)}
     por_sumula: dict[str, tuple[int, list[Punicao]]] = {}
     for nota_txt in config.notas_dir.glob("NOTA OFICIAL*.txt"):
+        import nota_pdf
+
+        if nota_pdf.eh_nota_recurso(nota_txt.read_text(encoding="utf-8-sig", errors="ignore")):
+            continue  # julgamento de recurso nao substitui as punicoes da nota recorrida
         sumula = localizar_sumula(nota_txt, config)
         if sumula is None:
             logger.warning("[CONTROLE] Sumula da nota %s nao encontrada; nota ignorada", nota_txt.name)

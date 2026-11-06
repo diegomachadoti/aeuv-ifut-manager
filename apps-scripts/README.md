@@ -1635,6 +1635,18 @@ decisão que ainda pode mudar. A publicação acontece quando a comissão regera
 PDF final (`python main.py --gerar-pdf-nota <número>`), ou em lote com
 `--publicar-drive` — [veja o fluxo no README do projeto principal](../README.md#publicação-no-drive).
 
+#### Notas de julgamento de recurso
+
+Quando uma equipe recorre de uma nota (ART. 34), a comissão gera a nota de
+julgamento com `python main.py --julgar-recurso "ARQUIVO" --nota-recorrida N
+--recebido "DD/MM/AAAA HH:MM"` e a efetiva com `--gerar-pdf-nota`. Ela
+aparece nesta tela como as demais notas, identificada no nome por
+`(JULGAMENTO DE RECURSO)`. Ela não tem punidos próprios: as punições continuam
+vinculadas à nota recorrida, e o controle de punições não é alterado pela nota
+de recurso. O passo a passo está no painel "Como as Notas Oficiais são geradas e
+publicadas" da tela e em
+[Julgamento de recurso](../README.md#julgamento-de-recurso-art-34).
+
 #### Colunas escolhidas
 
 | Coluna | Por que está ali |

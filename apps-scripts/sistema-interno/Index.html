@@ -3918,7 +3918,10 @@
         { cmd: 'python main.py --analisar-sumulas --process-local-only', desc: 'Analisa as súmulas já baixadas, sem novo download.' },
         { cmd: 'python main.py --gerar-pdf-nota 5', desc: 'EFETIVA a nota pelo número: grava a punição no controle, publica a nota oficial (substitui a prévia) e move a súmula para Analisada.' },
         { cmd: 'python main.py --gerar-pdf-nota "SUM-PROTOCOLO"', desc: 'Efetiva a nota pelo protocolo da súmula.' },
-        { cmd: 'python main.py --atualizar-controle-punicoes', desc: 'Reconstrói o TXT/PDF de punições pelas notas e publica o controle no Drive.' }
+        { cmd: 'python main.py --atualizar-controle-punicoes', desc: 'Reconstrói o TXT/PDF de punições pelas notas e publica o controle no Drive.' },
+        { cmd: 'python main.py --julgar-recurso "downloads/sumulas/Recurso - NOME.pdf" --nota-recorrida 10 --recebido "05/11/2026 21:29"', desc: 'Recurso (ART. 34): extrai o texto do recurso (PDF/DOCX/DOC/TXT), confere prazo de 48h, legitimidade, assinatura, provas (72h), pena x faixa do regulamento e reincidência, e gera a PRÉVIA da nota de julgamento. O mérito sai como [A DEFINIR PELA COMISSÃO] com a sugestão automática. O recurso e os anexos são movidos para downloads/sumulas/recursos/ com nome padronizado (REC-AAAA-NNN - NOTA ... - EQUIPE - RECORRENTE) e registrados no CONTROLE DE RECURSOS - AEUV.txt.' },
+        { cmd: 'python main.py --julgar-recurso "ARQUIVO" --nota-recorrida 10 --recebido "05/11/2026 21:29" --publicada "04/11/2026 14:52" --recorrente "NOME" --anexo "prova.jpg" --process-local-only', desc: 'Opções do recurso: hora exata de publicação da nota recorrida, nome do recorrente (se o texto não identificar), provas anexas (pode repetir) e sem publicar a prévia no Drive.' },
+        { cmd: 'python main.py --gerar-pdf-nota 13', desc: 'Efetiva a nota de julgamento do recurso após a revisão: publica a nota final. NÃO altera o controle de punições nem a súmula.' }
       ] },
       { titulo: '4. Regulamento / forma de disputa / publicação', itens: [
         { cmd: 'python main.py --gerar-pdf-regulamento "regulamento/regulamento-7-super-liga-união-2026"', desc: 'Gera o PDF assinado do regulamento e publica no Drive.' },
@@ -3964,6 +3967,7 @@
     const COMANDOS_AVISOS = [
       '--analisar-sumulas gera só a PRÉVIA (aparece como "Em análise") e não grava punição no controle. A punição só entra no controle ao efetivar com --gerar-pdf-nota (com a nota final, a súmula também passa a Analisada); e só conta no histórico do atleta após ser Aprovada no Controle de punições.',
       '--ajuste reinterpreta a pena apenas no modo --ia; no modo regras fixas ele entra como observação na nota (não altera a pena).',
+      '--julgar-recurso gera só uma sugestão: a decisão de mérito é sempre da comissão. A nota de recurso (marcada "JULGAMENTO DE RECURSO") nunca entra no controle de punições; se o recurso for provido e a pena mudar, ajuste a nota recorrida e efetive-a de novo com --gerar-pdf-nota.',
       '--process-local-only evita o download inicial, mas NÃO garante ausência de escrita remota.',
       'dry_run é configurado no INI; não impede remoções, publicação/movimentação no Drive ou planilha. Não existe flag --dry-run.',
       '--ia envia dados ao provedor configurado e pode gerar cobrança conforme o serviço.',
@@ -8964,6 +8968,7 @@
         + '<div class="info-punicoes-cmd">python main.py --gerar-pdf-nota 5  <span class="info-punicoes-coment"># efetiva a nota nº 5</span><br>python main.py --atualizar-controle-punicoes<br>python main.py --publicar-drive</div></li>'
         + '<li><strong>Aprovação da diretoria (nesta tela):</strong> cada punição precisa ser <em>Aprovada</em> aqui para contar no histórico disciplinar do atleta (suspensões e reincidência). Enquanto não aprovada, aparece como <em>Não aprovada</em> e não suspende ninguém.</li>'
         + '<li><strong>Cumprimento:</strong> a <em>Situação</em> acompanha o cumprimento — <em>A cumprir</em> enquanto restam jogos de suspensão e <em>Cumprida</em> ao final.</li>'
+        + '<li><strong>Recurso (ART. 34):</strong> não suspende a pena. A nota de julgamento do recurso (<code>python main.py --julgar-recurso ...</code>, veja <em>Notas oficiais</em>) <strong>não</strong> grava nada aqui; se o recurso for provido e a pena mudar, a comissão ajusta a nota recorrida e a efetiva de novo com <code>--gerar-pdf-nota</code>, o que atualiza este controle.</li>'
         + '</ol>'
         + '<p class="info-punicoes-nota">Punições marcadas como <strong>Retroativa</strong> vieram de notas oficiais antigas importadas; só as aprovadas contam no histórico. Use <strong>Desaprovar</strong> para reverter uma aprovação e <strong>Excluir</strong> (somente administrador) para remover um registro.</p>'
         + '</div>'
@@ -11624,6 +11629,19 @@
         + '<br><span class="info-punicoes-coment"># Alternativa: reenviar os documentos ao Drive em lote</span>'
         + '<br>python main.py --publicar-drive</div>'
         + 'A publicação exige acesso ao Drive configurado na automação; os arquivos vão para a subpasta <strong>Notas Oficiais</strong> da pasta das súmulas.</li>'
+        + '<li><strong>Recurso (ART. 34):</strong> a equipe tem <strong>48h</strong> após a publicação da nota para recorrer (provas em até 72h após o jogo; recurso sem efeito suspensivo). '
+        + 'Salve o arquivo recebido (PDF, DOCX, DOC ou TXT) e gere a prévia da <em>nota de julgamento</em>, informando a nota recorrida e a data/hora do recebimento. '
+        + 'A automação extrai o texto, confere prazo, legitimidade, assinatura, provas, pena x faixa do regulamento e reincidência, e responde aos argumentos usuais. '
+        + 'O mérito sai como <code>[A DEFINIR PELA COMISSÃO]</code>, com a sugestão em vermelho.'
+        + '<div class="info-punicoes-cmd">python main.py --julgar-recurso "downloads/sumulas/Recurso - NOME.pdf" --nota-recorrida 10 --recebido "05/11/2026 21:29"'
+        + '<br><span class="info-punicoes-coment"># Opcionais: hora exata da publicação da nota recorrida, recorrente, provas e sem publicar no Drive</span>'
+        + '<br>... --publicada "04/11/2026 14:52" --recorrente "NOME" --anexo "prova.jpg" --process-local-only'
+        + '<br><span class="info-punicoes-coment"># Após a comissão decidir no TXT, efetive pelo número da nota de recurso</span>'
+        + '<br>python main.py --gerar-pdf-nota 13</div>'
+        + 'A nota de recurso <strong>não altera o Controle de punições</strong> nem a súmula. Se o recurso for provido e a pena mudar, ajuste a nota recorrida e efetive-a de novo. '
+        + 'Na leitura, o recurso e os anexos são movidos para <code>downloads/sumulas/recursos/</code> e renomeados com protocolo '
+        + '(<code>REC-2026-001 - NOTA 010-2026 - EQUIPE - RECORRENTE.pdf</code>), e cada recurso é registrado no '
+        + '<code>CONTROLE DE RECURSOS - AEUV.txt</code> com a situação <em>EM ANÁLISE</em>, que passa a <em>JULGADO</em> ao efetivar a nota de julgamento.</li>'
         + '<li><strong>Consulta nesta tela:</strong> use a busca e os filtros para localizar a nota e <strong>Ver nota</strong> para consultar os detalhes. '
         + 'Os punidos e suas situações vêm do <strong>Controle de punições</strong>, vinculados pelo número da nota. '
         + '<em>Sem punição registrada</em> indica ausência de registros vinculados no controle, não necessariamente ausência de decisão no documento.</li>'

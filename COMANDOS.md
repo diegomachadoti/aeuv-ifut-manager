@@ -141,6 +141,18 @@ python main.py --atualizar-controle-punicoes
 
 Reconstrói TXT/PDF de punições pelas notas e publica o controle no Drive.
 
+### Julgamento de recurso (ART. 34)
+
+```bash
+python main.py --julgar-recurso "downloads/sumulas/Recurso - Paulo Henrique.pdf" --nota-recorrida 10 --recebido "05/11/2026 21:29"
+```
+
+Gera a PRÉVIA da nota de julgamento do recurso (PDF, DOCX, DOC ou TXT). Na leitura, o recurso e os anexos são **movidos para `downloads/sumulas/recursos/` e renomeados** no padrão `REC-AAAA-NNN - NOTA 010-2026 - EQUIPE - RECORRENTE.pdf` (anexos: `... - ANEXO 01.jpg`; texto: `... (texto extraído).txt`). Cada recurso ganha uma linha no `CONTROLE DE RECURSOS - AEUV.txt` (protocolo, recebimento, nota recorrida, nota de julgamento, admissibilidade, sugestão, decisão, situação EM ANÁLISE/JULGADO, arquivo original e hash). A pasta pode ser trocada em `[recursos] pasta` no `config.ini`. As verificações automáticas conferem prazo (48h), legitimidade, assinatura, provas (72h), recurso coletivo, pena x faixa do regulamento, primariedade e dupla punição pelo mesmo fato. Os argumentos usuais (primariedade, ausência de lesão, CBJD, calor do jogo etc.) recebem resposta com base no regulamento. A decisão de mérito sai como `[A DEFINIR PELA COMISSÃO]`, com a sugestão automática ao lado.
+
+Opções: `--publicada "04/11/2026 14:52"` (hora exata de publicação da nota recorrida; sem ela é usada só a data da nota), `--recorrente "NOME"` (quando o nome não é identificado no texto), `--anexo arquivo` (provas; pode repetir) e `--process-local-only` (não publica a prévia no Drive). Rodar de novo para o mesmo recurso (mesmo conteúdo, pelo caminho antigo ou pelo novo) reaproveita o protocolo REC e o número da nota.
+
+Depois de revisar o TXT, efetive com `python main.py --gerar-pdf-nota N`: o recurso passa a `JULGADO` no controle de recursos, com a decisão de mérito. A nota de recurso **não altera o controle de punições nem a súmula**. Se o recurso for aceito e a pena mudar, ajuste a nota recorrida e efetive-a de novo.
+
 ## 4. Regulamento / forma de disputa / publicação
 
 ```bash

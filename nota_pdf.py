@@ -32,6 +32,8 @@ SIMBOLOS_ASCII = {"➡": "->", "⬇": "v", "⚠": "!", "⛔": "X"}
 SECOES = (
     "DOS FATOS", "DO ENQUADRAMENTO LEGAL", "DA PUNIÇÃO", "DA PROPORCIONALIDADE DA DECISÃO",
     "DISPOSIÇÕES FINAIS", "RELATÓRIO OFICIAL DA ARBITRAGEM",
+    # Notas de julgamento de recurso (ART. 34)
+    "DO RECURSO", "DA ADMISSIBILIDADE", "DO PEDIDO DE EFEITO SUSPENSIVO", "DO MÉRITO", "DA DECISÃO",
 )
 
 
@@ -148,6 +150,18 @@ def tem_pendencias(texto: str) -> bool:
 def _eh_secao(linha: str) -> bool:
     limpa = linha.strip().rstrip(":")
     return limpa in SECOES
+
+
+MARCADOR_RECURSO = "JULGAMENTO DE RECURSO"
+
+
+def eh_nota_recurso(texto: str) -> bool:
+    """Nota de julgamento de recurso (ART. 34): nao alimenta o controle de punicoes nem fecha sumula.
+
+    Assim ela nao substitui, no controle, as punicoes da nota recorrida (o controle guarda a nota de
+    maior numero por sumula) e nao e confundida com a nota da sumula numa reanalise.
+    """
+    return MARCADOR_RECURSO in texto.upper()
 
 
 def _eh_maiuscula(linha: str) -> bool:
@@ -476,6 +490,22 @@ def regerar_pdf(alvo: str, config_path: Path = DEFAULT_CONFIG_PATH, logger: logg
     config = ConfigPdf.carregar(config_path)
     nota_txt = localizar_nota(alvo, config.notas_dir)
     destino = gerar_pdf_nota(nota_txt, config, logger)
+    texto = nota_txt.read_text(encoding="utf-8-sig")
+    if eh_nota_recurso(texto):
+        # Julgamento de recurso: so publica. O controle de punicoes e a sumula ficam como estao;
+        # se o recurso for provido (pena alterada), ajuste a nota recorrida/controle manualmente.
+        import publicacao_drive
+
+        publicacao_drive.publicar_nota(nota_txt, config_path, logger)
+        try:
+            import recurso_julgamento
+
+            recurso_julgamento.marcar_recurso_julgado(nota_txt, config_path, logger)
+        except Exception as exc:  # o controle de recursos nao pode impedir a efetivacao da nota
+            logger.warning("[RECURSO] Falha ao atualizar o controle de recursos: %s", exc)
+        logger.info("[RECURSO] %s e julgamento de recurso: controle de punicoes e sumula nao alterados. Se a pena "
+                    "foi alterada, ajuste a nota recorrida e rode --gerar-pdf-nota nela.", nota_txt.name)
+        return destino
     # A nota pode ter sido revisada (ex.: [A DEFINIR] decidido): atualiza o controle de punicoes.
     import controle_punicoes
 

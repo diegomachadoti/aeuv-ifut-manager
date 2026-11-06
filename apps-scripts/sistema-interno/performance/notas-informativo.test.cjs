@@ -36,6 +36,18 @@ test('informativo explica origem, comandos, revisão e limites da consulta', () 
   ]) assert(bloco.includes(texto), texto);
 });
 
+test('informativo explica o julgamento de recurso (ART. 34) sem alterar o controle', () => {
+  const bloco = contexto.informativoNotas();
+  for (const texto of [
+    'Recurso (ART. 34)',
+    'python main.py --julgar-recurso',
+    '--nota-recorrida 10 --recebido',
+    '--publicada',
+    '--anexo',
+    'não altera o Controle de punições'
+  ]) assert(bloco.includes(texto), texto);
+});
+
 test('informativo fica fora do status substituído em sucesso, vazio ou erro', () => {
   const inicioModulo = html.indexOf("      if (modulo.tipo === 'notas') {");
   const fimModulo = html.indexOf("      if (modulo.tipo === 'regulamentos')", inicioModulo);
