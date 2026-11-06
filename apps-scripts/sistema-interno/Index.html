@@ -3823,6 +3823,11 @@
       }
 
       if (modulo.tipo === 'sumulas') {
+        // Entrada pelo menu: reseta página e linhas expandidas (a busca e os
+        // selects já nascem vazios). O "Atualizar" chama carregarSumulas() direto
+        // e preserva o estado visual atual.
+        sumulasPaginacao.pagina = 0;
+        sumulasAbertas = {};
         conteudo.innerHTML = cabecalho + blocoCarregando('statusSumulas');
         carregarSumulas();
         return;
@@ -3848,6 +3853,9 @@
       }
 
       if (modulo.tipo === 'financeiro') {
+        // Entrada pelo menu: reseta os filtros (busca/tipo/origem/categoria/período/datas).
+        // O botão "Atualizar" chama carregarFinanceiro() direto e mantém os filtros.
+        financeiroFiltros = { busca: '', tipo: '', categoria: '', origem: '', periodo: '', dataInicio: '', dataFim: '' };
         conteudo.innerHTML = cabecalho
           + '<div id="areaFinanceiro">' + blocoCarregando('statusFinanceiro') + '</div>';
         carregarFinanceiro();
