@@ -176,7 +176,7 @@ test('páginas autorizada e restrita usam favicon próprio sem ler dados do Driv
     assert.equal(modo, 'FULL'); scopes++;
   }};
   const autorizado = a.ctx.doGet();
-  assert.equal(autorizado.favicon, 'https://portal.aeuv.org/assets/meu-controle/icon-192.png');
+  assert.equal(autorizado.favicon, 'https://cdn.jsdelivr.net/gh/diegomachadoti/aeuv-ifut-manager@4c92b0d/docs/assets/meu-controle/icon-192.png');
   assert.equal(autorizado.title, 'Diego Machado — Controle pessoal');
   a.setEmail('outra@example.com');
   const restrito = a.ctx.doGet();

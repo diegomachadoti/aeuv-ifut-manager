@@ -65,21 +65,33 @@ na raiz do projeto, com Pillow instalado. Não copiar esse script para o Apps Sc
 
 ### Aplicar no sistema já publicado
 
-1. Publique **somente as imagens** de `docs/assets/meu-controle/` no site estático
-   do projeto. Confira que `https://portal.aeuv.org/assets/meu-controle/icon-192.png`
-   abre diretamente a imagem, sem login. A alteração local não publica esses arquivos
-   automaticamente. Não publique planilhas, dados privados ou credenciais.
-2. Se usar outra hospedagem HTTPS pública, ajuste `CP.faviconUrl` em **WebApp.gs**.
-   O Google Apps Script exige `.setFaviconUrl()` com uma imagem pública; uma tag
-   `link rel="icon"` no HTML interno não troca o ícone da aba externa do aplicativo.
-3. Copie **Index.html**, **Estilos.html** e **WebApp.gs** para o projeto Apps Script
-   existente. Mantenha os outros arquivos e as permissões atuais.
-4. Use **Implantar → Gerenciar implantações → Editar → Nova versão → Implantar**.
-   Mantenha a mesma URL e abra/recarregue a aba para conferir a marca e o favicon.
-   Se o navegador mantiver o ícone anterior em cache, feche e reabra a aba.
+O favicon agora usa **jsDelivr**, servindo somente o PNG já publicado no repositório,
+com URL fixada no commit que contém a imagem:
+
+https://cdn.jsdelivr.net/gh/diegomachadoti/aeuv-ifut-manager@4c92b0d/docs/assets/meu-controle/icon-192.png
+
+O endereço foi verificado: HTTP 200, `image/png`, 192 × 192 pixels. Não depende da
+branch configurada no GitHub Pages, de publicar o portal ou de unir branches.
+Mudanças em outras branches não substituem essa imagem, pois a URL aponta ao commit.
+Não altera nem publica os outros Apps Scripts. O repositório/commit precisa continuar
+acessível publicamente; não exponha dados privados ou credenciais para hospedar o logo.
+
+1. Para corrigir somente o favicon, copie **WebApp.gs** atualizado para o projeto
+   **controle-pessoal** no Apps Script. Index/Estilos já instalados não precisam mudar.
+2. Use **Implantar → Gerenciar implantações → Editar → Nova versão → Implantar**.
+   Mantenha a mesma URL e as permissões atuais.
+3. Feche e reabra a aba; teste em janela anônima se o navegador mantiver o ícone antigo.
+
+O Google Apps Script exige `.setFaviconUrl()` com uma imagem pública HTTPS; uma tag
+`link rel="icon"` no HTML interno não troca o ícone da aba externa do aplicativo.
+O Drive não é recomendado para favicon: links de compartilhamento podem mostrar
+uma página, exigir login ou redirecionar em vez de entregar a imagem diretamente.
+Não torne a pasta de dados privada do sistema pública para hospedar o ícone.
+Para trocar o logo no futuro, publique o novo PNG, teste a URL CDN com o novo commit
+e ajuste somente `CP.faviconUrl`; a nova URL também evita reutilizar o cache antigo.
 
 Não executar `prepararSistema`, reimportar dados ou alterar os arquivos financeiros.
-A logo interna aparece mesmo se a imagem pública do favicon ainda não estiver publicada.
+A logo interna é SVG incorporado e continua independente da hospedagem do favicon.
 
 ### Loading próprio
 

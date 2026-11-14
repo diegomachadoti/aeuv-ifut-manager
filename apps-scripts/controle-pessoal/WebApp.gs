@@ -1,7 +1,8 @@
 const CP = Object.freeze({
   admin: 'deejaydiego@gmail.com',
   nome: 'Diego Machado — Controle pessoal',
-  faviconUrl: 'https://portal.aeuv.org/assets/meu-controle/icon-192.png',
+  // Imagem pública fixada no commit; independente do Pages e dos dados privados no Drive.
+  faviconUrl: 'https://cdn.jsdelivr.net/gh/diegomachadoti/aeuv-ifut-manager@4c92b0d/docs/assets/meu-controle/icon-192.png',
   pasta: 'Diego Machado - Controle Pessoal e Edificio Lisboa',
   pastaExistenteId: '1EcpSh4SOtasiFl4FW_HdG0zGm1D7sbXl',
   escopos: ['diego', 'iris', 'condominio'],
