@@ -793,7 +793,7 @@ pode declarar `grupo` para entrar num submenu.
 | `notas` | Notas oficiais; busca os dados com `listarNotas()`. |
 | `regulamentos` | Central de Documentos; busca os dados com `listarRegulamentos()` (identificadores mantidos por compatibilidade). |
 | `financeiro` | Financeiro e Prestação de Contas; controle de entradas/saídas, anexos e relatórios oficiais em PDF com `listarFinanceiro()`, `listarRelatoriosFinanceiros()` e `salvarLancamentoFinanceiro()`. |
-| `atas` | Atas de reuniões da associação ou campeonato; usa `listarAtas()`, `salvarAta()`, `exportarAtaPdf()` e `excluirAta()`. |
+| `atas` | Atas e comunicados: atas de reunião (associação ou campeonato) e comunicados gerais; usa `listarAtas()`, `salvarAta()`, `exportarAtaPdf()` e `excluirAta()`. |
 | `associados` | Cadastro de associados; usa `listarAssociados()` e `salvarAssociado()`. |
 | `equipes` | Equipes participantes; usa `listarEquipes()`, `salvarEquipe()` e `removerEquipe()`. |
 | `atletas` | Banco de Dados de Atletas; busca os dados com `listarAtletas()` (somente admin/diretoria). |
@@ -801,7 +801,7 @@ pode declarar `grupo` para entrar num submenu.
 
 Módulos publicados hoje: Início, Formulários (Súmula digital e Inscrição e
 portabilidade), Solicitações de Inscrições, Súmulas Enviadas, Notas oficiais,
-Central de Documentos, Controle de punições, Financeiro e Prestação de Contas, Atas de reuniões, Associados,
+Central de Documentos, Controle de punições, Financeiro e Prestação de Contas, Atas e comunicados, Associados,
 Banco de Dados de Atletas e Usuários do sistema.
 
 #### Relatórios financeiros publicados
@@ -1155,15 +1155,31 @@ obsoleto conhecido, jamais enumera a pasta. Falhas/interrupções podem deixar
 `previousId`, não apagar arquivos de cadastro/histórico. Não compartilhar
 arquivos de cópia publicamente nem expor seus IDs/URLs na tela.
 
-#### Atas de reuniões
+#### Atas e comunicados
 
-**Admin e Diretoria** podem consultar, criar atas e exportar PDFs. O editor
-contém tipo (Associação ou Campeonato), título, data, local, participantes e
-texto livre. Ao escolher **Campeonato**, aparece o campo obrigatório de
-competição, usando a mesma lista do módulo Financeiro; a escolha aparece na
-lista de atas e no cabeçalho e corpo do PDF. Atas antigas continuam legíveis,
-mesmo sem competição informada. O botão **Salvar ata** guarda o trabalho mesmo
-antes de exportar.
+O módulo (antes "Atas de reuniões") reúne qualquer documento oficial redigido
+pela associação. **Admin e Diretoria** podem consultar, criar documentos e
+exportar PDFs. O campo **Tipo** do editor define o documento:
+
+| Tipo | Valor salvo | No PDF | Competição | Campo de pessoas |
+| --- | --- | --- | --- | --- |
+| Ata de reunião · Associação | `associacao` | subtítulo ASSOCIAÇÃO | não se aplica | Participantes |
+| Ata de reunião · Campeonato | `campeonato` | subtítulo CAMPEONATO | obrigatória | Participantes |
+| Comunicado geral | `comunicado` | subtítulo COMUNICADO GERAL | opcional | Destinatários |
+
+A opção Texto livre foi removida. Registros antigos de tipo `livre` são tratados
+como Comunicado geral e passam a `comunicado` ao salvar, preservando o conteúdo.
+
+O rodapé de todos os tipos exibe somente o nome da associação, sem indicar o tipo de documento.
+
+O editor também tem título, data, local e texto (com a mesma legenda de
+formatação). A competição usa a mesma lista do módulo Financeiro e aparece na
+lista e no PDF quando informada. Os rótulos do formulário (competição,
+participantes/destinatários e texto) mudam conforme o tipo. Os tipos ficam em
+`ATAS_TIPOS` (`WebApp.gs`) e `ATAS_TIPOS_UI` (`Index.html`), que devem andar
+juntos. Atas antigas continuam legíveis, mesmo sem competição informada. O
+botão **Salvar** guarda o trabalho mesmo antes de exportar. Os PDFs são
+nomeados `Ata <id> - ...` ou `Comunicado geral <id> - ...`.
 **Admin e Diretoria** podem editar atas existentes; apenas o **Admin** pode
 excluí-las. Alterações não salvas exigem confirmação antes de sair do editor.
 

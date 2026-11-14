@@ -176,5 +176,60 @@ for (const [tipo, reuniao] of [['associacao', 'Associação'], ['campeonato', 'C
     assert(body.elements.some(item => item.images && item.images.length === 1));
     assert.equal(body.PageWidth, 595.28);
     assert.equal(body.PageHeight, 841.89);
+    assert.equal(footer.elements[0].text.text, 'AEUV (Associação Esportiva Uberlandense Varzeana)');
   });
 }
+
+function gerar(ata) {
+  const body = new Section(), header = new Section(), footer = new Section();
+  context.formatarDocumentoAta_({ getBody: () => body, addHeader: () => header, addFooter: () => footer },
+    Object.assign({ titulo: 'Aviso', data: '2026-11-13', local: '', participantes: '', texto: 'Texto.' }, ata));
+  return { body, header, footer, texts: body.elements.filter(item => item.text).map(item => item.text.text) };
+}
+
+test('comunicado usa rodapé geral, subtítulo e destinatários próprios; competição é opcional', () => {
+  const { body, header, footer, texts } = gerar({
+    tipo: 'comunicado', competicao: 'SUPER LIGA UNIÃO', participantes: 'Todas as equipes'
+  });
+  assert.equal(header.elements[1].text.text, 'Comissão Organizadora · Comunicado geral');
+  assert.equal(body.elements[1].text.text, 'COMUNICADO GERAL');
+  assert.equal(footer.elements[0].text.text, 'AEUV (Associação Esportiva Uberlandense Varzeana)');
+  assert(texts.includes('Competição: SUPER LIGA UNIÃO'));
+  assert(texts.includes('Destinatários: Todas as equipes'));
+  assert(!texts.some(t => t.startsWith('Participantes:')));
+  assert(texts.includes('Iure Costtiti'));
+  assert(!gerar({ tipo: 'comunicado', competicao: '' }).texts.some(t => t.startsWith('Competição:')));
+});
+
+test('texto livre antigo é exportado como Comunicado geral sem perder conteúdo', () => {
+  const { body, header, footer, texts } = gerar({ tipo: 'livre', participantes: 'Diretoria' });
+  assert.equal(header.elements[1].text.text, 'Comissão Organizadora · Comunicado geral');
+  assert.equal(body.elements[0].text.text, 'Aviso');
+  assert.equal(body.elements[1].text.text, 'COMUNICADO GERAL');
+  assert(texts.includes('Data: 13/11/2026'));
+  assert.equal(footer.elements[0].text.text, 'AEUV (Associação Esportiva Uberlandense Varzeana)');
+  assert(texts.includes('Destinatários: Diretoria'));
+  assert(texts.includes('Uberlândia/MG, 13 de novembro de 2026.'));
+});
+
+test('tipos e prefixos de arquivo: atas mantêm "Ata"; tipo desconhecido cai em associação', () => {
+  assert.equal(context.prefixoArquivoAta_('associacao'), 'Ata');
+  assert.equal(context.prefixoArquivoAta_('campeonato'), 'Ata');
+  assert.equal(context.prefixoArquivoAta_('comunicado'), 'Comunicado geral');
+  assert.equal(context.prefixoArquivoAta_('livre'), 'Comunicado geral');
+  assert.equal(context.tipoDocumentoAta_('xyz').rotulo, 'Associação');
+});
+
+test('editor oferece somente atas e Comunicado geral; registros livres são normalizados', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'Index.html'), 'utf8');
+  assert(html.includes("opcaoTipo('comunicado', 'Comunicado geral')"));
+  assert(!html.includes("opcaoTipo('livre'"));
+  const rowContext = vm.createContext({});
+  vm.runInContext(source.slice(source.indexOf('function ataDaLinha_('),
+    source.indexOf('function linhaAta_(')), rowContext);
+  const row = ['id', 'livre', 'Título', '2026-11-13', 'Local', 'Equipes', 'Conteúdo'];
+  const result = rowContext.ataDaLinha_(row);
+  assert.equal(result.tipo, 'comunicado');
+  assert.equal(result.texto, 'Conteúdo');
+});
+

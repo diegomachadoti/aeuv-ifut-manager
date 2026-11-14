@@ -3670,7 +3670,7 @@
         return;
       }
 
-      if (moduloAtual === 'atas' && !podeSairDaAta()) {
+      if (moduloAtual === 'atas' && !podeSairDaAta(function () { abrirModulo(id, busca, aprovacaoDescarte); })) {
         if (window.location.hash !== '#atas') window.location.hash = 'atas';
         return;
       }
@@ -13366,20 +13366,50 @@
     }
 
     /******************************************************
-     * ATAS DE REUNIOES (CLIENTE)
+     * ATAS E COMUNICADOS (CLIENTE)
      ******************************************************/
+
+    /**
+     * Tipos de documento (espelha ATAS_TIPOS do WebApp.gs). 'associacao'/'campeonato' sao atas de
+      * reuniao; 'comunicado' representa Comunicado geral.
+     */
+    const ATAS_TIPOS_UI = {
+      associacao: { rotulo: 'Ata · Associação', texto: 'Texto da ata', participantes: 'Participantes', competicao: '' },
+      campeonato: { rotulo: 'Ata · Campeonato', texto: 'Texto da ata', participantes: 'Participantes', competicao: 'obrigatoria' },
+      comunicado: { rotulo: 'Comunicado geral', texto: 'Texto do comunicado', participantes: 'Destinatários', competicao: 'opcional' }
+    };
+
+    function tipoAtaUi_(tipo) {
+      if (tipo === 'livre') tipo = 'comunicado'; // Compatibilidade com documentos antigos.
+      return ATAS_TIPOS_UI[tipo] || ATAS_TIPOS_UI.associacao;
+    }
 
     let atasDados = null;
     let ataEmEdicao = null;
     let ataAlterada = false;
     let ataOcupada = false;
+    let ataConfirmacaoSaida = false;
 
-    function podeSairDaAta() {
-      if (ataOcupada) return false;
+    function podeSairDaAta(aoConfirmar) {
+      if (ataOcupada || ataConfirmacaoSaida) return false;
       if (!ataAlterada) return true;
-      const sair = window.confirm('Existem alterações não salvas na ata. Deseja descartá-las?');
-      if (sair) ataAlterada = false;
-      return sair;
+      const contexto = ataEmEdicao;
+      const formulario = document.getElementById('formAta');
+      ataConfirmacaoSaida = true;
+      confirmarDialogo_({
+        titulo: 'Descartar alterações?',
+        mensagem: 'Existem alterações não salvas no documento. Ao sair, elas serão perdidas.',
+        confirmar: 'Descartar e sair',
+        cancelar: 'Continuar editando',
+        perigo: true
+      }).then(function (confirmado) {
+        ataConfirmacaoSaida = false;
+        if (!confirmado || ataOcupada || moduloAtual !== 'atas' || ataEmEdicao !== contexto
+            || document.getElementById('formAta') !== formulario) return;
+        ataAlterada = false;
+        if (typeof aoConfirmar === 'function') aoConfirmar();
+      });
+      return false;
     }
 
     window.addEventListener('beforeunload', function (evento) {
@@ -13412,7 +13442,7 @@
       const area = document.getElementById('areaAtas');
       const registros = atasDados.registros || [];
       area.innerHTML = '<div class="barra-acoes">'
-        + '<button type="button" class="botao-principal" id="novaAta">+ Nova ata</button>'
+        + '<button type="button" class="botao-principal" id="novaAta">+ Novo documento</button>'
         + '<button type="button" class="botao-apoio" id="atualizarAtas">Atualizar lista</button>'
         + '</div><div id="avisoAtas"></div>'
         + (registros.length
@@ -13420,7 +13450,7 @@
               return '<div class="ata-item">'
                 + '<h3>' + escapar(ata.titulo) + '</h3>'
                 + '<span class="apoio">' + escapar(ata.data.split('-').reverse().join('/'))
-                + ' · ' + (ata.tipo === 'campeonato' ? 'Campeonato' : 'Associação')
+                + ' · ' + escapar(tipoAtaUi_(ata.tipo).rotulo)
                 + (ata.competicao ? ' · ' + escapar(ata.competicao) : '')
                 + ' · Atualizada em ' + escapar(ata.atualizadoEm) + '</span>'
                 + '<div class="barra-acoes">'
@@ -13437,7 +13467,7 @@
                   + escapar(ata.id) + '">Excluir</button>' : '')
                 + '</div></div>';
             }).join('') + '</div>'
-          : '<div class="vazio">Nenhuma ata salva ainda.</div>');
+          : '<div class="vazio">Nenhum documento salvo ainda.</div>');
 
       document.getElementById('novaAta').addEventListener('click', function () { abrirEditorAta(); });
       document.getElementById('atualizarAtas').addEventListener('click', function () {
@@ -13485,17 +13515,17 @@
     }
 
     function abrirEditorAta(id, visualizar) {
-      if (!podeSairDaAta()) return;
+      if (!podeSairDaAta(function () { abrirEditorAta(id, visualizar); })) return;
       const ata = id && (atasDados.registros || []).filter(function (item) { return item.id === id; })[0];
       if (id && !ata) {
-        document.getElementById('avisoAtas').innerHTML = '<div class="erro">Ata não encontrada. Atualize a lista.</div>';
+        document.getElementById('avisoAtas').innerHTML = '<div class="erro">Documento não encontrado. Atualize a lista.</div>';
         return;
       }
       if (id && !visualizar && !atasDados.podeEditar) return;
       if (ata && ata.texto === undefined) {
         ataOcupada = true;
         const botao = document.querySelector('[data-' + (visualizar ? 'ver' : 'editar') + '-ata="' + id + '"]');
-        const progresso = progressoAta('Carregando ata...', botao);
+        const progresso = progressoAta('Carregando documento...', botao);
         google.script.run
           .withSuccessHandler(function (completa) {
             ataOcupada = false;
@@ -13521,22 +13551,32 @@
       }
       ataAlterada = false;
       ataEmEdicao = ata || null;
+      const tipoSalvo = ata && ata.tipo === 'livre' ? 'comunicado' : ata && ata.tipo;
+      const tipoAtual = ATAS_TIPOS_UI[tipoSalvo] ? tipoSalvo : 'associacao';
+      const regraTipo = tipoAtaUi_(tipoAtual);
+      const opcaoTipo = function (valor, rotulo) {
+        return '<option value="' + valor + '"' + (tipoAtual === valor ? ' selected' : '') + '>' + rotulo + '</option>';
+      };
       const area = document.getElementById('areaAtas');
       area.innerHTML = '<div class="barra-acoes"><button type="button" class="botao-apoio" id="voltarAtas">← Voltar à lista</button></div>'
         + '<form class="ata-editor" id="formAta">'
-        + '<h3>' + (somenteLeitura ? 'Consultar ata' : ata ? 'Editar ata' : 'Nova ata') + '</h3>'
+        + '<h3>' + (somenteLeitura ? 'Consultar documento' : ata ? 'Editar documento' : 'Novo documento') + '</h3>'
         + '<div class="campos">'
         + '<div class="campo largo"><label for="ataTitulo">Título *</label><input id="ataTitulo" maxlength="160" required value="'
         + escapar(ata ? ata.titulo : '') + '"></div>'
-        + '<div class="campo curto"><label for="ataTipo">Reunião *</label><select id="ataTipo">'
-        + '<option value="associacao"' + (ata && ata.tipo === 'campeonato' ? '' : ' selected') + '>Associação</option>'
-        + '<option value="campeonato"' + (ata && ata.tipo === 'campeonato' ? ' selected' : '') + '>Campeonato</option></select></div>'
+        + '<div class="campo curto"><label for="ataTipo">Tipo *</label><select id="ataTipo">'
+        + '<optgroup label="Ata de reunião">'
+        + opcaoTipo('associacao', 'Associação') + opcaoTipo('campeonato', 'Campeonato') + '</optgroup>'
+        + '<optgroup label="Outros documentos">'
+        + opcaoTipo('comunicado', 'Comunicado geral') + '</optgroup></select></div>'
         + '<div class="campo curto"><label for="ataData">Data *</label><input id="ataData" required '
         + atributosDataHora_('date', ata ? ata.data : new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
           .toISOString().slice(0, 10)) + '></div>'
         + '<div class="campo largo" id="ataCampoCompeticao"'
-        + (ata && ata.tipo === 'campeonato' ? '' : ' hidden')
-        + '><label for="ataCompeticao">Competição *</label><select id="ataCompeticao">'
+        + (regraTipo.competicao ? '' : ' hidden')
+        + '><label for="ataCompeticao" id="ataCompeticaoRotulo">'
+        + (regraTipo.competicao === 'obrigatoria' ? 'Competição *' : 'Competição (opcional)')
+        + '</label><select id="ataCompeticao">'
         + '<option value="">Selecione a competição</option>'
         + competicoes.map(function (nome) {
           return '<option value="' + escapar(nome) + '"'
@@ -13544,9 +13584,11 @@
         }).join('') + '</select></div>'
         + '<div class="campo largo"><label for="ataLocal">Local</label><input id="ataLocal" maxlength="200" value="'
         + escapar(ata ? ata.local : '') + '"></div>'
-        + '<div class="campo cheio"><label for="ataParticipantes">Participantes</label><textarea id="ataParticipantes" maxlength="5000" style="min-height:70px;">'
+        + '<div class="campo cheio"><label for="ataParticipantes" id="ataParticipantesRotulo">' + regraTipo.participantes
+        + '</label><textarea id="ataParticipantes" maxlength="5000" style="min-height:70px;">'
         + escapar(ata ? ata.participantes : '') + '</textarea></div>'
-        + '<div class="campo cheio"><label for="ataTexto">Texto da ata *</label><textarea id="ataTexto" maxlength="40000" required aria-describedby="ataFormatacao">'
+        + '<div class="campo cheio"><label for="ataTexto" id="ataTextoRotulo">' + regraTipo.texto
+        + ' *</label><textarea id="ataTexto" maxlength="40000" required aria-describedby="ataFormatacao">'
         + escapar(ata ? ata.texto : '') + '</textarea>'
         + '<aside class="ata-formatacao" id="ataFormatacao" aria-labelledby="ataFormatacaoTitulo">'
         + '<strong id="ataFormatacaoTitulo">Legenda de formatação do PDF</strong>'
@@ -13554,27 +13596,31 @@
         + '<li><code>&gt; ART 1: Disposições</code><span>Comece a linha com <strong>&gt;</strong> para criar uma faixa azul-clara com texto azul em negrito.</span></li>'
         + '<li><code>- Primeiro item</code><span>Comece a linha com <strong>-</strong> para criar um tópico com marcador. Use uma linha para cada item.</span></li>'
         + '<li><code>Prazo até **20 de outubro**.</code><span>Coloque o trecho entre <strong>**</strong> e <strong>**</strong> para aplicar negrito azul; nas faixas escuras, o texto permanece branco.</span></li></ul>'
-        + '<p>Os marcadores não aparecem no PDF. Linhas sem marcadores são texto normal. Salve a ata e clique em <strong>Exportar PDF</strong> para aplicar a formatação.</p>'
+        + '<p>Os marcadores não aparecem no PDF. Linhas sem marcadores são texto normal. Salve o documento e clique em <strong>Exportar PDF</strong> para aplicar a formatação.</p>'
         + '</aside></div>'
         + '</div><div class="acoes-formulario">'
-        + (somenteLeitura ? '' : '<button type="submit" class="botao-principal" id="salvarAta">Salvar ata</button>')
+        + (somenteLeitura ? '' : '<button type="submit" class="botao-principal" id="salvarAta">Salvar</button>')
         + (ata ? '<button type="button" class="botao-apoio" id="exportarAtaEditor">Exportar PDF</button>' : '')
         + (somenteLeitura ? '' : '<span class="apoio">Salve sempre que quiser guardar o andamento da redação.</span>')
         + '</div>'
         + '<div id="statusAta" role="status"></div></form>';
       document.getElementById('voltarAtas').addEventListener('click', function () {
-        if (podeSairDaAta()) montarListaAtas();
+        if (podeSairDaAta(montarListaAtas)) montarListaAtas();
       });
       document.getElementById('formAta').addEventListener('input', function () { ataAlterada = true; });
       document.getElementById('formAta').addEventListener('change', function () { ataAlterada = true; });
       document.getElementById('ataTipo').addEventListener('change', function () {
-        const campeonato = this.value === 'campeonato';
-        document.getElementById('ataCampoCompeticao').hidden = !campeonato;
+        const regra = tipoAtaUi_(this.value);
+        document.getElementById('ataCampoCompeticao').hidden = !regra.competicao;
+        document.getElementById('ataCompeticaoRotulo').textContent =
+          regra.competicao === 'obrigatoria' ? 'Competição *' : 'Competição (opcional)';
         const seletor = document.getElementById('ataCompeticao');
-        seletor.required = campeonato;
-        if (!campeonato) seletor.value = '';
+        seletor.required = regra.competicao === 'obrigatoria';
+        if (!regra.competicao) seletor.value = '';
+        document.getElementById('ataParticipantesRotulo').textContent = regra.participantes;
+        document.getElementById('ataTextoRotulo').textContent = regra.texto + ' *';
       });
-      document.getElementById('ataCompeticao').required = !!(ata && ata.tipo === 'campeonato');
+      document.getElementById('ataCompeticao').required = regraTipo.competicao === 'obrigatoria';
       if (somenteLeitura) {
         document.querySelectorAll('#formAta input, #formAta select, #formAta textarea')
           .forEach(function (campo) { campo.disabled = true; });
@@ -13608,7 +13654,7 @@
         texto: document.getElementById('ataTexto').value
       };
       ataOcupada = true;
-      const progresso = progressoAta('Salvando ata...', document.getElementById('salvarAta'));
+      const progresso = progressoAta('Salvando documento...', document.getElementById('salvarAta'));
       document.querySelectorAll('#formAta input, #formAta textarea, #formAta select, #formAta button')
         .forEach(function (campo) { campo.disabled = true; });
       google.script.run
@@ -13667,9 +13713,9 @@
     }
 
     function excluirAtaDaLista(id) {
-      if (ataOcupada || !window.confirm('Excluir esta ata? Esta ação não pode ser desfeita.')) return;
+      if (ataOcupada || !window.confirm('Excluir este documento? Esta ação não pode ser desfeita.')) return;
       ataOcupada = true;
-      const progresso = progressoAta('Excluindo ata...', document.querySelector('[data-excluir-ata="' + id + '"]'));
+      const progresso = progressoAta('Excluindo documento...', document.querySelector('[data-excluir-ata="' + id + '"]'));
       google.script.run
         .withSuccessHandler(function () {
           ataOcupada = false;

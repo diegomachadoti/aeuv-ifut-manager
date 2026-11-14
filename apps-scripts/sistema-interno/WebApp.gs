@@ -1,4 +1,4 @@
-/******************************************************
+﻿/******************************************************
  * SISTEMA INTERNO AEUV
  * Projeto independente
  *
@@ -381,10 +381,10 @@ const MODULOS = [
   },
   {
     id: 'atas',
-    nome: 'Atas de reuniões',
+    nome: 'Atas e comunicados',
     icone: '🗒️',
     tipo: 'atas',
-    descricao: 'Redação, consulta e exportação das atas da associação e dos campeonatos.',
+    descricao: 'Redação, consulta e exportação de atas de reunião e comunicados gerais da associação e dos campeonatos.',
     perfis: ['admin', 'diretoria']
   },
   {
@@ -14730,7 +14730,7 @@ function gerarReciboAssociado(payload) {
 }
 
 /******************************************************
- * ATAS DE REUNIOES
+ * ATAS E COMUNICADOS (atas de reuniao, comunicados e texto livre)
  ******************************************************/
 
 const ATAS_COLUNAS = [
@@ -14934,7 +14934,7 @@ function ataDaLinha_(linha) {
     : String(linha[3] || '');
   return {
     id: String(linha[0] || ''),
-    tipo: String(linha[1] || ''),
+    tipo: linha[1] === 'livre' ? 'comunicado' : String(linha[1] || ''),
     titulo: String(linha[2] || ''),
     data: data,
     local: String(linha[4] || ''),
@@ -14998,12 +14998,18 @@ function salvarAta(payload) {
   const dados = payload || {};
   const id = String(dados.id || '').trim();
   if (id && sessao.usuario.perfil !== 'admin' && sessao.usuario.perfil !== 'diretoria') {
-    throw new Error('Somente Administrador e Diretoria podem editar atas existentes.');
+    throw new Error('Somente Administrador e Diretoria podem editar documentos existentes.');
   }
-  const tipo = String(dados.tipo || '').trim();
-  const competicao = tipo === 'campeonato' ? String(dados.competicao || '').trim() : '';
-  if (tipo === 'campeonato' && FINANCEIRO_COMPETICOES_ORIGEM.slice(1).indexOf(competicao) === -1) {
+  const tipoRecebido = String(dados.tipo || '').trim();
+  const tipo = tipoRecebido === 'livre' ? 'comunicado' : tipoRecebido;
+  const regraCompeticao = ATAS_TIPOS[tipo] ? ATAS_TIPOS[tipo].competicao : '';
+  const competicao = regraCompeticao ? String(dados.competicao || '').trim() : '';
+  if (regraCompeticao === 'obrigatoria' && FINANCEIRO_COMPETICOES_ORIGEM.slice(1).indexOf(competicao) === -1) {
     throw new Error('Selecione uma competição da lista para a ata do campeonato.');
+  }
+  if (regraCompeticao === 'opcional' && competicao
+      && FINANCEIRO_COMPETICOES_ORIGEM.slice(1).indexOf(competicao) === -1) {
+    throw new Error('Selecione uma competição da lista ou deixe o campo em branco.');
   }
   const titulo = String(dados.titulo || '').trim();
   const data = String(dados.data || '').trim();
@@ -15012,10 +15018,10 @@ function salvarAta(payload) {
   const texto = String(dados.texto || '').trim();
   const partes = data.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const dia = partes && new Date(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3]));
-  if (['associacao', 'campeonato'].indexOf(tipo) === -1 || !titulo || !partes || !dia
+  if (!Object.prototype.hasOwnProperty.call(ATAS_TIPOS, tipo) || !titulo || !partes || !dia
       || dia.getFullYear() !== Number(partes[1]) || dia.getMonth() !== Number(partes[2]) - 1
       || dia.getDate() !== Number(partes[3]) || !texto) {
-    throw new Error('Preencha tipo, título, data válida e texto da ata.');
+    throw new Error('Preencha tipo, título, data válida e texto do documento.');
   }
   if (titulo.length > 160 || local.length > 200 || participantes.length > 5000 || texto.length > 40000) {
     throw new Error('Texto muito longo: título até 160, local até 200, participantes até 5.000 e ata até 40.000 caracteres.');
@@ -15027,7 +15033,7 @@ function salvarAta(payload) {
     const aba = abaAtas_();
     const anterior = id ? localizarAta_(aba, id) : null;
     if (anterior && anterior.ata.revisao !== String(dados.revisao || '')) {
-      throw new Error('Esta ata foi alterada por outra pessoa. Recarregue antes de salvar.');
+      throw new Error('Este documento foi alterado por outra pessoa. Recarregue antes de salvar.');
     }
     const agora = formatarDataHora_(new Date());
     const ata = {
@@ -15053,7 +15059,7 @@ function salvarAta(payload) {
 function excluirAta(id) {
   const sessao = exigirAcessoAtas_();
   if (sessao.usuario.perfil !== 'admin') {
-    throw new Error('Somente o Administrador pode excluir atas.');
+    throw new Error('Somente o Administrador pode excluir documentos.');
   }
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -15065,7 +15071,7 @@ function excluirAta(id) {
       const arquivos = DriveApp.getFolderById(pastaId).getFiles();
       while (arquivos.hasNext()) {
         const arquivo = arquivos.next();
-        if (arquivo.getName().indexOf('Ata ' + encontrada.ata.id + ' - ') === 0) {
+        if (arquivo.getName().indexOf(' ' + encontrada.ata.id + ' - ') > 0) {
           arquivo.setTrashed(true);
         }
       }
@@ -15163,10 +15169,36 @@ function adicionarTextoAta_(corpo, texto) {
   });
 }
 
+/**
+ * Tipos de documento do modulo "Atas e comunicados". 'associacao' e 'campeonato' sao atas de
+ * reuniao (valores antigos preservados); 'comunicado' representa Comunicado geral.
+ * competicao: 'obrigatoria' | 'opcional' | '' (nao se aplica).
+ */
+const ATAS_TIPOS = {
+  associacao: { rotulo: 'Associação', documento: 'Ata de reunião', subtitulo: 'ASSOCIAÇÃO',
+    participantes: 'Participantes', competicao: '' },
+  campeonato: { rotulo: 'Campeonato', documento: 'Ata de reunião', subtitulo: 'CAMPEONATO',
+    participantes: 'Participantes', competicao: 'obrigatoria' },
+  comunicado: { rotulo: 'Comunicado geral', documento: 'Comunicado geral', subtitulo: 'COMUNICADO GERAL',
+    participantes: 'Destinatários', competicao: 'opcional' }
+};
+
+function tipoDocumentoAta_(tipo) {
+  if (tipo === 'livre') tipo = 'comunicado'; // Compatibilidade com documentos antigos.
+  return ATAS_TIPOS[tipo] || ATAS_TIPOS.associacao;
+}
+
+/** Prefixo do arquivo exportado: "Ata" ou "Comunicado geral". */
+function prefixoArquivoAta_(tipo) {
+  const documento = tipoDocumentoAta_(tipo).documento;
+  return documento === 'Ata de reunião' ? 'Ata' : documento;
+}
+
 function formatarDocumentoAta_(documento, ata) {
   const azul = '#1F3A68';
   const cinza = '#5A6270';
-  const reuniao = ata.tipo === 'campeonato' ? 'Campeonato' : 'Associação';
+  const tipoDoc = tipoDocumentoAta_(ata.tipo);
+  const reuniao = tipoDoc.rotulo;
   const corpo = documento.getBody();
   corpo.setPageWidth(595.28).setPageHeight(841.89);
   corpo.setMarginTop(95).setMarginBottom(68).setMarginLeft(57).setMarginRight(57);
@@ -15191,7 +15223,7 @@ function formatarDocumentoAta_(documento, ata) {
   cabecalho.appendHorizontalRule();
 
   const rodape = documento.addFooter();
-  const linhaRodape = rodape.appendParagraph(ASSOCIACAO_NOME + ' · Ata de reunião');
+  const linhaRodape = rodape.appendParagraph(ASSOCIACAO_NOME);
   linhaRodape.editAsText().setFontSize(8).setForegroundColor(cinza);
 
   const titulo = corpo.appendParagraph(ata.titulo)
@@ -15199,16 +15231,20 @@ function formatarDocumentoAta_(documento, ata) {
     .setSpacingBefore(12).setSpacingAfter(4);
   titulo.editAsText().setFontFamily('Arial').setBold(true)
     .setForegroundColor(azul).setFontSize(18);
-  const subtituloAta = corpo.appendParagraph(reuniao.toUpperCase())
-    .setAlignment(DocumentApp.HorizontalAlignment.CENTER).setSpacingAfter(14);
-  subtituloAta.editAsText().setFontFamily('Arial').setBold(true)
-    .setForegroundColor(cinza).setFontSize(11);
+  if (tipoDoc.subtitulo) {
+    const subtituloAta = corpo.appendParagraph(tipoDoc.subtitulo)
+      .setAlignment(DocumentApp.HorizontalAlignment.CENTER).setSpacingAfter(14);
+    subtituloAta.editAsText().setFontFamily('Arial').setBold(true)
+      .setForegroundColor(cinza).setFontSize(11);
+  } else {
+    titulo.setSpacingAfter(14);
+  }
 
   const data = ata.data.slice(8, 10) + '/' + ata.data.slice(5, 7) + '/' + ata.data.slice(0, 4);
   const metadados = ['Data: ' + data];
-  if (ata.tipo === 'campeonato' && ata.competicao) metadados.push('Competição: ' + ata.competicao);
+  if (tipoDoc.competicao && ata.competicao) metadados.push('Competição: ' + ata.competicao);
   if (ata.local) metadados.push('Local: ' + ata.local);
-  if (ata.participantes) metadados.push('Participantes: ' + ata.participantes);
+  if (ata.participantes) metadados.push(tipoDoc.participantes + ': ' + ata.participantes);
   metadados.forEach(function (linha) {
     const paragrafo = corpo.appendParagraph(linha).setSpacingAfter(5);
     paragrafo.editAsText().setFontSize(10).setForegroundColor(cinza);
@@ -15248,12 +15284,13 @@ function exportarAtaPdf(id) {
     const encontrada = localizarAta_(aba, String(id || ''));
     const ata = encontrada.ata;
     const pasta = pastaAtas_();
-    const documento = DocumentApp.create('Ata - ' + ata.titulo);
+    const prefixo = prefixoArquivoAta_(ata.tipo);
+    const documento = DocumentApp.create(prefixo + ' - ' + ata.titulo);
     const arquivoDocumento = DriveApp.getFileById(documento.getId());
     try {
       formatarDocumentoAta_(documento, ata);
       documento.saveAndClose();
-      const nome = ('Ata ' + ata.id + ' - ' + ata.data + ' - ' + ata.titulo)
+      const nome = (prefixo + ' ' + ata.id + ' - ' + ata.data + ' - ' + ata.titulo)
         .replace(/[\\/:*?"<>|]/g, '-').slice(0, 160) + '.pdf';
       const pdf = pasta.createFile(arquivoDocumento.getAs(MimeType.PDF).setName(nome));
       try {
