@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Diego Machado — Controle pessoal</title>
+  <meta name="robots" content="noindex,nofollow">
+  <base target="_top">
+  <?!= incluir_('Estilos'); ?>
+</head>
+<body>
+  <aside>
+    <div class="marca">
+      <svg class="simbolo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="48" height="48" role="img" aria-labelledby="marca-titulo" aria-describedby="marca-descricao">
+        <title id="marca-titulo">Logo Meu controle</title>
+        <desc id="marca-descricao">Barras financeiras com um check de organização e contas em dia.</desc>
+        <rect x="1" y="1" width="62" height="62" rx="16" fill="#17304f"/>
+        <rect x="14" y="29" width="7" height="19" rx="2" fill="#bfdbfe"/>
+        <rect x="25" y="22" width="7" height="26" rx="2" fill="#7db4f5"/>
+        <rect x="36" y="15" width="7" height="33" rx="2" fill="#4d91e8"/>
+        <polyline points="27,29 36,38 51,19" fill="none" stroke="#17304f" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="27,29 36,38 51,19" fill="none" stroke="#5ee0b5" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div><strong>Meu controle</strong><small>Diego Machado</small></div>
+    </div>
+    <nav aria-label="Menu principal">
+      <button data-pagina="inicio" class="ativo">Visão geral</button>
+      <button data-pagina="pessoal">Financeiro pessoal</button>
+      <button data-pagina="servicos">Serviços digitais</button>
+      <button data-pagina="iptv">IPTV · Clientes</button>
+      <details open><summary>Edifício Lisboa</summary>
+        <button data-pagina="condominio">Financeiro e saldo</button>
+        <button data-pagina="contatos">Contatos / fornecedores</button>
+        <button data-pagina="simulacoes">Simulações de gastos</button>
+        <button data-pagina="checklist">Checklist / manutenção</button>
+      </details>
+      <details id="menu-admin"><summary>Administração</summary>
+        <button data-pagina="importacao">Importar planilhas</button>
+        <button data-pagina="config">Configurações / Drive</button>
+      </details>
+    </nav>
+    <small class="privacidade">Privado · Conta Google do administrador<br>Valores em reais · Horário de Brasília</small>
+  </aside>
+  <main>
+    <header><div><small id="identidade">Área privada</small><h1 id="titulo">Visão geral</h1></div>
+      <div class="cabecalho-acoes">
+        <button id="sino" class="secundario sino" type="button" aria-label="Avisos" aria-haspopup="dialog" aria-controls="avisos" disabled>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+          <span id="sino-contador" class="sino-contador" hidden>0</span>
+        </button>
+        <button id="atualizar" class="secundario">Atualizar</button>
+      </div>
+    </header>
+    <section class="filtros" aria-label="Período">
+      <label>Ano<input id="ano" type="number" min="1900" max="2200" required></label>
+      <label>Mês<select id="mes"></select></label>
+      <label>Visão<select id="visao"><option value="mensal">Mensal</option><option value="anual">Anual</option></select></label>
+      <label id="pessoa-label">Pessoa<select id="pessoa"><option value="diego">Diego Machado</option><option value="iris">Iris Marta</option></select></label>
+    </section>
+    <p id="mensagem" role="status" aria-live="polite" hidden></p>
+    <div id="carregando" popover="manual" role="status" aria-live="polite" aria-atomic="true" hidden>
+      <div class="loading-cartao">
+        <div class="loading-marca" aria-hidden="true">
+          <span class="loading-anel"></span>
+          <svg class="loading-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" focusable="false">
+            <rect x="1" y="1" width="62" height="62" rx="16" fill="#17304f"/>
+            <rect x="14" y="29" width="7" height="19" rx="2" fill="#bfdbfe"/>
+            <rect x="25" y="22" width="7" height="26" rx="2" fill="#7db4f5"/>
+            <rect x="36" y="15" width="7" height="33" rx="2" fill="#4d91e8"/>
+            <polyline points="27,29 36,38 51,19" fill="none" stroke="#17304f" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="27,29 36,38 51,19" fill="none" stroke="#5ee0b5" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <small class="loading-nome">Meu controle</small>
+        <strong id="carregando-texto">Processando…</strong>
+        <p>Aguarde a confirmação antes de repetir a operação.</p>
+      </div>
+    </div>
+    <section id="conteudo" aria-label="Conteúdo da página"></section>
+    <footer id="rodape"></footer>
+  </main>
+  <dialog id="avisos" class="painel-avisos" aria-labelledby="avisos-titulo" aria-describedby="avisos-ajuda">
+    <div class="avisos-cabecalho"><h2 id="avisos-titulo">Avisos e vencimentos</h2><button id="avisos-fechar" type="button" class="secundario" aria-label="Fechar avisos" autofocus>×</button></div>
+    <p id="avisos-ajuda" class="muted">Financeiros de todas as pessoas e condomínio, checklist e clientes IPTV ativos, independentemente do período e dos filtros da tela. Avisamos 2 dias antes, no dia e enquanto houver atraso. Use Atualizar para consultar alterações feitas em outra sessão.</p>
+    <div id="avisos-lista"></div>
+  </dialog>
+  <dialog id="editor" aria-labelledby="editor-titulo">
+    <form id="formulario">
+      <h2 id="editor-titulo">Cadastro</h2>
+      <div id="campos" class="grade-form"></div>
+      <p id="erro-editor" role="alert" hidden></p>
+      <div class="acoes"><button type="button" id="cancelar" class="secundario">Cancelar</button><button type="submit">Salvar</button></div>
+    </form>
+  </dialog>
+  <dialog id="popup" class="popup" aria-labelledby="popup-titulo" aria-describedby="popup-descricao">
+    <form id="popup-formulario" novalidate>
+      <div class="popup-cabecalho">
+        <span id="popup-icone" class="popup-icone" aria-hidden="true">?</span>
+        <div><small>Meu controle</small><h2 id="popup-titulo">Confirmar ação</h2></div>
+        <button type="button" id="popup-fechar" class="secundario popup-fechar" aria-label="Cancelar e fechar">×</button>
+      </div>
+      <p id="popup-descricao"></p>
+      <label id="popup-campo" hidden><span id="popup-rotulo">Valor</span>
+        <input id="popup-valor" aria-describedby="popup-ajuda popup-erro">
+      </label>
+      <small id="popup-ajuda" hidden></small>
+      <p id="popup-erro" role="alert" hidden></p>
+      <div class="acoes popup-acoes">
+        <button type="button" id="popup-cancelar" class="secundario">Cancelar</button>
+        <button type="submit" id="popup-confirmar">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
+  <?!= incluir_('Relatorios'); ?>
+  <?!= incluir_('Cliente'); ?>
+</body>
+</html>

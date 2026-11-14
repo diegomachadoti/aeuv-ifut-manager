@@ -12,6 +12,14 @@ Google Drive.
 | **Inscrição, remoção e portabilidade** | `inscricao-portabilidade/` | Receber solicitações para atletas e comissão técnica, salvar comprovantes e gerar arquivos TXT. |
 | **Súmula digital** | `sumula-digital/` | Registrar relatórios de arbitragem e gerar arquivos TXT e PDF. |
 | **Sistema interno** | `sistema-interno/` | Área restrita da associação, com login Google e menu das funcionalidades internas. |
+| **Controle pessoal (privado, separado da AEUV)** | [`controle-pessoal/`](controle-pessoal/README.md) | Financeiro de Diego Machado/Iris Marta, serviços digitais por cartão e administração do Edifício Lisboa; administrador Google único. |
+
+O **Controle pessoal** tem pasta privada própria no Meu Drive, sem integração com
+o financeiro da AEUV e sem publicação no portal público. Seu código está pronto;
+a implantação do Web App deve seguir o [guia específico](controle-pessoal/README.md#publicar-pela-primeira-vez),
+não as permissões dos formulários públicos abaixo. A pasta dedicada já foi criada;
+nenhuma movimentação real foi importada. As demais seções deste documento tratam
+dos três aplicativos da associação.
 
 Cada aplicativo é um projeto GAS independente. **Não combine os arquivos das
 pastas em um único projeto:** todos declaram `doGet()` e funções auxiliares com

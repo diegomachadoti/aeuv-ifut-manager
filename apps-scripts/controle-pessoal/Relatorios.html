@@ -1,0 +1,166 @@
+<script>
+  window.CPRelatorios = (() => {
+    'use strict';
+    const fontes = [
+      'https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js',
+      'https://cdn.jsdelivr.net/npm/jspdf-autotable@5.0.9/dist/jspdf.plugin.autotable.min.js'
+    ];
+    let bibliotecas = null;
+    const texto = valor => String(valor == null ? '' : valor).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/\u00a0/g, ' ').trim();
+    function carregarScript(url) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        const falhar = () => {
+          clearTimeout(timer); script.remove();
+          reject(new Error('Não foi possível carregar o gerador de PDF. Confira a conexão e tente novamente.'));
+        };
+        const timer = setTimeout(falhar, 20000);
+        script.src = url; script.crossOrigin = 'anonymous'; script.referrerPolicy = 'no-referrer';
+        script.onload = () => { clearTimeout(timer); resolve(); };
+        script.onerror = falhar;
+        document.head.appendChild(script);
+      });
+    }
+    async function carregarBibliotecas() {
+      if (window.jspdf && typeof window.jspdf.jsPDF.API.autoTable === 'function') return;
+      if (!bibliotecas) bibliotecas = (async () => {
+        if (!window.jspdf) await carregarScript(fontes[0]);
+        if (typeof window.jspdf.jsPDF.API.autoTable !== 'function') await carregarScript(fontes[1]);
+      })().catch(err => { bibliotecas = null; throw err; });
+      await bibliotecas;
+    }
+    function capturar(conteudo, opcoes) {
+      function conteudoTexto(el) {
+        const copia = el.cloneNode(true);
+        copia.querySelectorAll('button,input,select,textarea,.nao-imprimir').forEach(no => no.remove());
+        copia.querySelectorAll('small,br').forEach(no => no.before(document.createTextNode('\n')));
+        copia.querySelectorAll('[aria-hidden="true"]').forEach(no => no.remove());
+        return texto(copia.textContent);
+      }
+      const secoes = [];
+      let secao = {titulo: opcoes.entidade || opcoes.titulo, cards: [], tabelas: [], notas: []};
+      secoes.push(secao);
+      function lerTabela(tabela) {
+        const ths = Array.from(tabela.querySelectorAll('thead th'));
+        const indices = ths.map((th, i) => /^(Selecionar|Ações|Importar)$/.test(texto(th.textContent)) ? -1 : i).filter(i => i >= 0);
+        const linhas = Array.from(tabela.querySelectorAll('tbody tr'))
+          .filter(tr => !tr.querySelector('.vazio'))
+          .map(tr => indices.map(i => conteudoTexto(tr.cells[i])));
+        return {colunas: indices.map(i => texto(ths[i].textContent)), linhas};
+      }
+      function visitar(el) {
+        if (el.matches('section.bloco')) {
+          secao = {titulo: texto(el.querySelector('h2').textContent), cards: [], tabelas: [], notas: []};
+          secoes.push(secao);
+        }
+        if (el.matches('.card')) {
+          const valor = el.querySelector('.valor');
+          secao.cards.push({rotulo: texto(el.querySelector('small').textContent), valor: texto(valor.textContent),
+            cor: valor.classList.contains('negativo') ? 'negativo' : valor.classList.contains('positivo') ? 'positivo' : 'neutro'});
+          return;
+        }
+        if (el.matches('table')) { secao.tabelas.push(lerTabela(el)); return; }
+        if (el.matches('p.info,p.aviso')) { secao.notas.push(conteudoTexto(el)); return; }
+        if (el.matches('.acoes,.filtros,dialog,.nao-imprimir')) return;
+        Array.from(el.children).forEach(visitar);
+      }
+      Array.from(conteudo.children).forEach(visitar);
+      return {...opcoes, secoes: secoes.filter(s => s.cards.length || s.tabelas.length || s.notas.length)};
+    }
+    function renderizar(modelo) {
+      const paisagem = modelo.secoes.some(s => s.tabelas.some(t => t.colunas.length >= 6));
+      const doc = new window.jspdf.jsPDF({orientation: paisagem ? 'landscape' : 'portrait', unit: 'mm', format: 'a4', compress: true});
+      doc.setProperties({title: modelo.titulo + ' — Meu controle', subject: modelo.periodo, author: 'Meu controle', creator: 'Meu controle'});
+      const largura = doc.internal.pageSize.getWidth(), altura = doc.internal.pageSize.getHeight();
+      const margem = 14, util = largura - margem * 2;
+      const cores = {navy: '#17304f', azul: '#2258a5', positivo: '#12704b', negativo: '#b02c35', neutro: '#1c2b40', muted: '#52647c'};
+      let y = 46;
+      function espaco(h) { if (y + h > altura - 19) { doc.addPage(); y = 46; } }
+      function paragrafo(valor, tamanho = 9, cor = cores.muted) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(tamanho); doc.setTextColor(cor);
+        const linhas = doc.splitTextToSize(texto(valor), util);
+        for (const linha of linhas) { espaco(5); doc.text(linha, margem, y); y += 4.5; }
+        y += 3;
+      }
+      paragrafo('Período: ' + modelo.periodo + ' | Emitido em ' + modelo.emitidoEm);
+      if (modelo.filtros) paragrafo('Filtros da lista: ' + modelo.filtros);
+      for (const secao of modelo.secoes) {
+        espaco(22);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(cores.navy);
+        doc.text(texto(secao.titulo), margem, y); y += 8;
+        const colunas = paisagem ? 5 : 3, gap = 3, w = (util - (colunas - 1) * gap) / colunas;
+        for (let i = 0; i < secao.cards.length; i += colunas) {
+          const cards = secao.cards.slice(i, i + colunas);
+          const alturaCards = Math.max(...cards.map(c => {
+            doc.setFontSize(8); return doc.splitTextToSize(c.rotulo, w - 8).length * 3.5 + 17;
+          }));
+          espaco(alturaCards + 3);
+          cards.forEach((c, j) => {
+            const x = margem + j * (w + gap);
+            doc.setDrawColor('#dae2ef'); doc.setFillColor('#f3f6fb');
+            doc.roundedRect(x, y, w, alturaCards, 2, 2, 'FD');
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(cores.muted);
+            doc.text(doc.splitTextToSize(c.rotulo, w - 8), x + 4, y + 6);
+            doc.setFont('helvetica', 'bold'); doc.setTextColor(cores[c.cor]);
+            let tamanho = 12; doc.setFontSize(tamanho);
+            while (doc.getTextWidth(c.valor) > w - 8 && tamanho > 7) doc.setFontSize(--tamanho);
+            doc.text(c.valor, x + 4, y + alturaCards - 5);
+          });
+          y += alturaCards + 3;
+        }
+        secao.notas.forEach(nota => paragrafo(nota, 8));
+        for (const tabela of secao.tabelas) {
+          espaco(20);
+          doc.autoTable({startY: y, margin: {top: 45, left: margem, right: margem, bottom: 20},
+            head: [tabela.colunas], body: tabela.linhas.length ? tabela.linhas : [tabela.colunas.map((_, i) => i ? '' : 'Nenhum registro neste filtro.')],
+            theme: 'striped', showHead: 'everyPage', rowPageBreak: 'avoid',
+            styles: {font: 'helvetica', fontSize: 8, cellPadding: 2.5, overflow: 'linebreak', textColor: cores.neutro, lineColor: '#dae2ef', lineWidth: .1},
+            headStyles: {fillColor: cores.navy, textColor: '#ffffff', fontStyle: 'bold'},
+            alternateRowStyles: {fillColor: '#f3f6fb'},
+            didParseCell: dados => {
+              if (dados.section !== 'body') return;
+              const coluna = tabela.colunas[dados.column.index];
+              if (/Valor|Saldo|Resultado|Entradas|Saídas/.test(coluna)) dados.cell.styles.halign = 'right';
+              const valor = dados.cell.text.join(' ');
+              if (/^Saída\b|^Vencido\b|^Verificação vencida\b|^-R\$/.test(valor)) dados.cell.styles.textColor = cores.negativo;
+              else if (/^Entrada\b|^Recebido\b|^Pago\b/.test(valor)) dados.cell.styles.textColor = cores.positivo;
+            }});
+          y = doc.lastAutoTable.finalY + 7;
+          paragrafo(tabela.linhas.length + ' registro(s) nesta tabela.', 8);
+        }
+        y += 5;
+      }
+      // Marca vetorial: mesma geometria do SVG, sem imagens ou chamadas externas.
+      function logo(x, y, tamanho) {
+        const s = tamanho / 64;
+        doc.setFillColor(cores.navy); doc.roundedRect(x+s, y+s, 62*s, 62*s, 16*s, 16*s, 'F');
+        [[14,29,19,'#bfdbfe'],[25,22,26,'#7db4f5'],[36,15,33,'#4d91e8']].forEach(([a,b,h,cor]) => {
+          doc.setFillColor(cor); doc.roundedRect(x+a*s,y+b*s,7*s,h*s,2*s,2*s,'F');
+        });
+        doc.setLineCap('round'); doc.setLineJoin('round');
+        [[10,cores.navy],[6,'#5ee0b5']].forEach(([w,cor]) => {
+          doc.setDrawColor(cor); doc.setLineWidth(w*s);
+          doc.line(x+27*s,y+29*s,x+36*s,y+38*s); doc.line(x+36*s,y+38*s,x+51*s,y+19*s);
+        });
+      }
+      const paginas = doc.getNumberOfPages();
+      for (let p = 1; p <= paginas; p++) {
+        doc.setPage(p); doc.setFillColor(cores.navy); doc.rect(0, 0, largura, 34, 'F');
+        logo(margem, 6, 22);
+        doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(17);
+        doc.text('Meu controle', margem + 29, 14);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+        doc.text(texto(modelo.titulo), margem + 29, 22);
+        doc.setTextColor('#bfdbfe'); doc.setFontSize(8);
+        doc.text('RELATÓRIO PRIVADO', largura - margem, 14, {align: 'right'});
+        doc.setDrawColor('#dae2ef'); doc.setLineWidth(.3); doc.line(margem, altura - 15, largura - margem, altura - 15);
+        doc.setTextColor(cores.muted); doc.setFontSize(7);
+        doc.text('Revisão ' + modelo.revisao + ' | Dados atualizados: ' + modelo.atualizadoEm, margem, altura - 10);
+        doc.text('Página ' + p + ' de ' + paginas, largura - margem, altura - 10, {align: 'right'});
+      }
+      return doc;
+    }
+    async function gerar(modelo) { await carregarBibliotecas(); return renderizar(modelo); }
+    return {capturar, gerar, renderizar};
+  })();
+</script>

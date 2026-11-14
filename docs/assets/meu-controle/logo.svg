@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="titulo" aria-describedby="descricao">
+  <title id="titulo">Meu controle</title>
+  <desc id="descricao">Barras financeiras azuis com um check verde sobre fundo azul-marinho.</desc>
+  <rect x="1" y="1" width="62" height="62" rx="16" fill="#17304f"/>
+  <rect x="14" y="29" width="7" height="19" rx="2" fill="#bfdbfe"/>
+  <rect x="25" y="22" width="7" height="26" rx="2" fill="#7db4f5"/>
+  <rect x="36" y="15" width="7" height="33" rx="2" fill="#4d91e8"/>
+  <polyline points="27,29 36,38 51,19" fill="none" stroke="#17304f" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="27,29 36,38 51,19" fill="none" stroke="#5ee0b5" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+

@@ -1,0 +1,801 @@
+<script>
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const nomes = {diego: 'Diego Machado', iris: 'Iris Marta', condominio: 'Edifício Lisboa'};
+  const titulos = {inicio: 'Visão geral', pessoal: 'Financeiro pessoal', servicos: 'Serviços digitais',
+    condominio: 'Edifício Lisboa · Financeiro e saldo', contatos: 'Edifício Lisboa · Contatos', simulacoes: 'Edifício Lisboa · Simulações de gastos',
+    checklist: 'Edifício Lisboa · Checklist', iptv: 'IPTV · Clientes e vencimentos', importacao: 'Administração · Importar planilhas', config: 'Administração · Configurações / Drive'};
+  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  let estado = null, pagina = 'inicio', ocupado = false, editar = null, previa = null, exportacao = [];
+  let busca = '', statusFiltro = 'todos';
+  let popupPendente = null;
+  let loadingOrigem = null;
+  let diaAvisos = '';
+  const selecaoBaixa = new Set();
+  const e = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const brl = v => v == null ? 'Não disponível' : (v / 100).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
+  const decimal = v => ((v || 0) / 100).toFixed(2);
+  const dataBR = s => s ? s.split('-').reverse().join('/') : '—';
+  const hoje = () => new Intl.DateTimeFormat('sv-SE', {timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const periodo = () => $('ano').value + '-' + $('mes').value;
+  const escopo = () => pagina === 'condominio' ? 'condominio' : $('pessoa').value;
+  function dataISO(valor) {
+    const texto = String(valor).trim();
+    if (!texto) return '';
+    const partes = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto);
+    if (!partes) throw new Error('Informe uma data válida no formato DD/MM/AAAA.');
+    const iso = partes[3]+'-'+partes[2]+'-'+partes[1];
+    const d = new Date(iso+'T12:00:00Z');
+    if (isNaN(d.getTime()) || d.toISOString().slice(0,10)!==iso || iso<'1900-01-01' || iso>'2200-12-31') {
+      throw new Error('Informe uma data válida no formato DD/MM/AAAA, entre 1900 e 2200.');
+    }
+    return iso;
+  }
+  function centavos(v) {
+    const s = String(v).trim().replace(',', '.');
+    if (!/^-?\d+(\.\d{1,2})?$/.test(s)) throw new Error('Informe um valor em reais com até duas casas decimais, sem separador de milhar.');
+    const n = Math.round(Number(s) * 100);
+    if (!Number.isSafeInteger(n)) throw new Error('Valor acima do limite.');
+    return n;
+  }
+  function rpc(nome, ...args) {
+    return new Promise((resolve, reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[nome](...args));
+  }
+  function mensagem(texto, erro = false) {
+    $('mensagem').textContent = texto; $('mensagem').className = erro ? 'erro' : ''; $('mensagem').hidden = !texto;
+  }
+  function abrirPopup(opcoes) {
+    if (ocupado || popupPendente || $('editor').open) return Promise.resolve(null);
+    const dialog = $('popup'), input = $('popup-valor');
+    $('popup-titulo').textContent = opcoes.titulo;
+    $('popup-descricao').textContent = opcoes.descricao;
+    $('popup-confirmar').textContent = opcoes.botao || 'Confirmar';
+    dialog.dataset.perigo = String(Boolean(opcoes.perigo));
+    $('popup-icone').textContent = opcoes.perigo ? '!' : opcoes.tipo === 'month' ? '↗' : opcoes.tipo === 'date' ? '✓' : '?';
+    $('popup-campo').hidden = !opcoes.tipo;
+    $('popup-rotulo').textContent = opcoes.rotulo || '';
+    // Inputs date nativos seguem o idioma do navegador, não o padrão da listagem.
+    input.type = opcoes.tipo === 'date' ? 'text' : opcoes.tipo || 'text';
+    input.dataset.tipo = opcoes.tipo || '';
+    input.placeholder = opcoes.tipo === 'date' ? 'DD/MM/AAAA' : '';
+    input.inputMode = opcoes.tipo === 'date' ? 'numeric' : '';
+    input.maxLength = opcoes.tipo === 'date' ? 10 : 200;
+    input.value = opcoes.tipo === 'date' ? (opcoes.valor ? dataBR(opcoes.valor) : '') : opcoes.valor || '';
+    input.required = Boolean(opcoes.tipo);
+    input.min = opcoes.tipo === 'date' ? '1900-01-01' : opcoes.tipo === 'month' ? '1900-01' : '';
+    input.max = opcoes.tipo === 'date' ? (opcoes.permitirFutura ? '2200-12-31' : hoje()) : opcoes.tipo === 'month' ? '2200-12' : '';
+    input.setCustomValidity(''); input.removeAttribute('aria-invalid');
+    $('popup-ajuda').textContent = opcoes.ajuda || '';
+    $('popup-ajuda').hidden = !opcoes.ajuda;
+    $('popup-erro').hidden = true;
+    const foco = document.activeElement;
+    return new Promise(resolve => {
+      popupPendente = {resolve, opcoes, foco};
+      dialog.showModal();
+      // Ação destrutiva começa em Cancelar; campos começam no seletor.
+      (opcoes.tipo ? input : $('popup-cancelar')).focus();
+    });
+  }
+  function finalizarPopup(resultado = null) {
+    if (!popupPendente) return;
+    const pendente = popupPendente;
+    popupPendente = null;
+    $('popup').close();
+    if (pendente.foco && pendente.foco.isConnected) pendente.foco.focus();
+    pendente.resolve(resultado);
+  }
+  function validarPopup(opcoes, valor) {
+    if (opcoes.tipo) {
+      const iso = opcoes.tipo === 'month' ? valor + '-01' : valor;
+      const d = new Date(iso + 'T12:00:00Z');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== iso ||
+          iso < '1900-01-01' || iso > '2200-12-31') {
+        return opcoes.tipo === 'month' ? 'Selecione um mês e ano válidos.' : 'Informe uma data válida.';
+      }
+      if (opcoes.tipo === 'date' && !opcoes.permitirFutura && valor > hoje()) return 'A data de pagamento não pode ser futura.';
+    }
+    return opcoes.validar ? opcoes.validar(valor) : '';
+  }
+  function bloquear(b, texto = 'Processando…') {
+    if (ocupado === b) return;
+    ocupado = b;
+    const loading = $('carregando');
+    if (b) {
+      const modal = document.querySelector('dialog[open]');
+      if (modal) {
+        loadingOrigem = {pai: loading.parentNode, proximo: loading.nextSibling};
+        modal.appendChild(loading);
+      }
+    }
+    if ($('carregando-texto')) $('carregando-texto').textContent = texto;
+    if (b) loading.hidden = false;
+    // A camada superior mantém o loading visível durante o salvamento em modais.
+    // Index antigo e navegadores sem Popover continuam usando o elemento normal.
+    if (loading.getAttribute('popover') === 'manual' && typeof loading.showPopover === 'function') {
+      if (b) loading.showPopover();
+      else if (loading.matches(':popover-open')) loading.hidePopover();
+    }
+    if (!b) {
+      loading.hidden = true;
+      if (loadingOrigem) {
+        loadingOrigem.pai.insertBefore(loading, loadingOrigem.proximo);
+        loadingOrigem = null;
+      }
+    }
+    if (b) document.querySelectorAll('button,input,select,textarea,summary').forEach(el => {
+      el.dataset.antesDisabled = el.disabled ? '1' : '0';
+      if ('disabled' in el) el.disabled = true;
+    });
+    else document.querySelectorAll('[data-antes-disabled]').forEach(el => {
+      if ('disabled' in el) el.disabled = el.dataset.antesDisabled === '1';
+      delete el.dataset.antesDisabled;
+    });
+    $('conteudo').setAttribute('aria-busy', String(b));
+    if (!b) atualizarAvisos();
+  }
+  async function carregar() {
+    if (ocupado || popupPendente) return;
+    if (!$('ano').checkValidity()) { $('ano').reportValidity(); return; }
+    bloquear(true, 'Carregando seus dados…');
+    try {
+      estado = await rpc('consultarSistema', Number($('ano').value));
+      previa = null;
+      selecaoBaixa.clear();
+      mensagem(''); renderizar();
+    } catch (err) {
+      estado = null;
+      atualizarAvisos();
+      $('conteudo').innerHTML = '<div class="bloco"><h2>Não foi possível carregar</h2><p>Confira a sessão Google e as permissões. Use Atualizar para tentar novamente.</p></div>';
+      mensagem(err.message || String(err), true);
+    } finally { bloquear(false); }
+  }
+  async function alterar(pedido, sucesso = 'Alteração salva.') {
+    if (ocupado || !estado || !estado.preparado) return;
+    bloquear(true, 'Salvando alterações…'); $('erro-editor').hidden = true;
+    try {
+      await rpc('alterarSistema', Object.assign({revisao: estado.db.revisao}, pedido));
+      selecaoBaixa.clear();
+      estado = await rpc('consultarSistema', Number($('ano').value));
+      $('editor').close(); editar = null;
+      previa = null; renderizar(); mensagem(sucesso);
+    } catch (err) {
+      const texto = (err.message || String(err)) + ' Se houve falha de comunicação, atualize e confira antes de repetir.';
+      if ($('editor').open) { $('erro-editor').textContent = texto; $('erro-editor').hidden = false; }
+      else mensagem(texto, true);
+    } finally { bloquear(false); }
+  }
+  function botao(acao, texto, id = '', classe = '') {
+    return '<button data-acao="'+e(acao)+'" data-id="'+e(id)+'" class="'+e(classe)+'">'+e(texto)+'</button>';
+  }
+  function tabela(cabecalhos, linhas, classes = []) {
+    return '<div class="tabela"><table><thead><tr>'+cabecalhos.map(c=>'<th scope="col">'+e(c)+'</th>').join('')+
+      '</tr></thead><tbody>'+(linhas.length ? linhas.map((c,i)=>'<tr class="'+e(classes[i]||'')+'">'+c.map(t=>'<td>'+t+'</td>').join('')+'</tr>').join('') :
+      '<tr><td colspan="'+cabecalhos.length+'" class="vazio">Nenhum registro neste filtro.</td></tr>')+'</tbody></table></div>';
+  }
+  function card(nome, valor, classe = '') { return '<div class="card"><small>'+e(nome)+'</small><span class="valor '+e(classe)+'">'+brl(valor)+'</span></div>'; }
+  function resumo(es) {
+    const todos = estado.resumo[es];
+    if ($('visao').value === 'mensal') return todos[Number($('mes').value)-1];
+    const r = {entradas:0,saidas:0,recebido:0,pago:0,receber:0,pagar:0,caixaEntrada:0,caixaSaida:0,atrasados:0};
+    todos.forEach(m=>Object.keys(r).forEach(k=>r[k]+=m[k]));
+    r.saldoInicial = todos[0].saldoInicial; r.saldoFinal = todos[11].saldoFinal; r.resultado=r.entradas-r.saidas;
+    return r;
+  }
+  function painelFinanceiro(es) {
+    const r = resumo(es);
+    return '<div class="cards">'+card('Entradas previstas',r.entradas,'positivo')+card('Saídas previstas',r.saidas,'negativo')+card('Resultado previsto',r.resultado,r.resultado<0?'negativo':'positivo')+
+      card('A receber',r.receber,'positivo')+card('A pagar',r.pagar,'negativo')+card('Vencidos / pendentes',r.atrasados,'negativo')+'</div>'+
+      '<div class="cards">'+card('Saldo inicial de caixa',r.saldoInicial)+card('Entradas no caixa',r.caixaEntrada,'positivo')+
+      card('Saídas do caixa',r.caixaSaida,'negativo')+card('Saldo final de caixa',r.saldoFinal,r.saldoFinal<0?'negativo':'positivo')+'</div>';
+  }
+  function statusLancamento(l) {
+    return l.pagamento ? 'ok' : l.vencimento && l.vencimento < hoje() ? 'atrasado' : 'pendente';
+  }
+  const situacoesChecklist = {todos:'Todas',pendente:'Pendente',andamento:'Em andamento',ok:'OK',atrasado:'Verificação vencida'};
+  function statusChecklist(r) {
+    return r.proxima && r.proxima < hoje() ? 'atrasado' : r.status;
+  }
+  const custosSimulacao = {materiais:'Materiais',maoObra:'Mão de obra',outros:'Outros gastos',reserva:'Reserva para imprevistos'};
+  const totalSimulacao = r => Object.keys(custosSimulacao).reduce((t,k)=>t+r[k],0);
+  function saldoSimulacao() {
+    const inicio=estado.db.config.saldos.condominio, data=hoje();
+    if (data<inicio.data) return null;
+    return estado.db.lancamentos.filter(l=>l.escopo==='condominio'&&l.pagamento&&l.pagamento>=inicio.data&&l.pagamento<=data)
+      .reduce((t,l)=>t+(l.tipo==='entrada'?l.valor:-l.valor),inicio.valor);
+  }
+  function previaSimulacao() {
+    if (!editar || editar.colecao!=='simulacoes' || !$('simulacao-previa')) return;
+    try {
+      const r={};Object.keys(custosSimulacao).forEach(k=>{
+        r[k]=centavos(document.querySelector('#campos [name="'+k+'"]').value);
+        if(r[k]<0) throw new Error('Os custos não podem ser negativos.');
+      });
+      const saldo=saldoSimulacao(), total=totalSimulacao(r), restante=saldo===null?null:saldo-total;
+      $('simulacao-previa').innerHTML='<div class="cards">'+card('Saldo atual registrado',saldo)+card('Custo total estimado',total)+
+        card('Saldo após o cenário',restante,restante<0?'negativo':'positivo')+'</div>'+
+        '<p>'+(saldo===null?'Saldo indisponível: confira a data de referência nas configurações.':restante<0?'Faltariam '+brl(-restante)+' para este cenário.':'O caixa registrado cobre este cenário, sobrando '+brl(restante)+'.')+'</p>';
+    } catch(err) { $('simulacao-previa').textContent=err.message; }
+  }
+  const situacoesIPTV = {todos:'Todos',ativo:'Ativos',inativo:'Inativos',atrasado:'Vencidos',hoje:'Vencem hoje',proximo:'Próximos 2 dias'};
+  const rotulosIPTV = {ativo:'Ativo · em dia',inativo:'Inativo',atrasado:'Vencido',hoje:'Vence hoje',proximo:'Vence em até 2 dias'};
+  function statusIPTV(r) {
+    if (r.status === 'inativo') return 'inativo';
+    const dias = Math.round((Date.parse(r.vencimento+'T12:00:00Z')-Date.parse(hoje()+'T12:00:00Z'))/86400000);
+    return dias < 0 ? 'atrasado' : dias === 0 ? 'hoje' : dias <= 2 ? 'proximo' : 'ativo';
+  }
+  function calcularAvisos(dataHoje = hoje()) {
+    if (!estado || !estado.preparado) return [];
+    const base = Date.parse(dataHoje+'T12:00:00Z');
+    const avisos = [];
+    const adicionar = (r, colecao, data) => {
+      if (!data) return;
+      const dias = Math.round((Date.parse(data+'T12:00:00Z')-base)/86400000);
+      if (!Number.isFinite(dias) || dias > 2) return;
+      avisos.push({id:r.id,colecao,nome:r.nome,data,dias,escopo:colecao==='iptv'?'iptv':colecao==='checklist'?'condominio':r.escopo,
+        competencia:r.competencia,valor:r.valor,tipo:r.tipo});
+    };
+    estado.db.lancamentos.filter(r=>!r.pagamento).forEach(r=>adicionar(r,'lancamentos',r.vencimento));
+    // A próxima verificação representa um novo ciclo, mesmo após uma verificação OK.
+    estado.db.checklist.forEach(r=>adicionar(r,'checklist',r.proxima));
+    (estado.db.iptv || []).filter(r=>r.status==='ativo').forEach(r=>adicionar(r,'iptv',r.vencimento));
+    return avisos.sort((a,b)=>a.data.localeCompare(b.data)||a.escopo.localeCompare(b.escopo)||a.nome.localeCompare(b.nome));
+  }
+  function atualizarAvisos() {
+    diaAvisos = hoje();
+    if (!$('sino') || !$('avisos')) return;
+    const avisos = calcularAvisos(diaAvisos);
+    const disponivel = Boolean(estado && estado.preparado);
+    $('sino').disabled = ocupado || !disponivel;
+    $('sino').setAttribute('aria-label', 'Avisos: '+avisos.length+' item(ns)');
+    $('sino').title = avisos.length+' aviso(s) · Vencidos, hoje e próximos 2 dias';
+    $('sino-contador').textContent = avisos.length > 99 ? '99+' : String(avisos.length);
+    $('sino-contador').hidden = !avisos.length;
+    $('sino').classList.toggle('tem-atrasados', avisos.some(a=>a.dias<0));
+    $('avisos-lista').innerHTML = [
+      ['Vencidos','vencido',a=>a.dias<0], ['Hoje','hoje',a=>a.dias===0], ['Próximos 2 dias','proximo',a=>a.dias>0]
+    ].map(([titulo,classe,filtro])=>{
+      const itens = avisos.filter(filtro);
+      if (!itens.length) return '';
+      return '<section class="avisos-secao"><h3>'+e(titulo)+' ('+itens.length+')</h3><ul>'+itens.map(a=>{
+        const financeiro = a.colecao === 'lancamentos';
+        const prazo = a.dias<0 ? Math.abs(a.dias)+' dia(s) em atraso' : a.dias===0 ? 'Hoje' : 'Em '+a.dias+' dia(s)';
+        return '<li><button class="aviso-item '+classe+'" data-acao="ver-aviso" data-colecao="'+e(a.colecao)+'" data-id="'+e(a.id)+'">'+
+          '<strong>'+e(a.nome)+'</strong><small>'+e(a.colecao==='iptv'?'IPTV · Renovação de cliente':nomes[a.escopo]+' · '+(financeiro?(a.tipo==='entrada'?'A receber':'A pagar'):'Checklist'))+'</small>'+
+          '<span>'+dataBR(a.data)+' · '+e(prazo)+(financeiro?' · '+brl(a.valor):'')+'</span><small>Ver item →</small></button></li>';
+      }).join('')+'</ul></section>';
+    }).join('') || '<p class="info">Nenhum vencimento ou verificação atrasada, para hoje ou para os próximos 2 dias (incluindo IPTV).</p>';
+    if (!disponivel) $('avisos').close();
+  }
+  async function verAviso(colecao, id) {
+    const aviso = calcularAvisos().find(a=>a.colecao===colecao && a.id===id);
+    if (!aviso) { atualizarAvisos(); return; }
+    $('avisos').close();
+    selecaoBaixa.clear(); busca=''; statusFiltro='todos'; previa=null;
+    if (colecao === 'lancamentos') {
+      pagina = aviso.escopo === 'condominio' ? 'condominio' : 'pessoal';
+      if (aviso.escopo !== 'condominio') $('pessoa').value = aviso.escopo;
+      const mudouAno = $('ano').value !== aviso.competencia.slice(0,4);
+      $('ano').value = aviso.competencia.slice(0,4);
+      $('mes').value = aviso.competencia.slice(5,7);
+      $('visao').value = 'mensal';
+      if (mudouAno) await carregar(); else renderizar();
+    } else { pagina=colecao==='iptv'?'iptv':'checklist'; renderizar(); }
+    const acao = colecao === 'lancamentos' ? 'pagamento' : colecao === 'iptv' ? 'renovar-iptv' : 'verificar';
+    const alvo = Array.from($('conteudo').querySelectorAll('[data-acao="'+acao+'"]')).find(b=>b.dataset.id===id);
+    if (alvo) {
+      alvo.closest('tr').classList.add('linha-aviso-alvo');
+      alvo.scrollIntoView({block:'center'}); alvo.focus({preventScroll:true});
+      mensagem('Item localizado: '+aviso.nome+'. Confira o registro antes de registrar baixa, verificação ou renovação.');
+    }
+  }
+  function passaBusca(r) {
+    const normal = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    return normal(JSON.stringify(r)).includes(normal(busca));
+  }
+  function lancamentosFiltrados() {
+    return estado.db.lancamentos.filter(l=>l.escopo===escopo() &&
+      ($('visao').value==='anual'?l.competencia.startsWith($('ano').value+'-'):l.competencia===periodo()) &&
+      passaBusca(l) && (statusFiltro==='todos'||statusLancamento(l)===statusFiltro));
+  }
+  function barraCadastro(colecao) {
+    return '<div class="acoes">'+botao('novo','Novo registro',colecao)+botao('csv','Exportar CSV','','secundario')+botao('abrir-pdf','Abrir PDF','','secundario')+botao('imprimir','Baixar PDF','','secundario')+'</div>';
+  }
+  function filtrosLista(financeiro = false) {
+    return '<div class="filtros nao-imprimir"><label>Buscar<input id="busca" value="'+e(busca)+'" placeholder="Descrição, conta, unidade…"></label>'+
+      (financeiro ? '<label>Situação<select id="status-filtro"><option value="todos">Todas</option><option value="pendente">Pendentes</option><option value="atrasado">Vencidos</option><option value="ok">Pagos / recebidos</option></select></label>' :
+        ['checklist','iptv'].includes(pagina) ? '<label>Situação<select id="status-filtro">'+Object.entries(pagina==='iptv'?situacoesIPTV:situacoesChecklist).map(([valor,rotulo])=>'<option value="'+valor+'">'+e(rotulo)+'</option>').join('')+'</select></label>' : '')+'</div>';
+  }
+  function anual(es) {
+    return tabela(['Mês','Entradas previstas','Saídas previstas','Resultado previsto','Entradas caixa','Saídas caixa','Saldo inicial','Saldo final'],
+      estado.resumo[es].map(r=>[e(meses[Number(r.mes.slice(5))-1]),...['entradas','saidas','resultado','caixaEntrada','caixaSaida','saldoInicial','saldoFinal'].map(k=>'<span class="numero">'+brl(r[k])+'</span>')]));
+  }
+  function renderizar() {
+    $('titulo').textContent = titulos[pagina];
+    $('pessoa-label').hidden = !['pessoal','servicos'].includes(pagina);
+    document.querySelector('section[aria-label="Período"]').hidden = ['iptv','simulacoes'].includes(pagina);
+    if ($('menu-admin') && ['importacao','config'].includes(pagina)) $('menu-admin').open = true;
+    document.querySelectorAll('[data-pagina]').forEach(b=>b.classList.toggle('ativo',b.dataset.pagina===pagina));
+    atualizarAvisos();
+    if (!estado) return;
+    $('identidade').textContent = estado.usuario;
+    if (!estado.preparado) {
+      $('conteudo').innerHTML='<div class="bloco"><h2>Prepare seu espaço privado</h2><p>O sistema criará uma pasta exclusiva no seu Meu Drive, sem compartilhar arquivos, e iniciará uma base vazia.</p>'+botao('preparar','Preparar sistema')+'</div>';
+      return;
+    }
+    $('rodape').textContent = 'Revisão '+estado.db.revisao+' · Atualizado em '+new Date(estado.db.atualizadoEm).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})+' · '+($('visao').value==='anual'?'Ano '+$('ano').value:meses[Number($('mes').value)-1]+' / '+$('ano').value);
+    exportacao = [];
+    let html = '';
+    if (pagina === 'inicio') {
+      html='<div class="acoes">'+botao('abrir-pdf','Abrir PDF da visão geral','','secundario')+botao('imprimir','Baixar PDF da visão geral','','secundario')+'</div>'+
+        '<p class="info">Planejamento por competência e caixa por data real de pagamento. Os valores pessoais e do condomínio nunca são misturados.</p>';
+      Object.keys(nomes).forEach(es=>{html+='<section class="bloco"><h2>'+e(nomes[es])+'</h2>'+painelFinanceiro(es)+($('visao').value==='anual'?anual(es):'')+'</section>';});
+      const pendentes=estado.db.checklist.filter(r=>r.status!=='ok'||(r.proxima&&r.proxima<hoje())).length;
+      html+='<p class="aviso">Checklist do condomínio: '+pendentes+' itens pendentes ou com próxima verificação vencida.</p>';
+    } else if (['pessoal','condominio'].includes(pagina)) {
+      const es=escopo();
+      const filtrados=lancamentosFiltrados()
+        .sort((a,b)=>(a.vencimento||'9999-12-31').localeCompare(b.vencimento||'9999-12-31'));
+      const pendentes=filtrados.filter(l=>!l.pagamento);
+      const elegiveis=new Set(pendentes.map(l=>l.id));
+      selecaoBaixa.forEach(id=>{if (!elegiveis.has(id)) selecaoBaixa.delete(id);});
+      exportacao=filtrados.map(l=>({Pessoa:nomes[l.escopo],Competencia:l.competencia,Descricao:l.nome,Tipo:l.tipo,Categoria:l.categoria,
+        Unidade:l.unidade,Conta:l.conta,Valor:decimal(l.valor),Meta:decimal(l.meta),Vencimento:l.vencimento,Pagamento:l.pagamento,Situacao:statusLancamento(l),Observacao:l.obs}));
+      html='<h2>'+e(nomes[es])+'</h2>'+painelFinanceiro(es)+
+        '<p class="info">Indicadores consideram o período inteiro, não a busca abaixo. “Previsto” usa competência; “caixa” usa pagamento/recebimento. Saldo inicial é configurado com base no extrato.</p>'+
+        ($('visao').value==='anual'?anual(es):'')+barraCadastro('lancamentos')+
+        '<div class="acoes">'+botao('copiar','Copiar este mês para outro','','secundario')+
+        (es!=='condominio'?botao('gerar','Gerar subtotal de serviços do mês','','secundario'):'')+'</div>'+
+        filtrosLista(true)+'<div class="acoes baixa-lote nao-imprimir">'+
+        '<button data-acao="selecionar-baixas" class="secundario" '+(!pendentes.length?'disabled':'')+'>Selecionar todos</button>'+
+        '<button id="limpar-baixas" data-acao="limpar-baixas" class="secundario">Limpar seleção</button>'+
+        '<button id="baixar-selecionados" data-acao="pagamento-selecionados">Registrar baixa dos selecionados</button>'+
+        '<button data-acao="pagamento-todos" class="secundario" '+(!pendentes.length?'disabled':'')+'>Registrar baixa de todos ('+pendentes.length+')</button>'+
+        '<small id="resumo-selecao" role="status" aria-live="polite"></small></div>'+
+        tabela(['Selecionar','Descrição / conta','Tipo / competência','Valor / meta','Vencimento','Pagamento','Situação','Ações'],filtrados.map(l=>{
+          const st=statusLancamento(l);
+          return ['<label class="selecao-baixa nao-imprimir"><input type="checkbox" data-baixa-id="'+e(l.id)+'" aria-label="Selecionar '+e(l.nome)+' para baixa" '+
+            (l.pagamento?'disabled title="Registro já baixado"':selecaoBaixa.has(l.id)?'checked':'')+'></label>',
+            e(l.nome)+'<small>'+e([l.categoria,l.conta,l.unidade].filter(Boolean).join(' · '))+'</small><small>'+e(l.obs)+'</small>'+
+            (l.itens?'<small>'+l.itens.map(s=>e(s.nome)+': '+brl(s.valor)).join('<br>')+'</small>':''),
+            '<span class="tipo-movimento '+(l.tipo==='entrada'?'entrada':'saida')+'"><span aria-hidden="true">'+(l.tipo==='entrada'?'↑':'↓')+'</span>'+e(l.tipo==='entrada'?'Entrada':'Saída')+'</span><small>'+e(l.competencia)+'</small>',
+            '<strong class="'+(l.tipo==='entrada'?'positivo':'negativo')+'">'+brl(l.valor)+'</strong>'+(l.meta?'<small>Meta: '+brl(l.meta)+(l.valor>l.meta?' · Acima da meta':'')+'</small>':''),
+            dataBR(l.vencimento),dataBR(l.pagamento),'<span class="status '+st+'">'+(st==='ok'?(l.tipo==='entrada'?'Recebido':'Pago'):st==='atrasado'?'<span aria-hidden="true">⚠ </span>Vencido · sem baixa':'Pendente')+'</span>',
+            botao('pagamento',l.pagamento?'Estornar baixa':'Registrar baixa',l.id,'secundario')+
+            (l.origem==='servicos'?'':botao('editar','Editar',l.id,'secundario')+botao('excluir','Excluir',l.id,'perigo'))+
+            (l.comprovante?'<a href="'+e(l.comprovante)+'" target="_blank" rel="noopener noreferrer">Comprovante</a>':'')];
+        }),filtrados.map(l=>statusLancamento(l)==='atrasado'?'linha-vencida':''));
+      if (es!=='condominio') html+='<p class="aviso">Serviços digitais são uma despesa separada por cartão. Ao lançar uma fatura completa, desconte o subtotal de serviços já gerado para não contabilizar duas vezes.</p>';
+    } else if (pagina === 'servicos') {
+      const es=$('pessoa').value;
+      const ativos=estado.db.servicos.filter(s=>s.escopo===es&&s.inicio<=periodo()&&(!s.fim||s.fim>=periodo())&&(s.ciclo==='mensal'||s.inicio.slice(5)===periodo().slice(5)));
+      const ls=estado.db.servicos.filter(s=>s.escopo===es&&passaBusca(s));
+      const gerados=estado.db.lancamentos.filter(l=>l.escopo===es&&l.competencia===periodo()&&l.origem==='servicos');
+      const porCartao={};ativos.forEach(s=>{porCartao[s.cartao]=(porCartao[s.cartao]||0)+s.valor;});
+      html='<h2>'+e(nomes[es])+'</h2><div class="cards">'+card('Cobranças previstas no mês',ativos.reduce((t,s)=>t+s.valor,0))+
+        card('Subtotal já registrado no mês',gerados.reduce((t,l)=>t+l.valor,0))+Object.keys(porCartao).map(c=>card(c,porCartao[c])).join('')+'</div>'+
+        '<p class="info">Esta tela usa sempre o mês selecionado. Ciclo anual cobra o valor integral apenas no mês de aniversário. Para cancelar, informe o último mês de cobrança. Nunca cadastre senhas.</p>'+
+        '<p class="aviso">Gerar cria uma linha por pessoa/cartão no financeiro para todas as pessoas cadastradas. Repetir não duplica. Totais já gerados são congelados: alterações no cadastro só afetam meses ainda não gerados. Cadastre tudo e confira o cartão antes de gerar.</p>'+
+        barraCadastro('servicos')+'<div class="acoes">'+botao('gerar','Gerar subtotais do mês')+'</div>'+filtrosLista()+
+        tabela(['Serviço','Valor / ciclo','Cartão / pessoa','Período','Cobrança','Observações','Ações'],ls.map(s=>[
+          e(s.nome)+(s.url?'<small><a target="_blank" rel="noopener noreferrer" href="'+e(s.url)+'">Abrir serviço</a></small>':''),brl(s.valor)+'<small>'+e(s.ciclo)+'</small>',
+          e(s.cartao)+'<small>'+e(nomes[s.escopo])+'</small>',e(s.inicio)+' até '+e(s.fim||'sem término'),'Dia '+s.dia,
+          e(s.obs)+'<small>'+e(s.login)+'</small>',botao('editar','Editar',s.id,'secundario')+botao('excluir','Excluir',s.id,'perigo')]));
+      exportacao=ls.map(s=>({Servico:s.nome,Pessoa:nomes[s.escopo],Valor:decimal(s.valor),Ciclo:s.ciclo,Cartao:s.cartao,Inicio:s.inicio,Fim:s.fim,Dia:s.dia,Observacao:s.obs}));
+    } else if (['contatos','checklist'].includes(pagina)) {
+      const ls=estado.db[pagina].filter(r=>passaBusca(r) && (pagina!=='checklist'||statusFiltro==='todos'||statusChecklist(r)===statusFiltro));html=barraCadastro(pagina)+filtrosLista();
+      if (pagina==='contatos') html+=tabela(['Contato','Serviço / tipo','Telefone','E-mail','Observações','Ações'],ls.map(r=>[
+        e(r.nome),e(r.tipo),e(r.telefone),e(r.email),e(r.obs),botao('editar','Editar',r.id,'secundario')+botao('excluir','Excluir',r.id,'perigo')]));
+      if (pagina==='checklist') html+='<p class="info">Verificar hoje registra a data e calcula a próxima pelo intervalo em dias. Intervalo zero significa tarefa única. Datas vencidas aparecem mesmo quando a última verificação foi OK.</p>'+
+        tabela(['Item','Prioridade / responsável','Última verificação','Próxima','Situação','Observações','Ações'],ls.sort((a,b)=>(a.proxima||'9999').localeCompare(b.proxima||'9999')).map(r=>[
+          e(r.nome),e(r.prioridade)+'<small>'+e(r.responsavel)+'</small>',dataBR(r.ultima),dataBR(r.proxima)+'<small>Intervalo: '+r.intervalo+' dias</small>',
+          '<span class="status '+e(statusChecklist(r))+'">'+e(situacoesChecklist[statusChecklist(r)]||r.status)+'</span>',e(r.obs),
+          botao('verificar','Verificar hoje',r.id)+botao('editar','Editar',r.id,'secundario')+botao('excluir','Excluir',r.id,'perigo')]));
+      exportacao=ls.map(r=>{const copia=Object.assign({},r);delete copia.id;return copia;});
+    } else if (pagina==='simulacoes') {
+      const saldo=saldoSimulacao();
+      if (!Array.isArray(estado.db.simulacoes)) html='<p class="aviso">Atualize também WebApp.gs para habilitar as simulações. Não prepare a base novamente.</p>';
+      else {
+        const ls=estado.db.simulacoes.filter(passaBusca).sort((a,b)=>b.data.localeCompare(a.data)||a.nome.localeCompare(b.nome));
+        html='<div class="cards">'+card('Saldo atual de caixa registrado',saldo)+'</div>'+
+          '<p class="info">Saldo calculado até '+dataBR(hoje())+', pela referência configurada e pelas baixas do condomínio. Não inclui entradas previstas. Confira com o extrato: o sistema não consulta o banco. Cenários são alternativas independentes, não reservam dinheiro nem criam despesas. Ao editar e salvar, a referência é atualizada para o caixa de hoje.</p>'+
+          barraCadastro('simulacoes')+filtrosLista()+tabela(['Cenário / custos','Referência salva','Custo total','Saldo projetado salvo','Saldo projetado hoje','Observações','Ações'],ls.map(r=>{
+            const total=totalSimulacao(r), restante=r.saldoBase-total, atual=saldo===null?null:saldo-total;
+            return [e(r.nome)+Object.entries(custosSimulacao).map(([k,nome])=>'<small>'+e(nome)+': '+brl(r[k])+'</small>').join(''),
+              dataBR(r.data)+'<small>Caixa: '+brl(r.saldoBase)+'</small>',brl(total),'<strong class="'+(restante<0?'negativo':'positivo')+'">'+brl(restante)+'</strong>'+
+              (restante<0?'<small>Faltam '+brl(-restante)+'</small>':''),brl(atual),e(r.obs),botao('editar','Editar / recalcular',r.id,'secundario')+botao('excluir','Excluir',r.id,'perigo')];
+          }));
+        exportacao=ls.map(r=>({Cenario:r.nome,DataReferencia:r.data,SaldoBase:decimal(r.saldoBase),Materiais:decimal(r.materiais),MaoDeObra:decimal(r.maoObra),Outros:decimal(r.outros),Reserva:decimal(r.reserva),CustoTotal:decimal(totalSimulacao(r)),SaldoProjetadoSalvo:decimal(r.saldoBase-totalSimulacao(r)),SaldoProjetadoHoje:saldo===null?'Não disponível':decimal(saldo-totalSimulacao(r)),Observacao:r.obs}));
+      }
+      $('rodape').textContent='Revisão '+estado.db.revisao+' · Simulações independentes · Posição em '+dataBR(hoje());
+    } else if (pagina==='iptv') {
+      if (!Array.isArray(estado.db.iptv)) {
+        html='<p class="aviso">Atualize também WebApp.gs para habilitar o cadastro IPTV. Não prepare a base novamente.</p>';
+      } else {
+        const todos = estado.db.iptv;
+        const ls = todos.filter(r=>passaBusca(r) && (statusFiltro==='todos'||(statusFiltro==='ativo'?r.status==='ativo':statusIPTV(r)===statusFiltro)))
+          .sort((a,b)=>a.vencimento.localeCompare(b.vencimento)||a.nome.localeCompare(b.nome));
+        const indicador=(nome,quantidade)=>'<div class="card"><small>'+e(nome)+'</small><span class="valor">'+quantidade+'</span></div>';
+        html='<div class="cards">'+indicador('Clientes ativos',todos.filter(r=>r.status==='ativo').length)+
+          indicador('Ativos vencidos',todos.filter(r=>statusIPTV(r)==='atrasado').length)+
+          indicador('Vencem hoje / próximos 2 dias',todos.filter(r=>['hoje','proximo'].includes(statusIPTV(r))).length)+
+          indicador('Clientes inativos',todos.filter(r=>r.status==='inativo').length)+'</div>'+
+          '<p class="info">Todos os clientes, independentemente do mês/ano. Indicadores consideram o cadastro inteiro. Renovação altera somente a data informada; não registra pagamento nem receita nos financeiros. Não guarde senhas.</p>'+
+          barraCadastro('iptv')+filtrosLista()+tabela(['Cliente / plano','Telefone','Valor mensal','Vencimento','Situação','Observações','Ações'],ls.map(r=>{
+            const st=statusIPTV(r);
+            return [e(r.nome)+'<small>'+e(r.plano)+'</small>',e(r.telefone),brl(r.valor),dataBR(r.vencimento),
+              '<span class="status '+(st==='ativo'?'ok':e(st))+'">'+(st==='atrasado'?'<span aria-hidden="true">⚠ </span>':'')+e(rotulosIPTV[st])+'</span>',e(r.obs),
+              (r.status==='ativo'?botao('renovar-iptv','Renovar',r.id):'')+botao('editar','Editar',r.id,'secundario')+botao('excluir','Excluir',r.id,'perigo')];
+          }),ls.map(r=>statusIPTV(r)==='atrasado'?'linha-vencida':''));
+        exportacao=ls.map(r=>({Cliente:r.nome,Plano:r.plano,Telefone:r.telefone,ValorMensal:decimal(r.valor),Vencimento:r.vencimento,Status:r.status,Situacao:rotulosIPTV[statusIPTV(r)],Observacao:r.obs}));
+      }
+      $('rodape').textContent='Revisão '+estado.db.revisao+' · IPTV · Posição em '+dataBR(hoje());
+    } else if (pagina==='config') {
+      html='<section class="bloco"><h2>Pasta privada no Drive</h2><p><a href="'+e(estado.pastaUrl)+'" target="_blank" rel="noopener noreferrer">Abrir pasta exclusiva do sistema</a></p>'+
+        '<p>Os dados ficam em arquivos JSON versionados. Cada gravação preserva as versões anteriores; o sistema não compartilha arquivos nem altera as planilhas originais.</p>'+botao('backup','Baixar backup JSON','','secundario')+'</section>'+
+        '<section class="bloco"><h2>Saldos iniciais e cartão padrão</h2><p>Informe o saldo imediatamente anterior à data de início, com base no extrato bancário. Movimentos pagos anteriores a essa data não entram no caixa. Períodos anteriores aparecem como não disponíveis.</p>'+
+        '<p>Cartão padrão: <strong>'+e(estado.db.config.cartao)+'</strong></p>'+tabela(['Pessoa / entidade','Data de início','Saldo anterior'],Object.keys(nomes).map(es=>[
+          e(nomes[es]),dataBR(estado.db.config.saldos[es].data),brl(estado.db.config.saldos[es].valor)]))+botao('configurar','Editar configurações')+'</section>'+
+        '<section class="bloco"><h2>Últimas alterações</h2>'+tabela(['Revisão','Data','Ação'],estado.db.historico.slice(-20).reverse().map(h=>[e(h.revisao),e(new Date(h.em).toLocaleString('pt-BR')),e(h.acao)]))+'</section>';
+    } else if (pagina==='importacao') {
+      html='<div class="bloco"><h2>Importação seletiva · '+e(periodo())+'</h2><p>Selecione o mês/ano acima. No condomínio, o ano das abas sem ano precisa ser confirmado. Nenhuma planilha original será alterada.</p>'+
+        '<div class="filtros"><label>Fonte<select id="fonte"><option value="pessoal">Pessoal + serviços digitais</option><option value="condominio">Edifício Lisboa + contatos/checklist</option></select></label>'+
+        '<label>Outro ID (opcional)<input id="fonte-id" placeholder="Deixe vazio para usar a referência"></label></div>'+botao('prever','Gerar prévia')+'</div>';
+      if (previa) {
+        html+='<div class="aviso"><ul>'+previa.dados.avisos.map(a=>'<li>'+e(a)+'</li>').join('')+'</ul></div>'+
+          '<p>'+previa.dados.registros.length+' registros encontrados. Desmarque os que não deseja importar. Já importados não serão repetidos, mesmo em outros meses.</p>'+
+          tabela(['Importar','Módulo','Nome','Pessoa','Valor','Detalhes'],previa.dados.registros.map((r,i)=>[
+            '<input type="checkbox" aria-label="Importar '+e(r.registro.nome)+'" data-importar="'+i+'" '+(r.jaImportado?'disabled':'checked')+'>',e(r.colecao),e(r.registro.nome),e(nomes[r.registro.escopo]||'Edifício Lisboa'),
+            r.registro.valor==null?'—':brl(r.registro.valor),e(r.jaImportado?'Já importado':r.registro.obs)]))+
+          '<p><label><span><input type="checkbox" id="confirma-importacao"> Conferi valores, ano, duplicatas, avisos e permissões. Autorizo importar os itens selecionados como pendentes.</span></label></p>'+botao('importar','Importar seleção');
+      }
+    }
+    $('conteudo').innerHTML=html;
+    atualizarSelecaoBaixa();
+    if ($('status-filtro')) $('status-filtro').value=statusFiltro;
+    if (previa && pagina==='importacao') { $('fonte').value=previa.opcoes.fonte;$('fonte-id').value=previa.opcoes.fonteId||''; }
+  }
+
+  function atualizarSelecaoBaixa() {
+    const botao=$('baixar-selecionados');
+    if (!botao) return;
+    const alvos=lancamentosFiltrados().filter(l=>!l.pagamento && selecaoBaixa.has(l.id));
+    botao.textContent='Registrar baixa dos selecionados ('+alvos.length+')';
+    botao.disabled=!alvos.length;
+    $('limpar-baixas').disabled=!selecaoBaixa.size;
+    const total=tipo=>brl(alvos.filter(l=>l.tipo===tipo).reduce((s,l)=>s+l.valor,0));
+    $('resumo-selecao').textContent=alvos.length+' selecionado(s) · Entradas: '+total('entrada')+' · Saídas: '+total('saida')+
+      '. Apenas os pendentes visíveis; itens ocultos pelos filtros saem da seleção.';
+    document.querySelectorAll('[data-baixa-id]').forEach(el=>{el.checked=!el.disabled && selecaoBaixa.has(el.dataset.baixaId);});
+  }
+  function campo(nome, rotulo, valor, tipo='text', obrigatorio=false, opcoes=null) {
+    let html;
+    if (opcoes) html='<select name="'+e(nome)+'">'+opcoes.map(o=>'<option value="'+e(o[0])+'" '+(String(valor)===String(o[0])?'selected':'')+'>'+e(o[1])+'</option>').join('')+'</select>';
+    else if (tipo==='textarea') html='<textarea name="'+e(nome)+'" maxlength="2000">'+e(valor)+'</textarea>';
+    else if (tipo==='date') html='<input name="'+e(nome)+'" type="text" data-tipo="date" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10" value="'+
+      e(valor ? dataBR(valor) : '')+'" '+(obrigatorio?'required':'')+'>';
+    else html='<input name="'+e(nome)+'" type="'+tipo+'" value="'+e(valor)+'" '+(obrigatorio?'required':'')+
+      (tipo==='number'?' step="1"':tipo==='text'?' maxlength="200"':'')+'>';
+    return '<label class="'+(tipo==='textarea'?'inteiro':'')+'">'+e(rotulo)+html+'</label>';
+  }
+  function abrirEditor(colecao, id) {
+    if (ocupado) return;
+    const r=id?estado.db[colecao].find(x=>x.id===id):{};
+    if (!r) return;
+    editar={colecao,id:id||''};
+    $('editor-titulo').textContent=(id?'Editar':'Novo')+' · '+({lancamentos:'Lançamento',servicos:'Serviço digital',contatos:'Contato',simulacoes:'Simulação de gastos',checklist:'Checklist',iptv:'Cliente IPTV'}[colecao]);
+    let html=campo('nome','Descrição / nome',r.nome||'','text',true);
+    const pessoas=[['diego',nomes.diego],['iris',nomes.iris]], todos=pessoas.concat([['condominio',nomes.condominio]]);
+    if (colecao==='lancamentos') {
+      html+=campo('escopo','Pessoa / entidade',r.escopo||escopo(),'text',true,todos)+campo('tipo','Tipo',r.tipo||'saida','text',true,[['entrada','Entrada'],['saida','Saída']])+
+        campo('competencia','Competência',r.competencia||periodo(),'month',true)+campo('valor','Valor (R$)',decimal(r.valor),'text',true)+campo('meta','Meta de gasto (R$)',decimal(r.meta),'text',true)+
+        campo('vencimento','Vencimento',r.vencimento||'','date')+campo('pagamento','Pago / recebido em (vazio = pendente)',r.pagamento||'','date')+
+        campo('categoria','Categoria',r.categoria||'')+campo('conta','Conta / cartão',r.conta||'')+campo('unidade','Unidade / morador (condomínio)',r.unidade||'')+
+        campo('comprovante','Link HTTPS do comprovante no Drive',r.comprovante||'','url');
+    } else if (colecao==='servicos') {
+      html+=campo('escopo','Pessoa',r.escopo||$('pessoa').value,'text',true,pessoas)+campo('valor','Valor cobrado (R$)',decimal(r.valor),'text',true)+
+        campo('cartao','Cartão / forma de pagamento',r.cartao||estado.db.config.cartao,'text',true)+campo('ciclo','Ciclo',r.ciclo||'mensal','text',true,[['mensal','Mensal'],['anual','Anual']])+
+        campo('inicio','Primeiro mês / aniversário anual',r.inicio||periodo(),'month',true)+campo('fim','Último mês cobrado (opcional)',r.fim||'','month')+
+        campo('dia','Dia do vencimento do cartão (1–31)',r.dia||2,'number',true)+campo('login','Usuário / e-mail (NUNCA senha)',r.login||'')+campo('url','Portal do serviço (HTTPS)',r.url||'','url');
+    } else if (colecao==='contatos') {
+      html+=campo('tipo','Tipo de serviço',r.tipo||'','text',true)+campo('telefone','Telefone(s)',r.telefone||'')+campo('email','E-mail',r.email||'','email');
+    } else if (colecao==='simulacoes') {
+      html+=Object.entries(custosSimulacao).map(([k,nome])=>campo(k,nome+' (R$)',decimal(r[k]),'text',true)).join('')+
+        '<div class="inteiro"><p class="info">Prévia com o caixa registrado de hoje. Salvar não cria despesa nem reserva dinheiro.</p><div id="simulacao-previa" role="status" aria-live="polite"></div></div>';
+    } else if (colecao==='iptv') {
+      html+=campo('telefone','Telefone / WhatsApp',r.telefone||'')+campo('plano','Plano',r.plano||'')+
+        campo('valor','Valor mensal (R$)',decimal(r.valor),'text',true)+campo('vencimento','Vencimento / fim do acesso',r.vencimento||hoje(),'date',true)+
+        campo('status','Status do cliente',r.status||'ativo','text',true,[['ativo','Ativo'],['inativo','Inativo']]);
+    } else if (colecao==='checklist') {
+      html+=campo('ultima','Última verificação',r.ultima||'','date')+campo('proxima','Próxima verificação',r.proxima||'','date')+
+        campo('intervalo','Periodicidade em dias (0 = tarefa única)',r.intervalo||0,'number',true)+campo('responsavel','Responsável',r.responsavel||'Diego Machado')+
+        campo('prioridade','Prioridade',r.prioridade||'media','text',true,[['baixa','Baixa'],['media','Média'],['alta','Alta']])+
+        campo('status','Situação',r.status||'pendente','text',true,[['pendente','Pendente'],['andamento','Em andamento'],['ok','OK']]);
+    }
+    html+=campo('obs','Observações (não guardar senhas)',r.obs||'','textarea');
+    $('campos').innerHTML=html;$('erro-editor').hidden=true;$('editor').showModal();
+    previaSimulacao();
+  }
+  function configurar() {
+    editar={colecao:'config'};const c=estado.db.config;
+    $('editor-titulo').textContent='Configurações';
+    $('campos').innerHTML=campo('cartao','Nome do cartão padrão',c.cartao,'text',true)+Object.keys(nomes).map(es=>
+      campo(es+'Data',nomes[es]+' · início',c.saldos[es].data,'date',true)+campo(es+'Valor',nomes[es]+' · saldo anterior (R$)',decimal(c.saldos[es].valor),'text',true)).join('');
+    $('erro-editor').hidden=true;$('editor').showModal();
+  }
+  function baixar(nome, texto, mime) {
+    const url=URL.createObjectURL(new Blob([texto],{type:mime}));const a=document.createElement('a');a.href=url;a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);
+  }
+  function csv() {
+    if (!exportacao.length) { mensagem('Nenhum registro para exportar.');return; }
+    const colunas=Object.keys(exportacao[0]);
+    const celula=v=>'"'+String(v==null?'':v).replace(/^[=+\-@\t\r]/,m=>"'"+m).replace(/"/g,'""')+'"';
+    const linhas=[colunas,...exportacao.map(r=>colunas.map(k=>r[k]))];
+    baixar(pagina+'-'+periodo()+'.csv','\ufeff'+linhas.map(r=>r.map(celula).join(';')).join('\r\n'),'text/csv;charset=utf-8');
+  }
+  async function exportarPDF(abrir = false) {
+    if (ocupado || popupPendente || !estado || !estado.preparado) return;
+    if (!window.CPRelatorios) throw new Error('Atualize também Index.html e Relatorios.html para exportar o PDF.');
+    const financeiro = ['pessoal','condominio'].includes(pagina);
+    const mensal = pagina === 'servicos' || $('visao').value === 'mensal';
+    const periodoRelatorio = ['iptv','simulacoes'].includes(pagina) ? 'Posição em '+dataBR(hoje()) : mensal ? meses[Number($('mes').value)-1]+' / '+$('ano').value : 'Ano '+$('ano').value;
+    const filtros = [];
+    if (['pessoal','condominio','servicos','contatos','simulacoes','checklist','iptv'].includes(pagina)) {
+      filtros.push('Busca: '+(busca || 'sem filtro'));
+      if (financeiro) filtros.push('Situação: '+({todos:'Todas',pendente:'Pendentes',atrasado:'Vencidos',ok:'Pagos / recebidos'}[statusFiltro] || 'Todas'));
+      if (pagina === 'checklist') filtros.push('Situação: '+(situacoesChecklist[statusFiltro] || 'Todas'));
+      if (pagina === 'iptv') filtros.push('Situação: '+(situacoesIPTV[statusFiltro] || 'Todos'));
+    }
+    const entidade = pagina === 'iptv' ? 'Clientes IPTV' : ['pessoal','servicos'].includes(pagina) ? nomes[$('pessoa').value] : pagina !== 'inicio' ? nomes.condominio : '';
+    const dataAtualizada = new Date(estado.db.atualizadoEm);
+    const modelo = window.CPRelatorios.capturar($('conteudo'), {
+      titulo: titulos[pagina], entidade, periodo: periodoRelatorio, filtros: filtros.join(' | '),
+      emitidoEm: new Date().toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}),
+      revisao: estado.db.revisao, atualizadoEm: isNaN(dataAtualizada.getTime()) ? 'Não informado' : dataAtualizada.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})
+    });
+    const nome = ('meu-controle-'+pagina+'-'+(entidade || 'geral')+'-'+(['iptv','simulacoes'].includes(pagina)?hoje():mensal ? periodo() : $('ano').value))
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9-]+/g,'-')+'.pdf';
+    // Reserva a aba durante o clique, antes do await, para evitar bloqueio de pop-ups.
+    const aba = abrir ? window.open('about:blank', '_blank') : null;
+    if (abrir && !aba) throw new Error('O navegador bloqueou a nova aba. Permita pop-ups para abrir o PDF ou use Baixar PDF.');
+    if (aba) {
+      aba.opener = null;
+      aba.document.title = 'Preparando PDF · Meu controle';
+      aba.document.body.textContent = 'Preparando seu PDF… Aguarde.';
+    }
+    bloquear(true, 'Preparando seu PDF…');
+    try {
+      const pdf = await window.CPRelatorios.gerar(modelo);
+      const dados = pdf.output('arraybuffer');
+      if (aba) {
+        if (aba.closed) throw new Error('A aba do PDF foi fechada. Clique em Abrir PDF para tentar novamente.');
+        const url = URL.createObjectURL(new Blob([dados], {type:'application/pdf'}));
+        try { aba.location.replace(url); }
+        catch (err) { URL.revokeObjectURL(url); throw err; }
+        // Mantém o arquivo disponível ao visualizador até sair desta página.
+        window.addEventListener('unload', ()=>URL.revokeObjectURL(url), {once:true});
+        mensagem('PDF aberto em uma nova aba. Você pode visualizar, imprimir ou salvar pelo navegador.');
+      } else {
+        baixar(nome, dados, 'application/pdf');
+        mensagem('PDF gerado. Confira o download do navegador.');
+      }
+    } catch (err) {
+      if (aba && !aba.closed) aba.close();
+      throw err;
+    } finally { bloquear(false); }
+  }
+
+  document.addEventListener('click',async ev=>{
+    if (popupPendente) return;
+    const nav=ev.target.closest('[data-pagina]');
+    if (nav&&!ocupado) { selecaoBaixa.clear();pagina=nav.dataset.pagina;busca='';statusFiltro='todos';previa=null;mensagem('');renderizar();return; }
+    const b=ev.target.closest('[data-acao]');if (!b||ocupado) return;
+    const acao=b.dataset.acao,id=b.dataset.id;
+    try {
+      if (acao==='ver-aviso') await verAviso(b.dataset.colecao,id);
+      else if (acao==='renovar-iptv') {
+        const cliente=estado.db.iptv.find(r=>r.id===id);
+        if (!cliente || cliente.status!=='ativo') throw new Error('Cliente IPTV ativo não encontrado. Atualize a página.');
+        const data=await abrirPopup({titulo:'Renovar cliente IPTV',descricao:cliente.nome+' · '+brl(cliente.valor)+' / mês\nVencimento atual: '+dataBR(cliente.vencimento)+
+          '\n\nInforme a nova data de vencimento. Esta ação não registra pagamento nem receita no financeiro.',
+          tipo:'date',permitirFutura:true,rotulo:'Novo vencimento (DD/MM/AAAA)',valor:'',botao:'Confirmar renovação',
+          ajuda:'A data deve ser posterior ao vencimento atual e não pode estar no passado.',
+          validar:v=>v<=cliente.vencimento||v<hoje()?'Informe uma data posterior ao vencimento atual, sem data no passado.':''});
+        if (data) await alterar({acao:'renovarIPTV',id,data},'Vencimento do cliente IPTV atualizado.');
+      }
+      else if (acao==='preparar') {
+        bloquear(true);try { await rpc('prepararSistema'); } finally { bloquear(false); } await carregar();mensagem('Pasta privada criada e sistema preparado.');
+      } else if (acao==='novo') abrirEditor(id);
+      else if (acao==='editar') abrirEditor(['pessoal','condominio'].includes(pagina)?'lancamentos':pagina,id);
+      else if (acao==='excluir') {
+        const colecao = ['pessoal','condominio'].includes(pagina) ? 'lancamentos' : pagina;
+        const registro = estado.db[colecao].find(r=>r.id===id);
+        if (await abrirPopup({titulo:'Excluir registro?', descricao:(registro ? registro.nome + '\n\n' : '') +
+          'O registro será removido do controle atual. A versão anterior será preservada no Drive.', botao:'Excluir registro', perigo:true})) {
+          await alterar({acao:'excluir',colecao,id});
+        }
+      } else if (acao==='selecionar-baixas' || acao==='limpar-baixas') {
+        selecaoBaixa.clear();
+        if (acao==='selecionar-baixas') lancamentosFiltrados().filter(l=>!l.pagamento).forEach(l=>selecaoBaixa.add(l.id));
+        atualizarSelecaoBaixa();
+      } else if (acao==='pagamento-todos' || acao==='pagamento-selecionados') {
+        const selecionados=acao==='pagamento-selecionados';
+        const alvos=lancamentosFiltrados().filter(l=>!l.pagamento && (!selecionados || selecaoBaixa.has(l.id)));
+        if (!alvos.length) throw new Error('Não há lançamentos pendentes nos filtros atuais.');
+        const entradas=alvos.filter(l=>l.tipo==='entrada'), saidas=alvos.filter(l=>l.tipo==='saida');
+        const contexto={escopo:escopo(),visao:$('visao').value,ano:Number($('ano').value),mes:periodo(),ids:alvos.map(l=>l.id)};
+        const data=await abrirPopup({titulo:selecionados?'Registrar baixa dos selecionados?':'Registrar baixa de todos?',
+          descricao:nomes[contexto.escopo]+' · '+(contexto.visao==='anual'?'Ano '+contexto.ano:meses[Number(contexto.mes.slice(5))-1]+' / '+contexto.ano)+
+            '\n\n'+alvos.length+' lançamento(s) pendente(s) nos filtros atuais.'+
+            '\nEntradas: '+entradas.length+' · '+brl(entradas.reduce((s,l)=>s+l.valor,0))+
+            '\nSaídas: '+saidas.length+' · '+brl(saidas.reduce((s,l)=>s+l.valor,0))+
+            '\n\nTodos serão baixados integralmente na mesma data. Use somente se esses pagamentos e recebimentos realmente ocorreram. Já baixados não serão alterados.',
+          tipo:'date',rotulo:'Data real dos pagamentos / recebimentos',valor:hoje(),
+          ajuda:'Para datas diferentes ou pagamentos parciais, cancele e registre as baixas individualmente.',botao:selecionados?'Confirmar baixa dos selecionados':'Confirmar baixa de todos'});
+        if (data) await alterar(Object.assign({acao:'pagarTodos',data},contexto),alvos.length+' baixa(s) registrada(s).');
+      } else if (acao==='pagamento') {
+        const l=estado.db.lancamentos.find(x=>x.id===id);
+        if (!l) throw new Error('Lançamento não encontrado. Atualize a página.');
+        if (l.pagamento) {
+          if (await abrirPopup({titulo:'Estornar baixa?', descricao:l.nome + ' · ' + brl(l.valor) + '\nBaixa em ' + dataBR(l.pagamento) +
+            '\n\nO lançamento voltará a ficar pendente e deixará de afetar o saldo de caixa.', botao:'Estornar baixa', perigo:true})) {
+            await alterar({acao:'pagar',id,data:''});
+          }
+        }
+        else {
+          const d=await abrirPopup({titulo:l.tipo==='entrada'?'Registrar recebimento':'Registrar pagamento',
+            descricao:l.nome + ' · ' + brl(l.valor) + '\n\nA baixa será do valor integral na data informada.',
+            tipo:'date', rotulo:'Data real de pagamento / recebimento', valor:hoje(),
+            ajuda:'Informe a data em DD/MM/AAAA. Para pagamento parcial, divida em lançamentos separados.', botao:'Registrar baixa'});
+          if (d) await alterar({acao:'pagar',id,data:d});
+        }
+      } else if (acao==='verificar') {
+        const item=estado.db.checklist.find(r=>r.id===id), data=hoje();
+        if (await abrirPopup({titulo:'Confirmar verificação', descricao:(item ? item.nome + '\n\n' : '') +
+          'Registrar verificação em ' + dataBR(data) + ' e calcular a próxima data pelo intervalo cadastrado?', botao:'Verificado hoje'})) {
+          await alterar({acao:'verificar',id,data});
+        }
+      }
+      else if (acao==='gerar') {
+        const mes=periodo();
+        if (await abrirPopup({titulo:'Gerar subtotais de serviços', descricao:'Competência: ' + meses[Number(mes.slice(5))-1] + ' / ' + mes.slice(0,4) +
+          '\n\nConfira pessoas, cartões e valores. Não inclua novamente esses valores na fatura completa.\n\nTotais já gerados não serão alterados.', botao:'Gerar subtotais'})) {
+          await alterar({acao:'servicos',mes});
+        }
+      } else if (acao==='copiar') {
+        const origem=periodo(), pessoa=escopo();
+        const proximo=new Date(Number(origem.slice(0,4)),Number(origem.slice(5)),1);
+        const sugestao=proximo.getFullYear()+'-'+String(proximo.getMonth()+1).padStart(2,'0');
+        const destino=await abrirPopup({titulo:'Copiar lançamentos para outro mês',
+          descricao:nomes[pessoa] + ' · Origem: ' + meses[Number(origem.slice(5))-1] + ' / ' + origem.slice(0,4) +
+            '\n\nCopia lançamentos manuais/importados sem os pagamentos. Serviços digitais são gerados separadamente.',
+          tipo:'month',rotulo:'Mês e ano de destino',valor:sugestao,ajuda:'Os vencimentos serão ajustados ao mês escolhido. Repetir a mesma cópia não duplica os registros de origem.',
+          botao:'Copiar lançamentos',validar:v=>v===origem?'Escolha um mês diferente do mês de origem.':''});
+        if (destino) await alterar({acao:'copiar',origem,destino,escopo:pessoa});
+      } else if (acao==='configurar') configurar();
+      else if (acao==='backup') baixar('controle-pessoal-backup-'+hoje()+'.json',JSON.stringify(estado.db,null,2),'application/json');
+      else if (acao==='csv') csv();
+      else if (acao==='imprimir') await exportarPDF();
+      else if (acao==='abrir-pdf') await exportarPDF(true);
+      else if (acao==='prever') {
+        const opcoes={fonte:$('fonte').value,fonteId:$('fonte-id').value.trim(),mes:periodo()};
+        bloquear(true);try { previa=await rpc('preverImportacao',opcoes);previa.opcoes=opcoes;renderizar(); } finally { bloquear(false); }
+      } else if (acao==='importar') {
+        if (!previa||!$('confirma-importacao').checked) throw new Error('Confira e confirme a prévia antes de importar.');
+        if (periodo()!==previa.opcoes.mes||$('fonte').value!==previa.opcoes.fonte||$('fonte-id').value.trim()!==previa.opcoes.fonteId) throw new Error('Filtros da fonte mudaram. Gere outra prévia.');
+        const chaves=Array.from(document.querySelectorAll('[data-importar]:checked')).map(el=>previa.dados.registros[Number(el.dataset.importar)].chave);
+        if (!chaves.length) throw new Error('Selecione pelo menos um item ainda não importado.');
+        if (estado.db.revisao!==previa.revisao) throw new Error('Dados mudaram. Gere outra prévia.');
+        const pedido={acao:'importar',digest:previa.digest,opcoes:previa.opcoes,chaves,confirmado:true};
+        if (await abrirPopup({titulo:'Confirmar importação', descricao:chaves.length + ' registro(s) selecionado(s) · ' + periodo() +
+          '\n\nOs lançamentos financeiros entrarão como pendentes. As planilhas originais não serão alteradas.',botao:'Importar seleção'})) {
+          await alterar(pedido,'Seleção importada. Confira e registre os pagamentos reais no financeiro.');
+        }
+      }
+    } catch(err) { mensagem(err.message||String(err),true); }
+  });
+  function garantirPopup_() {
+    const ids=['popup','popup-formulario','popup-titulo','popup-descricao','popup-icone','popup-fechar',
+      'popup-campo','popup-rotulo','popup-valor','popup-ajuda','popup-erro','popup-cancelar','popup-confirmar'];
+    if (ids.every(id=>$(id))) return;
+    // Compatibilidade com Index publicado antes dos pop-ups. Apenas elementos de UI.
+    ids.forEach(id=>{const el=$(id);if (el) el.remove();});
+    const dialog=document.createElement('dialog');
+    dialog.id='popup';dialog.className='popup';
+    dialog.setAttribute('aria-labelledby','popup-titulo');
+    dialog.setAttribute('aria-describedby','popup-descricao');
+    dialog.innerHTML='<form id="popup-formulario" novalidate><div class="popup-cabecalho">'+
+      '<span id="popup-icone" class="popup-icone" aria-hidden="true">?</span>'+
+      '<div><small>Meu controle</small><h2 id="popup-titulo">Confirmar ação</h2></div>'+
+      '<button type="button" id="popup-fechar" class="secundario popup-fechar" aria-label="Cancelar e fechar">×</button></div>'+
+      '<p id="popup-descricao"></p><label id="popup-campo" hidden><span id="popup-rotulo">Valor</span>'+
+      '<input id="popup-valor" aria-describedby="popup-ajuda popup-erro"></label>'+
+      '<small id="popup-ajuda" hidden></small><p id="popup-erro" role="alert" hidden></p>'+
+      '<div class="acoes popup-acoes"><button type="button" id="popup-cancelar" class="secundario">Cancelar</button>'+
+      '<button type="submit" id="popup-confirmar">Confirmar</button></div></form>';
+    document.body.appendChild(dialog);
+  }
+  garantirPopup_();
+  $('popup-formulario').addEventListener('submit',ev=>{
+    ev.preventDefault();
+    if (!popupPendente || ocupado) return;
+    const {opcoes}=popupPendente;
+    let valor=$('popup-valor').value, erro='';
+    try {
+      if (opcoes.tipo==='date') valor=dataISO(valor);
+      erro=validarPopup(opcoes,valor);
+    } catch (err) { erro=err.message; }
+    if (erro) {
+      $('popup-erro').textContent=erro; $('popup-erro').hidden=false;
+      $('popup-valor').setAttribute('aria-invalid','true'); $('popup-valor').focus(); return;
+    }
+    finalizarPopup(opcoes.tipo ? valor : true);
+  });
+  ['popup-cancelar','popup-fechar'].forEach(id=>$(id).addEventListener('click',()=>finalizarPopup()));
+  $('popup').addEventListener('cancel',ev=>{ev.preventDefault();finalizarPopup();});
+  $('popup').addEventListener('close',()=>{if (popupPendente && !$('popup').open) finalizarPopup();});
+  $('popup-valor').addEventListener('input',()=>{$('popup-erro').hidden=true;$('popup-valor').removeAttribute('aria-invalid');});
+  $('formulario').addEventListener('submit',async ev=>{
+    ev.preventDefault();if (!editar||ocupado) return;
+    try {
+      const r=Object.fromEntries(new FormData(ev.target));
+      if (editar.colecao==='simulacoes') Object.keys(custosSimulacao).forEach(k=>{
+        r[k]=centavos(r[k]);if(r[k]<0) throw new Error('Os custos não podem ser negativos.');
+      });
+      ev.target.querySelectorAll('[data-tipo="date"]').forEach(input=>{
+        try { r[input.name]=dataISO(input.value); }
+        catch (err) { input.focus(); throw new Error(input.closest('label').childNodes[0].textContent+': '+err.message); }
+      });
+      if (editar.colecao==='config') {
+        const saldos={};Object.keys(nomes).forEach(es=>{saldos[es]={data:r[es+'Data'],valor:centavos(r[es+'Valor'])};});
+        await alterar({acao:'config',config:{cartao:r.cartao,saldos}});
+      } else {
+        if (editar.id) r.id=editar.id;
+        if ('valor' in r) r.valor=centavos(r.valor);
+        if ('meta' in r) r.meta=centavos(r.meta);
+        ['dia','intervalo'].forEach(k=>{if (k in r) r[k]=Number(r[k]);});
+        await alterar({acao:'salvar',colecao:editar.colecao,registro:r});
+      }
+    } catch(err) { $('erro-editor').textContent=err.message||String(err);$('erro-editor').hidden=false; }
+  });
+  $('cancelar').addEventListener('click',()=>{if (!ocupado) { $('editor').close();editar=null; }});
+  $('editor').addEventListener('cancel',ev=>{if (ocupado) ev.preventDefault();});
+  if ($('sino') && $('avisos')) {
+    $('sino').addEventListener('click',()=>{
+      if (ocupado || popupPendente || $('editor').open || !estado || !estado.preparado) return;
+      atualizarAvisos(); $('avisos').showModal();
+    });
+    $('avisos-fechar').addEventListener('click',()=>{$('avisos').close();$('sino').focus();});
+    $('avisos').addEventListener('click',ev=>{
+      const r=$('avisos').getBoundingClientRect();
+      if (ev.target===$('avisos') && (ev.clientX<r.left||ev.clientX>r.right||ev.clientY<r.top||ev.clientY>r.bottom)) $('avisos').close();
+    });
+  }
+  function atualizarDiaAvisos() {
+    if (!ocupado && !popupPendente && !$('editor').open && estado && estado.preparado && diaAvisos!==hoje()) renderizar();
+  }
+  setInterval(atualizarDiaAvisos, 60000);
+  document.addEventListener('visibilitychange',()=>{if (!document.hidden) atualizarDiaAvisos();});
+  $('atualizar').addEventListener('click',carregar);
+  $('ano').addEventListener('change',carregar);
+  ['mes','visao','pessoa'].forEach(id=>$(id).addEventListener('change',()=>{selecaoBaixa.clear();previa=null;renderizar();}));
+  document.addEventListener('input',ev=>{
+    if (ev.target.closest('#campos') && editar && editar.colecao==='simulacoes') previaSimulacao();
+    if (ev.target.id==='busca') {
+      const inicio=ev.target.selectionStart;busca=ev.target.value;renderizar();$('busca').focus();$('busca').setSelectionRange(inicio,inicio);
+    }
+  });
+  document.addEventListener('change',ev=>{
+    if (ev.target.matches('[data-baixa-id]')) {
+      if (ocupado || popupPendente) return;
+      const id=ev.target.dataset.baixaId;
+      if (ev.target.checked && lancamentosFiltrados().some(l=>l.id===id && !l.pagamento)) selecaoBaixa.add(id);
+      else selecaoBaixa.delete(id);
+      atualizarSelecaoBaixa();
+    }
+    if (ev.target.id==='status-filtro') {statusFiltro=ev.target.value;renderizar();}
+  });
+  window.addEventListener('beforeunload',ev=>{if (ocupado||$('editor').open) {ev.preventDefault();ev.returnValue='';}});
+  const atual=hoje();$('ano').value=atual.slice(0,4);
+  $('mes').innerHTML=meses.map((m,i)=>'<option value="'+String(i+1).padStart(2,'0')+'">'+m+'</option>').join('');$('mes').value=atual.slice(5,7);
+  carregar();
+</script>
