@@ -12,6 +12,22 @@
   let loadingOrigem = null;
   let diaAvisos = '';
   const selecaoBaixa = new Set();
+  function aplicarTema(tema) {
+    document.documentElement.dataset.tema = tema;
+    const botao = $('alternar-tema');
+    if (!botao) return;
+    const escuro = tema === 'escuro';
+    botao.setAttribute('aria-pressed', String(escuro));
+    botao.title = escuro ? 'Ativar modo claro' : 'Ativar modo noturno';
+    $('tema-texto').textContent = escuro ? 'Modo claro' : 'Modo noturno';
+    botao.querySelector('[aria-hidden]').textContent = escuro ? '☀' : '☾';
+  }
+  aplicarTema(document.documentElement.dataset.tema || 'claro');
+  if ($('alternar-tema')) $('alternar-tema').addEventListener('click', () => {
+    const tema = document.documentElement.dataset.tema === 'escuro' ? 'claro' : 'escuro';
+    aplicarTema(tema);
+    try { localStorage.setItem('meu-controle-tema', tema); } catch (_) {}
+  });
   const e = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const brl = v => v == null ? 'Não disponível' : (v / 100).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
   const decimal = v => ((v || 0) / 100).toFixed(2);
@@ -188,6 +204,23 @@
       '<div class="cards">'+card('Saldo inicial de caixa',r.saldoInicial)+card('Entradas no caixa',r.caixaEntrada,'positivo')+
       card('Saídas do caixa',r.caixaSaida,'negativo')+card('Saldo final de caixa',r.saldoFinal,r.saldoFinal<0?'negativo':'positivo')+'</div>';
   }
+  function resumoPessoa(es) {
+    const r = resumo(es), anualSelecionado = $('visao').value === 'anual';
+    const pendencia = (rotulo, valor, classe) => '<div class="'+(rotulo==='Vencidos / pendentes'&&valor>0?'pendencia-alerta':'')+'"><dt>'+e(rotulo)+
+      '</dt><dd class="'+(valor ? classe : 'muted')+'">'+brl(valor)+'</dd></div>';
+    return '<section class="bloco resumo-pessoa" data-escopo="'+es+'" aria-labelledby="resumo-'+es+'">'+
+      '<div class="resumo-cabecalho"><div><h2 id="resumo-'+es+'">'+e(nomes[es])+'</h2><small>'+ (es==='condominio'?'Condomínio · contas separadas':'Financeiro pessoal')+
+      '</small></div>'+botao('abrir-financeiro','Ver financeiro',es,'secundario nao-imprimir')+'</div>'+
+      '<div class="resumo-destaques">'+card('Saldo final de caixa',r.saldoFinal,r.saldoFinal<0?'negativo':'positivo')+
+      card('Resultado previsto',r.resultado,r.resultado<0?'negativo':'positivo')+'</div>'+
+      '<dl class="resumo-pendencias">'+pendencia('A receber',r.receber,'positivo')+pendencia('A pagar',r.pagar,'negativo')+
+      pendencia('Vencidos / pendentes',r.atrasados,'negativo')+'</dl>'+
+      '<details class="resumo-detalhes"><summary>Detalhes de planejamento e caixa</summary><h3>Planejamento · por competência</h3><div class="cards">'+
+      card('Entradas previstas',r.entradas,'positivo')+card('Saídas previstas',r.saidas,'negativo')+'</div>'+
+      '<h3>Caixa · por data de pagamento</h3><div class="cards">'+card('Saldo inicial de caixa',r.saldoInicial)+
+      card('Entradas no caixa',r.caixaEntrada,'positivo')+card('Saídas do caixa',r.caixaSaida,'negativo')+'</div></details>'+
+      (anualSelecionado?'<h3 class="resumo-anual">Evolução mensal</h3>'+anual(es):'')+'</section>';
+  }
   function statusLancamento(l) {
     return l.pagamento ? 'ok' : l.vencimento && l.vencimento < hoje() ? 'atrasado' : 'pendente';
   }
@@ -326,11 +359,14 @@
     exportacao = [];
     let html = '';
     if (pagina === 'inicio') {
-      html='<div class="acoes">'+botao('abrir-pdf','Abrir PDF da visão geral','','secundario')+botao('imprimir','Baixar PDF da visão geral','','secundario')+'</div>'+
-        '<p class="info">Planejamento por competência e caixa por data real de pagamento. Os valores pessoais e do condomínio nunca são misturados.</p>';
-      Object.keys(nomes).forEach(es=>{html+='<section class="bloco"><h2>'+e(nomes[es])+'</h2>'+painelFinanceiro(es)+($('visao').value==='anual'?anual(es):'')+'</section>';});
+      const periodoTexto = $('visao').value==='anual'?'Ano '+$('ano').value:meses[Number($('mes').value)-1]+' de '+$('ano').value;
+      html='<div class="visao-intro"><div><h2>'+e(periodoTexto)+'</h2><p class="muted">Compare cada conta separadamente: saldo de caixa e resultado do planejamento.</p></div>'+
+        '<div class="acoes">'+botao('abrir-pdf','Abrir PDF','','secundario')+botao('imprimir','Baixar PDF','','secundario')+'</div></div>'+
+        '<p class="info">Previsto considera a competência; caixa considera a data real de pagamento. O saldo final corresponde ao fim do período selecionado, não necessariamente ao saldo de hoje. Valores pessoais e do condomínio nunca são misturados.</p>'+
+        '<div class="visao-grade '+($('visao').value==='anual'?'anual':'')+'">'+Object.keys(nomes).map(resumoPessoa).join('')+'</div>';
       const pendentes=estado.db.checklist.filter(r=>r.status!=='ok'||(r.proxima&&r.proxima<hoje())).length;
-      html+='<p class="aviso">Checklist do condomínio: '+pendentes+' itens pendentes ou com próxima verificação vencida.</p>';
+      html+='<section class="visao-checklist"><p><strong>Manutenção do condomínio</strong><br>'+pendentes+' itens pendentes ou com próxima verificação vencida (independentemente do período).</p>'+
+        '<button class="secundario nao-imprimir" data-pagina="checklist">Ver checklist</button></section>';
     } else if (['pessoal','condominio'].includes(pagina)) {
       const es=escopo();
       const filtrados=lancamentosFiltrados()
@@ -514,6 +550,7 @@
     html+=campo('obs','Observações (não guardar senhas)',r.obs||'','textarea');
     $('campos').innerHTML=html;$('erro-editor').hidden=true;$('editor').showModal();
     previaSimulacao();
+    $('campos').scrollTop=0;
   }
   function configurar() {
     editar={colecao:'config'};const c=estado.db.config;
@@ -521,6 +558,7 @@
     $('campos').innerHTML=campo('cartao','Nome do cartão padrão',c.cartao,'text',true)+Object.keys(nomes).map(es=>
       campo(es+'Data',nomes[es]+' · início',c.saldos[es].data,'date',true)+campo(es+'Valor',nomes[es]+' · saldo anterior (R$)',decimal(c.saldos[es].valor),'text',true)).join('');
     $('erro-editor').hidden=true;$('editor').showModal();
+    $('campos').scrollTop=0;
   }
   function baixar(nome, texto, mime) {
     const url=URL.createObjectURL(new Blob([texto],{type:mime}));const a=document.createElement('a');a.href=url;a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);
@@ -584,14 +622,47 @@
     } finally { bloquear(false); }
   }
 
+  function restaurarMenu() {
+    const menu=$('menu-mobile'), lateral=$('menu-lateral');
+    if (!menu || menu.open) return;
+    if (lateral && lateral.parentNode===menu) document.body.insertBefore(lateral,document.body.firstChild);
+    if ($('menu-abrir')) $('menu-abrir').setAttribute('aria-expanded','false');
+  }
+  function fecharMenu() {
+    if ($('menu-mobile') && $('menu-mobile').open) $('menu-mobile').close();
+    restaurarMenu();
+  }
+  if ($('menu-abrir') && $('menu-mobile') && $('menu-lateral')) {
+    const mobile=window.matchMedia('(max-width:950px)');
+    $('menu-abrir').addEventListener('click',()=>{
+      if (ocupado || popupPendente || !mobile.matches || document.querySelector('dialog[open]')) return;
+      $('menu-mobile').appendChild($('menu-lateral'));
+      $('menu-mobile').showModal();
+      $('menu-abrir').setAttribute('aria-expanded','true');
+      $('menu-fechar').focus();
+    });
+    $('menu-fechar').addEventListener('click',fecharMenu);
+    $('menu-mobile').addEventListener('close',restaurarMenu);
+    $('menu-mobile').addEventListener('click',ev=>{
+      const r=$('menu-mobile').getBoundingClientRect();
+      if (ev.target===$('menu-mobile') && (ev.clientX<r.left || ev.clientX>r.right || ev.clientY<r.top || ev.clientY>r.bottom)) fecharMenu();
+    });
+    mobile.addEventListener('change',()=>{if (!mobile.matches) fecharMenu();});
+  }
+
   document.addEventListener('click',async ev=>{
     if (popupPendente) return;
     const nav=ev.target.closest('[data-pagina]');
-    if (nav&&!ocupado) { selecaoBaixa.clear();pagina=nav.dataset.pagina;busca='';statusFiltro='todos';previa=null;mensagem('');renderizar();return; }
+    if (nav&&!ocupado) { fecharMenu();selecaoBaixa.clear();pagina=nav.dataset.pagina;busca='';statusFiltro='todos';previa=null;mensagem('');renderizar();return; }
     const b=ev.target.closest('[data-acao]');if (!b||ocupado) return;
     const acao=b.dataset.acao,id=b.dataset.id;
     try {
-      if (acao==='ver-aviso') await verAviso(b.dataset.colecao,id);
+      if (acao==='abrir-financeiro' && Object.hasOwn(nomes,id)) {
+        selecaoBaixa.clear(); pagina=id==='condominio'?'condominio':'pessoal';
+        if (id!=='condominio') $('pessoa').value=id;
+        busca='';statusFiltro='todos';previa=null;mensagem('');renderizar();
+      }
+      else if (acao==='ver-aviso') await verAviso(b.dataset.colecao,id);
       else if (acao==='renovar-iptv') {
         const cliente=estado.db.iptv.find(r=>r.id===id);
         if (!cliente || cliente.status!=='ativo') throw new Error('Cliente IPTV ativo não encontrado. Atualize a página.');
@@ -758,6 +829,7 @@
     } catch(err) { $('erro-editor').textContent=err.message||String(err);$('erro-editor').hidden=false; }
   });
   $('cancelar').addEventListener('click',()=>{if (!ocupado) { $('editor').close();editar=null; }});
+  if ($('editor-fechar')) $('editor-fechar').addEventListener('click',()=>{if (!ocupado) { $('editor').close();editar=null; }});
   $('editor').addEventListener('cancel',ev=>{if (ocupado) ev.preventDefault();});
   if ($('sino') && $('avisos')) {
     $('sino').addEventListener('click',()=>{
@@ -795,6 +867,12 @@
     if (ev.target.id==='status-filtro') {statusFiltro=ev.target.value;renderizar();}
   });
   window.addEventListener('beforeunload',ev=>{if (ocupado||$('editor').open) {ev.preventDefault();ev.returnValue='';}});
+  let detalhesImpressao = [];
+  window.addEventListener('beforeprint',()=>{
+    detalhesImpressao = [...document.querySelectorAll('.resumo-detalhes:not([open])')];
+    detalhesImpressao.forEach(el=>el.open=true);
+  });
+  window.addEventListener('afterprint',()=>{detalhesImpressao.forEach(el=>el.open=false);detalhesImpressao=[];});
   const atual=hoje();$('ano').value=atual.slice(0,4);
   $('mes').innerHTML=meses.map((m,i)=>'<option value="'+String(i+1).padStart(2,'0')+'">'+m+'</option>').join('');$('mes').value=atual.slice(5,7);
   carregar();

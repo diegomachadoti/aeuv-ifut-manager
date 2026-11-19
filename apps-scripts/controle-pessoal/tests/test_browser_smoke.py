@@ -85,6 +85,8 @@ class BrowserSmoke(unittest.TestCase):
 
     def pagina(self, nome):
         self.aguardar()
+        if self.driver.execute_script("return matchMedia('(max-width:950px)').matches && !document.getElementById('menu-mobile').open"):
+            self.driver.find_element(By.ID, 'menu-abrir').click()
         botao = self.driver.find_element(By.CSS_SELECTOR, f'[data-pagina="{nome}"]')
         self.driver.execute_script("const grupo=arguments[0].closest('details');if(grupo)grupo.open=true;", botao)
         botao.click()
@@ -255,6 +257,8 @@ class BrowserSmoke(unittest.TestCase):
         try:
             for largura in (1440, 390):
                 self.driver.set_window_size(largura, 1000)
+                if largura == 390:
+                    self.driver.find_element(By.ID, 'menu-abrir').click()
                 medidas = self.driver.execute_script('''
                     const logo=document.querySelector('.marca .simbolo').getBoundingClientRect();
                     const marca=document.querySelector('.marca').getBoundingClientRect();
@@ -262,9 +266,69 @@ class BrowserSmoke(unittest.TestCase):
                 ''')
                 self.assertEqual(medidas, [48, 48, True, True])
         finally:
+            self.driver.execute_script('fecharMenu();')
+            self.driver.set_window_size(1440, 1000)
+
+    def test_mobile_menu_recolhivel_foco_e_redimensionamento(self):
+        self.aguardar()
+        try:
+            self.driver.set_window_size(390, 844)
+            self.assertFalse(self.driver.find_element(By.ID, 'menu-lateral').is_displayed())
+            abrir = self.driver.find_element(By.ID, 'menu-abrir')
+            abrir.click()
+            self.assertEqual(abrir.get_attribute('aria-expanded'), 'true')
+            self.assertTrue(self.driver.execute_script("return document.getElementById('menu-mobile').matches(':modal')"))
+            self.driver.find_element(By.ID, 'menu-fechar').send_keys(Keys.ESCAPE)
+            self.wait.until(lambda d: abrir.get_attribute('aria-expanded') == 'false')
+            self.assertEqual(self.driver.execute_script('return document.activeElement.id'), 'menu-abrir')
+            self.pagina('condominio')
+            self.assertEqual(abrir.get_attribute('aria-expanded'), 'false')
+            self.assertEqual(self.driver.find_element(By.ID, 'titulo').text, 'Edifício Lisboa · Financeiro e saldo')
+            abrir.click()
+            self.driver.execute_script("document.getElementById('menu-mobile').dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:innerWidth-1,clientY:100}));")
+            self.assertEqual(abrir.get_attribute('aria-expanded'), 'false')
+            abrir.click()
+            self.driver.set_window_size(1440, 1000)
+            self.wait.until(lambda d: not d.execute_script("return document.getElementById('menu-mobile').open"))
+            self.assertTrue(self.driver.find_element(By.ID, 'menu-lateral').is_displayed())
+            self.assertEqual(self.driver.execute_script("return document.getElementById('menu-lateral').parentNode.tagName"), 'BODY')
+        finally:
+            self.driver.execute_script('fecharMenu();')
+            self.driver.set_window_size(1440, 1000)
+
+    def test_mobile_editor_compacto_rolagem_acoes_visiveis(self):
+        self.aguardar()
+        try:
+            for tema, largura, altura in (('claro', 390, 844), ('escuro', 320, 568), ('escuro', 568, 400)):
+                self.driver.set_window_size(largura, altura)
+                self.driver.execute_script('aplicarTema(arguments[0]);', tema)
+                self.pagina('condominio')
+                self.driver.find_element(By.CSS_SELECTOR, '[data-acao="novo"]').click()
+                self.assertTrue(self.driver.execute_script('''
+                  const d=document.getElementById('editor'), r=d.getBoundingClientRect();
+                  const campos=document.getElementById('campos');
+                  return r.left>=10 && r.right<=innerWidth-10 && r.top>=0 && r.bottom<=innerHeight &&
+                    r.height<=innerHeight*.85 && campos.scrollHeight>campos.clientHeight;
+                '''))
+                self.driver.execute_script("document.getElementById('campos').scrollTop=10000;")
+                self.assertTrue(self.driver.execute_script('''
+                  return ['editor-fechar','cancelar'].every(id=>{
+                    const el=document.getElementById(id),r=el.getBoundingClientRect();
+                    return r.top>=0 && r.bottom<=innerHeight && el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));
+                  });
+                '''))
+                self.assertEqual(self.driver.execute_script("return getComputedStyle(document.querySelector('#campos input')).fontSize"), '16px')
+                self.driver.find_element(By.ID, 'editor-fechar').click()
+                self.assertFalse(self.driver.find_element(By.ID, 'editor').is_displayed())
+                self.abrir_popup('copiar')
+                self.assertTrue(self.driver.execute_script("const r=document.getElementById('popup').getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight && r.width<=innerWidth-20;"))
+                self.driver.find_element(By.ID, 'popup-fechar').click()
+        finally:
+            self.driver.execute_script("document.getElementById('editor').close();document.getElementById('popup-fechar').click();aplicarTema('claro');")
             self.driver.set_window_size(1440, 1000)
 
     def test_fluxo_formularios_menu_importacao_mobile(self):
+        self.driver.execute_script("aplicarTema('claro');")
         self.pagina("pessoal")
         self.driver.find_element(By.CSS_SELECTOR, '[data-acao="novo"]').click()
         self.driver.execute_cdp_cmd("Emulation.setEmulatedMedia", {"features": [{"name": "prefers-color-scheme", "value": "dark"}]})
@@ -286,7 +350,7 @@ class BrowserSmoke(unittest.TestCase):
         self.assertIn("não executar", self.driver.find_element(By.ID, "popup-descricao").text)
         self.assertEqual(self.driver.execute_script("return document.querySelectorAll('#popup script').length"), 0)
         self.driver.execute_script("document.querySelector('[data-pagina=simulacoes]').click()")
-        self.assertEqual(self.driver.find_element(By.ID, "titulo").text, "Financeiro pessoal")
+        self.assertEqual(self.driver.find_element(By.ID, "titulo").get_attribute('textContent'), "Financeiro pessoal")
         self.driver.find_element(By.ID, "popup-cancelar").click()
         self.assertEqual(self.driver.execute_script("return ultimoPedido.acao"), "salvar")
         self.abrir_popup("copiar")
@@ -362,6 +426,110 @@ class BrowserSmoke(unittest.TestCase):
         erros = [r["message"] for r in self.driver.get_log("browser") if r["level"] == "SEVERE"]
         self.assertEqual(erros, [])
 
+    def test_tema_noturno_persistencia_formularios_impressao(self):
+        self.aguardar()
+        try:
+            self.driver.execute_script("aplicarTema('claro');")
+            self.driver.find_element(By.ID, 'alternar-tema').click()
+            self.assertEqual(self.driver.find_element(By.ID, 'alternar-tema').get_attribute('aria-pressed'), 'true')
+            self.assertEqual(self.driver.execute_script("return localStorage.getItem('meu-controle-tema')"), 'escuro')
+            self.driver.refresh()
+            self.wait.until(EC.text_to_be_present_in_element((By.ID, 'identidade'), 'Administrador de teste'))
+            self.aguardar()
+            self.assertEqual(self.driver.execute_script('return document.documentElement.dataset.tema'), 'escuro')
+            self.assertEqual(self.driver.execute_script('return getComputedStyle(document.body).backgroundColor'), 'rgb(13, 21, 35)')
+            self.pagina('pessoal')
+            self.driver.find_element(By.CSS_SELECTOR, '[data-acao="novo"]').click()
+            for seletor in ('#editor', '#editor input', '#editor select', '#editor textarea'):
+                self.assertEqual(self.driver.execute_script('return getComputedStyle(document.querySelector(arguments[0])).backgroundColor', seletor), 'rgb(23, 34, 53)')
+            self.driver.find_element(By.ID, 'cancelar').click()
+            self.abrir_popup('copiar')
+            self.assertEqual(self.driver.execute_script("return getComputedStyle(document.getElementById('popup')).backgroundColor"), 'rgb(23, 34, 53)')
+            self.driver.find_element(By.ID, 'popup-cancelar').click()
+            self.driver.find_element(By.ID, 'sino').click()
+            self.assertEqual(self.driver.execute_script("return getComputedStyle(document.getElementById('avisos')).backgroundColor"), 'rgb(23, 34, 53)')
+            self.driver.find_element(By.ID, 'avisos-fechar').click()
+            self.pagina('inicio')
+            self.driver.execute_script("window.dispatchEvent(new Event('beforeprint'));")
+            self.assertEqual(len(self.driver.find_elements(By.CSS_SELECTOR, '.resumo-detalhes[open]')), 3)
+            self.driver.execute_cdp_cmd('Emulation.setEmulatedMedia', {'media': 'print'})
+            self.assertEqual(self.driver.execute_script('return getComputedStyle(document.body).backgroundColor'), 'rgb(255, 255, 255)')
+            self.driver.execute_cdp_cmd('Emulation.setEmulatedMedia', {'media': ''})
+            self.driver.execute_script("window.dispatchEvent(new Event('afterprint'));")
+            self.assertEqual(len(self.driver.find_elements(By.CSS_SELECTOR, '.resumo-detalhes[open]')), 0)
+            self.driver.find_element(By.ID, 'alternar-tema').click()
+            self.assertEqual(self.driver.execute_script("return localStorage.getItem('meu-controle-tema')"), 'claro')
+            self.driver.execute_cdp_cmd('Emulation.setEmulatedMedia', {'features': [{'name': 'prefers-color-scheme', 'value': 'dark'}]})
+            self.driver.refresh()
+            self.wait.until(EC.text_to_be_present_in_element((By.ID, 'identidade'), 'Administrador de teste'))
+            self.aguardar()
+            self.assertEqual(self.driver.execute_script('return document.documentElement.dataset.tema'), 'claro')
+            self.driver.execute_script("localStorage.removeItem('meu-controle-tema');")
+            self.driver.refresh()
+            self.wait.until(EC.text_to_be_present_in_element((By.ID, 'identidade'), 'Administrador de teste'))
+            self.aguardar()
+            self.assertEqual(self.driver.execute_script('return document.documentElement.dataset.tema'), 'escuro')
+        finally:
+            self.driver.execute_cdp_cmd('Emulation.setEmulatedMedia', {'media': '', 'features': []})
+            self.driver.execute_script("localStorage.removeItem('meu-controle-tema');aplicarTema('claro');")
+            self.driver.refresh()
+            self.wait.until(EC.text_to_be_present_in_element((By.ID, 'identidade'), 'Administrador de teste'))
+            self.aguardar()
+
+    def test_visao_geral_indicadores_atalhos_mobile(self):
+        self.aguardar()
+        self.driver.set_window_size(1440, 1000)
+        self.pagina('inicio')
+        try:
+            self.driver.execute_script("""
+                $('visao').value='mensal';$('mes').value='11';
+                Object.assign(estado.resumo.diego[10], {saldoFinal:27264,resultado:-603,pagar:15000,atrasados:5000,entradas:898753,saidas:899356,saldoInicial:12867,caixaEntrada:898753,caixaSaida:884356});
+                Object.assign(estado.resumo.iris[10], {saldoFinal:89819,resultado:57486});
+                renderizar();
+            """)
+            self.assertEqual(len(self.driver.find_elements(By.CSS_SELECTOR, '.resumo-pessoa')), 3)
+            self.assertEqual(len(self.driver.find_elements(By.CSS_SELECTOR, '.resumo-pessoa .card')), 21)
+            self.assertEqual(len(self.driver.find_elements(By.CSS_SELECTOR, '.resumo-pessoa dd')), 9)
+            self.assertIn('Novembro', self.driver.find_element(By.CSS_SELECTOR, '.visao-intro').text)
+            diego = self.driver.find_element(By.CSS_SELECTOR, '.resumo-pessoa[data-escopo="diego"]')
+            self.assertIn('272,64', diego.text)
+            self.assertIn('-R$ 6,03', diego.text)
+            self.assertEqual(len(diego.find_elements(By.CSS_SELECTOR, '.pendencia-alerta')), 1)
+            self.assertNotIn('898,19', diego.text)
+            diego.find_element(By.CSS_SELECTOR, 'summary').click()
+            self.assertIn('8.987,53', diego.text)
+            self.assertIn('128,67', diego.text)
+            for tema in ('claro', 'escuro'):
+                self.driver.execute_script('aplicarTema(arguments[0]);', tema)
+                for largura in (1440, 1024, 768, 390, 320):
+                    self.driver.set_window_size(largura, 1000)
+                    self.assertTrue(self.driver.execute_script('return document.body.scrollWidth <= innerWidth'), (tema, largura))
+                    self.assertTrue(self.driver.execute_script('''
+                        return [...document.querySelectorAll('.resumo-pessoa')].every(el=>{
+                            const r=el.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth;
+                        });
+                    '''), (tema, largura))
+            self.driver.set_window_size(1440, 1000)
+            for escopo in ('iris', 'diego', 'condominio'):
+                self.pagina('inicio')
+                self.driver.find_element(By.CSS_SELECTOR, f'[data-acao="abrir-financeiro"][data-id="{escopo}"]').click()
+                self.assertEqual(self.driver.execute_script('return pagina'), 'condominio' if escopo == 'condominio' else 'pessoal')
+                if escopo != 'condominio':
+                    self.assertEqual(self.driver.find_element(By.ID, 'pessoa').get_attribute('value'), escopo)
+            self.pagina('inicio')
+            Select(self.driver.find_element(By.ID, 'visao')).select_by_value('anual')
+            self.assertEqual(len(self.driver.find_elements(By.CSS_SELECTOR, '.visao-grade.anual table tbody tr')), 36)
+            self.driver.set_window_size(390, 844)
+            self.assertTrue(self.driver.execute_script('return document.body.scrollWidth <= innerWidth'))
+            self.driver.find_element(By.CSS_SELECTOR, '.visao-checklist button').click()
+            self.assertEqual(self.driver.execute_script('return pagina'), 'checklist')
+        finally:
+            self.driver.set_window_size(1440, 1000)
+            self.driver.execute_script("aplicarTema('claro');")
+            self.driver.refresh()
+            self.wait.until(EC.text_to_be_present_in_element((By.ID, 'identidade'), 'Administrador de teste'))
+            self.aguardar()
+
     def test_index_antigo_preserva_consulta_dados(self):
         original = self.driver.current_url
         try:
@@ -435,6 +603,7 @@ class BrowserSmoke(unittest.TestCase):
         self.driver.refresh()
         self.wait.until(EC.text_to_be_present_in_element((By.ID, "identidade"), "Administrador de teste"))
         self.aguardar()
+        self.driver.execute_script("aplicarTema('claro');")
         self.driver.execute_script("""
           const mes=periodo();
           mockDB.lancamentos=[

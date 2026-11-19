@@ -5,10 +5,20 @@
   <title>Diego Machado — Controle pessoal</title>
   <meta name="robots" content="noindex,nofollow">
   <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    (() => {
+      let tema = '';
+      try { tema = localStorage.getItem('meu-controle-tema'); } catch (_) {}
+      document.documentElement.dataset.tema = ['claro','escuro'].includes(tema) ? tema :
+        (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro');
+    })();
+  </script>
   <?!= incluir_('Estilos'); ?>
 </head>
 <body>
-  <aside>
+  <aside id="menu-lateral">
+    <button id="menu-fechar" type="button" class="menu-fechar" aria-label="Fechar menu">×</button>
     <div class="marca">
       <svg class="simbolo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="48" height="48" role="img" aria-labelledby="marca-titulo" aria-describedby="marca-descricao">
         <title id="marca-titulo">Logo Meu controle</title>
@@ -41,8 +51,9 @@
     <small class="privacidade">Privado · Conta Google do administrador<br>Valores em reais · Horário de Brasília</small>
   </aside>
   <main>
-    <header><div><small id="identidade">Área privada</small><h1 id="titulo">Visão geral</h1></div>
+    <header><div class="cabecalho-titulo"><button id="menu-abrir" type="button" class="secundario menu-abrir" aria-haspopup="dialog" aria-controls="menu-mobile" aria-expanded="false"><span aria-hidden="true">☰</span> Menu</button><div><small id="identidade">Área privada</small><h1 id="titulo">Visão geral</h1></div></div>
       <div class="cabecalho-acoes">
+        <button id="alternar-tema" class="secundario tema-botao" type="button" aria-label="Modo noturno" aria-pressed="false"><span aria-hidden="true">☾</span> <span id="tema-texto">Modo noturno</span></button>
         <button id="sino" class="secundario sino" type="button" aria-label="Avisos" aria-haspopup="dialog" aria-controls="avisos" disabled>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
           <span id="sino-contador" class="sino-contador" hidden>0</span>
@@ -78,6 +89,7 @@
     <section id="conteudo" aria-label="Conteúdo da página"></section>
     <footer id="rodape"></footer>
   </main>
+  <dialog id="menu-mobile" aria-label="Menu principal"></dialog>
   <dialog id="avisos" class="painel-avisos" aria-labelledby="avisos-titulo" aria-describedby="avisos-ajuda">
     <div class="avisos-cabecalho"><h2 id="avisos-titulo">Avisos e vencimentos</h2><button id="avisos-fechar" type="button" class="secundario" aria-label="Fechar avisos" autofocus>×</button></div>
     <p id="avisos-ajuda" class="muted">Financeiros de todas as pessoas e condomínio, checklist e clientes IPTV ativos, independentemente do período e dos filtros da tela. Avisamos 2 dias antes, no dia e enquanto houver atraso. Use Atualizar para consultar alterações feitas em outra sessão.</p>
@@ -85,7 +97,7 @@
   </dialog>
   <dialog id="editor" aria-labelledby="editor-titulo">
     <form id="formulario">
-      <h2 id="editor-titulo">Cadastro</h2>
+      <div class="editor-cabecalho"><h2 id="editor-titulo">Cadastro</h2><button id="editor-fechar" type="button" class="secundario" aria-label="Fechar cadastro">×</button></div>
       <div id="campos" class="grade-form"></div>
       <p id="erro-editor" role="alert" hidden></p>
       <div class="acoes"><button type="button" id="cancelar" class="secundario">Cancelar</button><button type="submit">Salvar</button></div>

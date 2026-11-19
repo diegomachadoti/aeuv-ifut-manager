@@ -46,6 +46,40 @@ não estiver disponível na sessão, o sistema bloqueia: não há fallback para 
 proprietário. Todas as consultas e mutações revalidam a conta no servidor.
 O app não é embutido em iframe externo, para evitar problemas com o login Google.
 
+## Modo noturno e visão geral compacta
+
+- O botão **Modo noturno / Modo claro**, no cabeçalho de todas as páginas,
+  alterna a aparência sem consultar ou alterar os dados financeiros.
+- A primeira abertura acompanha a preferência clara/escura do dispositivo.
+  Depois de uma escolha manual, o tema é salvo no navegador (`localStorage`,
+  chave `meu-controle-tema`). Apenas o tema é salvo, nunca dados financeiros.
+  Se o navegador bloquear esse armazenamento, a alternância continua funcionando
+  na sessão, mas pode não ser preservada após recarregar.
+- Tabelas, formulários, confirmações, avisos e loading acompanham o tema.
+  Impressão e PDFs continuam com fundo claro.
+- A visão geral destaca **Saldo final de caixa** e **Resultado previsto**, com
+  resumos independentes para Diego, Iris e condomínio. Mostra a receber, a pagar
+  e vencidos/pendentes; valores zerados dessas pendências ficam neutros.
+- **Detalhes de planejamento e caixa** expande os demais indicadores. Os dez
+  indicadores anteriores continuam disponíveis, com os mesmos cálculos.
+- **Ver financeiro** abre a pessoa correspondente; **Ver checklist** abre as
+  manutenções. A visão anual mantém a evolução dos 12 meses de cada escopo.
+- O saldo final corresponde ao fim do período selecionado, não necessariamente
+  ao saldo de hoje. O checklist independe desse período.
+
+### Atualizar o sistema já publicado
+
+1. No projeto Apps Script **controle-pessoal**, substitua **Index.html**,
+   **Estilos.html** e **Cliente.html** pelos arquivos desta pasta, juntos.
+2. Use **Implantar → Gerenciar implantações → Editar → Nova versão → Implantar**,
+   mantendo a URL e as permissões existentes; reabra a URL `/exec`.
+3. Confira os temas, os detalhes expansíveis, os atalhos e as visões mensal/anual
+   no computador e no celular.
+
+Não executar `prepararSistema`, reimportar planilhas ou alterar a base do Drive.
+Esta atualização não modifica o backend nem os cálculos dos relatórios PDF.
+Os testes locais de interface ficam em `tests/test_browser_smoke.py`.
+
 ## Logo e ícone próprios — Meu controle
 
 A marca combina barras financeiras azuis e um check verde sobre azul-marinho,
